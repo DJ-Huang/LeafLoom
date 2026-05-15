@@ -1,0 +1,73 @@
+# vault-rag — tool repo (Obsidian notes live under VAULT_ROOT, not here)
+
+# --- Local RAG index (INDEX_IN_VAULT=false → project/_index) ---
+# LanceDB, nodes.jsonl, status.json, audit reports — rebuild with `vault-rag reindex`
+_index/
+
+# --- Setup output (machine-specific Python paths for Cursor MCP) ---
+_generated/
+
+# --- Secrets / local config ---
+.env
+.env.local
+.env.*.local
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+build/
+dist/
+*.egg-info/
+*.egg
+
+.venv/
+venv/
+env/
+
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# uv (optional local env)
+.uv/
+
+# Jupyter
+.ipynb_checkpoints
+
+# --- Logs & caches ---
+*.log
+.cache/
+
+# --- Editors / IDEs ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+# Windows
+Thumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# Note: when INDEX_IN_VAULT=true (default), index lives at
+#   <VAULT_ROOT>/.vault-rag/
+# Add `.vault-rag/` to your Obsidian vault's .gitignore — not this repo.

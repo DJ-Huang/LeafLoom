@@ -1,0 +1,12 @@
+# Copy to your vault root as `.ragignore` (gitignore-style).
+# Lines apply to paths relative to the vault root (POSIX slashes).
+
+# Large exports / archives
+# Export/**
+# Attachments/**
+
+# Drafts (example)
+# Inbox/drafts/**
+
+# Personal or legal — do not embed
+# Private/**
