@@ -135,6 +135,21 @@ class Settings(BaseSettings):
     bm25_top_k: int = Field(default=40)
     rrf_k: int = Field(default=60)
 
+    verification_ranking_enabled: bool = Field(
+        default=True,
+        description=(
+            "If true, vault_search fills results from verified_true/limited (and trusted paths) "
+            "before unverified; unverified under Tips/Features/BugFix only backfills."
+        ),
+    )
+    unverified_restricted_prefixes: tuple[str, ...] = Field(
+        default=("Tips/", "Features/", "BugFix/"),
+        description=(
+            "Relative vault paths: unverified or missing verified_status only used "
+            "when top_k cannot be filled from preferred pool."
+        ),
+    )
+
     def merged_exclude_dir_names(self) -> tuple[str, ...]:
         """Built-in dir-name excludes plus `exclude_dir_names_extra`, deduped case-insensitively."""
         out: list[str] = []

@@ -34,7 +34,12 @@ def build_mcp() -> FastMCP:
         note_type: str | None = None,
         domain: str | None = None,
     ) -> str:
-        """Hybrid search (BM25 + dense vectors) over the Obsidian vault index."""
+        """Hybrid search (BM25 + dense vectors) over the Obsidian vault index.
+
+        Results prefer notes with verified_status limited/verified_true. Notes marked
+        unverified (and Tips/Features/BugFix without verification) are backfilled only
+        when top_k cannot be met; backfill excerpts are prefixed as unverified hints.
+        """
         try:
             rows = svc().search(
                 query,

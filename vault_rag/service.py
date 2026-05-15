@@ -14,6 +14,13 @@ from llama_index.core.schema import TextNode
 from vault_rag.fusion import reciprocal_rank_fusion
 from vault_rag.nodes_store import read_nodes_jsonl
 from vault_rag.settings import Settings
+from vault_rag.verification_rank import (
+    UNVERIFIED_EXCERPT_PREFIX,
+    rank_search_candidates,
+    select_for_top_k,
+    trust_label,
+    verification_tier,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,16 +113,33 @@ class VaultRagService:
         merged = reciprocal_rank_fusion(
             [b_results, v_results],
             k=self.settings.rrf_k,
-            top_n=max(top_k * 5, 30),
+            top_n=max(top_k * 8, 40),
         )
 
-        out: list[dict[str, Any]] = []
+        filtered: list = []
         for nws in merged:
             meta = dict(nws.node.metadata or {})
-            if not _metadata_match(meta, type_=type_, domain=domain):
-                continue
+            if _metadata_match(meta, type_=type_, domain=domain):
+                filtered.append(nws)
+
+        if self.settings.verification_ranking_enabled:
+            preferred, backfill = rank_search_candidates(
+                filtered,
+                restricted_prefixes=self.settings.unverified_restricted_prefixes,
+            )
+            selected = select_for_top_k(preferred, backfill, top_k)
+        else:
+            selected = [(nws, "preferred") for nws in filtered[:top_k]]
+
+        out: list[dict[str, Any]] = []
+        for nws, ranking in selected:
+            meta = dict(nws.node.metadata or {})
+            tier = verification_tier(meta)
             text = nws.node.get_content(metadata_mode="none")
             excerpt = text.strip().replace("\r\n", "\n")
+            if ranking == "backfill" or tier == 0:
+                if not excerpt.startswith(UNVERIFIED_EXCERPT_PREFIX.strip()):
+                    excerpt = UNVERIFIED_EXCERPT_PREFIX + excerpt
             if len(excerpt) > 900:
                 excerpt = excerpt[:900] + "…"
             out.append(
@@ -123,12 +147,13 @@ class VaultRagService:
                     "chunk_id": nws.node.node_id,
                     "score": float(nws.score or 0.0),
                     "file_path": meta.get("file_path", ""),
+                    "verified_status": meta.get("verified_status", ""),
+                    "trust": trust_label(tier),
+                    "ranking": ranking,
                     "metadata": {k: meta[k] for k in sorted(meta.keys()) if k != "file_path"},
                     "excerpt": excerpt,
                 }
             )
-            if len(out) >= top_k:
-                break
         return out
 
     def get_chunk(self, chunk_id: str) -> dict[str, Any]:
