@@ -25,11 +25,27 @@ from vault_rag.verification_rank import (
 logger = logging.getLogger(__name__)
 
 
+def _normalize_posix_path(value: str) -> str:
+    return value.replace("\\", "/").strip("/")
+
+
+def _path_under_prefix(file_path: str, prefix: str | None) -> bool:
+    if not prefix:
+        return True
+    rel = _normalize_posix_path(file_path)
+    root = _normalize_posix_path(prefix)
+    return rel == root or rel.startswith(f"{root}/")
+
+
 def _metadata_match(meta: dict[str, Any], *, type_: str | None, domain: str | None) -> bool:
     if type_ is not None and str(meta.get("type", "")).lower() != type_.lower():
         return False
-    if domain is not None and str(meta.get("domain", "")).lower() != domain.lower():
-        return False
+    if domain is not None:
+        want = domain.lower()
+        raw = str(meta.get("domain", "")).lower()
+        parts = [p.strip() for p in raw.split(",") if p.strip()]
+        if want not in parts and raw != want:
+            return False
     return True
 
 
@@ -103,6 +119,7 @@ class VaultRagService:
         top_k: int = 10,
         type_: str | None = None,
         domain: str | None = None,
+        path_prefix: str | None = None,
     ) -> list[dict[str, Any]]:
         self._ensure_loaded()
         assert self._vector_retriever is not None and self._bm25 is not None
@@ -119,6 +136,9 @@ class VaultRagService:
         filtered: list = []
         for nws in merged:
             meta = dict(nws.node.metadata or {})
+            file_path = str(meta.get("file_path", ""))
+            if not _path_under_prefix(file_path, path_prefix):
+                continue
             if _metadata_match(meta, type_=type_, domain=domain):
                 filtered.append(nws)
 

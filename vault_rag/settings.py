@@ -67,6 +67,10 @@ class Settings(BaseSettings):
         default=".vault-rag",
         description="Subfolder under vault for LanceDB + nodes.jsonl (dot-folder, Obsidian can exclude from graph).",
     )
+    vault_rules_folder: str = Field(
+        default="Rules",
+        description="Subfolder under vault_root for Codely routing rules (rule_search scope).",
+    )
     index_dir: Path = Field(
         default=Path("_index"),
         description="When index_in_vault=false: index under vault-rag project (relative or absolute).",

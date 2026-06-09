@@ -53,6 +53,30 @@ def build_mcp() -> FastMCP:
             return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
 
     @mcp.tool()
+    def rule_search(
+        query: str,
+        top_k: int = 10,
+        domain: str | None = None,
+    ) -> str:
+        """Hybrid search scoped to vault Rules/ only (Codely routing rules).
+
+        Does not search Pitfall/Tip/Concept/BugFix outside Rules/. Use vault_search for experience notes.
+        """
+        try:
+            settings = Settings()
+            rows = svc().search(
+                query,
+                top_k=top_k,
+                type_="rule",
+                domain=domain,
+                path_prefix=settings.vault_rules_folder,
+            )
+            return json.dumps({"ok": True, "results": rows}, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.exception("rule_search failed")
+            return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+
+    @mcp.tool()
     def vault_get_chunk(chunk_id: str) -> str:
         """Fetch full chunk text by chunk_id (from vault_search results)."""
         try:
