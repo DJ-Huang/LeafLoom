@@ -105,7 +105,8 @@ vault-rag search "Unity URP depth prepass 問題" --top-k 8
 
 重啟 Cursor 後應可看到工具：
 
-- `vault_search`：混合檢索（可選 `note_type`、`domain` 對應 frontmatter 欄位）
+- `rule_search`：混合檢索，**僅** `Rules/`（Codely 路由規則）
+- `vault_search`：混合檢索經驗筆記（**自動排除** `Rules/`，規則請用 `rule_search`；可選 `note_type`、`domain`）
 - `vault_get_chunk`：依 `chunk_id` 取全文
 - `vault_index_status`：索引狀態
 

@@ -37,6 +37,13 @@ def _path_under_prefix(file_path: str, prefix: str | None) -> bool:
     return rel == root or rel.startswith(f"{root}/")
 
 
+def _path_excluded_by_prefixes(file_path: str, prefixes: tuple[str, ...]) -> bool:
+    for prefix in prefixes:
+        if _path_under_prefix(file_path, prefix):
+            return True
+    return False
+
+
 def _metadata_match(meta: dict[str, Any], *, type_: str | None, domain: str | None) -> bool:
     if type_ is not None and str(meta.get("type", "")).lower() != type_.lower():
         return False
@@ -120,6 +127,7 @@ class VaultRagService:
         type_: str | None = None,
         domain: str | None = None,
         path_prefix: str | None = None,
+        path_exclude_prefixes: tuple[str, ...] = (),
     ) -> list[dict[str, Any]]:
         self._ensure_loaded()
         assert self._vector_retriever is not None and self._bm25 is not None
@@ -138,6 +146,8 @@ class VaultRagService:
             meta = dict(nws.node.metadata or {})
             file_path = str(meta.get("file_path", ""))
             if not _path_under_prefix(file_path, path_prefix):
+                continue
+            if _path_excluded_by_prefixes(file_path, path_exclude_prefixes):
                 continue
             if _metadata_match(meta, type_=type_, domain=domain):
                 filtered.append(nws)
