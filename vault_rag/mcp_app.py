@@ -36,16 +36,19 @@ def build_mcp() -> FastMCP:
     ) -> str:
         """Hybrid search (BM25 + dense vectors) over the Obsidian vault index.
 
-        Results prefer notes with verified_status limited/verified_true. Notes marked
-        unverified (and Tips/Features/BugFix without verification) are backfilled only
-        when top_k cannot be met; backfill excerpts are prefixed as unverified hints.
+        Excludes vault Rules/ (use rule_search for routing rules). Results prefer notes
+        with verified_status limited/verified_true. Notes marked unverified (and
+        Tips/Features/BugFix without verification) are backfilled only when top_k
+        cannot be met; backfill excerpts are prefixed as unverified hints.
         """
         try:
+            settings = Settings()
             rows = svc().search(
                 query,
                 top_k=top_k,
                 type_=note_type,
                 domain=domain,
+                path_exclude_prefixes=(settings.vault_rules_folder,),
             )
             return json.dumps({"ok": True, "results": rows}, ensure_ascii=False, indent=2)
         except Exception as e:
