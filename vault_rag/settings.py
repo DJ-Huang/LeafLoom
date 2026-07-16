@@ -56,7 +56,7 @@ class Settings(BaseSettings):
         )
 
     vault_root: Path = Field(
-        default=Path(r"D:\Project\Obsidian\DJ Knowledge\DJ knowledge"),
+        default=Path.home() / "DJKnowledges",
         description="Obsidian vault root (folder that contains notes).",
     )
     index_in_vault: bool = Field(

@@ -135,6 +135,8 @@ domain: unity
 ---
 ```
 
+`type` 缺失時服務會從 `type/*` tag 或一級目錄推導；`domain` 可寫單值、逗號分隔值或 YAML 陣列。未填 domain 的筆記視為未分類，仍可參與帶 domain 的召回。
+
 ---
 
 ## 7. 常見問題

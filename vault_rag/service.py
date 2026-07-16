@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+import re
 from typing import Any
 
 from llama_index.core import VectorStoreIndex
 from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.vector_stores.lancedb import LanceDBVectorStore
-from llama_index.core.schema import TextNode
+from llama_index.core.schema import NodeWithScore, TextNode
 
 from vault_rag.fusion import reciprocal_rank_fusion
 from vault_rag.nodes_store import read_nodes_jsonl
@@ -44,16 +45,123 @@ def _path_excluded_by_prefixes(file_path: str, prefixes: tuple[str, ...]) -> boo
     return False
 
 
+_PATH_NOTE_TYPES = {
+    "bugfix": "bugfix",
+    "concepts": "concept",
+    "decisions": "decision",
+    "experience": "experience",
+    "features": "feature",
+    "guides": "guide",
+    "mocs": "moc",
+    "performance": "performance",
+    "pitfalls": "pitfall",
+    "rules": "rule",
+    "tips": "tip",
+}
+
+
+def _metadata_tokens(value: Any) -> set[str]:
+    """Normalize scalar, CSV, JSON-list, or list metadata into lowercase tokens."""
+    if value is None:
+        return set()
+    if isinstance(value, (list, tuple, set)):
+        values = value
+    else:
+        raw = str(value).strip()
+        if not raw:
+            return set()
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            parsed = raw
+        values = parsed if isinstance(parsed, list) else re.split(r"[,|]", str(parsed))
+    return {str(item).strip().lower() for item in values if str(item).strip()}
+
+
+def _effective_note_type(meta: dict[str, Any]) -> str:
+    explicit = str(meta.get("type", "")).strip().lower()
+    if explicit:
+        return explicit
+
+    for tag in _metadata_tokens(meta.get("tags")):
+        if tag.startswith("type/"):
+            tagged = tag.split("/", 1)[1]
+            return "tip" if tagged == "quick-tip" else tagged
+
+    file_path = _normalize_posix_path(str(meta.get("file_path", "")))
+    top_level = file_path.split("/", 1)[0].lower() if file_path else ""
+    return _PATH_NOTE_TYPES.get(top_level, "")
+
+
 def _metadata_match(meta: dict[str, Any], *, type_: str | None, domain: str | None) -> bool:
-    if type_ is not None and str(meta.get("type", "")).lower() != type_.lower():
+    if type_ is not None and _effective_note_type(meta) != type_.strip().lower():
         return False
     if domain is not None:
-        want = domain.lower()
-        raw = str(meta.get("domain", "")).lower()
-        parts = [p.strip() for p in raw.split(",") if p.strip()]
-        if want not in parts and raw != want:
+        want = domain.strip().lower()
+        domains = _metadata_tokens(meta.get("domain"))
+        # Unclassified notes remain eligible. A declared domain is a hard constraint.
+        if domains and want not in domains:
             return False
     return True
+
+
+def _dedupe_candidates(
+    candidates: list[NodeWithScore],
+    *,
+    prefer_rule_id: bool,
+    seen: set[str] | None = None,
+) -> list[NodeWithScore]:
+    """Keep the highest-ranked chunk per note (or rule_id for rule_search)."""
+    used = seen if seen is not None else set()
+    out: list[NodeWithScore] = []
+    for nws in candidates:
+        meta = dict(nws.node.metadata or {})
+        file_path = _normalize_posix_path(str(meta.get("file_path", "")))
+        rule_id = str(meta.get("rule_id", "")).strip()
+        key = rule_id if prefer_rule_id and rule_id else file_path or nws.node.node_id
+        if key in used:
+            continue
+        used.add(key)
+        out.append(nws)
+    return out
+
+
+def _ensure_required_rules(
+    candidates: list[NodeWithScore],
+    *,
+    all_nodes: list[TextNode],
+    required_rule_ids: tuple[str, ...],
+) -> list[NodeWithScore]:
+    """Pin required rule documents ahead of semantic candidates without duplicating them."""
+    if not required_rule_ids:
+        return candidates
+
+    existing: dict[str, NodeWithScore] = {}
+    for nws in candidates:
+        rule_id = str((nws.node.metadata or {}).get("rule_id", "")).strip()
+        if rule_id and rule_id not in existing:
+            existing[rule_id] = nws
+
+    fallback: dict[str, TextNode] = {}
+    required = set(required_rule_ids)
+    for node in all_nodes:
+        rule_id = str((node.metadata or {}).get("rule_id", "")).strip()
+        if rule_id in required and rule_id not in fallback:
+            fallback[rule_id] = node
+
+    pinned: list[NodeWithScore] = []
+    for rule_id in required_rule_ids:
+        nws = existing.get(rule_id)
+        if nws is None and rule_id in fallback:
+            nws = NodeWithScore(node=fallback[rule_id], score=0.0)
+        if nws is not None:
+            pinned.append(nws)
+
+    return pinned + [
+        nws
+        for nws in candidates
+        if str((nws.node.metadata or {}).get("rule_id", "")).strip() not in required
+    ]
 
 
 class VaultRagService:
@@ -128,6 +236,8 @@ class VaultRagService:
         domain: str | None = None,
         path_prefix: str | None = None,
         path_exclude_prefixes: tuple[str, ...] = (),
+        dedupe_by_rule: bool = False,
+        required_rule_ids: tuple[str, ...] = (),
     ) -> list[dict[str, Any]]:
         self._ensure_loaded()
         assert self._vector_retriever is not None and self._bm25 is not None
@@ -152,14 +262,33 @@ class VaultRagService:
             if _metadata_match(meta, type_=type_, domain=domain):
                 filtered.append(nws)
 
+        if required_rule_ids:
+            filtered = _ensure_required_rules(
+                filtered,
+                all_nodes=list(self._nodes_by_id.values()),
+                required_rule_ids=required_rule_ids,
+            )
+
         if self.settings.verification_ranking_enabled:
             preferred, backfill = rank_search_candidates(
                 filtered,
                 restricted_prefixes=self.settings.unverified_restricted_prefixes,
             )
+            seen: set[str] = set()
+            preferred = _dedupe_candidates(
+                preferred,
+                prefer_rule_id=dedupe_by_rule,
+                seen=seen,
+            )
+            backfill = _dedupe_candidates(
+                backfill,
+                prefer_rule_id=dedupe_by_rule,
+                seen=seen,
+            )
             selected = select_for_top_k(preferred, backfill, top_k)
         else:
-            selected = [(nws, "preferred") for nws in filtered[:top_k]]
+            unique = _dedupe_candidates(filtered, prefer_rule_id=dedupe_by_rule)
+            selected = [(nws, "preferred") for nws in unique[:top_k]]
 
         out: list[dict[str, Any]] = []
         for nws, ranking in selected:
@@ -177,9 +306,15 @@ class VaultRagService:
                     "chunk_id": nws.node.node_id,
                     "score": float(nws.score or 0.0),
                     "file_path": meta.get("file_path", ""),
+                    "note_type": _effective_note_type(meta),
                     "verified_status": meta.get("verified_status", ""),
                     "trust": trust_label(tier),
                     "ranking": ranking,
+                    "match_reason": (
+                        "required_rule"
+                        if str(meta.get("rule_id", "")).strip() in required_rule_ids
+                        else "semantic"
+                    ),
                     "metadata": {k: meta[k] for k in sorted(meta.keys()) if k != "file_path"},
                     "excerpt": excerpt,
                 }
