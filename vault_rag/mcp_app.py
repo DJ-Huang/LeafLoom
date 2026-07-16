@@ -18,6 +18,56 @@ def _service() -> VaultRagService:
     return VaultRagService(PROJECT_ROOT, Settings())
 
 
+def _required_rule_ids(query: str, domain: str | None) -> tuple[str, ...]:
+    """Translate the stable gate contract into deterministic rule inclusions."""
+    domain_key = (domain or "").strip().lower()
+    query_key = query.lower()
+    is_review = any(token in query_key for token in ("review", "审查"))
+    is_debug = any(token in query_key for token in ("debug", "调试", "排错"))
+    is_architecture = any(
+        token in query_key
+        for token in ("architecture", "module", "documentation", "架构", "模块", "文档")
+    )
+    is_write = any(
+        token in query_key
+        for token in (
+            "write",
+            "implement",
+            "fix",
+            "refactor",
+            "code",
+            "写",
+            "改",
+            "实现",
+            "修复",
+            "重构",
+            "编码",
+        )
+    )
+
+    if domain_key == "unity":
+        rule_ids = ["core/role", "core/anti-ai-trace"]
+        if is_review:
+            rule_ids.extend(("reviews/hmirp-review-rules", "agents/shader-expert"))
+        elif is_debug:
+            rule_ids.append("agents/test-engineer")
+        elif is_architecture:
+            rule_ids.append("agents/ta-render-expert")
+        elif is_write:
+            rule_ids.append("core/hmirp-rendering-agent")
+        return tuple(rule_ids)
+
+    if domain_key == "comfyui":
+        rule_ids = ["core/comfyui", "core/anti-ai-trace"]
+        if is_review:
+            rule_ids.extend(("reviews/comfyui-review-rules", "agents/comfyui-expert"))
+        return tuple(rule_ids)
+
+    if domain_key == "pcg":
+        return ("pcg/index", "pcg/assembly-bevel")
+    return ()
+
+
 def build_mcp() -> FastMCP:
     mcp = FastMCP("vault-rag")
     svc_holder: dict[str, VaultRagService | None] = {"svc": None}
@@ -73,6 +123,8 @@ def build_mcp() -> FastMCP:
                 type_="rule",
                 domain=domain,
                 path_prefix=settings.vault_rules_folder,
+                dedupe_by_rule=True,
+                required_rule_ids=_required_rule_ids(query, domain),
             )
             return json.dumps({"ok": True, "results": rows}, ensure_ascii=False, indent=2)
         except Exception as e:

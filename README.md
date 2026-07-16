@@ -105,8 +105,8 @@ vault-rag search "Unity URP depth prepass 問題" --top-k 8
 
 重啟 Cursor 後應可看到工具：
 
-- `rule_search`：混合檢索，**僅** `Rules/`（Codely 路由規則）
-- `vault_search`：混合檢索經驗筆記（**自動排除** `Rules/`，規則請用 `rule_search`；可選 `note_type`、`domain`）
+- `rule_search`：混合檢索，**僅** `Rules/`；按 `rule_id` 去重，Unity / ComfyUI / PCG 的穩定必選規則會標記為 `match_reason=required_rule`
+- `vault_search`：混合檢索經驗筆記（**自動排除** `Rules/`，規則請用 `rule_search`；可選 `note_type`、`domain`）；每篇筆記最多返回一個最高相關 chunk
 - `vault_get_chunk`：依 `chunk_id` 取全文
 - `vault_index_status`：索引狀態
 
@@ -120,6 +120,8 @@ type: pitfall
 domain: unity
 ---
 ```
+
+未填 `type` 時會從 `type/*` tag 或一級目錄（如 `Pitfalls/`、`Tips/`、`Rules/`）推導。`domain` 支援逗號、`|`、JSON 陣列或 YAML 陣列；未分類筆記不會因傳入 domain 而被直接排除。
 
 ## 維護
 

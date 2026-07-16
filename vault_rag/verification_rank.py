@@ -69,13 +69,8 @@ def rank_search_candidates(
         else:
             preferred.append(nws)
 
-    # Higher verification tier first, then fused score.
-    def sort_key(nws: NodeWithScore) -> tuple[int, float]:
-        meta = dict(nws.node.metadata or {})
-        return (verification_tier(meta), float(nws.score or 0.0))
-
-    preferred.sort(key=sort_key, reverse=True)
-    backfill.sort(key=sort_key, reverse=True)
+    # `merged` is already relevance-ordered. Trust decides preferred vs backfill,
+    # but must not make an unrelated verified note outrank a relevant limited note.
     return preferred, backfill
 
 
