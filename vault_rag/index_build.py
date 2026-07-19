@@ -45,9 +45,12 @@ def build_index(project_root: Path, settings: Settings) -> dict[str, Any]:
     insert_batch = max(1, len(nodes))
 
     logger.info("Embedding %s chunks from %s markdown files…", len(nodes), num_files)
+    # macOS System proxy (Clash/Surge via scutil) is picked up by httpx when
+    # trust_env=True and can 502 localhost Ollama; force direct connection.
     embed_model = OllamaEmbedding(
         model_name=settings.embedding_model,
         base_url=settings.ollama_base_url,
+        client_kwargs={"trust_env": False},
     )
 
     vector_store = LanceDBVectorStore(

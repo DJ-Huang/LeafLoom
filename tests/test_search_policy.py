@@ -10,8 +10,10 @@ from vault_rag.service import (
     _ensure_required_rules,
     _metadata_match,
     _metadata_tokens,
+    _path_under_prefix,
 )
-from vault_rag.mcp_app import _required_rule_ids
+from vault_rag.mcp_app import _required_rule_ids, _rule_path_prefixes
+from vault_rag.settings import Settings
 from vault_rag.verification_rank import rank_search_candidates
 
 
@@ -59,6 +61,20 @@ class MetadataPolicyTests(unittest.TestCase):
             _metadata_match({"type": "", "file_path": "Pitfalls/x.md"}, type_="pitfall", domain=None)
         )
 
+    def test_multiple_path_prefixes_are_supported(self) -> None:
+        prefixes = ("Rules", "PCG AI Rule")
+        self.assertTrue(_path_under_prefix("Rules/core/a.md", prefixes))
+        self.assertTrue(_path_under_prefix("PCG AI Rule/Graph Authoring/a.md", prefixes))
+        self.assertFalse(_path_under_prefix("Pitfalls/a.md", prefixes))
+
+    def test_pcg_rule_root_is_domain_bound(self) -> None:
+        settings = Settings(_env_file=None)
+        self.assertEqual(_rule_path_prefixes(settings, "unity"), (settings.vault_rules_folder,))
+        self.assertEqual(
+            _rule_path_prefixes(settings, "pcg"),
+            (settings.vault_rules_folder, settings.pcg_rules_folder),
+        )
+
 
 class RankingPolicyTests(unittest.TestCase):
     def test_verification_pool_preserves_relevance_order(self) -> None:
@@ -98,10 +114,36 @@ class RankingPolicyTests(unittest.TestCase):
         )
         self.assertEqual([x.node.node_id for x in pinned], ["required", "semantic"])
 
+    def test_required_rule_cannot_escape_allowed_roots(self) -> None:
+        outside = _candidate(
+            "outside",
+            0.1,
+            file_path="Pitfalls/not-a-rule.md",
+            rule_id="core/required",
+        )
+        pinned = _ensure_required_rules(
+            [],
+            all_nodes=[outside.node],
+            required_rule_ids=("core/required",),
+            path_prefix=("Rules", "PCG AI Rule"),
+        )
+        self.assertEqual(pinned, [])
+
     def test_unity_write_contract_includes_stable_rules(self) -> None:
         self.assertEqual(
             _required_rule_ids("implement Unity shader code", "unity"),
             ("core/role", "core/anti-ai-trace", "core/hmirp-rendering-agent"),
+        )
+
+    def test_pcg_contract_includes_project_and_graph_rules(self) -> None:
+        self.assertEqual(
+            _required_rule_ids("author a vehicle graph", "pcg"),
+            (
+                "pcg/project-engineering",
+                "pcg/index",
+                "pcg/graph-contract",
+                "pcg/assembly-bevel",
+            ),
         )
 
 
