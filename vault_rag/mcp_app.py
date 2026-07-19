@@ -64,8 +64,21 @@ def _required_rule_ids(query: str, domain: str | None) -> tuple[str, ...]:
         return tuple(rule_ids)
 
     if domain_key == "pcg":
-        return ("pcg/index", "pcg/assembly-bevel")
+        return (
+            "pcg/project-engineering",
+            "pcg/index",
+            "pcg/graph-contract",
+            "pcg/assembly-bevel",
+        )
     return ()
+
+
+def _rule_path_prefixes(settings: Settings, domain: str | None) -> tuple[str, ...]:
+    """Expose the dedicated PCG-AI rule root only to the PCG domain."""
+    prefixes = [settings.vault_rules_folder]
+    if (domain or "").strip().lower() == "pcg":
+        prefixes.append(settings.pcg_rules_folder)
+    return tuple(prefixes)
 
 
 def build_mcp() -> FastMCP:
@@ -86,7 +99,7 @@ def build_mcp() -> FastMCP:
     ) -> str:
         """Hybrid search (BM25 + dense vectors) over the Obsidian vault index.
 
-        Excludes vault Rules/ (use rule_search for routing rules). Results prefer notes
+        Excludes all routing-rule roots (use rule_search). Results prefer notes
         with verified_status limited/verified_true. Notes marked unverified (and
         Tips/Features/BugFix without verification) are backfilled only when top_k
         cannot be met; backfill excerpts are prefixed as unverified hints.
@@ -98,7 +111,10 @@ def build_mcp() -> FastMCP:
                 top_k=top_k,
                 type_=note_type,
                 domain=domain,
-                path_exclude_prefixes=(settings.vault_rules_folder,),
+                path_exclude_prefixes=(
+                    settings.vault_rules_folder,
+                    settings.pcg_rules_folder,
+                ),
             )
             return json.dumps({"ok": True, "results": rows}, ensure_ascii=False, indent=2)
         except Exception as e:
@@ -111,9 +127,10 @@ def build_mcp() -> FastMCP:
         top_k: int = 10,
         domain: str | None = None,
     ) -> str:
-        """Hybrid search scoped to vault Rules/ only (Codely routing rules).
+        """Hybrid search over routing rules with domain-bound roots.
 
-        Does not search Pitfall/Tip/Concept/BugFix outside Rules/. Use vault_search for experience notes.
+        Rules/ is always eligible. PCG AI Rule/ is eligible only for domain=pcg.
+        Does not search Pitfall/Tip/Concept/BugFix. Use vault_search for experience notes.
         """
         try:
             settings = Settings()
@@ -122,7 +139,7 @@ def build_mcp() -> FastMCP:
                 top_k=top_k,
                 type_="rule",
                 domain=domain,
-                path_prefix=settings.vault_rules_folder,
+                path_prefix=_rule_path_prefixes(settings, domain),
                 dedupe_by_rule=True,
                 required_rule_ids=_required_rule_ids(query, domain),
             )

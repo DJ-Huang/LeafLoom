@@ -71,6 +71,13 @@ class Settings(BaseSettings):
         default="Rules",
         description="Subfolder under vault_root for Codely routing rules (rule_search scope).",
     )
+    pcg_rules_folder: str = Field(
+        default="PCG AI Rule",
+        description=(
+            "PCG-AI-only routing-rule root. rule_search includes it only when domain=pcg; "
+            "vault_search always excludes it."
+        ),
+    )
     index_dir: Path = Field(
         default=Path("_index"),
         description="When index_in_vault=false: index under vault-rag project (relative or absolute).",

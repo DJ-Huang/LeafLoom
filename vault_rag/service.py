@@ -30,9 +30,14 @@ def _normalize_posix_path(value: str) -> str:
     return value.replace("\\", "/").strip("/")
 
 
-def _path_under_prefix(file_path: str, prefix: str | None) -> bool:
+def _path_under_prefix(
+    file_path: str,
+    prefix: str | tuple[str, ...] | None,
+) -> bool:
     if not prefix:
         return True
+    if isinstance(prefix, tuple):
+        return any(_path_under_prefix(file_path, item) for item in prefix)
     rel = _normalize_posix_path(file_path)
     root = _normalize_posix_path(prefix)
     return rel == root or rel.startswith(f"{root}/")
@@ -131,6 +136,7 @@ def _ensure_required_rules(
     *,
     all_nodes: list[TextNode],
     required_rule_ids: tuple[str, ...],
+    path_prefix: str | tuple[str, ...] | None = None,
 ) -> list[NodeWithScore]:
     """Pin required rule documents ahead of semantic candidates without duplicating them."""
     if not required_rule_ids:
@@ -145,7 +151,10 @@ def _ensure_required_rules(
     fallback: dict[str, TextNode] = {}
     required = set(required_rule_ids)
     for node in all_nodes:
-        rule_id = str((node.metadata or {}).get("rule_id", "")).strip()
+        meta = dict(node.metadata or {})
+        if not _path_under_prefix(str(meta.get("file_path", "")), path_prefix):
+            continue
+        rule_id = str(meta.get("rule_id", "")).strip()
         if rule_id in required and rule_id not in fallback:
             fallback[rule_id] = node
 
@@ -195,9 +204,11 @@ class VaultRagService:
             raise RuntimeError(f"No nodes in {nodes_path}")
         self._nodes_by_id = {n.node_id: n for n in nodes}
 
+        # Bypass macOS System proxy so localhost Ollama is not 502'd.
         embed_model = OllamaEmbedding(
             model_name=self.settings.embedding_model,
             base_url=self.settings.ollama_base_url,
+            client_kwargs={"trust_env": False},
         )
         vector_store = LanceDBVectorStore(
             uri=str(lance_path),
@@ -234,7 +245,7 @@ class VaultRagService:
         top_k: int = 10,
         type_: str | None = None,
         domain: str | None = None,
-        path_prefix: str | None = None,
+        path_prefix: str | tuple[str, ...] | None = None,
         path_exclude_prefixes: tuple[str, ...] = (),
         dedupe_by_rule: bool = False,
         required_rule_ids: tuple[str, ...] = (),
@@ -267,6 +278,7 @@ class VaultRagService:
                 filtered,
                 all_nodes=list(self._nodes_by_id.values()),
                 required_rule_ids=required_rule_ids,
+                path_prefix=path_prefix,
             )
 
         if self.settings.verification_ranking_enabled:

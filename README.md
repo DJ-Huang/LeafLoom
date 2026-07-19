@@ -41,6 +41,7 @@ pip install -e .
 - `VAULT_ROOT`：Obsidian 庫根目錄（預設已指向 `D:\Project\Obsidian\DJ Knowledge\DJ knowledge`）
 - `OLLAMA_BASE_URL`：預設 `http://127.0.0.1:11434`
 - `EMBEDDING_MODEL`：預設 `bge-m3`
+- `PCG_RULES_FOLDER`：PCG-AI 專用規則根（預設 `PCG AI Rule`）；僅 `rule_search(domain=pcg)` 可檢索
 - **`INDEX_IN_VAULT`**（預設 `true`）：索引寫在 **`VAULT_ROOT` + `VAULT_INDEX_FOLDER`**（預設 **`.vault-rag/`**），與知識庫同備份。設為 `false` 時改寫到 `vault-rag` 專案下的 `INDEX_DIR`。
 - 排除規則：見 [知識庫整理與排除規則](./docs/VAULT_ORGANIZATION.md)（目錄名 **`EXCLUDE_DIR_NAMES_EXTRA`**、`.ragignore`、`EXCLUDE_PATHSPEC_EXTRA`、YAML `rag_index` 等）。
 
@@ -105,8 +106,8 @@ vault-rag search "Unity URP depth prepass 問題" --top-k 8
 
 重啟 Cursor 後應可看到工具：
 
-- `rule_search`：混合檢索，**僅** `Rules/`；按 `rule_id` 去重，Unity / ComfyUI / PCG 的穩定必選規則會標記為 `match_reason=required_rule`
-- `vault_search`：混合檢索經驗筆記（**自動排除** `Rules/`，規則請用 `rule_search`；可選 `note_type`、`domain`）；每篇筆記最多返回一個最高相關 chunk
+- `rule_search`：混合檢索 `Rules/`；當且僅當 `domain=pcg` 時額外納入 `PCG AI Rule/`。按 `rule_id` 去重，穩定必選規則標記為 `match_reason=required_rule`
+- `vault_search`：混合檢索經驗筆記（**自動排除** `Rules/` 與 `PCG AI Rule/`；規則請用 `rule_search`；可選 `note_type`、`domain`）；每篇筆記最多返回一個最高相關 chunk
 - `vault_get_chunk`：依 `chunk_id` 取全文
 - `vault_index_status`：索引狀態
 
