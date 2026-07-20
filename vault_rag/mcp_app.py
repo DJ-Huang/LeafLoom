@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import json
 import logging
 from pathlib import Path
@@ -86,6 +87,12 @@ def build_mcp() -> FastMCP:
     svc_holder: dict[str, VaultRagService | None] = {"svc": None}
 
     def svc() -> VaultRagService:
+        current = svc_holder["svc"]
+        if current is not None and current._index_changed_since_load():
+            logger.info("Index changed; recreating VaultRagService…")
+            current._release_resources()
+            svc_holder["svc"] = None
+            gc.collect()
         if svc_holder["svc"] is None:
             svc_holder["svc"] = _service()
         return svc_holder["svc"]

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import gc
 import json
 import logging
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -184,10 +186,34 @@ class VaultRagService:
         self._vector_retriever = None
         self._bm25: BM25Retriever | None = None
         self._loaded = False
+        self._status_mtime: float | None = None
+
+    def _index_changed_since_load(self) -> bool:
+        """True if status.json mtime is newer than what we loaded (reindex happened)."""
+        status_path = self.index_dir / "status.json"
+        if not status_path.is_file():
+            return True
+        current = os.stat(status_path).st_mtime
+        if self._status_mtime is None or current > self._status_mtime:
+            return True
+        return False
+
+    def _release_resources(self) -> None:
+        """Explicitly release LanceDB native handles and large Python objects.
+
+        LanceDB's Rust core has no close()/__del__; without explicit teardown
+        the old table/connection linger until GC eventually drops them, leaking
+        ~4 MB per reload (native mmap + Arrow buffers).
+        """
+        self._vector_retriever = None
+        self._bm25 = None
+        self._nodes_by_id = {}
+        gc.collect()
 
     def _ensure_loaded(self) -> None:
         if self._loaded:
             return
+
         nodes_path = self.index_dir / "nodes.jsonl"
         if not nodes_path.is_file():
             raise FileNotFoundError(
@@ -226,6 +252,10 @@ class VaultRagService:
             similarity_top_k=self.settings.bm25_top_k,
         )
         self._loaded = True
+        status_path = self.index_dir / "status.json"
+        self._status_mtime = (
+            os.stat(status_path).st_mtime if status_path.is_file() else None
+        )
         logger.info(
             "Vault RAG loaded: %s chunks, Lance=%s",
             len(nodes),
