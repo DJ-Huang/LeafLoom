@@ -6,13 +6,20 @@ from llama_index.core.schema import NodeWithScore, TextNode
 
 from vault_rag.service import (
     _dedupe_candidates,
+    _effective_domains,
     _effective_note_type,
     _ensure_required_rules,
     _metadata_match,
     _metadata_tokens,
+    _passes_relevance_gate,
     _path_under_prefix,
 )
-from vault_rag.mcp_app import _required_rule_ids, _rule_path_prefixes
+from vault_rag.mcp_app import (
+    _filter_rule_scope,
+    _is_hmirp_query,
+    _required_rule_ids,
+    _rule_path_prefixes,
+)
 from vault_rag.settings import Settings
 from vault_rag.verification_rank import rank_search_candidates
 
@@ -56,6 +63,19 @@ class MetadataPolicyTests(unittest.TestCase):
         self.assertTrue(_metadata_match({"domain": ""}, type_=None, domain="unity"))
         self.assertFalse(_metadata_match({"domain": "pcg"}, type_=None, domain="unity"))
 
+    def test_general_domain_excludes_inferred_specialized_notes(self) -> None:
+        dcc = {"domain": "", "file_path": "DCC/Blender/guide.md"}
+        unity = {"domain": "", "file_path": "Pitfalls/x.md", "techStack": "Unity, URP"}
+        tmp = {"domain": "", "file_path": "Concepts/cpt-tmp-per-glyph-uv-mirror.md"}
+        generic = {"domain": "", "file_path": "Concepts/generic-cli.md"}
+        self.assertEqual(_effective_domains(dcc), {"dcc"})
+        self.assertEqual(_effective_domains(unity), {"unity"})
+        self.assertEqual(_effective_domains(tmp), {"unity"})
+        self.assertFalse(_metadata_match(dcc, type_=None, domain="general"))
+        self.assertFalse(_metadata_match(unity, type_=None, domain="general"))
+        self.assertFalse(_metadata_match(tmp, type_=None, domain="general"))
+        self.assertTrue(_metadata_match(generic, type_=None, domain="general"))
+
     def test_type_filter_uses_path_inference(self) -> None:
         self.assertTrue(
             _metadata_match({"type": "", "file_path": "Pitfalls/x.md"}, type_="pitfall", domain=None)
@@ -70,10 +90,7 @@ class MetadataPolicyTests(unittest.TestCase):
     def test_pcg_rule_root_is_domain_bound(self) -> None:
         settings = Settings(_env_file=None)
         self.assertEqual(_rule_path_prefixes(settings, "unity"), (settings.vault_rules_folder,))
-        self.assertEqual(
-            _rule_path_prefixes(settings, "pcg"),
-            (settings.vault_rules_folder, settings.pcg_rules_folder),
-        )
+        self.assertEqual(_rule_path_prefixes(settings, "pcg"), (settings.vault_rules_folder,))
 
 
 class RankingPolicyTests(unittest.TestCase):
@@ -129,21 +146,54 @@ class RankingPolicyTests(unittest.TestCase):
         )
         self.assertEqual(pinned, [])
 
-    def test_unity_write_contract_includes_stable_rules(self) -> None:
+    def test_generic_unity_write_does_not_include_hmirp_rules(self) -> None:
+        self.assertFalse(_is_hmirp_query("implement Unity shader code"))
+        self.assertEqual(_required_rule_ids("implement Unity shader code", "unity"), ())
+
+    def test_hmirp_write_contract_includes_project_rules(self) -> None:
+        self.assertTrue(_is_hmirp_query("implement HMIRP shader code"))
+        self.assertTrue(_is_hmirp_query("fix Unity Runtime.Stable placement"))
         self.assertEqual(
-            _required_rule_ids("implement Unity shader code", "unity"),
+            _required_rule_ids("implement HMIRP shader code", "unity"),
             ("core/role", "core/anti-ai-trace", "core/hmirp-rendering-agent"),
         )
 
-    def test_pcg_contract_includes_project_and_graph_rules(self) -> None:
+    def test_non_hmirp_unity_search_filters_project_rules(self) -> None:
+        rows = [
+            {"metadata": {"rule_id": "core/hmirp-rendering-agent"}},
+            {"metadata": {"rule_id": "core/generic-unity"}},
+        ]
         self.assertEqual(
-            _required_rule_ids("author a vehicle graph", "pcg"),
-            (
-                "pcg/project-engineering",
-                "pcg/index",
-                "pcg/graph-contract",
-                "pcg/assembly-bevel",
+            _filter_rule_scope(rows, query="implement Unity shader", domain="unity"),
+            [{"metadata": {"rule_id": "core/generic-unity"}}],
+        )
+
+    def test_pcg_contract_uses_project_local_kb(self) -> None:
+        self.assertEqual(_required_rule_ids("author a vehicle graph", "pcg"), ())
+        self.assertEqual(
+            _filter_rule_scope(
+                [{"metadata": {"rule_id": "pcg/project-engineering"}}],
+                query="author a vehicle graph",
+                domain="pcg",
             ),
+            [],
+        )
+
+    def test_relevance_gate_uses_vector_similarity(self) -> None:
+        candidate = _candidate("candidate", 0.03, file_path="Pitfalls/a.md")
+        self.assertFalse(
+            _passes_relevance_gate(
+                candidate,
+                vector_scores={"candidate": 0.39},
+                min_vector_score=0.40,
+            )
+        )
+        self.assertTrue(
+            _passes_relevance_gate(
+                candidate,
+                vector_scores={"candidate": 0.41},
+                min_vector_score=0.40,
+            )
         )
 
 

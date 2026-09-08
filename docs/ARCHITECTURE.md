@@ -121,9 +121,10 @@ flowchart LR
   V --> R[RRF fusion]
   B --> R
   R --> F[metadata filter type/domain]
-  F --> T[verification tier]
+  F --> G[vector relevance gate]
+  G --> T[verification tier]
   T --> D[file_path / rule_id dedupe]
-  D --> O[top_k results]
+  D --> O[up to top_k results or no_relevant_hit]
 ```
 
 ### 4.1 載入（`service.py`）
@@ -137,17 +138,18 @@ flowchart LR
 - 對同一 `query` 分別 **`retrieve`** 向量與 BM25（**BM25 結果列在融合時先於向量**，以符合常見 LlamaIndex 社群建議）。
 - **`reciprocal_rank_fusion`**：對多份排序列表做 RRF 打分，合併為單一排序。
 - `note_type` 優先使用 `metadata["type"]`，缺失時由 `type/*` tag 或一級目錄推導。
-- `domain` 支援 CSV、`|`、JSON/YAML 陣列的成員匹配；未分類筆記保持候選資格，已聲明且不匹配的 domain 才排除。
+- `domain` 支援 CSV、`|`、JSON/YAML 陣列的成員匹配；DCC 路徑及明確 metadata 可補充推導舊筆記域。`general` 嚴格排除專用域；其他域保留真正未分類的跨項目候選。
+- RRF `score` 只負責相對排序；以原始 `vector_score >= MIN_VECTOR_SCORE`（預設 `0.40`）作語義門檻。門檻後不足 `top_k` 不回填弱命中。
 - 驗證狀態只決定 preferred / backfill，不再讓低相關的 `verified_true` 硬排在高相關的 `limited` 前面。
 - `vault_search` 按 `file_path` 去重；`rule_search` 按 `rule_id` 去重。去重發生在 `top_k` 截斷之前。
-- `rule_search` 根據 domain + query intent 注入穩定必選規則，並以 `match_reason=required_rule` 標識；其餘結果仍由混合檢索補充。
+- `rule_search` 僅在 HMIRP 強信號存在時注入 HMIRP 必選規則，並以 `match_reason=required_rule` 標識；普通 Unity 不繼承 HMIRP，PCG-AI 使用工程 `.pcg-ai/`。
 
 ### 4.3 MCP 工具（`mcp_app.py`）
 
 | 工具 | 作用 |
 |------|------|
-| `vault_search` | 混合檢索 + 過濾 + 可信度分層 + 筆記去重 + 摘要片段 `excerpt`。 |
-| `rule_search` | `Rules/` 範圍混合檢索 + 必選規則注入 + `rule_id` 去重。 |
+| `vault_search` | 混合檢索 + 域/相關性過濾 + 可信度分層 + 筆記去重；可返回 `no_relevant_hit`。 |
+| `rule_search` | `Rules/` 範圍混合檢索 + HMIRP 強信號注入 + `rule_id` 去重；可返回 `no_relevant_hit`。 |
 | `vault_get_chunk` | 依 `chunk_id` 返回完整 `text` 與 `metadata`。 |
 | `vault_index_status` | 讀取 `status.json` 與基本就緒狀態。 |
 
