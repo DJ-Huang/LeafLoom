@@ -41,7 +41,8 @@ pip install -e .
 - `VAULT_ROOT`：Obsidian 庫根目錄（預設已指向 `D:\Project\Obsidian\DJ Knowledge\DJ knowledge`）
 - `OLLAMA_BASE_URL`：預設 `http://127.0.0.1:11434`
 - `EMBEDDING_MODEL`：預設 `bge-m3`
-- `PCG_RULES_FOLDER`：PCG-AI 專用規則根（預設 `PCG AI Rule`）；僅 `rule_search(domain=pcg)` 可檢索
+- `MIN_VECTOR_SCORE`：語義相關性門檻（預設 `0.40`）；低於門檻的候選不為填滿 `top_k` 返回，設為 `-1` 可停用
+- `PCG_RULES_FOLDER`：僅保留為全局經驗搜尋的舊規則根排除項；PCG-AI 規則改走工程 `.pcg-ai/` 的 `pcg_kb_*`
 - **`INDEX_IN_VAULT`**（預設 `true`）：索引寫在 **`VAULT_ROOT` + `VAULT_INDEX_FOLDER`**（預設 **`.vault-rag/`**），與知識庫同備份。設為 `false` 時改寫到 `vault-rag` 專案下的 `INDEX_DIR`。
 - 排除規則：見 [知識庫整理與排除規則](./docs/VAULT_ORGANIZATION.md)（目錄名 **`EXCLUDE_DIR_NAMES_EXTRA`**、`.ragignore`、`EXCLUDE_PATHSPEC_EXTRA`、YAML `rag_index` 等）。
 
@@ -106,8 +107,8 @@ vault-rag search "Unity URP depth prepass 問題" --top-k 8
 
 重啟 Cursor 後應可看到工具：
 
-- `rule_search`：混合檢索 `Rules/`；當且僅當 `domain=pcg` 時額外納入 `PCG AI Rule/`。按 `rule_id` 去重，穩定必選規則標記為 `match_reason=required_rule`
-- `vault_search`：混合檢索經驗筆記（**自動排除** `Rules/` 與 `PCG AI Rule/`；規則請用 `rule_search`；可選 `note_type`、`domain`）；每篇筆記最多返回一個最高相關 chunk
+- `rule_search`：混合檢索 `Rules/`；HMIRP 規則只在 Unity 查詢含 HMIRP 強信號時注入/保留，PCG-AI 不走全局規則庫
+- `vault_search`：混合檢索經驗筆記（**自動排除**規則根；可選 `note_type`、`domain`）；每篇最多一個 chunk，弱命中會返回 `no_relevant_hit=true` 而不是填滿 `top_k`
 - `vault_get_chunk`：依 `chunk_id` 取全文
 - `vault_index_status`：索引狀態
 
@@ -119,7 +120,7 @@ vault-rag search "Unity URP depth prepass 問題" --top-k 8
 - 精简返回保留 `chunk_id`、`file_path`、`note_type`、`trust`、原摘要和 `excerpt_truncated`，以及非空的域、规则 ID、技术栈、平台、验证日期/范围和适用前提。去掉检索分数、重复/空元数据与 JSON 排版空白，不再次缩短摘要。
 - `excerpt_truncated=true` 表示底层摘要达到原有 900 字符上限；决定据此实施或下结论前，用 `vault_get_chunk` 核对全文。未验证提示始终保留。
 - 需要原有完整字段时传 `compact=false`；复现原默认数量可显式传 `top_k=10`。完整结果新增 `excerpt_truncated`，已有字段与含义保持不变。
-- `vault_get_chunk` 继续返回完整正文与元数据；无命中返回 `ok=true, results=[]`，服务错误返回 `ok=false`。
+- `vault_get_chunk` 继续返回完整正文与元数据；搜索成功返回 `no_relevant_hit`；无命中为 `ok=true, no_relevant_hit=true, results=[]`，服务错误返回 `ok=false`。
 - 本次仅调整输出和默认结果数量，不改变召回、排序、验证分层或索引。无需 reindex；重启/重新连接 vault-rag MCP 后加载新接口，旧连接继续使用旧代码。
 
 ## 筆記 frontmatter（建議）
@@ -133,7 +134,9 @@ domain: unity
 ---
 ```
 
-未填 `type` 時會從 `type/*` tag 或一級目錄（如 `Pitfalls/`、`Tips/`、`Rules/`）推導。`domain` 支援逗號、`|`、JSON 陣列或 YAML 陣列；未分類筆記不會因傳入 domain 而被直接排除。
+未填 `type` 時會從 `type/*` tag 或一級目錄（如 `Pitfalls/`、`Tips/`、`Rules/`）推導。`domain` 支援逗號、`|`、JSON 陣列或 YAML 陣列；服務會從 DCC 路徑及明確的 Unity/ComfyUI/PCG metadata 補充推導。`domain=general` 嚴格排除專用域，其他明確域仍允許真正未分類的跨項目筆記。
+
+`score` 是 RRF 相對排序，不是置信度；`vector_score` 才用於相關性門檻。所有返回內容都是候選證據，仍須由調用方核對項目、版本、平台與當前源碼。
 
 ## 維護
 

@@ -135,7 +135,9 @@ domain: unity
 ---
 ```
 
-`type` 缺失時服務會從 `type/*` tag 或一級目錄推導；`domain` 可寫單值、逗號分隔值或 YAML 陣列。未填 domain 的筆記視為未分類，仍可參與帶 domain 的召回。
+`type` 缺失時服務會從 `type/*` tag 或一級目錄推導；`domain` 可寫單值、逗號分隔值或 YAML 陣列。服務會從 DCC 路徑及明確 metadata 推導部分舊筆記的域；`domain=general` 嚴格排除專用域，其他域仍可召回真正未分類的跨項目筆記。
+
+`MIN_VECTOR_SCORE` 預設為 `0.40`。低於門檻的候選不返回，因此 `results=[]` / `no_relevant_hit=true` 是正常结果；若更換 embedding model，應用本地正負查詢重新校準，不要用 RRF `score` 當置信度。
 
 ---
 

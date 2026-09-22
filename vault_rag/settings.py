@@ -145,6 +145,15 @@ class Settings(BaseSettings):
     vector_top_k: int = Field(default=40)
     bm25_top_k: int = Field(default=40)
     rrf_k: int = Field(default=60)
+    min_vector_score: float = Field(
+        default=0.40,
+        ge=-1.0,
+        le=1.0,
+        description=(
+            "Minimum embedding similarity for semantic search results. RRF scores are "
+            "relative ranks and must not be used as confidence thresholds. Set to -1 to disable."
+        ),
+    )
 
     verification_ranking_enabled: bool = Field(
         default=True,
