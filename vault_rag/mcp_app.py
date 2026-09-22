@@ -4,6 +4,7 @@ import gc
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
@@ -82,6 +83,42 @@ def _rule_path_prefixes(settings: Settings, domain: str | None) -> tuple[str, ..
     return tuple(prefixes)
 
 
+
+# Keep evidence scope, but omit empty/index-only metadata from routine searches.
+_COMPACT_METADATA_KEYS = (
+    "domain", "rule_id", "techStack", "affectedPlatforms",
+    "verified_date", "verification_scope", "common_assumption",
+)
+
+
+def _search_response(rows: list[dict[str, Any]], *, compact: bool) -> str:
+    if not compact:
+        return json.dumps({"ok": True, "results": rows}, ensure_ascii=False, indent=2)
+
+    results = []
+    for row in rows:
+        result = {
+            key: row[key]
+            for key in (
+                "chunk_id", "file_path", "note_type", "trust",
+                "excerpt", "excerpt_truncated",
+            )
+            if key in row
+        }
+        metadata = row.get("metadata", {})
+        scope = {
+            key: metadata[key] for key in _COMPACT_METADATA_KEYS
+            if metadata.get(key) not in (None, "", [], {})
+        }
+        if scope:
+            result["metadata"] = scope
+        if row.get("match_reason") == "required_rule":
+            result["match_reason"] = "required_rule"
+        results.append(result)
+    return json.dumps({"ok": True, "results": results}, ensure_ascii=False,
+                      separators=(",", ":"))
+
+
 def build_mcp() -> FastMCP:
     mcp = FastMCP("vault-rag")
     svc_holder: dict[str, VaultRagService | None] = {"svc": None}
@@ -100,16 +137,18 @@ def build_mcp() -> FastMCP:
     @mcp.tool()
     def vault_search(
         query: str,
-        top_k: int = 10,
+        top_k: int = 3,
         note_type: str | None = None,
         domain: str | None = None,
+        compact: bool = True,
     ) -> str:
         """Hybrid search (BM25 + dense vectors) over the Obsidian vault index.
 
-        Excludes all routing-rule roots (use rule_search). Results prefer notes
-        with verified_status limited/verified_true. Notes marked unverified (and
-        Tips/Features/BugFix without verification) are backfilled only when top_k
-        cannot be met; backfill excerpts are prefixed as unverified hints.
+        Use for missing project history or platform/compatibility evidence, not
+        every coding task. Excludes rules; prefers verified/limited notes.
+        Defaults to 3 compact results, retaining excerpts and evidence scope.
+        Fetch vault_get_chunk before relying on excerpt_truncated=true results.
+        Set compact=false for all original fields; explicit top_k is respected.
         """
         try:
             settings = Settings()
@@ -123,7 +162,7 @@ def build_mcp() -> FastMCP:
                     settings.pcg_rules_folder,
                 ),
             )
-            return json.dumps({"ok": True, "results": rows}, ensure_ascii=False, indent=2)
+            return _search_response(rows, compact=compact)
         except Exception as e:
             logger.exception("vault_search failed")
             return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
@@ -131,13 +170,18 @@ def build_mcp() -> FastMCP:
     @mcp.tool()
     def rule_search(
         query: str,
-        top_k: int = 10,
+        top_k: int = 3,
         domain: str | None = None,
+        compact: bool = True,
     ) -> str:
         """Hybrid search over routing rules with domain-bound roots.
 
-        Rules/ is always eligible. PCG AI Rule/ is eligible only for domain=pcg.
-        Does not search Pitfall/Tip/Concept/BugFix. Use vault_search for experience notes.
+        Use only for known relevant Vault rules missing from current context.
+        Project hard constraints should be loaded directly from project files.
+        Defaults to 3 compact results; compact=false returns all original fields.
+        Fetch vault_get_chunk before relying on excerpt_truncated=true results.
+        Rules/ is eligible; legacy PCG AI Rule/ is restricted to domain=pcg.
+        Use vault_search for experience notes.
         """
         try:
             settings = Settings()
@@ -150,7 +194,7 @@ def build_mcp() -> FastMCP:
                 dedupe_by_rule=True,
                 required_rule_ids=_required_rule_ids(query, domain),
             )
-            return json.dumps({"ok": True, "results": rows}, ensure_ascii=False, indent=2)
+            return _search_response(rows, compact=compact)
         except Exception as e:
             logger.exception("rule_search failed")
             return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)

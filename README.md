@@ -111,6 +111,17 @@ vault-rag search "Unity URP depth prepass 問題" --top-k 8
 - `vault_get_chunk`：依 `chunk_id` 取全文
 - `vault_index_status`：索引狀態
 
+### 按需查询与精简返回
+
+普通改码和审查不固定调用检索；缺少相关项目历史、平台/兼容证据或用户要求时再查。项目硬约束直接加载，已知存于 Vault 且当前缺失的补充规则才用 `rule_search`。
+
+- MCP 的 `vault_search`、`rule_search` 默认 `top_k=3`、`compact=true`。显式 `top_k` 仍生效，CLI 与底层 search 默认值不变。
+- 精简返回保留 `chunk_id`、`file_path`、`note_type`、`trust`、原摘要和 `excerpt_truncated`，以及非空的域、规则 ID、技术栈、平台、验证日期/范围和适用前提。去掉检索分数、重复/空元数据与 JSON 排版空白，不再次缩短摘要。
+- `excerpt_truncated=true` 表示底层摘要达到原有 900 字符上限；决定据此实施或下结论前，用 `vault_get_chunk` 核对全文。未验证提示始终保留。
+- 需要原有完整字段时传 `compact=false`；复现原默认数量可显式传 `top_k=10`。完整结果新增 `excerpt_truncated`，已有字段与含义保持不变。
+- `vault_get_chunk` 继续返回完整正文与元数据；无命中返回 `ok=true, results=[]`，服务错误返回 `ok=false`。
+- 本次仅调整输出和默认结果数量，不改变召回、排序、验证分层或索引。无需 reindex；重启/重新连接 vault-rag MCP 后加载新接口，旧连接继续使用旧代码。
+
 ## 筆記 frontmatter（建議）
 
 在 Markdown 的 YAML 裡使用 `type`、`domain` 等欄位，可讓 `vault_search` 的過濾更準，例如：
