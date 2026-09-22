@@ -341,7 +341,8 @@ class VaultRagService:
             if ranking == "backfill" or tier == 0:
                 if not excerpt.startswith(UNVERIFIED_EXCERPT_PREFIX.strip()):
                     excerpt = UNVERIFIED_EXCERPT_PREFIX + excerpt
-            if len(excerpt) > 900:
+            excerpt_truncated = len(excerpt) > 900
+            if excerpt_truncated:
                 excerpt = excerpt[:900] + "…"
             out.append(
                 {
@@ -359,6 +360,7 @@ class VaultRagService:
                     ),
                     "metadata": {k: meta[k] for k in sorted(meta.keys()) if k != "file_path"},
                     "excerpt": excerpt,
+                    "excerpt_truncated": excerpt_truncated,
                 }
             )
         return out
