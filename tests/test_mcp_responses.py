@@ -56,6 +56,7 @@ class McpResponseTests(unittest.IsolatedAsyncioTestCase):
         service = make_service([note(index) for index in range(5)])
         result = await self.call(service, "vault_search", {"query": "history"})
         self.assertTrue(result["ok"])
+        self.assertFalse(result["no_relevant_hit"])
         self.assertEqual([row["chunk_id"] for row in result["results"]], ["0", "1", "2"])
         row = result["results"][0]
         self.assertEqual(row["trust"], "limited")
@@ -74,7 +75,7 @@ class McpResponseTests(unittest.IsolatedAsyncioTestCase):
         result = await self.call(service, "vault_search", {
             "query": "history", "top_k": 5, "compact": False,
         })
-        self.assertEqual(result, {"ok": True, "results": expected})
+        self.assertEqual(result, {"ok": True, "no_relevant_hit": False, "results": expected})
         self.assertIn("empty_field", result["results"][0]["metadata"])
 
     async def test_unverified_warning_survives_and_truncated_excerpt_resolves_to_full_text(self):
@@ -108,11 +109,40 @@ class McpResponseTests(unittest.IsolatedAsyncioTestCase):
     async def test_no_hit_and_error_keep_distinct_outcomes(self):
         service = make_service([])
         no_hit = await self.call(service, "vault_search", {"query": "missing"})
-        self.assertEqual(no_hit, {"ok": True, "results": []})
+        self.assertEqual(no_hit, {"ok": True, "no_relevant_hit": True, "results": []})
         service._vector_retriever.retrieve = lambda query: (_ for _ in ()).throw(RuntimeError("offline"))
         with self.assertLogs("vault_rag.mcp_app", level="ERROR"):
             error = await self.call(service, "vault_search", {"query": "history"})
         self.assertEqual(error, {"ok": False, "error": "offline"})
+
+    async def test_scope_filter_runs_before_no_hit_flag_and_compact_projection(self):
+        hmirp = note(1, file_path="Rules/core/render.md", rule_id="core/hmirp-rendering-agent")
+        for compact in (True, False):
+            service = make_service([hmirp])
+            result = await self.call(service, "rule_search", {
+                "query": "implement Unity shader", "domain": "unity", "compact": compact,
+            })
+            self.assertEqual(result, {"ok": True, "no_relevant_hit": True, "results": []})
+            explicit = await self.call(service, "rule_search", {
+                "query": "implement HMIRP shader", "domain": "unity", "compact": compact,
+            })
+            self.assertFalse(explicit["no_relevant_hit"])
+            self.assertEqual(explicit["results"][0]["chunk_id"], "1")
+
+    async def test_weak_matches_remain_empty_in_both_response_modes(self):
+        service = make_service([note(1)])
+        weak = [NodeWithScore(node=service._nodes_by_id["1"], score=0.1)]
+        service._vector_retriever.retrieve = lambda query: weak
+        for compact in (True, False):
+            result = await self.call(service, "vault_search", {"query": "unrelated", "compact": compact})
+            self.assertEqual(result, {"ok": True, "no_relevant_hit": True, "results": []})
+
+    async def test_general_queries_and_pcg_rules_respect_remote_isolation(self):
+        service = make_service([note(1), note(2, domain="pcg", file_path="Rules/pcg/example.md")])
+        generic = await self.call(service, "vault_search", {"query": "history", "domain": "general"})
+        self.assertTrue(generic["no_relevant_hit"])
+        pcg = await self.call(service, "rule_search", {"query": "example", "domain": "pcg"})
+        self.assertEqual(pcg, {"ok": True, "no_relevant_hit": True, "results": []})
 
     async def test_tool_schema_exposes_compact_defaults(self):
         tools = {tool.name: tool for tool in await build_mcp().list_tools()}

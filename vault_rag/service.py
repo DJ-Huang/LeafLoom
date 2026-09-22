@@ -66,6 +66,33 @@ _PATH_NOTE_TYPES = {
     "tips": "tip",
 }
 
+_DOMAIN_MARKERS = {
+    "comfyui": ("comfyui", "ta-toolkit", "nodebase", "node_base"),
+    "dcc": (
+        "blender",
+        "houdini",
+        "substance painter",
+        "substance designer",
+        "maya",
+        "zbrush",
+        "bpy",
+        "bmesh",
+    ),
+    "pcg": ("pcg-ai", "pcg ai", ".pcg-ai"),
+    "unity": (
+        "unity",
+        "tuanjie",
+        "hmirp",
+        "hmicore",
+        "cpt-tmp-",
+        "shadergraph",
+        "rendertexture",
+        "scriptable render pass",
+        "textmeshpro",
+        "universal render pipeline",
+    ),
+}
+
 
 def _metadata_tokens(value: Any) -> set[str]:
     """Normalize scalar, CSV, JSON-list, or list metadata into lowercase tokens."""
@@ -100,16 +127,53 @@ def _effective_note_type(meta: dict[str, Any]) -> str:
     return _PATH_NOTE_TYPES.get(top_level, "")
 
 
+def _effective_domains(meta: dict[str, Any]) -> set[str]:
+    """Use declared domains first, then conservatively infer obvious legacy scopes."""
+    declared = _metadata_tokens(meta.get("domain"))
+    if declared:
+        return declared
+
+    file_path = _normalize_posix_path(str(meta.get("file_path", ""))).lower()
+    if file_path.startswith("dcc/"):
+        return {"dcc"}
+
+    searchable = " ".join(
+        str(meta.get(key, ""))
+        for key in ("file_path", "name", "tags", "techStack", "categories", "category")
+    ).lower()
+    inferred = {
+        domain
+        for domain, markers in _DOMAIN_MARKERS.items()
+        if any(marker in searchable for marker in markers)
+    }
+    return inferred
+
+
 def _metadata_match(meta: dict[str, Any], *, type_: str | None, domain: str | None) -> bool:
     if type_ is not None and _effective_note_type(meta) != type_.strip().lower():
         return False
     if domain is not None:
         want = domain.strip().lower()
-        domains = _metadata_tokens(meta.get("domain"))
-        # Unclassified notes remain eligible. A declared domain is a hard constraint.
+        domains = _effective_domains(meta)
+        # `general` is intentionally strict: specialized or legacy-inferred notes are noise.
+        if want == "general":
+            return not domains
+        # Other domains keep truly unclassified cross-project notes as candidates.
         if domains and want not in domains:
             return False
     return True
+
+
+def _passes_relevance_gate(
+    candidate: NodeWithScore,
+    *,
+    vector_scores: dict[str, float],
+    min_vector_score: float,
+) -> bool:
+    """Reject top-k filler using embedding similarity, not the relative RRF score."""
+    if min_vector_score <= -1.0:
+        return True
+    return vector_scores.get(candidate.node.node_id, float("-inf")) >= min_vector_score
 
 
 def _dedupe_candidates(
@@ -285,6 +349,10 @@ class VaultRagService:
 
         v_results = self._vector_retriever.retrieve(query)
         b_results = self._bm25.retrieve(query)
+        vector_scores = {
+            result.node.node_id: float(result.score or 0.0)
+            for result in v_results
+        }
         # BM25 first per LlamaIndex community guidance for fusion with sparse retrievers.
         merged = reciprocal_rank_fusion(
             [b_results, v_results],
@@ -300,7 +368,11 @@ class VaultRagService:
                 continue
             if _path_excluded_by_prefixes(file_path, path_exclude_prefixes):
                 continue
-            if _metadata_match(meta, type_=type_, domain=domain):
+            if _metadata_match(meta, type_=type_, domain=domain) and _passes_relevance_gate(
+                nws,
+                vector_scores=vector_scores,
+                min_vector_score=self.settings.min_vector_score,
+            ):
                 filtered.append(nws)
 
         if required_rule_ids:
@@ -348,6 +420,7 @@ class VaultRagService:
                 {
                     "chunk_id": nws.node.node_id,
                     "score": float(nws.score or 0.0),
+                    "vector_score": vector_scores.get(nws.node.node_id),
                     "file_path": meta.get("file_path", ""),
                     "note_type": _effective_note_type(meta),
                     "verified_status": meta.get("verified_status", ""),
