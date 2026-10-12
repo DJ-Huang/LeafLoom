@@ -31,7 +31,8 @@ def state_directory() -> Path:
     if override:
         return Path(override).expanduser().resolve()
     if is_windows():
-        return Path(os.environ.get('LOCALAPPDATA', str(Path.home() / 'AppData/Local'))) / 'VaultRag'
+        local_appdata = os.environ.get('LOCALAPPDATA')
+        return (Path(local_appdata) if local_appdata else Path.home() / 'AppData/Local') / 'VaultRag'
     if sys.platform == 'darwin':
         return Path.home() / 'Library/Application Support/VaultRag'
     return Path(os.environ.get('XDG_DATA_HOME', str(Path.home() / '.local/share'))) / 'VaultRag'

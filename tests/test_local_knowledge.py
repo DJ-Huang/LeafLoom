@@ -32,6 +32,16 @@ class LocalKnowledgeTests(unittest.TestCase):
         self.put('Outside/secret.md','# 目录外内容\n信号调试')
         self.put('RAG/Navigation/topic.md','# 能量流主题\n[[a]] [[out]] [[Outside/secret]]')
         self.runtime.catalog.scan();self.runtime.knowledge.build()
+    def test_choose_directory_calls_native_picker_once(self):
+        from unittest.mock import patch
+        app=create_app(self.config,self.runtime,start_background=False)
+        token=(self.config.directory/'auth-token').read_text().strip()
+        with patch('vault_rag.web_server.choose_directory',return_value={'path':str(self.root)}) as picker:
+            with TestClient(app,base_url='http://127.0.0.1:18080') as client:
+                response=client.post('/api/choose-directory',headers={'Authorization':'Bearer '+token})
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.json(),{'path':str(self.root)})
+            picker.assert_called_once_with()
     def test_scope_lexical_wiki_and_immediate_withdrawal(self):
         self.populate();k=self.runtime.knowledge
         self.put('RAG/_archive/old.md','# 信号调试 旧归档');self.assertFalse(self.config.eligible('RAG/_archive/old.md'))

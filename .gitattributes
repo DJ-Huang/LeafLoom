@@ -1,0 +1,4 @@
+*.sh text eol=lf
+*.command text eol=lf
+scripts/macos/menu.js text eol=lf
+本地知识库.app/Contents/MacOS/launcher text eol=lf

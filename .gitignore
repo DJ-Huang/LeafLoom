@@ -24,6 +24,8 @@ dist/
 *.egg
 
 .venv/
+.venv-backup-*/
+.install.lock
 venv/
 env/
 

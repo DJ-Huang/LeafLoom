@@ -31,10 +31,13 @@ def macos_control(action, config):
     if action=='install':
         logs=config.directory/'logs';logs.mkdir(exist_ok=True);path.parent.mkdir(parents=True,exist_ok=True)
         repo=Path(__file__).resolve().parents[1]
-        data={'Label':LABEL,'ProgramArguments':[str(Path(sys.executable).absolute()),'-m','vault_rag.web_server_entry'],'WorkingDirectory':str(repo),'RunAtLoad':True,'KeepAlive':True,'ThrottleInterval':10,'StandardOutPath':str(logs/'service.log'),'StandardErrorPath':str(logs/'service-error.log'),'EnvironmentVariables':{'VAULT_RAG_HOME':str(config.directory),'TOKENIZERS_PARALLELISM':'false','PYTHONDONTWRITEBYTECODE':'1','NO_PROXY':'localhost,127.0.0.1','no_proxy':'localhost,127.0.0.1'}}
+        previous=plistlib.loads(path.read_bytes()) if path.exists() else {}
+        enabled=previous.get('RunAtLoad',True)
+        data={'Label':LABEL,'ProgramArguments':[str(Path(sys.executable).absolute()),'-m','vault_rag.web_server_entry'],'WorkingDirectory':str(repo),'RunAtLoad':enabled,'KeepAlive':enabled,'ThrottleInterval':10,'StandardOutPath':str(logs/'service.log'),'StandardErrorPath':str(logs/'service-error.log'),'EnvironmentVariables':{'VAULT_RAG_HOME':str(config.directory),'TOKENIZERS_PARALLELISM':'false','PYTHONDONTWRITEBYTECODE':'1','NO_PROXY':'localhost,127.0.0.1','no_proxy':'localhost,127.0.0.1'}}
         atomic_write(path,plistlib.dumps(data));path.chmod(0o600)
         subprocess.run(['launchctl','bootout',target],capture_output=True)
-        subprocess.run(['launchctl','bootstrap',f'gui/{os.getuid()}',str(path)],check=True);print('已安装并启动本地知识库服务')
+        subprocess.run(['launchctl','bootstrap',f'gui/{os.getuid()}',str(path)],check=True)
+        subprocess.run(['launchctl','kickstart',target],check=True);print('已安装并启动本地知识库服务')
     elif action=='start':
         if not path.exists():return control('install', config)
         result=subprocess.run(['launchctl','bootstrap',f'gui/{os.getuid()}',str(path)],capture_output=True)
@@ -55,7 +58,9 @@ def health(config):
     import urllib.request, urllib.error
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
-        with opener.open(base_url(config) + '/healthz', timeout=1) as response:
+        # Windows loopback refusal can take about two seconds. A one-second
+        # timeout misclassified a normally stopped service as unresponsive.
+        with opener.open(base_url(config) + '/healthz', timeout=3) as response:
             if json.load(response).get('service') != 'vault-rag':return 'other'
         token = (config.directory / 'auth-token').read_text(encoding='utf-8').strip()
         req = urllib.request.Request(base_url(config) + '/api/status', headers={'Authorization':'Bearer '+token})

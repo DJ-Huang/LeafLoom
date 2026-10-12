@@ -10,7 +10,12 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
     private var busy = false
     private var checking = false
     private var actions: [NSMenuItem] = []
-    private let home = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/VaultRag")
+    private var home: URL {
+        if let value = ProcessInfo.processInfo.environment["VAULT_RAG_HOME"] ?? Bundle.main.object(forInfoDictionaryKey: "VaultRagState") as? String {
+            return URL(fileURLWithPath: value)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/VaultRag")
+    }
     private var repo: URL {
         let adjacent = Bundle.main.bundleURL.deletingLastPathComponent()
         if FileManager.default.fileExists(atPath: adjacent.appendingPathComponent("vault_rag/service_control.py").path) { return adjacent }
@@ -22,8 +27,8 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
         return "http://127.0.0.1:\(config?["port"] as? Int ?? 18080)"
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
-        if others.contains(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) { NSApp.terminate(nil); return }
+        // The state-specific supervisor lock owns single-instance handling;
+        // Finder's shell launcher can briefly share this bundle identifier.
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = NSImage(systemSymbolName: "books.vertical", accessibilityDescription: "本地知识库")
         item.button?.image?.isTemplate = true
@@ -90,7 +95,7 @@ final class MenuBarController: NSObject, NSApplicationDelegate {
     @objc private func restartService() { control("restart") }
     @objc private func openWeb() {
         // Reuse the launcher: opens immediately if ready; starts the service otherwise.
-        let task = Process(); task.executableURL = repo.appendingPathComponent(".venv/bin/python"); task.arguments = [repo.appendingPathComponent("scripts/open_local_knowledge.py").path]; task.currentDirectoryURL = repo
+        let task = Process(); task.executableURL = URL(fileURLWithPath: "/bin/bash"); task.arguments = [repo.appendingPathComponent("scripts/macos/launch.sh").path, "open"]; task.currentDirectoryURL = repo
         do { try task.run() } catch { let alert = NSAlert(); alert.messageText = "无法打开网页"; alert.informativeText = error.localizedDescription; alert.runModal() }
     }
     @objc private func openLogs() { NSWorkspace.shared.open(home.appendingPathComponent("logs")) }
