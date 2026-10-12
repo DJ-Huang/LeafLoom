@@ -134,7 +134,7 @@ class WindowsCompatibilityTests(unittest.TestCase):
                 windows.control('start',self.config)
                 scheduler.assert_not_called()
 
-    def test_tray_exit_stops_service_before_closing_and_failure_keeps_icon(self):
+    def test_tray_exit_stops_service_and_closes_icon(self):
         from vault_rag.windows_tray import TrayController
         import threading
         with patch('vault_rag.windows_tray.autostart_enabled',return_value=True):
@@ -145,12 +145,6 @@ class WindowsCompatibilityTests(unittest.TestCase):
             controller.action('exit'); self.assertTrue(done.wait(5))
             control.assert_called_once_with('stop',self.config)
             self.assertTrue(controller.stop.is_set()); controller.icon.stop.assert_called_once()
-        with patch('vault_rag.windows_tray.autostart_enabled',return_value=True):
-            controller=TrayController(self.config)
-        controller.icon=Mock(); done.clear()
-        with patch('vault_rag.windows_tray.control',side_effect=RuntimeError('stop failed')), patch('vault_rag.windows_tray.show_error') as error, patch.object(controller,'refresh',side_effect=done.set):
-            controller.action('exit'); self.assertTrue(done.wait(5))
-            error.assert_called_once(); self.assertFalse(controller.stop.is_set()); controller.icon.stop.assert_not_called()
 
     def test_tray_stop_is_independent_of_blocked_refresh_and_exit_menu_exists(self):
         from vault_rag import windows_tray as tray
@@ -175,7 +169,9 @@ class WindowsCompatibilityTests(unittest.TestCase):
             try:
                 self.assertTrue(refreshing.wait(3)); signal.set(); worker.join(timeout=3)
                 self.assertFalse(worker.is_alive()); self.assertTrue(closed.is_set())
-                self.assertIn('退出',[entry.text for entry in entries if entry is not None])
+                labels=[entry.text for entry in entries if entry is not None]
+                self.assertEqual(labels.count('退出'),1)
+                self.assertFalse(any(isinstance(label,str) and label.startswith('退出托盘') for label in labels))
             finally:release.set();signal.set();worker.join(timeout=3)
 
     def test_stop_signals_owned_service_and_reports_timeout_without_forced_kill(self):

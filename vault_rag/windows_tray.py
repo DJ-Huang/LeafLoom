@@ -90,7 +90,6 @@ def run(config):
             item('查看日志',invoke('logs')),
             item(lambda entry:'取消登录启动' if controller.autostart else '恢复登录启动',
                  lambda icon,entry:controller.action('disable-autostart' if controller.autostart else 'enable-autostart')),
-            item('退出托盘（服务继续运行）',lambda icon,entry:controller.quit()),
             item('退出',invoke('exit'),enabled=lambda entry:not controller.busy.locked()),
         )
         icon=pystray.Icon('vault-rag',tray_image('stopped'),'本地知识库',menu)
