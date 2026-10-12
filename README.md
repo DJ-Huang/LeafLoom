@@ -23,6 +23,8 @@
 
 在仓库目录的终端运行 **`sh Start.sh`**，或双击仓库内的 **`本地知识库.app`**。首次自动下载私有 Python/Node、构建网页、安装依赖、准备模型和当前用户后台服务，完成后打开网页。主动安装或修复在仓库目录的终端运行 **`sh Install.sh`**（入口不需要可执行权限），停止运行 **`sh Stop.sh`**。三个 `.sh` 入口均不需要可执行权限。无需预装 Homebrew、Python、Node 或 Xcode。
 
+`Install.sh` 先检查现有环境，完整且未变化时跳过安装；需要修复或更新时只处理受影响的依赖、网页和模型，复用其余组件。更新依据当前仓库的版本和锁定文件。
+
 菜单栏应用安装到 `~/Applications/本地知识库.app`，登录时启动服务与图标，不弹网页。运行环境仅保存在用户私有目录；Intel Mac 和 macOS 13 及以下不在本次支持范围。macOS 原生验收本次按要求跳过，不能将 Windows 结果当作 Mac 实测结果。
 
 `service start/stop/restart/status/uninstall` 管理当前平台的用户后台服务。macOS 使用 LaunchAgent，Windows 使用普通权限的当前用户计划任务。登录后启动、异常退出重启；只有一个 worker 和一个模型实例。首次网页关联本机目录，之后在设置中切换。手动运行用 `vault-rag serve`；启动前确保没有另一实例占用端口。

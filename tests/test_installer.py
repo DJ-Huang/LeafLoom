@@ -101,12 +101,90 @@ class InstallerTests(unittest.TestCase):
         with patch.object(self.setup, 'compatible', return_value=True),patch.object(self.setup, 'run'): self.setup.prepare_environment()
         self.assertTrue((self.repo / '.venv').exists()); self.assertEqual(list(self.repo.glob('.venv-backup-*')), [])
 
-    def test_compatible_python_with_damaged_dependencies_is_backed_up(self):
+    def test_compatible_python_with_missing_dependencies_is_preserved_for_sync(self):
         root=self.repo/'.venv';root.mkdir();(root/'keep').write_text('damaged environment')
         with patch.object(self.setup,'compatible',return_value=True),patch.object(self.setup,'run',side_effect=RuntimeError('native DLL missing')):
             self.setup.prepare_environment()
-        self.assertFalse(root.exists())
-        self.assertEqual(next(self.repo.glob('.venv-backup-*/keep')).read_text(),'damaged environment')
+        self.assertEqual((root/'keep').read_text(),'damaged environment')
+        self.assertEqual(list(self.repo.glob('.venv-backup-*')), [])
+
+    def test_install_ready_environment_skips_install_and_preserves_marker(self):
+        self.install()
+        previous = self.setup.marker.read_bytes()
+        with patch.object(self.setup, 'ready', return_value=True), patch.object(self.setup, 'run') as run, patch.object(self.setup, 'install') as install:
+            self.assertEqual(self.setup.execute('install', no_open=True), 0)
+            install.assert_not_called()
+            self.assertEqual(run.call_args.args[0][-1], 'check')
+        self.assertEqual(self.setup.marker.read_bytes(), previous)
+
+    def test_model_repair_skips_unchanged_web_and_python_dependencies(self):
+        self.install()
+        (self.setup.state / 'models/bge-m3/model.safetensors').unlink()
+        self.calls.clear()
+        with patch.object(self.setup, 'compatible', return_value=True), patch.object(self.setup, 'node') as node, patch.object(self.setup, 'stop_owned'), patch.object(self.setup, 'run', side_effect=self.run_stage):
+            self.setup.install()
+            node.assert_not_called()
+        self.assertFalse(any('sync' in args or 'build' in args or 'ci' in args for args in self.calls))
+        self.assertTrue(any('model-prepare' in args for args in self.calls))
+        self.assertTrue(self.setup.model_ready())
+
+    def test_web_update_skips_python_sync_and_model_prepare(self):
+        self.install()
+        (self.repo / 'web/src/main.tsx').write_text('updated website')
+        self.calls.clear()
+        with patch.object(self.setup, 'compatible', return_value=True): self.install()
+        self.assertTrue(any('build' in args for args in self.calls))
+        self.assertFalse(any('sync' in args or 'model-prepare' in args for args in self.calls))
+
+    def test_dependency_update_syncs_without_rebuilding_web_or_model(self):
+        self.install()
+        (self.repo / 'uv.lock').write_text('updated lock')
+        self.calls.clear()
+        with patch.object(self.setup, 'compatible', return_value=True): self.install()
+        self.assertTrue(any('sync' in args for args in self.calls))
+        self.assertFalse(any('build' in args or 'ci' in args or 'model-prepare' in args for args in self.calls))
+
+    def test_legacy_install_model_repair_reuses_verified_dependencies(self):
+        self.install()
+        (self.setup.state / 'python-install.json').unlink()
+        (self.setup.state / 'models/bge-m3/model.safetensors').unlink()
+        self.calls.clear()
+        with patch.object(self.setup, 'compatible', return_value=True): self.install()
+        self.assertFalse(any('sync' in args for args in self.calls))
+        self.assertTrue(any('model-prepare' in args for args in self.calls))
+
+    def test_missing_packages_sync_without_replacing_compatible_environment(self):
+        self.install()
+        keep = self.repo / '.venv/keep'; keep.write_text('preserve')
+        self.calls.clear()
+        synced = False
+        def missing(args, **kwargs):
+            nonlocal synced
+            if 'sync' in args: synced = True
+            if args[-1] in ('check', 'check-runtime') and not synced:
+                raise RuntimeError('dependency missing')
+            return self.run_stage(args, **kwargs)
+        with patch.object(self.setup, 'compatible', return_value=True), patch.object(self.setup, 'stop_owned'), patch.object(self.setup, 'run', side_effect=missing):
+            self.setup.install()
+        sync = next(args for args in self.calls if 'sync' in args)
+        self.assertNotIn('--reinstall', sync)
+        self.assertEqual(keep.read_text(), 'preserve')
+
+    def test_broken_native_packages_force_repair_and_recheck(self):
+        self.install()
+        self.calls.clear()
+        synced = False
+        def damaged(args, **kwargs):
+            nonlocal synced
+            if 'sync' in args: synced = True
+            if args[-1] == 'check' and not synced:
+                raise RuntimeError('native library damaged')
+            return self.run_stage(args, **kwargs)
+        with patch.object(self.setup, 'compatible', return_value=True), patch.object(self.setup, 'stop_owned'), patch.object(self.setup, 'run', side_effect=damaged):
+            self.setup.install()
+        sync = next(args for args in self.calls if 'sync' in args)
+        self.assertIn('--reinstall', sync)
+        self.assertTrue(self.setup.marker.exists())
 
     def test_failed_backup_keeps_original(self):
         root = self.repo / '.venv'; root.mkdir(); (root / 'keep').write_bytes(b'old')

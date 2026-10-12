@@ -62,6 +62,8 @@ Codex 使用 `url` 与 `http_headers.Authorization`；Cursor 使用 `url` 与 `h
 
 首次在仓库目录的终端运行 `sh Start.sh` 或双击仓库 `.app` 即可；主动修复在仓库目录的终端运行 `sh Install.sh`，停止运行 `sh Stop.sh`。三个 `.sh` 入口均不需要可执行权限。服务使用当前用户 LaunchAgent，菜单栏安装到 `~/Applications/本地知识库.app`，不需要管理员权限。正常登录只启动服务和菜单栏，不打开网页；退出菜单栏后服务继续运行。移动仓库后在新目录运行 `sh Install.sh` 更新路径。
 
+`Install.sh` 会先检查现有环境，依赖、网页和模型完整且安装输入未变化时跳过安装。需要更新或修复时按组件处理：网页未变化不重建，Python 依赖未变化且检查通过不重新同步，完整模型不重新准备；缺失依赖在原有兼容环境中补齐，损坏的原生依赖重新安装修复，Python 版本不兼容时保留旧环境备份。跳过安装后仍按原有行为打开网页，传入 `--no-open` 可禁止打开。这里的更新以当前仓库的版本和锁定文件为准，不检查远程最新版本。
+
 Intel Mac 和 macOS 13 及以下不在支持范围。菜单栏维护端构建说明见 [macOS 说明](../scripts/macos/README.md)，用户端不编译 Swift。
 
 ## 定向检查与 Windows 实机验收
