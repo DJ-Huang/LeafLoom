@@ -116,7 +116,7 @@ vault-rag search "測試關鍵詞" --top-k 5
 | `command` | 建議 **`...\vault-rag\.venv\Scripts\python.exe`**，避免系統 Python 缺依賴 |
 | `args` | `["<vault-rag 根目錄>\\mcp_server.py"]` |
 | `cwd` | **必須**為 **`vault-rag` 根目錄**，以便載入 `.env` |
-| `env` | 至少 **`VAULT_ROOT`**、**`OLLAMA_BASE_URL`**、**`EMBEDDING_MODEL`**；可選 **`INDEX_IN_VAULT`**、**`VAULT_INDEX_FOLDER`**、**`LOAD_RAGIGNORE_FILE`**、**`EXCLUDE_PATHSPEC_EXTRA`**、**`EXCLUDE_DIR_NAMES_EXTRA`** |
+| `env` | 至少 **`VAULT_ROOT`**、**`VAULT_CONTENT_FOLDER=RAG`**、**`OLLAMA_BASE_URL`**、**`EMBEDDING_MODEL`**；可選 **`INDEX_IN_VAULT`**、**`VAULT_INDEX_FOLDER`**、**`LOAD_RAGIGNORE_FILE`**、**`EXCLUDE_PATHSPEC_EXTRA`**、**`EXCLUDE_DIR_NAMES_EXTRA`** |
 
 ### 5.4 生效
 
@@ -158,3 +158,7 @@ domain: unity
 - [架構說明](./ARCHITECTURE.md)
 - [知識庫整理與排除](./VAULT_ORGANIZATION.md)
 - 上層 [README](../README.md)
+
+## 2026-10 单目录范围
+
+设置 `VAULT_CONTENT_FOLDER=RAG`，`VAULT_RULES_FOLDER=Rules` 是相对内容目录的子目录。RAG 必须先存在；旧索引需要重新构建，否则查询会报范围不匹配。状态同时返回 vault_root 和 vault_content_root。Notes 正文平铺，DCC 笔记明确 domain；Navigation、README 和附件固定排除。

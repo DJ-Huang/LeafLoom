@@ -42,14 +42,11 @@ def is_backfill_only(
     """
     True → only used when preferred pool cannot fill top_k.
 
-    - explicit unverified: always backfill
-    - unknown status under Tips/Features/BugFix: backfill (no implicit trust)
+    - explicit unverified or missing status: always backfill
+    - flat note directories never grant implicit trust
     """
     tier = verification_tier(meta)
-    if tier == TIER_UNVERIFIED:
-        return True
-    fp = str(meta.get("file_path", ""))
-    if tier == TIER_UNKNOWN and any(fp.startswith(p) for p in restricted_prefixes):
+    if tier in (TIER_UNVERIFIED, TIER_UNKNOWN):
         return True
     return False
 

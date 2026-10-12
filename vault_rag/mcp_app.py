@@ -115,7 +115,7 @@ def _required_rule_ids(query: str, domain: str | None) -> tuple[str, ...]:
 
 def _rule_path_prefixes(settings: Settings, domain: str | None) -> tuple[str, ...]:
     """PCG-AI rules are project-local; global rule search only exposes Vault Rules/."""
-    return (settings.vault_rules_folder,)
+    return (settings.rules_path_prefix(),)
 
 
 # Keep evidence scope, but omit empty/index-only metadata from routine searches.
@@ -194,8 +194,8 @@ def build_mcp() -> FastMCP:
                 type_=note_type,
                 domain=domain,
                 path_exclude_prefixes=(
-                    settings.vault_rules_folder,
-                    settings.pcg_rules_folder,
+                    settings.rules_path_prefix(),
+                    str(Path(settings.vault_content_folder) / settings.pcg_rules_folder),
                 ),
             )
             return _search_response(rows, compact=compact)
@@ -216,7 +216,7 @@ def build_mcp() -> FastMCP:
         Project hard constraints should be loaded directly from project files.
         Defaults to 3 compact results; compact=false returns all original fields.
         Fetch vault_get_chunk before relying on excerpt_truncated=true results.
-        Only Vault Rules/ is eligible; PCG-AI uses project-local pcg_kb_*.
+        Only content-folder Rules/ is eligible; PCG-AI uses project-local pcg_kb_*.
         HMIRP rules require a strong HMIRP signal in Unity queries. Scope and
         relevance gates may return no_relevant_hit. Use vault_search for experience.
         """

@@ -17,6 +17,7 @@ from llama_index.core.schema import NodeWithScore, TextNode
 from vault_rag.fusion import reciprocal_rank_fusion
 from vault_rag.nodes_store import read_nodes_jsonl
 from vault_rag.settings import Settings
+from vault_rag.content_scope import CONTENT_SCOPE_VERSION, indexed_path_is_in_scope
 from vault_rag.verification_rank import (
     UNVERIFIED_EXCERPT_PREFIX,
     rank_search_candidates,
@@ -275,6 +276,9 @@ class VaultRagService:
         gc.collect()
 
     def _ensure_loaded(self) -> None:
+        status = self.status()
+        if not status.get("scope_matches_settings"):
+            raise RuntimeError("Index content scope is missing or mismatched. Run `vault-rag reindex` before searching.")
         if self._loaded:
             return
 
@@ -292,6 +296,8 @@ class VaultRagService:
         nodes = read_nodes_jsonl(nodes_path)
         if not nodes:
             raise RuntimeError(f"No nodes in {nodes_path}")
+        if any(not indexed_path_is_in_scope(str(n.metadata.get("file_path", "")), self.settings) for n in nodes):
+            raise RuntimeError("Index contains paths outside the content scope. Run `vault-rag reindex`.")
         self._nodes_by_id = {n.node_id: n for n in nodes}
 
         # Bypass macOS System proxy so localhost Ollama is not 502'd.
@@ -328,9 +334,18 @@ class VaultRagService:
 
     def status(self) -> dict[str, Any]:
         path = self.index_dir / "status.json"
+        scope = {
+            "vault_root": str(self.settings.vault_root.expanduser().resolve()),
+            "vault_content_folder": self.settings.vault_content_folder,
+            "vault_content_root": str(self.settings.resolved_content_root()),
+            "content_scope_version": CONTENT_SCOPE_VERSION,
+        }
         if not path.is_file():
-            return {"ok": False, "error": f"Missing index status at {path}"}
-        return {"ok": True, **json.loads(path.read_text(encoding="utf-8"))}
+            return {"ok": False, **scope, "scope_matches_settings": False, "error": f"Missing index status at {path}"}
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        matches = all(stored.get(key) == value for key, value in scope.items())
+        return {"ok": True, **stored, **scope, "scope_matches_settings": matches,
+                "indexed_content_root": stored.get("vault_content_root")}
 
     def search(
         self,
@@ -364,6 +379,8 @@ class VaultRagService:
         for nws in merged:
             meta = dict(nws.node.metadata or {})
             file_path = str(meta.get("file_path", ""))
+            if not indexed_path_is_in_scope(file_path, self.settings):
+                continue
             if not _path_under_prefix(file_path, path_prefix):
                 continue
             if _path_excluded_by_prefixes(file_path, path_exclude_prefixes):
@@ -441,7 +458,7 @@ class VaultRagService:
     def get_chunk(self, chunk_id: str) -> dict[str, Any]:
         self._ensure_loaded()
         node = self._nodes_by_id.get(chunk_id)
-        if node is None:
+        if node is None or not indexed_path_is_in_scope(str(node.metadata.get("file_path", "")), self.settings):
             return {"ok": False, "error": f"Unknown chunk_id: {chunk_id}"}
         meta = dict(node.metadata or {})
         return {

@@ -14,6 +14,7 @@ from vault_rag.path_exclusions import (
     skip_file_for_index,
 )
 from vault_rag.settings import Settings
+from vault_rag.content_scope import iter_scoped_markdown, CONTENT_SCOPE_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ def audit_vault(settings: Settings, project_root: Path) -> dict[str, Any]:
     Scan vault for RAG preflight: counts, largest files, exclusion preview, YAML opt-outs.
     Does not modify files.
     """
-    root = settings.vault_root.resolve()
+    root = settings.vault_root.expanduser().resolve()
     if not root.is_dir():
         raise FileNotFoundError(str(root))
 
@@ -37,7 +38,7 @@ def audit_vault(settings: Settings, project_root: Path) -> dict[str, Any]:
     sizes: list[tuple[int, str]] = []
 
     indexed = 0
-    for path in root.rglob("*.md"):
+    for path in iter_scoped_markdown(settings):
         if not path.is_file():
             continue
         rel = path.relative_to(root)
@@ -67,6 +68,9 @@ def audit_vault(settings: Settings, project_root: Path) -> dict[str, Any]:
     sizes.sort(reverse=True)
     return {
         "vault_root": str(root),
+        "vault_content_folder": settings.vault_content_folder,
+        "vault_content_root": str(settings.resolved_content_root()),
+        "content_scope_version": CONTENT_SCOPE_VERSION,
         "index_will_use": str(settings.resolved_index_dir(project_root)),
         "index_in_vault": settings.index_in_vault,
         "vault_index_folder": settings.vault_index_folder,
@@ -99,6 +103,7 @@ def write_audit_report_md(
         "---",
         "",
         f"Vault: `{data['vault_root']}`",
+        f"Content subtree: `{data['vault_content_root']}` (no whole-vault scan)",
         f"Index directory: `{data['index_will_use']}`",
         "",
         "## Summary",

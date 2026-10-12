@@ -1,148 +1,44 @@
 # vault-rag
 
-Obsidian 筆記庫的本地 RAG：**Ollama `bge-m3` 嵌入 + LanceDB 向量庫 + BM25 混合檢索 + MCP**（給 Cursor Agent 調用）。在本倉庫語境下，**可取代 Smart Connections MCP** 作為 Cursor 側的知識庫語義檢索（兩者擇一即可，不必並存）。
+Obsidian Markdown 的 BM25 + Ollama 向量混合检索，供 MCP 使用。
 
-## 需求
+## 内容范围
 
-- Python **3.11+**（本倉在 **3.14** 下已能安裝依賴；建議仍優先 **3.11–3.12** 以利長期相容）
-- [Ollama](https://ollama.com/) 已安裝，且建立索引時 **Ollama 必須在執行中**（Windows 托盤或終端 `ollama serve`）
-- 已拉取嵌入模型：
+`VAULT_ROOT` 是完整 Vault 根目录；`VAULT_CONTENT_FOLDER` 默认 `RAG`，只扫描该子树。
+子树必须存在且严格位于 Vault 内，不能设置为空、`.`、绝对路径、上级路径或符号链接根目录。
+目录外内容不需要 `.ragignore`，即使关闭排除文件也不会进入索引。
 
-```bash
-ollama pull bge-m3
-```
+内容结构：`RAG/Notes/`（正文平铺）、`RAG/Rules/`（规则平铺）、`RAG/Navigation/`（导航）。
+`README.md`、`_README.md`、Navigation、Attachments 固定不入索引；目录符号链接不遍历，文件符号链接不能跨出内容子树。
+库根 `.ragignore` 的模式仍相对 Vault 根，用于目录内细粒度排除；保留 `rag_index: false` / `vault_rag_exclude: true`。
 
-## 安裝
+## 配置与运行
 
-**一鍵搭建（Windows）**：在 `vault-rag` 目錄執行 `.\scripts\setup.ps1`（見 [docs/SETUP.md](./docs/SETUP.md)）。
+使用 Python 3.11+ 建立虚拟环境并安装 `pip install -e .`，将 `.env.example` 复制为 `.env`。
+配置 `VAULT_ROOT`、`VAULT_CONTENT_FOLDER=RAG`、本机 Ollama 地址及 embedding model。
+`VAULT_RULES_FOLDER=Rules` 表示内容目录下的规则子目录，即 `RAG/Rules/`。
+MCP 启动文件为 `mcp_server.py`，使用虚拟环境 Python；建议设置本仓为 cwd，并显式传入相同配置。
 
-**手動安裝**：
-
-```powershell
-cd "D:\reseilion sync\UnityPackage\vault-rag"
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -U pip
-pip install -e .
-```
-
-（若已安裝 [uv](https://github.com/astral-sh/uv)，可改用 `uv sync` 與 `uv run`。）
-
-## 文檔
-
-- [搭建與 Cursor 配置](./docs/SETUP.md)
-- [架構與 RAG 構建說明](./docs/ARCHITECTURE.md)
-- [知識庫整理與排除規則](./docs/VAULT_ORGANIZATION.md)
-
-## 設定
-
-複製 `.env.example` 為 `.env`，至少確認：
-
-- `VAULT_ROOT`：Obsidian 庫根目錄（預設已指向 `C:\ExampleVault Knowledge\DJ knowledge`）
-- `OLLAMA_BASE_URL`：預設 `http://127.0.0.1:11434`
-- `EMBEDDING_MODEL`：預設 `bge-m3`
-- `MIN_VECTOR_SCORE`：語義相關性門檻（預設 `0.40`）；低於門檻的候選不為填滿 `top_k` 返回，設為 `-1` 可停用
-- `PCG_RULES_FOLDER`：僅保留為全局經驗搜尋的舊規則根排除項；PCG-AI 規則改走工程 `.pcg-ai/` 的 `pcg_kb_*`
-- **`INDEX_IN_VAULT`**（預設 `true`）：索引寫在 **`VAULT_ROOT` + `VAULT_INDEX_FOLDER`**（預設 **`.vault-rag/`**），與知識庫同備份。設為 `false` 時改寫到 `vault-rag` 專案下的 `INDEX_DIR`。
-- 排除規則：見 [知識庫整理與排除規則](./docs/VAULT_ORGANIZATION.md)（目錄名 **`EXCLUDE_DIR_NAMES_EXTRA`**、`.ragignore`、`EXCLUDE_PATHSPEC_EXTRA`、YAML `rag_index` 等）。
-
-## 建立索引前（建議）
-
-```powershell
-vault-rag audit
-# 可選：在索引目錄寫出 AUDIT-last.md
-vault-rag audit --write-report
-```
-
-## 建立索引
-
-先確認 Ollama 可連線（否則嵌入階段會報 `Failed to connect to Ollama`）：
-
-```powershell
-ollama list
-```
-
-再在 `vault-rag` 目錄執行：
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-vault-rag reindex
-```
-
-完成後會生成（預設在 **`VAULT_ROOT/.vault-rag/`**）：
-
-- `lancedb/`：LanceDB 向量表
-- `nodes.jsonl`：BM25 與 `vault_get_chunk` 用的 chunk 正文
-- `status.json`：上次索引時間、chunk 數等
-
-## 本機試搜
-
-```powershell
+```sh
 vault-rag doctor
-vault-rag search "Unity URP depth prepass 問題" --top-k 8
+vault-rag audit
+vault-rag reindex
+vault-rag search "关键词" --top-k 3
 ```
 
-## 接到 Cursor（MCP）
+索引默认位于 `<VAULT_ROOT>/.vault-rag/`，包含 LanceDB、nodes.jsonl 和 status.json。
+重建在旁路临时目录完成，成功后切换；加载/embedding 失败不会删除旧索引。
+旧索引未记录内容范围，或与当前配置不一致时，搜索和全文读取会要求重新索引。
+状态提供 `vault_content_folder`、`vault_content_root`、`indexed_content_root`、`content_scope_version`、`scope_matches_settings`。
 
-1. 執行 **`scripts/setup.ps1`** 後，會生成 **`_generated/cursor-mcp-vault-rag.fragment.json`**（內含本機 **`.venv` 的 `python.exe` 絕對路徑**）。
-2. 將該 JSON 檔中的 **`vault-rag`** 物件合併進 **`%USERPROFILE%\.cursor\mcp.json`** 的 **`mcpServers`**（若已存在同名項，以生成檔為準覆寫）。
-3. **完全重啟 Cursor**。
+## 检索
 
-與倉庫示例一致時，亦可直接參考根目錄 **`.cursor/mcp.json.example`**（已指向 `.venv` 的 `python`）。
+- `vault_search`：正文经验，排除规则；`rule_search`：仅内容目录下 Rules，保留领域及项目约束。
+- 类型以 frontmatter `type` 或 `type/*` 标签识别；领域以 `domain` 或保守的技术标签识别，平铺 DCC 笔记须保留领域信息。
+- `limited` / `verified_true` 优先；`unverified` 和缺少状态的笔记仅作补充，不因所在目录获得隐含信任。
+- 相似度门槛默认 `MIN_VECTOR_SCORE=0.40`；RRF 分数仅用于排序，不是置信度。
+- 默认返回最多 3 篇及证据范围，可用 `compact=false` 取得完整字段。
+- `vault_get_chunk` 取得全文；`vault_index_status` 查询索引与当前扫描范围。
+- 路径相对完整 Vault 根，例如 `RAG/Notes/pit-example.md`。移动路径会改变 chunk ID，需重新检索。
 
-手動片段範例（路徑需與你機器一致）：
-
-```json
-"vault-rag": {
-  "command": "D:\\reseilion sync\\UnityPackage\\vault-rag\\.venv\\Scripts\\python.exe",
-  "args": ["D:\\reseilion sync\\UnityPackage\\vault-rag\\mcp_server.py"],
-  "cwd": "D:\\reseilion sync\\UnityPackage\\vault-rag",
-  "env": {
-    "VAULT_ROOT": "C:\\ExampleVault Knowledge\\DJ knowledge",
-    "OLLAMA_BASE_URL": "http://127.0.0.1:11434",
-    "EMBEDDING_MODEL": "bge-m3"
-  }
-}
-```
-
-重啟 Cursor 後應可看到工具：
-
-- `rule_search`：混合檢索 `Rules/`；HMIRP 規則只在 Unity 查詢含 HMIRP 強信號時注入/保留，PCG-AI 不走全局規則庫
-- `vault_search`：混合檢索經驗筆記（**自動排除**規則根；可選 `note_type`、`domain`）；每篇最多一個 chunk，弱命中會返回 `no_relevant_hit=true` 而不是填滿 `top_k`
-- `vault_get_chunk`：依 `chunk_id` 取全文
-- `vault_index_status`：索引狀態
-
-### 按需查询与精简返回
-
-普通改码和审查不固定调用检索；缺少相关项目历史、平台/兼容证据或用户要求时再查。项目硬约束直接加载，已知存于 Vault 且当前缺失的补充规则才用 `rule_search`。
-
-- MCP 的 `vault_search`、`rule_search` 默认 `top_k=3`、`compact=true`。显式 `top_k` 仍生效，CLI 与底层 search 默认值不变。
-- 精简返回保留 `chunk_id`、`file_path`、`note_type`、`trust`、原摘要和 `excerpt_truncated`，以及非空的域、规则 ID、技术栈、平台、验证日期/范围和适用前提。去掉检索分数、重复/空元数据与 JSON 排版空白，不再次缩短摘要。
-- `excerpt_truncated=true` 表示底层摘要达到原有 900 字符上限；决定据此实施或下结论前，用 `vault_get_chunk` 核对全文。未验证提示始终保留。
-- 需要原有完整字段时传 `compact=false`；复现原默认数量可显式传 `top_k=10`。完整结果新增 `excerpt_truncated`，已有字段与含义保持不变。
-- `vault_get_chunk` 继续返回完整正文与元数据；搜索成功返回 `no_relevant_hit`；无命中为 `ok=true, no_relevant_hit=true, results=[]`，服务错误返回 `ok=false`。
-- 本次仅调整输出和默认结果数量，不改变召回、排序、验证分层或索引。无需 reindex；重启/重新连接 vault-rag MCP 后加载新接口，旧连接继续使用旧代码。
-
-## 筆記 frontmatter（建議）
-
-在 Markdown 的 YAML 裡使用 `type`、`domain` 等欄位，可讓 `vault_search` 的過濾更準，例如：
-
-```yaml
----
-type: pitfall
-domain: unity
----
-```
-
-未填 `type` 時會從 `type/*` tag 或一級目錄（如 `Pitfalls/`、`Tips/`、`Rules/`）推導。`domain` 支援逗號、`|`、JSON 陣列或 YAML 陣列；服務會從 DCC 路徑及明確的 Unity/ComfyUI/PCG metadata 補充推導。`domain=general` 嚴格排除專用域，其他明確域仍允許真正未分類的跨項目筆記。
-
-`score` 是 RRF 相對排序，不是置信度；`vector_score` 才用於相關性門檻。所有返回內容都是候選證據，仍須由調用方核對項目、版本、平台與當前源碼。
-
-## 維護
-
-- 筆記變更後：再執行一次 `vault-rag reindex`（目前為**全量重建**；之後可再加增量）。
-- 更換嵌入模型：需**重建索引**（向量空間不同）。
-
-## 授權
-
-與上層專案一致；本模組依賴 LlamaIndex、LanceDB、MCP 等各自授權條款。
+笔记变化后重建索引；程序变化后重新连接 MCP。PCG-AI 的项目知识仍由工程内工具维护。

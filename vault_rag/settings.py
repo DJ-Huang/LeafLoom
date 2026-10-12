@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from pydantic import Field, field_validator
@@ -59,6 +59,10 @@ class Settings(BaseSettings):
         default=Path.home() / "DJKnowledges",
         description="Obsidian vault root (folder that contains notes).",
     )
+    vault_content_folder: str = Field(
+        default="RAG",
+        description="Only this relative subtree of VAULT_ROOT is eligible for indexing; no whole-vault fallback.",
+    )
     index_in_vault: bool = Field(
         default=True,
         description="If true, index artifacts live under VAULT_ROOT / vault_index_folder.",
@@ -69,7 +73,7 @@ class Settings(BaseSettings):
     )
     vault_rules_folder: str = Field(
         default="Rules",
-        description="Subfolder under vault_root for Codely routing rules (rule_search scope).",
+        description="Subfolder under VAULT_CONTENT_FOLDER for routing rules (rule_search scope).",
     )
     pcg_rules_folder: str = Field(
         default="PCG AI Rule",
@@ -159,16 +163,33 @@ class Settings(BaseSettings):
         default=True,
         description=(
             "If true, vault_search fills results from verified_true/limited (and trusted paths) "
-            "before unverified; unverified under Tips/Features/BugFix only backfills."
+            "before unverified or missing-status notes, which only backfill."
         ),
     )
     unverified_restricted_prefixes: tuple[str, ...] = Field(
         default=("Tips/", "Features/", "BugFix/"),
         description=(
-            "Relative vault paths: unverified or missing verified_status only used "
-            "when top_k cannot be filled from preferred pool."
+            "Legacy compatibility option. All unverified/missing-status notes now backfill regardless of path."
         ),
     )
+
+    @field_validator("vault_content_folder", "vault_rules_folder")
+    @classmethod
+    def _validate_content_folder(cls, value: str) -> str:
+        path = Path(value.replace("\\", "/"))
+        if not value.strip() or path.is_absolute() or PureWindowsPath(value).drive or str(path) == "." or ".." in path.parts:
+            raise ValueError("Content folders must be nonempty relative subdirectories without '..'")
+        return path.as_posix()
+
+    def resolved_content_root(self) -> Path:
+        vault = self.vault_root.expanduser().resolve()
+        root = (vault / self.vault_content_folder).resolve()
+        if root == vault or not root.is_relative_to(vault) or root != vault / self.vault_content_folder:
+            raise ValueError("VAULT_CONTENT_FOLDER must resolve strictly inside VAULT_ROOT")
+        return root
+
+    def rules_path_prefix(self) -> str:
+        return (Path(self.vault_content_folder) / self.vault_rules_folder).as_posix()
 
     def merged_exclude_dir_names(self) -> tuple[str, ...]:
         """Built-in dir-name excludes plus `exclude_dir_names_extra`, deduped case-insensitively."""

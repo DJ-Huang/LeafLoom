@@ -73,7 +73,7 @@ flowchart LR
 
 ### 3.1 載入與排除（`path_exclusions.py` + `loader.py`）
 
-- 以 `VAULT_ROOT` 為根 **`rglob("*.md")`**。
+- 仅遍历 `VAULT_ROOT/VAULT_CONTENT_FOLDER` 子树，使用不跟随目录符号链接的扫描器。
 - **內建 pathspec**（`builtin_exclude_pathspec`）：預設 `.obsidian/**`、`.git/**`、`.vault-rag/**`、`node_modules/**`。
 - **`VAULT_ROOT/.ragignore`**（可選，`LOAD_RAGIGNORE_FILE=true`）：與 `.gitignore` 語法相同，合併進 pathspec。
 - **`EXCLUDE_PATHSPEC_EXTRA`**：環境變數額外規則（`|` 或逗號分隔）。
@@ -204,3 +204,7 @@ flowchart LR
 ## 8. 與 Smart Connections MCP 的關係
 
 本專案在 **Cursor 側**提供自建 **vault-rag** MCP，索引與檢索邏輯可控（混合檢索、metadata、本地 Ollama）。**不再需要** Node 版 **smart-connections-mcp** 即可在 Cursor 內搜庫；Obsidian 內是否仍安裝 Smart Connections **插件**與本 MCP 無強依賴。
+
+## 2026-10 索引边界与平铺目录
+
+`content_scope.py` 统一 loader、audit 与查询路径校验。内容根必须严格位于 Vault 内，缺失或越界不回退全库；README、Navigation、Attachments 固定排除。重建在 staging 完成后切换，失败保留旧索引。status.json 记录内容根和 scope version；服务拒绝缺失或不匹配的旧索引。Notes 类型由现有元数据识别，缺状态只作补充。
