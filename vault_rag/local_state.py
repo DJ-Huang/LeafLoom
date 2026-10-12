@@ -8,7 +8,7 @@ import pathspec
 from ruamel.yaml import YAML
 
 PROTECTED = {'.git', '.obsidian', '.vault-rag', '.rag-layout-backups', 'node_modules', '__pycache__'}
-TEXT_EXTENSIONS = {'.md', '.txt', '.json', '.yaml', '.yml', '.toml', '.csv', '.srt', '.vtt', '.py', '.js', '.ts', '.tsx', '.css', '.html', '.svg', '.base', '.log'}
+TEXT_EXTENSIONS = {'.md', '.txt', '.json', '.yaml', '.yml', '.toml', '.csv', '.srt', '.vtt', '.py', '.js', '.ts', '.tsx', '.css', '.html', '.htm', '.svg', '.base', '.log'}
 LINK_RE = re.compile(r'(!?\[\[)([^\]\n]+)(\]\])|(!?\[[^\]\n]*\]\()([^\n]*?)(\))')
 
 def digest(data: bytes | str) -> str:

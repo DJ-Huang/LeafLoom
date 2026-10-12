@@ -7,11 +7,13 @@ from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Respon
 from mcp.server.fastmcp import FastMCP
 from vault_rag.local_state import LocalConfig,ConflictError,atomic_write
 from vault_rag.knowledge import Runtime
+from vault_rag.html_preview import HtmlPreviews
 
 def json_response(value,status=200):return JSONResponse(json.loads(json.dumps(value,ensure_ascii=False,default=str)),status_code=status)
 
 def create_app(config=None,runtime=None,*,start_background=True):
     config=config or LocalConfig();runtime=runtime or Runtime(config);port=config.data.get('port',18080)
+    previews=HtmlPreviews(config)
     secret_file=config.directory/'auth-token'
     if not secret_file.exists():atomic_write(secret_file,secrets.token_hex(32).encode());secret_file.chmod(0o600)
     token=secret_file.read_text().strip();csrf=hmac.new(token.encode(),b'browser-write-v1',hashlib.sha256).hexdigest()
@@ -56,9 +58,11 @@ def create_app(config=None,runtime=None,*,start_background=True):
     async def local_security(request,call_next):
         allowed={f'127.0.0.1:{port}',f'localhost:{port}'}
         if request.headers.get('host') not in allowed:return json_response({'error':'仅允许本机访问'},403)
+        path=request.url.path
+        preview_read=path.startswith('/html-preview/') and request.method in ('GET','HEAD')
         origin=request.headers.get('origin')
-        if origin and origin not in {f'http://{h}' for h in allowed}:return json_response({'error':'来源不允许'},403)
-        path=request.url.path;is_api=path.startswith('/api/') or path=='/mcp'
+        if origin and origin not in {f'http://{h}' for h in allowed} and not (preview_read and origin=='null'):return json_response({'error':'来源不允许'},403)
+        is_api=path.startswith('/api/') or path=='/mcp'
         bearer=hmac.compare_digest(request.headers.get('authorization',''),'Bearer '+token)
         session=hmac.compare_digest(request.cookies.get('vault_session',''),token)
         if is_api and not (bearer or (session and path!='/mcp')):return json_response({'error':'请从本机网页入口打开，或配置 MCP 本机令牌'},401)
@@ -89,6 +93,15 @@ def create_app(config=None,runtime=None,*,start_background=True):
     async def tree(path:str=''):return await asyncio.to_thread(runtime.files.tree,path)
     @app.get('/api/file')
     async def read_file(path:str):return json_response(await asyncio.to_thread(runtime.files.read,path))
+    @app.post('/api/html-preview')
+    async def html_preview(request:Request):
+        body=await request.json()
+        if not isinstance(body,dict) or any(not isinstance(body.get(key),str) for key in ('path','root','text')):
+            raise ValueError('网页预览需要文件路径、关联根目录和 HTML 内容')
+        return json_response(previews.create(body['path'],body['root'],body['text']))
+    @app.api_route('/html-preview/{key}/files/{path:path}',methods=['GET','HEAD'])
+    async def html_resource(request:Request,key:str,path:str,download:bool=False):
+        return previews.response(key,path,str(request.base_url).rstrip('/'),download)
     @app.put('/api/file')
     async def save_file(request:Request):
         body=await request.json();return json_response(await asyncio.to_thread(runtime.files.save,body['path'],body['text'],body['etag'],expected_root=body.get('root')))
@@ -130,7 +143,7 @@ def create_app(config=None,runtime=None,*,start_background=True):
         p=config.path_for(path)
         if not p.is_file():raise FileNotFoundError(path)
         response=FileResponse(p,filename=p.name if download else None,content_disposition_type='attachment' if download else 'inline')
-        if p.suffix.lower() in ('.html','.svg'):response.headers['Content-Security-Policy']="sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:;"
+        if p.suffix.lower() in ('.html','.htm','.svg'):response.headers['Content-Security-Policy']="sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:;"
         return response
     @app.get('/api/search-files')
     async def search_files(query:str):return runtime.catalog.search(query)

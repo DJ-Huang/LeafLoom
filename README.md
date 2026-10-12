@@ -24,7 +24,7 @@ npm run build --prefix web
 
 实时 Markdown 编辑、源码与阅读切换、自动保存、草稿保护、属性、双链与嵌入、目录和关系图。保存必须携带文件版本；冲突保留编辑内容。原子写入保留换行方式，属性修改保留 YAML 注释和未知字段。
 
-移动或重命名修复明确可解析的 Markdown/wikilink/附件引用；歧义不猜测，代码块不替换。删除进入回收区，历史和目录操作可恢复。媒体按需读取，视频支持 Range；HTML/SVG 隔离内容不执行脚本。
+移动或重命名修复明确可解析的 Markdown/wikilink/附件引用；歧义不猜测，代码块不替换。删除进入回收区，历史和目录操作可恢复。媒体按需读取，视频支持 Range；HTML 默认作为网页浏览，可切换源码、全屏阅读或独立标签页；支持本地样式、脚本、图片、相对链接及 Markdown 下载。网页预览使用内存快照与临时只读地址，不因预览写入文件；脚本在隔离环境运行，不能访问知识库编辑器或写入 API。切换关联目录、重启服务或预览地址被回收后，点击刷新重新打开。网页主题与字号可调整，但不保存网页自身的 localStorage；远程 CDN 与联网接口不在支持范围内。普通媒体入口中的 HTML/SVG 仍不执行脚本。
 
 支持当前资料使用的 Dataview TABLE/LIST、FROM、WHERE、GROUP BY、SORT、LIMIT、contains/length 与 file 属性；不执行查询脚本。支持当前 `.base` 的表格、TaskNotes 看板、日历、迷你日历和任务列表。模板支持现有日期和光标占位符，不执行任意 Templater JavaScript。未实现通用 Obsidian 插件、Canvas 编辑器、云同步和通知提醒。
 
