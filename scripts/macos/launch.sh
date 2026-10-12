@@ -29,6 +29,17 @@ if [[ -f "$STATE/bootstrap-python.json" ]]; then
 fi
 # Normal launch stays offline. A legacy venv can run the compatibility check.
 if [[ ! -x "$PYTHON" && -x "$REPOSITORY/.venv/bin/python" ]]; then PYTHON="$REPOSITORY/.venv/bin/python"; fi
+python_current() {
+    [[ -x "$PYTHON" ]] && "$PYTHON" -c 'import sys; sys.exit(0 if ".".join(map(str, sys.version_info[:3])) == sys.argv[1] else 1)' "$PYTHON_VERSION"
+}
+if [[ $ACTION == install ]] && python_current; then
+    if "$PYTHON" -X utf8 "$REPOSITORY/scripts/installer.py" --repository "$REPOSITORY" --state "$STATE" --action check && \
+       "$REPOSITORY/.venv/bin/python" -X utf8 "$REPOSITORY/scripts/install_actions.py" check >/dev/null 2>&1; then
+        ARGS=(--repository "$REPOSITORY" --state "$STATE" --action install)
+        if [[ $NO_OPEN == --no-open ]]; then ARGS+=(--no-open); fi
+        exec "$PYTHON" -X utf8 "$REPOSITORY/scripts/installer.py" "${ARGS[@]}"
+    fi
+fi
 if [[ $ACTION == stop ]]; then
     if [[ -x "$PYTHON" ]]; then
         exec "$PYTHON" -X utf8 "$REPOSITORY/scripts/installer.py" --repository "$REPOSITORY" --state "$STATE" --action stop --no-open
@@ -83,19 +94,23 @@ if [[ ! -x "$UV" || ! -f "$UV_DIR/.verified" || $(cat "$UV_DIR/.verified") != "$
     printf '%s' "$UV_SHA" > "$UV_DIR/.verified"
 fi
 echo '[2/2] 准备私有 Python，复用已有下载…'
-PYTHON_KEY=$(read_manifest 'platforms.macos-arm64.python.key')
-PYTHON_DOWNLOADS="$STATE/runtimes/python-downloads.json"
-printf '{"%s":%s}' "$PYTHON_KEY" "$(/usr/bin/plutil -extract 'platforms.macos-arm64.python' json -o - "$MANIFEST")" > "$PYTHON_DOWNLOADS"
-for ATTEMPT in 1 2 3; do
-    if "$UV" python install --no-bin --python-downloads-json-url "$PYTHON_DOWNLOADS" "$PYTHON_VERSION" 2>&1 | /usr/bin/tee "$STATE/logs/python-bootstrap-last.log"; then break; fi
-    if [[ $ATTEMPT == 3 ]] || ! /usr/bin/grep -Eiq 'timed? ?out|connection (reset|refused|aborted)|temporar|429|502|503|504|name resolution' "$STATE/logs/python-bootstrap-last.log"; then
-        echo "Python 准备失败。日志：$STATE/logs/bootstrap.log；再次双击入口重试。" >&2; exit 1
-    fi
-    echo "暂时性网络错误，重试 $ATTEMPT/2…"
-    /bin/sleep $((ATTEMPT * 2))
-done
-PYTHON=$("$UV" python find --system --managed-python --no-project --no-python-downloads "$PYTHON_VERSION")
-"$PYTHON" -c 'import json,sys,pathlib,os; p=pathlib.Path(sys.argv[1]); t=p.with_suffix(".tmp"); t.write_text(json.dumps({"python":sys.executable,"version":sys.argv[2]})); os.replace(t,p)' "$STATE/bootstrap-python.json" "$PYTHON_VERSION"
+if python_current; then
+    echo 'Python 版本符合要求，跳过下载安装。'
+else
+    PYTHON_KEY=$(read_manifest 'platforms.macos-arm64.python.key')
+    PYTHON_DOWNLOADS="$STATE/runtimes/python-downloads.json"
+    printf '{"%s":%s}' "$PYTHON_KEY" "$(/usr/bin/plutil -extract 'platforms.macos-arm64.python' json -o - "$MANIFEST")" > "$PYTHON_DOWNLOADS"
+    for ATTEMPT in 1 2 3; do
+        if "$UV" python install --no-bin --python-downloads-json-url "$PYTHON_DOWNLOADS" "$PYTHON_VERSION" 2>&1 | /usr/bin/tee "$STATE/logs/python-bootstrap-last.log"; then break; fi
+        if [[ $ATTEMPT == 3 ]] || ! /usr/bin/grep -Eiq 'timed? ?out|connection (reset|refused|aborted)|temporar|429|502|503|504|name resolution' "$STATE/logs/python-bootstrap-last.log"; then
+            echo "Python 准备失败。日志：$STATE/logs/bootstrap.log；再次双击入口重试。" >&2; exit 1
+        fi
+        echo "暂时性网络错误，重试 $ATTEMPT/2…"
+        /bin/sleep $((ATTEMPT * 2))
+    done
+    PYTHON=$("$UV" python find --system --managed-python --no-project --no-python-downloads "$PYTHON_VERSION")
+    "$PYTHON" -c 'import json,sys,pathlib,os; p=pathlib.Path(sys.argv[1]); t=p.with_suffix(".tmp"); t.write_text(json.dumps({"python":sys.executable,"version":sys.argv[2]})); os.replace(t,p)' "$STATE/bootstrap-python.json" "$PYTHON_VERSION"
+fi
 ARGS=(--repository "$REPOSITORY" --state "$STATE" --action install)
 if [[ $NO_OPEN == --no-open || $ACTION == menubar ]]; then ARGS+=(--no-open); fi
 "$PYTHON" -X utf8 "$REPOSITORY/scripts/installer.py" "${ARGS[@]}"

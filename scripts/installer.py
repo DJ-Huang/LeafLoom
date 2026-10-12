@@ -160,6 +160,26 @@ class Installer:
         paths.extend(sorted((self.repo / 'web/public').rglob('*')))
         return self.hash_paths(paths)
 
+    def dependency_hash(self):
+        return self.hash_paths([self.repo / name for name in ('pyproject.toml', 'uv.lock', 'scripts/runtimes.json')])
+
+    def dependencies_ready(self):
+        try:
+            try:
+                receipt = json.loads((self.state / 'python-install.json').read_text())
+                unchanged = receipt['input_hash'] == self.dependency_hash() and receipt['python'] == str(self.python)
+            except FileNotFoundError:
+                # Adopt a previous successful installation without syncing its packages again.
+                receipt = json.loads(self.marker.read_text())
+                unchanged = (receipt['input_hash'] == self.input_hash() and receipt['python'] == str(self.python)
+                             and receipt['repository'] == str(self.repo) and receipt['platform'] == self.key)
+            if not unchanged or not self.compatible():
+                return False
+            self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'check'], capture=True)
+            return True
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError):
+            return False
+
     def hash_paths(self, paths):
         digest = hashlib.sha256()
         for path in paths:
@@ -222,12 +242,6 @@ class Installer:
     def prepare_environment(self):
         root = self.repo / '.venv'
         healthy = self.compatible() if root.exists() else False
-        if healthy:
-            try:
-                self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'check'], capture=True)
-            except (OSError, RuntimeError):
-                healthy = False
-                self.emit('现有环境依赖缺失或损坏，将保留备份并重建。')
         if root.exists() and not healthy:
             backup = self.repo / ('.venv-backup-' + time.strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:8])
             # Rename the entry itself; never follow a junction/symlink or delete its target.
@@ -336,31 +350,53 @@ class Installer:
                     subprocess.run(['/bin/launchctl', 'bootout', f'gui/{os.getuid()}/{label}'], capture_output=True)
 
     def install(self):
-        self.step('准备 Node 运行环境')
-        npm = self.node()
         self.step('安装网页依赖并生成网页')
         build_marker = self.state / 'web-build.json'
         try: cached = json.loads(build_marker.read_text())
         except (OSError, ValueError): cached = {}
         web_hash = self.web_input_hash()
         if cached.get('input_hash') != web_hash or not self.web_files() or cached.get('web_files') != self.web_files():
+            self.step('准备 Node 运行环境')
+            npm = self.node()
             self.run([*npm, 'ci', '--prefix', 'web', '--no-audit', '--no-fund'], retry=True)
             self.run([*npm, 'run', 'build', '--prefix', 'web'])
             if not self.web_files():
                 raise RuntimeError('网页构建没有生成 index.html 和 assets 资源')
             atomic_json(build_marker, {'input_hash': web_hash, 'web_files': self.web_files()})
+        else:
+            self.emit('网页完整且未变化，跳过依赖安装与构建。')
+        dependencies_ready = self.dependencies_ready()
         self.step('正常停止旧服务并准备项目环境')
         self.stop_owned()
         # Keep the previous success record if stopping the old service failed.
         # From here onward the environment is being modified and needs recheck.
         self.marker.unlink(missing_ok=True)
-        self.prepare_environment()
-        self.step('安装锁定的 Python 依赖及项目')
-        self.run([self.uv, 'sync', '--locked', '--no-dev', '--python', sys.executable], retry=True)
-        self.step('检查原生依赖')
-        self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'check'])
+        if not dependencies_ready:
+            self.prepare_environment()
+            self.step('同步缺失或更新的 Python 依赖及项目')
+            extra = []
+            if self.compatible():
+                try:
+                    self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'check-runtime'], capture=True)
+                except (OSError, RuntimeError):
+                    pass  # Missing packages can be filled in by ordinary sync.
+                else:
+                    try:
+                        self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'check'], capture=True)
+                    except (OSError, RuntimeError):
+                        extra = ['--reinstall']  # Present packages with broken native libraries need repair.
+            self.run([self.uv, 'sync', '--locked', '--no-dev', '--python', sys.executable, *extra], retry=True)
+            self.step('检查原生依赖')
+            self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'check'])
+            atomic_json(self.state / 'python-install.json', {'input_hash': self.dependency_hash(), 'python': str(self.python)})
+        else:
+            atomic_json(self.state / 'python-install.json', {'input_hash': self.dependency_hash(), 'python': str(self.python)})
+            self.emit('Python 依赖完整且未变化，跳过安装。')
         self.step('准备 BGE-M3 模型')
-        self.run([self.python, '-X', 'utf8', '-m', 'vault_rag.cli', 'model-prepare'], retry=True)
+        if not self.model_ready():
+            self.run([self.python, '-X', 'utf8', '-m', 'vault_rag.cli', 'model-prepare'], retry=True)
+        else:
+            self.emit('模型完整，跳过准备。')
         if not self.model_ready():
             raise RuntimeError('模型文件不完整，安装未完成')
         self.step('配置并启动后台服务')
@@ -390,9 +426,18 @@ class Installer:
                 locks.enter_context(InstallLock(self.repo / '.install.lock', timeout=wait))
                 if action == 'stop':
                     self.stop_owned(include_ui=False); return 0
-                if action == 'install' or not self.ready():
+                ready = self.ready()
+                if ready and action == 'install':
+                    try:
+                        self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'check'], capture=True)
+                    except (OSError, RuntimeError):
+                        ready = False
+                if not ready:
                     if no_install: return 3
                     self.install()
+                elif action == 'install':
+                    atomic_json(self.state / 'python-install.json', {'input_hash': self.dependency_hash(), 'python': str(self.python)})
+                    self.emit('当前环境完整且已是最新，跳过安装。')
                 if not no_open:
                     self.step('打开本地知识库')
                     self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'open'])
