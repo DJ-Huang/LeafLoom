@@ -1,5 +1,5 @@
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {BookOpen,Calendar,ChevronRight,FileText,Home,PanelLeftClose,Search,X} from 'lucide-react';
+import {BookOpen,Calendar,ChevronRight,FileText,Folder,Home,PanelLeftClose,Search} from 'lucide-react';
 import {Config,OpenNote} from './api';
 import {useStatus} from './hooks';
 import {Action} from './ui';
@@ -41,10 +41,14 @@ export function Sidebar({children,width,collapsed,mobileOpen,onToggle,onWidth,on
     onKeyDown={event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();onWidth(event.key==='Home'?200:event.key==='End'?360:Math.max(200,Math.min(360,width+(event.key==='ArrowRight'?16:-16))));}}}/>
   </aside></>;
 }
-export function Tabs({tabs,active,view,knowledgeVisited,onSelect,onClose,onHome,onKnowledge}:{tabs:string[],active:string,view:string,knowledgeVisited:boolean,onSelect:(path:string)=>void,onClose:(path:string)=>void,onHome:()=>void,onKnowledge:()=>void}){
- return <nav className="tabs" aria-label="已打开的页面"><button className={'tab '+(view==='home'?'active':'')} onClick={onHome}><Home size={14}/>首页</button>{knowledgeVisited&&<button className={'tab '+(view==='knowledge'?'active':'')} onClick={onKnowledge}><Search size={14}/>知识检索</button>}{tabs.map(path=><div className={'document-tab '+(view==='document'&&path===active?'active':'')} key={path}>
-  <button className="tab" title={path} aria-current={view==='document'&&path===active?'page':undefined} onClick={()=>onSelect(path)}><FileText size={14}/><span>{fileName(path)}</span></button><button className="tab-close" aria-label={'关闭 '+fileName(path)} onClick={()=>onClose(path)}><X size={12}/></button>
- </div>)}</nav>;
+export function PathNavigation({path,view,onFolder}:{path:string,view:string,onFolder:(path:string)=>void}){
+ const parts=path.split('/').filter(Boolean),browsing=view==='document'||view==='folder';
+ return <nav className="path-navigation" aria-label="当前位置"><ol>
+  {browsing?<><li><button onClick={()=>onFolder('')} title="打开知识库根目录"><BookOpen size={15}/><span>知识库</span></button></li>{parts.map((part,index)=>{
+   const current=index===parts.length-1,target=parts.slice(0,index+1).join('/');
+   return <li key={target}><ChevronRight size={13} aria-hidden="true"/>{current?<span className="path-current" aria-current="page" title={path}>{view==='document'?<FileText size={15}/>:<Folder size={15}/>}<span>{part}</span></span>:<button title={'打开 '+target} onClick={()=>onFolder(target)}>{part}</button>}</li>;
+  })}</>:<li><span className="path-current" aria-current="page">{view==='knowledge'?<Search size={15}/>:<Home size={15}/>}<span>{view==='knowledge'?'知识检索':'首页'}</span></span></li>}
+ </ol></nav>;
 }
 export function IndexStatus(){const status=useStatus();return <div className="index-status"><span className={'status-dot '+(status?.last_error?'error':'')}/><div><strong>{status?.sync?.state||'正在同步目录'}</strong><small>{status?.num_files||0} 篇检索资料 · {status?.catalog_files||0} 个文件</small>{status?.watch?.error&&<small>监听不可用 · 每 10 秒检查</small>}{status?.last_error&&<small className="error">{status.last_error}</small>}</div></div>;}
 export function Dashboard({config,recent,onOpen,onCreate,onKnowledge,onDaily}:{config:Config,recent:string[],onOpen:OpenNote,onCreate:()=>void,onKnowledge:()=>void,onDaily:()=>void}){
