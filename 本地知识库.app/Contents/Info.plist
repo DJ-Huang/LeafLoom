@@ -18,11 +18,13 @@
 	<string>1.1</string>
 	<key>CFBundleVersion</key>
 	<string>2</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>VaultRagRepository</key>
-	<string>/Users/djhuang/AI/MCPServers-VaultRAG</string>
+	<string></string>
 </dict>
 </plist>

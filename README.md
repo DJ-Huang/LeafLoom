@@ -15,20 +15,15 @@
 
 之后登录会自动运行后台服务和右下角托盘图标，不弹网页。双击启动入口或托盘图标打开网页；托盘右键提供状态、启动、停止、重启、日志、登录启动开关和退出。退出托盘保留服务；**`停止本地知识库.cmd`** 只停止服务，下次登录仍按登录启动设置运行。Windows 可能把托盘图标收进“隐藏图标”，可在系统设置中选择显示。
 
-运行环境下载到用户私有目录，项目虚拟环境位于 `.venv`；无需管理员权限，不修改系统 PATH。固定版本和 SHA256 在 `scripts/windows/runtimes.json`，Python 包使用跨平台 `uv.lock`，Windows 使用 CPU PyTorch。安装失败显示错误和日志位置，重新双击可重试。企业策略若禁止下载或创建计划任务，会明确失败，不绕过组织策略。
+运行环境下载到用户私有目录，项目虚拟环境位于 `.venv`；无需管理员权限，不修改系统 PATH。固定版本和 SHA256 在 `scripts/runtimes.json`，Python 包使用跨平台 `uv.lock`，Windows 使用 CPU PyTorch。安装失败显示阶段、原始错误摘要和日志位置，重新双击可重试；不兼容的旧环境自动保留为备份。企业策略若禁止下载或创建计划任务，会明确失败，不绕过组织策略。
 
 具体配置、排障和验收见 [安装指南](docs/SETUP.md)。
 
-### macOS
+### macOS 14+ Apple 芯片
 
-```sh
-.venv/bin/python -m pip install -e .
-npm ci --prefix web
-npm run build --prefix web
-.venv/bin/python -m vault_rag.cli model-prepare
-.venv/bin/python -m vault_rag.cli service install
-.venv/bin/python -m vault_rag.cli service open
-```
+双击 **`本地知识库.command`** 或仓库内的 **`本地知识库.app`**。首次自动下载私有 Python/Node、构建网页、安装依赖、准备模型和当前用户后台服务，完成后打开网页。主动安装或修复用 **`安装本地知识库.command`**，停止用 **`停止本地知识库.command`**。无需预装 Homebrew、Python、Node 或 Xcode。
+
+菜单栏应用安装到 `~/Applications/本地知识库.app`，登录时启动服务与图标，不弹网页。运行环境仅保存在用户私有目录；Intel Mac 和 macOS 13 及以下不在本次支持范围。macOS 原生验收本次按要求跳过，不能将 Windows 结果当作 Mac 实测结果。
 
 `service start/stop/restart/status/uninstall` 管理当前平台的用户后台服务。macOS 使用 LaunchAgent，Windows 使用普通权限的当前用户计划任务。登录后启动、异常退出重启；只有一个 worker 和一个模型实例。首次网页关联本机目录，之后在设置中切换。手动运行用 `vault-rag serve`；启动前确保没有另一实例占用端口。
 
@@ -63,6 +58,6 @@ Codex 使用 `[mcp_servers.user-vault-rag]` 的 `url` 与 `http_headers.Authoriz
 
 ## 检查
 
-Windows 定向检查可运行 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows\check.ps1`；加 `-ServiceSmoke` 会在独立临时配置下检查真实 Windows 后台任务的启停，不下载模型，也不改当前关联目录。Windows 实机显示、自动下载和登录启动验收尚需在 Windows 上完成，不能由 macOS 检查替代。
+Windows 定向检查可运行 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows\check.ps1`；加 `-ServiceSmoke` 会在独立临时配置下检查真实 Windows 后台任务的启停，不下载模型，也不改当前关联目录。安装验收记录见 [安装验收](docs/INSTALL_VALIDATION.md)；图标视觉与实际重新登录仍待人工验收，不能用后台任务检查代替。
 
 相关自动检查在 `tests/test_local_knowledge.py`，覆盖版本冲突、CRLF/YAML 保留、目录/符号链接隔离、移动回滚、查询解释器、领域隔离、构建失败和 HTTP/媒体 Range。本次部署的实际检索与浏览器验收记录保存在 `~/Library/Application Support/VaultRag/backups/local-knowledge-2026-10-12/`。

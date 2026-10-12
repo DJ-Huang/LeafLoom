@@ -86,7 +86,7 @@ def create_app(config=None,runtime=None,*,start_background=True):
     async def configure(request:Request):
         body=await request.json();value=config.save(body);runtime.event.set();return json_response(value)
     @app.post('/api/choose-directory')
-    async def choose_directory():
+    async def choose_current_directory():
         # Triggered only by an explicit click in the local webpage, not at login.
         return json_response(await asyncio.to_thread(choose_directory))
     @app.get('/api/tree')
@@ -216,7 +216,10 @@ def serve():
                 probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
                 try:probe.bind(('127.0.0.1', config.data.get('port',18080)))
                 except OSError as e:raise RuntimeError('配置端口已被其他程序占用') from e
-            server=uvicorn.Server(uvicorn.Config(create_app(config),host='127.0.0.1',port=config.data.get('port',18080),workers=1,access_log=False))
+            # Python 3.12's Proactor transport can leave reset loopback sockets
+            # awaiting closure indefinitely. HTTP MCP needs TCP, not async pipes.
+            server=uvicorn.Server(uvicorn.Config(create_app(config),host='127.0.0.1',port=config.data.get('port',18080),workers=1,access_log=False,
+                                                loop='asyncio:SelectorEventLoop',timeout_graceful_shutdown=20))
             finished=threading.Event()
             def watch():
                 while not finished.is_set():

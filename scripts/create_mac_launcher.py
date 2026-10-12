@@ -6,9 +6,12 @@ REPO=Path(__file__).resolve().parents[1]
 def build(repo=REPO,destination=None):
  destination=Path(destination) if destination else repo/'本地知识库.app'
  contents=destination/'Contents';(contents/'MacOS').mkdir(parents=True,exist_ok=True);(contents/'Resources').mkdir(exist_ok=True)
- launcher=contents/'MacOS'/'launcher'
- subprocess.run(['swiftc',str(repo/'scripts/macos/MenuBar.swift'),'-o',str(launcher),'-framework','AppKit','-O'],check=True)
- (contents/'Info.plist').write_bytes(plistlib.dumps({'CFBundleName':'本地知识库','CFBundleDisplayName':'本地知识库','CFBundleIdentifier':'com.djhuang.vault-rag.launcher','CFBundleVersion':'2','CFBundleShortVersionString':'1.1','CFBundlePackageType':'APPL','CFBundleExecutable':'launcher','CFBundleIconFile':'Knowledge.icns','NSHighResolutionCapable':True,'LSUIElement':True,'VaultRagRepository':str(repo)}))
+ launcher=contents/'MacOS'/'menubar'
+ subprocess.run(['swiftc','-target','arm64-apple-macos14.0',str(repo/'scripts/macos/MenuBar.swift'),'-o',str(launcher),'-framework','AppKit','-O'],check=True)
+ import shutil
+ shutil.copyfile(repo/'scripts/macos/app_launcher.sh',contents/'MacOS'/'launcher')
+ (contents/'MacOS'/'launcher').chmod(0o755)
+ (contents/'Info.plist').write_bytes(plistlib.dumps({'CFBundleName':'本地知识库','CFBundleDisplayName':'本地知识库','CFBundleIdentifier':'com.djhuang.vault-rag.launcher','CFBundleVersion':'3','CFBundleShortVersionString':'1.2','CFBundlePackageType':'APPL','CFBundleExecutable':'launcher','CFBundleIconFile':'Knowledge.icns','NSHighResolutionCapable':True,'LSUIElement':True,'LSMinimumSystemVersion':'14.0','VaultRagRepository':''}))
  with tempfile.TemporaryDirectory() as tmp:
   folder=Path(tmp)/'Knowledge.iconset';folder.mkdir()
   im=Image.new('RGBA',(1024,1024));d=ImageDraw.Draw(im)
@@ -24,5 +27,7 @@ def build(repo=REPO,destination=None):
   for size in (16,32,128,256,512):
    for scale in (1,2): im.resize((size*scale,size*scale),Image.Resampling.LANCZOS).save(folder/f'icon_{size}x{size}{"@2x" if scale==2 else ""}.png')
   subprocess.run(['iconutil','-c','icns',str(folder),'-o',str(contents/'Resources'/'Knowledge.icns')],check=True)
+ metadata=plistlib.loads((contents/'Info.plist').read_bytes());metadata['VaultRagMenuRevision']='3'
+ (contents/'Info.plist').write_bytes(plistlib.dumps(metadata))
  print(destination)
 if __name__=='__main__':build()
