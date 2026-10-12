@@ -16,6 +16,7 @@ from vault_rag.verification_rank import UNVERIFIED_EXCERPT_PREFIX
 
 def make_service(nodes: list[TextNode]) -> VaultRagService:
     service = VaultRagService(Path(__file__).parent, Settings(_env_file=None))
+    service.status = lambda: {"scope_matches_settings": True}
     service._loaded = True
     service._nodes_by_id = {node.node_id: node for node in nodes}
     candidates = [NodeWithScore(node=node, score=0.9) for node in nodes]
@@ -29,7 +30,8 @@ def note(index: int, *, text: str = "Project-specific evidence.", **metadata) ->
     return TextNode(
         id_=str(index), text=text,
         metadata={
-            "file_path": f"Pitfalls/note-{index}.md",
+            "file_path": f"RAG/Notes/note-{index}.md",
+            "type": "rule" if metadata.get("file_path", "").startswith("RAG/Rules/") else "pitfall",
             "verified_status": "limited",
             "domain": "unity",
             "verified_date": "2026-09-22",
@@ -96,7 +98,7 @@ class McpResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["results"][0]["excerpt_truncated"])
 
     async def test_rule_search_stays_separate_and_supports_full_mode(self):
-        rule = note(2, file_path="Rules/dcc/example.md", rule_id="dcc/example", domain="dcc")
+        rule = note(2, file_path="RAG/Rules/example.md", rule_id="dcc/example", domain="dcc")
         service = make_service([note(1), rule])
         rule_result = await self.call(service, "rule_search", {"query": "example", "domain": "dcc"})
         self.assertEqual([row["chunk_id"] for row in rule_result["results"]], ["2"])
@@ -116,7 +118,7 @@ class McpResponseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error, {"ok": False, "error": "offline"})
 
     async def test_scope_filter_runs_before_no_hit_flag_and_compact_projection(self):
-        hmirp = note(1, file_path="Rules/core/render.md", rule_id="core/hmirp-rendering-agent")
+        hmirp = note(1, file_path="RAG/Rules/render.md", rule_id="core/hmirp-rendering-agent")
         for compact in (True, False):
             service = make_service([hmirp])
             result = await self.call(service, "rule_search", {
@@ -138,7 +140,7 @@ class McpResponseTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result, {"ok": True, "no_relevant_hit": True, "results": []})
 
     async def test_general_queries_and_pcg_rules_respect_remote_isolation(self):
-        service = make_service([note(1), note(2, domain="pcg", file_path="Rules/pcg/example.md")])
+        service = make_service([note(1), note(2, domain="pcg", file_path="RAG/Rules/pcg-example.md")])
         generic = await self.call(service, "vault_search", {"query": "history", "domain": "general"})
         self.assertTrue(generic["no_relevant_hit"])
         pcg = await self.call(service, "rule_search", {"query": "example", "domain": "pcg"})

@@ -13,20 +13,21 @@ from vault_rag.path_exclusions import (
     skip_file_for_index,
 )
 from vault_rag.settings import Settings
+from vault_rag.content_scope import iter_scoped_markdown
 
 logger = logging.getLogger(__name__)
 
 
 def iter_markdown_documents(settings: Settings) -> list[Document]:
-    """Load all Markdown files under vault as LlamaIndex Documents."""
-    root = settings.vault_root.resolve()
+    """Load eligible Markdown from the single content subtree."""
+    root = settings.vault_root.expanduser().resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"VAULT_ROOT is not a directory: {root}")
 
     spec = build_pathspec(settings)
     merged_dirs = settings.merged_exclude_dir_names()
     docs: list[Document] = []
-    for path in root.rglob("*.md"):
+    for path in iter_scoped_markdown(settings):
         if not path.is_file():
             continue
         rel = path.relative_to(root)

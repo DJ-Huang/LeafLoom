@@ -89,8 +89,8 @@ class MetadataPolicyTests(unittest.TestCase):
 
     def test_pcg_rule_root_is_domain_bound(self) -> None:
         settings = Settings(_env_file=None)
-        self.assertEqual(_rule_path_prefixes(settings, "unity"), (settings.vault_rules_folder,))
-        self.assertEqual(_rule_path_prefixes(settings, "pcg"), (settings.vault_rules_folder,))
+        self.assertEqual(_rule_path_prefixes(settings, "unity"), (settings.rules_path_prefix(),))
+        self.assertEqual(_rule_path_prefixes(settings, "pcg"), (settings.rules_path_prefix(),))
 
 
 class RankingPolicyTests(unittest.TestCase):

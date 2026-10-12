@@ -34,6 +34,7 @@ def reindex() -> None:
     root = project_root()
     settings = Settings()
     console.print(f"[bold]Vault[/bold]: {settings.vault_root}")
+    console.print(f"[bold]Content[/bold]: {settings.resolved_content_root()}")
     console.print(f"[bold]Index dir[/bold]: {settings.resolved_index_dir(root)}")
     status = build_index(root, settings)
     _print_json_utf8(status)
@@ -53,6 +54,8 @@ def doctor() -> None:
     }
     payload = {
         "vault_root": str(settings.vault_root),
+        "vault_content_folder": settings.vault_content_folder,
+        "vault_content_root": str(settings.resolved_content_root()),
         "index_dir": str(idx),
         "embedding_model": settings.embedding_model,
         "ollama_base_url": settings.ollama_base_url,

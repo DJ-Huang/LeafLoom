@@ -7,6 +7,7 @@ import pathspec
 
 from vault_rag.paths import is_under_dot_prefixed_dir_segment, is_under_excluded_dir, should_skip_path
 from vault_rag.settings import Settings
+from vault_rag.content_scope import indexed_path_is_in_scope
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,8 @@ def skip_file_for_index(
     merged_exclude_dir_names: tuple[str, ...],
 ) -> bool:
     """True = do not index this markdown file."""
+    if not indexed_path_is_in_scope(rel_posix, settings):
+        return True
     if settings.exclude_dot_prefixed_dir_segments and is_under_dot_prefixed_dir_segment(rel):
         return True
     if is_under_excluded_dir(rel, merged_exclude_dir_names):
