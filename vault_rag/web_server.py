@@ -197,7 +197,9 @@ def create_app(config=None,runtime=None,*,start_background=True):
     async def asset(path:str):
         p=(static/'assets'/path).resolve()
         if not p.is_relative_to(static/'assets') or not p.is_file():return Response(status_code=404)
-        return FileResponse(p)
+        # Windows registry MIME associations can label .js as text/plain.
+        media_type={'.js':'text/javascript','.mjs':'text/javascript','.css':'text/css'}.get(p.suffix.lower())
+        return FileResponse(p,media_type=media_type)
     @app.get('/')
     async def index():
         if not (static/'index.html').is_file():return HTMLResponse('网页尚未构建，请运行前端构建',status_code=503)
