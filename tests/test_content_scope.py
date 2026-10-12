@@ -23,7 +23,7 @@ class ContentScopeTests(unittest.TestCase):
     def write(self, path, text="---\nverified_status: limited\n---\nEvidence"):
         p = self.root / path
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text)
+        p.write_text(text,encoding='utf-8')
         return p
 
     def test_only_content_subtree_without_ragignore(self):
@@ -59,7 +59,12 @@ class ContentScopeTests(unittest.TestCase):
     def test_symlinks_do_not_import_outside_content(self):
         inside = self.write("RAG/Notes/inside.md")
         outside = self.write("Elsewhere/outside.md")
-        (inside.parent / "external.md").symlink_to(outside)
+        try:
+            (inside.parent / "external.md").symlink_to(outside)
+        except OSError as error:
+            if __import__('sys').platform == 'win32' and getattr(error, 'winerror', None) == 1314:
+                self.skipTest('Windows symlink privilege unavailable; junction isolation has a separate native test')
+            raise
         (inside.parent / "external-folder").symlink_to(outside.parent, target_is_directory=True)
         self.assertEqual([d.metadata["file_path"] for d in iter_markdown_documents(self.settings)],
                          ["RAG/Notes/inside.md"])

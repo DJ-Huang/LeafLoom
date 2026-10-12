@@ -8,6 +8,7 @@ from mcp.server.fastmcp import FastMCP
 from vault_rag.local_state import LocalConfig,ConflictError,atomic_write
 from vault_rag.knowledge import Runtime
 from vault_rag.html_preview import HtmlPreviews
+from vault_rag.platform_support import choose_directory, private_file_mode, is_windows
 
 def json_response(value,status=200):return JSONResponse(json.loads(json.dumps(value,ensure_ascii=False,default=str)),status_code=status)
 
@@ -15,8 +16,8 @@ def create_app(config=None,runtime=None,*,start_background=True):
     config=config or LocalConfig();runtime=runtime or Runtime(config);port=config.data.get('port',18080)
     previews=HtmlPreviews(config)
     secret_file=config.directory/'auth-token'
-    if not secret_file.exists():atomic_write(secret_file,secrets.token_hex(32).encode());secret_file.chmod(0o600)
-    token=secret_file.read_text().strip();csrf=hmac.new(token.encode(),b'browser-write-v1',hashlib.sha256).hexdigest()
+    if not secret_file.exists():atomic_write(secret_file,secrets.token_hex(32).encode());private_file_mode(secret_file)
+    token=secret_file.read_text(encoding='utf-8').strip();csrf=hmac.new(token.encode(),b'browser-write-v1',hashlib.sha256).hexdigest()
     mcp=FastMCP('vault-rag',host='127.0.0.1',port=port,stateless_http=True,json_response=True)
     def result(fn,*args,**kwargs):
         try:return json.dumps(fn(*args,**kwargs),ensure_ascii=False,default=str)
@@ -87,8 +88,7 @@ def create_app(config=None,runtime=None,*,start_background=True):
     @app.post('/api/choose-directory')
     async def choose_directory():
         # Triggered only by an explicit click in the local webpage, not at login.
-        proc=await asyncio.to_thread(subprocess.run,['/usr/bin/osascript','-e','POSIX path of (choose folder with prompt "关联本地知识目录")'],capture_output=True,text=True,timeout=120)
-        return json_response({'path':proc.stdout.strip()} if proc.returncode==0 else {'cancelled':True})
+        return json_response(await asyncio.to_thread(choose_directory))
     @app.get('/api/tree')
     async def tree(path:str=''):return await asyncio.to_thread(runtime.files.tree,path)
     @app.get('/api/file')
@@ -201,10 +201,28 @@ def create_app(config=None,runtime=None,*,start_background=True):
     @app.get('/')
     async def index():
         if not (static/'index.html').is_file():return HTMLResponse('网页尚未构建，请运行前端构建',status_code=503)
-        response=HTMLResponse((static/'index.html').read_text());response.set_cookie('vault_session',token,httponly=True,samesite='strict',max_age=365*86400);return response
+        response=HTMLResponse((static/'index.html').read_text(encoding='utf-8'));response.set_cookie('vault_session',token,httponly=True,samesite='strict',max_age=365*86400);return response
     return app
 
 def serve():
     import uvicorn
     config=LocalConfig();logging.basicConfig(level=logging.INFO)
-    uvicorn.run(create_app(config),host='127.0.0.1',port=config.data.get('port',18080),workers=1,access_log=False)
+    if is_windows():
+        from vault_rag.windows_native import Instance
+        import socket
+        with Instance(config.directory, 'service') as instance:
+            if not instance.primary:return
+            with socket.socket() as probe:
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+                try:probe.bind(('127.0.0.1', config.data.get('port',18080)))
+                except OSError as e:raise RuntimeError('配置端口已被其他程序占用') from e
+            server=uvicorn.Server(uvicorn.Config(create_app(config),host='127.0.0.1',port=config.data.get('port',18080),workers=1,access_log=False))
+            finished=threading.Event()
+            def watch():
+                while not finished.is_set():
+                    if instance.wait_for_stop(200):server.should_exit=True;return
+            watcher=threading.Thread(target=watch,daemon=True);watcher.start()
+            try:server.run()
+            finally:finished.set();watcher.join()
+    else:
+        uvicorn.run(create_app(config),host='127.0.0.1',port=config.data.get('port',18080),workers=1,access_log=False)

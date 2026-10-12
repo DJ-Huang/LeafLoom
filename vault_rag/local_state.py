@@ -6,6 +6,8 @@ from urllib.parse import unquote, quote
 import frontmatter
 import pathspec
 from ruamel.yaml import YAML
+from vault_rag.platform_support import (state_directory, protect_private_directory, private_file_mode,
+    preserve_file_mode, is_windows, is_link, path_key, validate_windows_parts)
 
 PROTECTED = {'.git', '.obsidian', '.vault-rag', '.rag-layout-backups', 'node_modules', '__pycache__'}
 TEXT_EXTENSIONS = {'.md', '.txt', '.json', '.yaml', '.yml', '.toml', '.csv', '.srt', '.vtt', '.py', '.js', '.ts', '.tsx', '.css', '.html', '.htm', '.svg', '.base', '.log'}
@@ -19,7 +21,7 @@ def atomic_write(path: Path, data: bytes) -> None:
     tmp = path.with_name('.'+path.name+'.'+uuid.uuid4().hex+'.tmp')
     try:
         with tmp.open('xb') as f:
-            if path.exists(): os.fchmod(f.fileno(), path.stat().st_mode & 0o777)
+            preserve_file_mode(f, path)
             f.write(data); f.flush(); os.fsync(f.fileno())
         os.replace(tmp, path)
     finally:
@@ -30,9 +32,11 @@ def relative(value: str) -> str:
     p = PurePosixPath(value)
     if p.is_absolute() or '..' in p.parts or '\x00' in value or re.match(r'^[A-Za-z]:',value):
         raise ValueError('路径必须位于已关联目录内')
+    if is_windows():validate_windows_parts(p.parts)
     return '' if value in ('','.') else p.as_posix().rstrip('/')
 
 def under(path: str, root: str) -> bool:
+    path,root=path_key(path),path_key(root)
     return not root or path == root or path.startswith(root+'/')
 
 def split_link(target: str) -> tuple[str,str,str]:
@@ -44,10 +48,10 @@ class ConflictError(Exception): pass
 
 class LocalConfig:
     def __init__(self, directory: Path | None = None):
-        self.directory = directory or Path(os.environ.get('VAULT_RAG_HOME', str(Path.home()/'Library/Application Support/VaultRag')))
-        self.directory.mkdir(parents=True,exist_ok=True); self.directory.chmod(0o700)
+        self.directory = (directory or state_directory()).resolve()
+        protect_private_directory(self.directory)
         self.path=self.directory/'config.json'; self.lock=threading.RLock(); self._spec_key=None; self._spec=None
-        self.data=json.loads(self.path.read_text()) if self.path.exists() else self.defaults()
+        self.data=json.loads(self.path.read_text(encoding='utf-8')) if self.path.exists() else self.defaults()
     @staticmethod
     def defaults():
         return {'root':None,'include_roots':['RAG'],'exclude_roots':[], 'rules_roots':['RAG/Rules'], 'wiki_roots':['RAG/Navigation'], 'estimation_roots':['RAG/EstimationDB'], 'write_targets':{'notes':'RAG/Notes','rules':'RAG/Rules','navigation':'RAG/Navigation','estimation':'RAG/EstimationDB'}, 'homepage':'000-Home.md', 'templates':'Templates', 'daily_folder':'Daily', 'port':18080}
@@ -55,14 +59,18 @@ class LocalConfig:
     def root(self):
         if not self.data.get('root'): raise ValueError('请先在网页关联一个本地目录')
         p=Path(self.data['root'])
+        if is_windows() and p.drive.startswith('\\\\'):raise ValueError('请选择本机盘符目录，不支持网络共享')
         if not p.is_dir(): raise ValueError('已关联目录不存在，请在设置中重新关联')
+        if is_link(p) or (is_windows() and any(is_link(x) for x in p.parents)):
+            raise ValueError('已关联目录已变成符号链接或 junction，请重新关联')
         return p
     def save(self, values):
         with self.lock:
             data={**self.data,**values}
             if data.get('root'):
                 p=Path(data['root']).expanduser()
-                if not p.is_absolute() or not p.is_dir() or p.is_symlink(): raise ValueError('请选择存在的本机目录，不能使用符号链接')
+                if is_windows() and p.drive.startswith('\\\\'):raise ValueError('请选择本机盘符目录，不支持网络共享')
+                if not p.is_absolute() or not p.is_dir() or is_link(p) or (is_windows() and any(is_link(x) for x in p.parents)): raise ValueError('请选择存在的本机目录，不能使用符号链接或 junction')
                 data['root']=str(p.resolve())
             for key in ('include_roots','exclude_roots','rules_roots','wiki_roots','estimation_roots'):
                 data[key]=sorted(set(relative(x) for x in data.get(key,[])))
@@ -72,17 +80,17 @@ class LocalConfig:
                 for name in ('include_roots','rules_roots','wiki_roots','estimation_roots'):
                     for rel in data[name]:
                         p=Path(data['root'])/rel
-                        if p.exists() and (not p.is_dir() or p.is_symlink()):raise ValueError('目录配置不能指向文件或符号链接')
+                        if p.exists() and (not p.is_dir() or is_link(p) or not p.resolve().is_relative_to(Path(data['root']))):raise ValueError('目录配置不能指向文件、链接或根目录外部')
             data['revision']=uuid.uuid4().hex
-            atomic_write(self.path,json.dumps(data,ensure_ascii=False,indent=2).encode());self.path.chmod(0o600);self.data=data
+            atomic_write(self.path,json.dumps(data,ensure_ascii=False,indent=2).encode());private_file_mode(self.path);self.data=data
             return data
     def path_for(self, rel: str, *, writable=False) -> Path:
         rel=relative(rel);p=self.root/rel
-        if any(part in PROTECTED or part.startswith('.') for part in PurePosixPath(rel).parts):raise ValueError('应用或隐藏目录不允许通过网页访问')
+        if any(path_key(part) in {path_key(x) for x in PROTECTED} or part.startswith('.') for part in PurePosixPath(rel).parts):raise ValueError('应用或隐藏目录不允许通过网页访问')
         cur=self.root
         for part in PurePosixPath(rel).parts:
             cur=cur/part
-            if cur.is_symlink():raise ValueError('不通过符号链接访问文件')
+            if is_link(cur):raise ValueError('不通过符号链接或 junction 访问文件')
         if not p.resolve().is_relative_to(self.root):raise ValueError('路径越出关联目录')
         if writable and not rel: raise ValueError('不能修改关联根目录')
         return p
@@ -107,10 +115,10 @@ class LocalConfig:
         stat=rag.stat() if rag.is_file() else None
         key=(str(self.root),stat.st_mtime_ns if stat else None,stat.st_size if stat else None)
         if key!=self._spec_key:
-            self._spec=pathspec.PathSpec.from_lines('gitignore',rag.read_text().splitlines() if stat else []);self._spec_key=key
+            self._spec=pathspec.PathSpec.from_lines('gitignore',rag.read_text(encoding='utf-8').splitlines() if stat else []);self._spec_key=key
         if self._spec.match_file(rel):return False
         if meta is None:
-            try:meta=frontmatter.loads(self.path_for(rel).read_text()).metadata
+            try:meta=frontmatter.loads(self.path_for(rel).read_text(encoding='utf-8')).metadata
             except (OSError,ValueError):return False
         from vault_rag.path_exclusions import frontmatter_requests_skip
         return not frontmatter_requests_skip(meta)
@@ -122,7 +130,7 @@ class Files:
         if not p.is_dir():raise ValueError('不是目录')
         out=[]
         for x in p.iterdir():
-            if x.name.startswith('.') or x.name in PROTECTED or x.is_symlink():continue
+            if x.name.startswith('.') or path_key(x.name) in {path_key(x) for x in PROTECTED} or is_link(x):continue
             rp=x.relative_to(self.config.root).as_posix();s=x.stat()
             out.append({'path':rp,'name':x.name,'directory':x.is_dir(),'size':s.st_size,'mtime':s.st_mtime, 'selected':self.config.selected(rp)})
         return sorted(out,key=lambda x:(not x['directory'],x['name'].lower()))
@@ -191,13 +199,13 @@ class Files:
         d=self.config.root/'.vault-rag'/kind;out=[]
         if d.exists():
             for p in d.glob('*/record.json'):
-                item=json.loads(p.read_text())
+                item=json.loads(p.read_text(encoding='utf-8'))
                 if rel is None or item.get('path')==rel:out.append(item)
         return sorted(out,key=lambda x:x['time'],reverse=True)[:200]
     def restore(self,kind,key):
         if kind not in ('history','trash','operations') or not re.fullmatch(r'[a-f0-9]{32}',key):raise ValueError('恢复记录无效')
         with self.lock:
-            d=self.config.root/'.vault-rag'/kind/key;record=json.loads((d/'record.json').read_text())
+            d=self.config.root/'.vault-rag'/kind/key;record=json.loads((d/'record.json').read_text(encoding='utf-8'))
             if kind=='operations':return self.undo_move(d,record)
             p=self.config.path_for(record['path'],writable=True)
             if kind=='trash':
@@ -212,6 +220,7 @@ class Files:
         if re.match(r'^[a-zA-Z]+:',target):return []
         if paths is None:
             paths={p.relative_to(self.config.root).as_posix() for p in self.walk()}
+        canonical={path_key(p):p for p in paths}
         candidates=[]
         for name in [str(PurePosixPath(source).parent/target),target]:
             # Normalize relative links, but never escape the root.
@@ -224,17 +233,19 @@ class Files:
             if invalid:continue
             name='/'.join(parts)
             for option in (name,name+'.md'):
-                if option in paths and option not in candidates:candidates.append(option)
+                found=canonical.get(path_key(option))
+                if found is not None and found not in candidates:candidates.append(found)
             if candidates:return candidates
         base=PurePosixPath(target).name
-        if names is not None:return sorted(set(names.get(base,[])+names.get(base+'.md',[])))
-        return sorted(p for p in paths if p.rsplit('/',1)[-1] in (base,base+'.md'))
+        bases={path_key(base),path_key(base+'.md')}
+        if names is not None:return sorted({p for name,items in names.items() if path_key(name) in bases for p in items})
+        return sorted(p for p in paths if path_key(p.rsplit('/',1)[-1]) in bases)
     def walk(self):
         for folder,dirs,files in os.walk(self.config.root,followlinks=False):
-            dirs[:]=[d for d in dirs if not d.startswith('.') and d not in PROTECTED and not (Path(folder)/d).is_symlink()]
+            dirs[:]=[d for d in dirs if not d.startswith('.') and path_key(d) not in {path_key(x) for x in PROTECTED} and not is_link(Path(folder)/d)]
             for name in files:
                 p=Path(folder)/name
-                if not name.startswith('.') and not p.is_symlink():yield p
+                if not name.startswith('.') and not is_link(p):yield p
     def move(self,source,destination):
         with self.lock:
             a=self.config.path_for(source,writable=True);b=self.config.path_for(destination,writable=True)

@@ -15,10 +15,12 @@ def main() -> None:
     root = Path(__file__).resolve().parent.parent
     os.chdir(root)
     sys.path.insert(0, str(root))
+    from vault_rag.local_state import LocalConfig
+    port = LocalConfig().data.get('port', 18080)
 
     fragment = {
         "user-vault-rag": {
-            "url": "http://127.0.0.1:18080/mcp",
+            "url": f"http://127.0.0.1:{port}/mcp",
             "headers": {"Authorization": "Bearer <LOCAL_TOKEN>"},
         }
     }

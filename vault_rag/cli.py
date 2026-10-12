@@ -41,9 +41,15 @@ def serve() -> None:
 
 @app.command()
 def service(action: str = typer.Argument('status')) -> None:
-    """install/start/stop/restart/status/open/uninstall the macOS user service."""
+    """Manage the macOS/Windows user service; Windows also supports enable/disable-autostart."""
     from vault_rag.service_control import control
     control(action)
+
+@app.command()
+def tray() -> None:
+    """Run the Windows notification-area icon without loading the model."""
+    from vault_rag.windows_entry import main as run
+    run(['tray'])
 
 @app.command()
 def model_prepare() -> None:

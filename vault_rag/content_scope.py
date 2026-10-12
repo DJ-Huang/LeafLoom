@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Iterator
 
 from vault_rag.settings import Settings
+from vault_rag.platform_support import is_link
 
 CONTENT_SCOPE_VERSION = 1
 
@@ -15,10 +16,10 @@ def iter_scoped_markdown(settings: Settings) -> Iterator[Path]:
     if not root.is_dir():
         raise FileNotFoundError(f"VAULT_CONTENT_FOLDER is not a directory: {root}; no whole-vault fallback")
     for directory, dirs, files in os.walk(root, followlinks=False):
-        dirs[:] = sorted(d for d in dirs if not (Path(directory) / d).is_symlink())
+        dirs[:] = sorted(d for d in dirs if not is_link(Path(directory) / d))
         for name in sorted(files):
             path = Path(directory) / name
-            if path.suffix != ".md" or not path.is_file():
+            if path.suffix != ".md" or not path.is_file() or is_link(path):
                 continue
             if not path.resolve().is_relative_to(root):
                 continue
