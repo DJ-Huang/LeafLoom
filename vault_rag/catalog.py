@@ -203,7 +203,7 @@ class Catalog:
     def base(self,path):
         import hashlib
         raw=self.files.read(path)['text'];data=yaml.safe_load(raw) or {};rows=[]
-        profiles=json.loads((Path(__file__).parent/'tasknotes_profiles.json').read_text())
+        profiles=json.loads((Path(__file__).parent/'tasknotes_profiles.json').read_text(encoding='utf-8'))
         today=dt.date.today()
         def day(value):
             try:return dt.date.fromisoformat(str(value)[:10])

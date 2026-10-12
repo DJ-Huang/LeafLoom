@@ -4,10 +4,22 @@
 
 - 网页：http://127.0.0.1:18080/
 - MCP：http://127.0.0.1:18080/mcp
-- 配置与模型：macOS 用户 Application Support/VaultRag；本机令牌私有保存。
+- 配置与模型：macOS 使用 `~/Library/Application Support/VaultRag`；Windows 使用 `%LOCALAPPDATA%\VaultRag`。本机令牌私有保存，也可用 `VAULT_RAG_HOME` 指定目录。
 - 元数据、索引、版本历史和回收区：关联目录下 `.vault-rag/`，始终排除正文检索。
 
 ## 安装与启动
+
+### Windows 10/11 x64
+
+双击仓库根目录的 **`本地知识库.cmd`**。首次会显示安装进度，自动补齐缺少的 Python/Node、安装依赖、构建网页和下载 BGE-M3；成功后打开本地网页。也可双击 **`安装本地知识库.cmd`** 主动安装或更新。首次需联网，正常启动使用本地环境，不下载模型。
+
+之后登录会自动运行后台服务和右下角托盘图标，不弹网页。双击启动入口或托盘图标打开网页；托盘右键提供状态、启动、停止、重启、日志、登录启动开关和退出。退出托盘保留服务；**`停止本地知识库.cmd`** 只停止服务，下次登录仍按登录启动设置运行。Windows 可能把托盘图标收进“隐藏图标”，可在系统设置中选择显示。
+
+运行环境下载到用户私有目录，项目虚拟环境位于 `.venv`；无需管理员权限，不修改系统 PATH。固定版本和 SHA256 在 `scripts/windows/runtimes.json`，Python 包使用跨平台 `uv.lock`，Windows 使用 CPU PyTorch。安装失败显示错误和日志位置，重新双击可重试。企业策略若禁止下载或创建计划任务，会明确失败，不绕过组织策略。
+
+具体配置、排障和验收见 [安装指南](docs/SETUP.md)。
+
+### macOS
 
 ```sh
 .venv/bin/python -m pip install -e .
@@ -18,7 +30,7 @@ npm run build --prefix web
 .venv/bin/python -m vault_rag.cli service open
 ```
 
-`service start/stop/restart/status/uninstall` 管理 macOS 用户 LaunchAgent。登录后启动、异常退出重启；只有一个 worker 和一个模型实例。首次网页关联本机目录，之后在设置中切换。手动运行用 `vault-rag serve`；启动前确保没有另一实例占用端口。
+`service start/stop/restart/status/uninstall` 管理当前平台的用户后台服务。macOS 使用 LaunchAgent，Windows 使用普通权限的当前用户计划任务。登录后启动、异常退出重启；只有一个 worker 和一个模型实例。首次网页关联本机目录，之后在设置中切换。手动运行用 `vault-rag serve`；启动前确保没有另一实例占用端口。
 
 ## 文件与日常功能
 
@@ -50,5 +62,7 @@ Codex 使用 `[mcp_servers.user-vault-rag]` 的 `url` 与 `http_headers.Authoriz
 网页本地会话、写入 CSRF 校验、Host/Origin 检查以及 MCP bearer token 分别落实。服务仅监听 127.0.0.1。程序升级后重启服务，客户端重新连接。
 
 ## 检查
+
+Windows 定向检查可运行 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows\check.ps1`；加 `-ServiceSmoke` 会在独立临时配置下检查真实 Windows 后台任务的启停，不下载模型，也不改当前关联目录。Windows 实机显示、自动下载和登录启动验收尚需在 Windows 上完成，不能由 macOS 检查替代。
 
 相关自动检查在 `tests/test_local_knowledge.py`，覆盖版本冲突、CRLF/YAML 保留、目录/符号链接隔离、移动回滚、查询解释器、领域隔离、构建失败和 HTTP/媒体 Range。本次部署的实际检索与浏览器验收记录保存在 `~/Library/Application Support/VaultRag/backups/local-knowledge-2026-10-12/`。

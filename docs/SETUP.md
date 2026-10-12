@@ -1,164 +1,94 @@
-# vault-rag 搭建與配置指南
+# 安装与配置
 
-依序完成後，即可在本機 **建立索引**、**命令列試搜**，並在 **Cursor** 中透過 MCP 調用。
+## Windows：首次双击即可安装
 
----
+支持 Windows 10/11 x64 和内置 Windows PowerShell 5.1。将仓库放到可写的本机目录，允许中文和空格路径。双击根目录的 `本地知识库.cmd`，未安装时会打开安装进度窗口；`安装本地知识库.cmd` 可主动安装或更新。
 
-## 0. 前置條件
+安装按顺序进行：
 
-| 項目 | 要求 |
-|------|------|
-| OS | 本文以 **Windows** 為主（PowerShell） |
-| Python | **3.11+**（建議 3.11–3.12；3.14 需自行驗證依賴） |
-| Ollama | 已安裝，且建立索引與向量檢索時 **程序在運行** |
-| 嵌入模型 | 執行：`ollama pull bge-m3` |
-| Obsidian 庫 | 本倉預設路徑：`D:\Project\Obsidian\DJ Knowledge\DJ knowledge`（可改） |
+1. 保护当前用户的私有配置目录，准备已固定版本与 SHA256 的 uv。
+2. 复用 Python 3.12；缺失时由 uv 下载固定的 Python 3.12.13，不注册全局 Python 或修改 PATH。
+3. 使用 `uv.lock` 安装项目虚拟环境、CPU 版 PyTorch 和项目内的 Visual C++ 运行库，并实际导入原生依赖检查 DLL；不安装系统级运行库。
+4. 复用 Node 22.12+；缺失时下载已固定版本与 SHA256 的 Node 22 便携版，构建网页。
+5. 准备并记录 BGE-M3 的模型版本，生成不含真实令牌的 MCP 配置示例。
+6. 注册当前用户的服务和托盘登录任务，启动服务和托盘，再记录安装成功并打开网页。
 
----
+不需要手动安装 Python、Node 或 Ollama。首次模型与依赖下载可能耗时较长；后续启动只使用本地文件。运行时仅启动 Python 服务及轻量托盘，不启动 Node 网页服务器。
 
-## 1. 一鍵搭建（推薦）
+依赖或模型下载失败会显示错误和日志位置；重新双击安装入口可复用有效下载。已有非 Windows 或非 Python 3.12 的 `.venv` 不会被删除，会提示先将其改名。若组织策略禁止脚本、联网下载或计划任务，应由管理员调整策略；脚本只对当前进程使用 ExecutionPolicy Bypass，不修改系统策略。
 
-在 **PowerShell** 中執行（路徑請依你的克隆位置調整）：
+## 日常入口与托盘
 
-```powershell
-Set-Location "D:\reseilion sync\UnityPackage\vault-rag"
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\scripts\setup.ps1
-```
+- `本地知识库.cmd`：确保服务和托盘启动，等待服务就绪，再打开网页。
+- `停止本地知识库.cmd`：正常停止服务，保留托盘和登录启动设置。
+- `安装本地知识库.cmd`：安装或更新运行环境、网页和登录任务。
 
-腳本會：
+登录时默认启动服务和右下角托盘，不自动弹浏览器。托盘显示服务、模型与索引同步状态；菜单提供打开网页、刷新、启停、重启、日志、取消/恢复登录启动、退出托盘。双击图标打开网页。退出托盘后服务继续运行；重复打开不会增加模型实例。
 
-1. 建立 **`vault-rag\.venv`**（若尚不存在）
-2. 升級 **pip** 並 **`pip install -e .`**
-3. 若無 **`.env`**，從 **`.env.example`** 複製
-4. 嘗試 **`ollama pull bge-m3`**（失敗則僅提示，不中止安裝）
-5. 寫入 **`_generated/cursor-mcp-vault-rag.fragment.json`**：可合併進全局 `mcp.json` 的 **`vault-rag`** 片段（已替換為本機 **絕對路徑**）
+Windows 可将新图标放入“隐藏图标”；在任务栏设置中选择显示。服务与图标各使用一项当前用户计划任务，无需管理员或账户密码。服务任务没有运行时长限制，允许电池运行；异常退出每分钟重试一次，最多三次。主动停止正常退出，不触发失败重试。停止超时会报告错误，不强制结束其他 Python 程序。
 
----
-
-## 2. 手動搭建（與腳本等價）
+手动管理：
 
 ```powershell
-cd "D:\reseilion sync\UnityPackage\vault-rag"
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -U pip
-pip install -e .
-copy .env.example .env   # 若尚未有 .env
-notepad .env             # 確認 VAULT_ROOT 等
-ollama pull bge-m3
+.\.venv\Scripts\python.exe -X utf8 -m vault_rag.cli service status
+.\.venv\Scripts\python.exe -X utf8 -m vault_rag.cli service restart
+.\.venv\Scripts\python.exe -X utf8 -m vault_rag.cli service disable-autostart
+.\.venv\Scripts\python.exe -X utf8 -m vault_rag.cli service enable-autostart
+.\.venv\Scripts\python.exe -X utf8 -m vault_rag.cli service uninstall
 ```
 
----
+`uninstall` 停止服务与托盘并删除对应任务，保留模型、配置和知识库文件。移动仓库后，重新运行安装入口更新任务路径。
 
-## 3. 配置環境變數（`.env` 或 MCP `env`）
+## 配置与数据位置
 
-| 變數 | 說明 | 預設 |
-|------|------|------|
-| `VAULT_ROOT` | Obsidian 庫根目錄（內含 `.obsidian` 的那一層） | 見 `.env.example` |
-| `INDEX_IN_VAULT` | 為 `true` 時索引寫在 **`VAULT_ROOT` / `VAULT_INDEX_FOLDER`** | `true` |
-| `VAULT_INDEX_FOLDER` | 庫內索引子目錄名（建議點目錄，如 `.vault-rag`） | `.vault-rag` |
-| `INDEX_DIR` | 僅當 **`INDEX_IN_VAULT=false`**：索引相對於 `vault-rag` 專案根 | `_index` |
-| `LOAD_RAGIGNORE_FILE` | 是否合併 **`VAULT_ROOT/.ragignore`**（gitignore 語法） | `true` |
-| `EXCLUDE_DIR_NAMES_EXTRA` | 額外「路徑段」目錄名黑名單，`|` 或逗號分隔（與內建合併，不分大小寫匹配任一路徑段） | 空 |
-| `OLLAMA_BASE_URL` | Ollama HTTP 根 | `http://127.0.0.1:11434` |
-| `EMBEDDING_MODEL` | 嵌入模型名 | `bge-m3` |
-| `EXCLUDE_GLOBS` | 可選，逗號分隔，相對路徑子字串排除（舊版簡單規則） | 空 |
+| 内容 | Windows | macOS |
+|---|---|---|
+| 私有配置、模型和令牌 | `%LOCALAPPDATA%\VaultRag` | `~/Library/Application Support/VaultRag` |
+| 日志 | 上述目录的 `logs` | 上述目录的 `logs` |
+| 自动下载运行环境 | 上述目录的 `runtimes` | 使用已有 Python 环境 |
+| 元数据、索引、历史和回收区 | 已关联目录的 `.vault-rag` | 已关联目录的 `.vault-rag` |
 
-整理庫結構、排除規則與 **`audit`** 流程見 [VAULT_ORGANIZATION.md](./VAULT_ORGANIZATION.md)。
+`VAULT_RAG_HOME` 可覆盖私有配置目录；任务会固定保存该路径。目录和检索范围通过网页设置管理，正常 HTTP 服务无需 `.env`。已有 `.env` 仅供旧版审计助手使用，不会自动关联知识库。
 
----
+服务默认监听 `127.0.0.1:18080`，网页在 `/`，MCP 在 `/mcp`。端口冲突会提示错误，不结束占用端口的其他应用。修改私有 `config.json` 的 `port` 后重启，并重新生成 MCP 示例。关联目录仅支持本机盘符目录，不支持 UNC 网络共享；符号链接、junction 越界以及 Windows 非法相对文件名会被拒绝。
 
-## 4. 建立索引
+## MCP 客户端
 
-1. （建議）先預檢：`vault-rag audit`；需要報告時：`vault-rag audit --write-report`（寫入索引目錄下的 **`AUDIT-last.md`**）。
-2. 確認 Ollama 已啟動：`ollama list`
-3. 在啟用 venv 的前提下：
+运行 `scripts/write_mcp_fragment.py` 可生成 `_generated/cursor-mcp-vault-rag.fragment.json`，使用实际配置端口和 `<LOCAL_TOKEN>` 占位符。将占位符替换为私有目录 `auth-token` 的内容，再合并到自己的 Cursor 全局配置。不要将真实令牌提交到仓库或共享文档。
+
+Codex 使用 `url` 与 `http_headers.Authorization`；Cursor 使用 `url` 与 `headers.Authorization`；Claude Code 使用 `type: http`、`url` 与 `headers.Authorization`。不再使用 stdio 启动每个客户端各自的模型进程。
+
+## macOS
+
+保留现有 LaunchAgent 和原生菜单栏入口：
+
+```sh
+.venv/bin/python -m pip install -e .
+npm ci --prefix web
+npm run build --prefix web
+.venv/bin/python -m vault_rag.cli model-prepare
+.venv/bin/python -m vault_rag.cli service install
+.venv/bin/python -m vault_rag.cli service open
+```
+
+菜单栏安装见 [macOS 说明](../scripts/macos/README.md)。
+
+## 定向检查与 Windows 实机验收
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
-vault-rag reindex
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows\check.ps1
+# 额外执行独立配置下的真实后台任务启停：
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows\check.ps1 -ServiceSmoke
 ```
 
-庫較大時會花較長時間（嵌入 + 寫 Lance）。完成後應存在（預設 **`INDEX_IN_VAULT=true`**）：
+定向检查不下载或加载模型；覆盖 UTF-8/中文路径、CRLF/历史恢复、原子写失败、路径边界、服务状态与控制，以及 Windows 原生互斥量/junction。没有符号链接创建权限时，只跳过需要该权限的场景，junction 仍独立验证。后台任务 smoke 使用临时配置和独立端口，不改已有关联目录，结束后删除自己的任务。
 
-- `<VAULT_ROOT>/.vault-rag/lancedb/`
-- `<VAULT_ROOT>/.vault-rag/nodes.jsonl`
-- `<VAULT_ROOT>/.vault-rag/status.json`
+实际 Windows 验收还需逐项记录：
 
-若 **`INDEX_IN_VAULT=false`**，則為 **`vault-rag/_index/`** 下對應檔案。
+- 无 Python/Node 环境首次安装；中文和空格仓库路径；下载失败后重试。
+- 登录后自动启动服务和托盘、不打开网页；取消和恢复登录启动有效。
+- 托盘显示状态，双击打开网页，菜单启停/重启/日志可用；退出托盘保留服务。
+- 网页关联目录、中文编辑、模型索引与 HTTP MCP 检索；网页和 MCP 的模型 `load_count` 保持单实例。
+- 重复双击不新增服务；端口被其他应用占用、服务未就绪时显示正确错误；断网后正常启动不下载。
 
-驗證：
-
-```powershell
-vault-rag doctor
-vault-rag search "測試關鍵詞" --top-k 5
-```
-
----
-
-## 5. 接入 Cursor（MCP）
-
-### 5.1 配置文件位置
-
-- **Windows**：`%USERPROFILE%\.cursor\mcp.json`
-
-### 5.2 合併方式
-
-1. 執行 **`scripts/setup.ps1`** 後，打開 **`vault-rag/_generated/cursor-mcp-vault-rag.fragment.json`**。
-2. 將其中的 **`vault-rag`** 物件複製到全局 **`mcp.json`** 的 **`mcpServers`** 下（與現有 **`codely-agent`** 等並列）。
-3. 若 **`vault-rag` 已存在**，以生成檔為準覆蓋，確保 **`command` 指向 `.venv\Scripts\python.exe`**。
-
-### 5.3 必填欄位說明
-
-| 欄位 | 說明 |
-|------|------|
-| `command` | 建議 **`...\vault-rag\.venv\Scripts\python.exe`**，避免系統 Python 缺依賴 |
-| `args` | `["<vault-rag 根目錄>\\mcp_server.py"]` |
-| `cwd` | **必須**為 **`vault-rag` 根目錄**，以便載入 `.env` |
-| `env` | 至少 **`VAULT_ROOT`**、**`VAULT_CONTENT_FOLDER=RAG`**、**`OLLAMA_BASE_URL`**、**`EMBEDDING_MODEL`**；可選 **`INDEX_IN_VAULT`**、**`VAULT_INDEX_FOLDER`**、**`LOAD_RAGIGNORE_FILE`**、**`EXCLUDE_PATHSPEC_EXTRA`**、**`EXCLUDE_DIR_NAMES_EXTRA`** |
-
-### 5.4 生效
-
-**完全退出並重啟 Cursor**（僅重載窗口有時不夠）。在 MCP 面板確認 **`vault-rag`** 已連線，並可看到 **`vault_search`** 等工具。
-
----
-
-## 6. 筆記規範（可選，強烈建議）
-
-在 Markdown 頂部 YAML 使用 **`type`**、**`domain`**，便於 MCP 參數 **`note_type`**、**`domain`** 過濾：
-
-```yaml
----
-type: pitfall
-domain: unity
----
-```
-
-`type` 缺失時服務會從 `type/*` tag 或一級目錄推導；`domain` 可寫單值、逗號分隔值或 YAML 陣列。服務會從 DCC 路徑及明確 metadata 推導部分舊筆記的域；`domain=general` 嚴格排除專用域，其他域仍可召回真正未分類的跨項目筆記。
-
-`MIN_VECTOR_SCORE` 預設為 `0.40`。低於門檻的候選不返回，因此 `results=[]` / `no_relevant_hit=true` 是正常结果；若更換 embedding model，應用本地正負查詢重新校準，不要用 RRF `score` 當置信度。
-
----
-
-## 7. 常見問題
-
-| 現象 | 處理 |
-|------|------|
-| `Failed to connect to Ollama` | 啟動 Ollama；檢查防火牆；確認 `OLLAMA_BASE_URL` |
-| `Missing ... nodes.jsonl` | 尚未 `reindex` 或索引路徑錯誤；執行 `vault-rag doctor` |
-| Cursor 找不到工具 | 檢查 `mcp.json` JSON 語法；`cwd`；重啟 Cursor |
-| `ModuleNotFoundError: pandas` | 在 **venv** 內執行 `pip install -e .` |
-| `ollama` 指令找不到 | 關閉終端重開；或將 `C:\Users\<你>\AppData\Local\Programs\Ollama` 加到使用者 **PATH**；亦可：`"%LOCALAPPDATA%\Programs\Ollama\ollama.exe" pull bge-m3` |
-| `vault-rag search` 在 PowerShell 印中文亂碼 / `UnicodeEncodeError` | 已改為 UTF-8 輸出；若仍有問題，先執行 `chcp 65001` 再試 |
-| 更換模型後檢索怪 | 對新模型執行一次 **`reindex` 全量重建** |
-
-## 8. 相關文檔
-
-- [架構說明](./ARCHITECTURE.md)
-- [知識庫整理與排除](./VAULT_ORGANIZATION.md)
-- 上層 [README](../README.md)
-
-## 2026-10 单目录范围
-
-设置 `VAULT_CONTENT_FOLDER=RAG`，`VAULT_RULES_FOLDER=Rules` 是相对内容目录的子目录。RAG 必须先存在；旧索引需要重新构建，否则查询会报范围不匹配。状态同时返回 vault_root 和 vault_content_root。Notes 正文平铺，DCC 笔记明确 domain；Navigation、README 和附件固定排除。
+当前开发环境为 macOS，Windows 实机验收未完成。PowerShell 语法检查与跨平台自动检查不能替代上述验收。

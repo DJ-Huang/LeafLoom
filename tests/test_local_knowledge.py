@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json, tempfile, unittest
+import json, tempfile, unittest, sys, subprocess
 from pathlib import Path
 from starlette.testclient import TestClient
 from vault_rag.local_state import LocalConfig,Files,ConflictError
@@ -18,7 +18,12 @@ class LocalKnowledgeTests(unittest.TestCase):
         self.config=LocalConfig(self.home/'state');self.config.save({'root':str(self.root)})
         self.runtime=Runtime(self.config);self.runtime.model=FakeModel();self.runtime.knowledge.model=self.runtime.model;self.files=self.runtime.files
     def tearDown(self):self.temp.cleanup()
-    def put(self,path,text):p=self.root/path;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text);return p
+    def put(self,path,text):p=self.root/path;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8');return p
+    def directory_link(self,path,target):
+        try:path.symlink_to(target,target_is_directory=True)
+        except OSError as error:
+            if sys.platform!='win32' or getattr(error,'winerror',None)!=1314:raise
+            subprocess.run(['cmd.exe','/c','mklink','/J',str(path),str(target)],check=True,capture_output=True)
     def populate(self):
         self.put('RAG/Notes/a.md','---\nid: a\nname: 能量流接口\nverified_status: limited\n---\n# 能量流接口\n信号调试')
         self.put('RAG/Notes/out.md','---\nrag_index: false\n---\n# 已退出\n信号调试')
@@ -44,17 +49,17 @@ class LocalKnowledgeTests(unittest.TestCase):
         records=self.files.records('history','RAG/Notes/a.md');self.assertEqual(len(records),1);self.files.restore('history',records[0]['id']);self.assertEqual(self.files.read('RAG/Notes/a.md')['etag'],read['etag'])
     def test_move_renames_references_preserves_code_and_restores(self):
         self.put('RAG/Notes/a.md','# A\n[[b]]\n[image](../pic.png)\n');self.put('RAG/Notes/b.md','# B\n[[a|Alias]]\n```text\n[[a]]\n```\n');self.put('RAG/pic.png','image')
-        result=self.files.move('RAG/Notes/a.md','RAG/renamed.md');text=(self.root/'RAG/Notes/b.md').read_text();self.assertIn('[[RAG/renamed|Alias]]',text);self.assertIn('```text\n[[a]]',text);self.assertIn('[image](pic.png)',(self.root/'RAG/renamed.md').read_text())
-        self.files.restore('operations',result['operation_id']);self.assertTrue((self.root/'RAG/Notes/a.md').is_file());self.assertIn('[[a|Alias]]',(self.root/'RAG/Notes/b.md').read_text())
+        result=self.files.move('RAG/Notes/a.md','RAG/renamed.md');text=(self.root/'RAG/Notes/b.md').read_text(encoding='utf-8');self.assertIn('[[RAG/renamed|Alias]]',text);self.assertIn('```text\n[[a]]',text);self.assertIn('[image](pic.png)',(self.root/'RAG/renamed.md').read_text(encoding='utf-8'))
+        self.files.restore('operations',result['operation_id']);self.assertTrue((self.root/'RAG/Notes/a.md').is_file());self.assertIn('[[a|Alias]]',(self.root/'RAG/Notes/b.md').read_text(encoding='utf-8'))
         deleted=self.files.delete('RAG/Notes/a.md');self.assertFalse((self.root/'RAG/Notes/a.md').exists());self.files.restore('trash',deleted['id']);self.assertTrue((self.root/'RAG/Notes/a.md').exists())
     def test_paths_and_symlinks_never_escape(self):
-        (self.root/'escape').symlink_to(self.home,target_is_directory=True)
+        self.directory_link(self.root/'escape',self.home)
         for path in ['../other','/etc/passwd','escape/file','.vault-rag/status.json']:
             with self.assertRaises(ValueError):self.config.path_for(path,writable=True)
         self.assertNotIn('escape',[r['name'] for r in self.files.tree()])
-        self.put('RAG/Notes/a.md','same');read=self.files.read('RAG/Notes/a.md');other=self.home/'other';(other/'RAG/Notes').mkdir(parents=True);(other/'RAG/Notes/a.md').write_text('same');self.config.save({'root':str(other)})
+        self.put('RAG/Notes/a.md','same');read=self.files.read('RAG/Notes/a.md');other=self.home/'other';(other/'RAG/Notes').mkdir(parents=True);(other/'RAG/Notes/a.md').write_text('same',encoding='utf-8');self.config.save({'root':str(other)})
         with self.assertRaises(ConflictError):self.files.save('RAG/Notes/a.md','old draft',read['etag'],expected_root=read['root'])
-        self.assertEqual((other/'RAG/Notes/a.md').read_text(),'same')
+        self.assertEqual((other/'RAG/Notes/a.md').read_text(encoding='utf-8'),'same')
     def test_existing_query_and_safe_base_template(self):
         self.put('RAG/Notes/a.md','---\ncategory: Pitfall\nseverity: high\nverified_status: limited\ntags: [type/pitfall, task]\nstatus: open\nproject: Test\n---\n# A\n')
         self.runtime.catalog.scan();d=self.runtime.catalog.query('TABLE length(rows) AS 数量\nFROM "RAG/Notes"\nGROUP BY category\nSORT 数量 DESC');self.assertEqual(d['rows'][0]['values']['数量'],1)
@@ -64,7 +69,7 @@ class LocalKnowledgeTests(unittest.TestCase):
     def test_atomic_failure_keeps_snapshot_and_caches_embeddings(self):
         self.populate();k=self.runtime.knowledge;previous=k.snapshot['status']['generation'];self.put('RAG/Notes/new.md','# Different\nNew text')
         self.runtime.catalog.scan();self.runtime.model.encode=lambda _:(_ for _ in ()).throw(RuntimeError('model failed'));k.build()
-        self.assertEqual(k.snapshot['status']['generation'],previous);self.assertEqual(json.loads((self.root/'.vault-rag/current.json').read_text())['generation'],previous)
+        self.assertEqual(k.snapshot['status']['generation'],previous);self.assertEqual(json.loads((self.root/'.vault-rag/current.json').read_text(encoding='utf-8'))['generation'],previous)
     def test_model_unavailable_current_keywords_and_revision_checks(self):
         self.populate();k=self.runtime.knowledge
         self.put('RAG/Navigation/sources.md','---\nsources: [a]\n---\n# 能量流导航');self.runtime.catalog.scan();k.build()
@@ -93,7 +98,7 @@ class LocalKnowledgeTests(unittest.TestCase):
         self.put('网页 示例/next.htm','<!doctype html><h1>下一页</h1>')
         self.put('common.json','{"value":1}')
         app=create_app(self.config,self.runtime,start_background=False)
-        token=(self.config.directory/'auth-token').read_text()
+        token=(self.config.directory/'auth-token').read_text(encoding='utf-8')
         with TestClient(app,base_url='http://127.0.0.1:18080') as client:
             payload={'path':path,'root':str(self.config.root),'text':'<!doctype html><h1>草稿版本</h1>'}
             self.assertEqual(client.post('/api/html-preview',json=payload).status_code,401)
@@ -106,7 +111,7 @@ class LocalKnowledgeTests(unittest.TestCase):
             client.cookies.clear()
             response=client.get(url,headers={'origin':'null'})
             self.assertEqual(response.status_code,200);self.assertIn('草稿版本',response.text)
-            self.assertEqual(p.read_text(),original)
+            self.assertEqual(p.read_text(encoding='utf-8'),original)
             policy=response.headers['content-security-policy']
             self.assertIn('sandbox allow-scripts',policy);self.assertNotIn('allow-same-origin',policy)
             self.assertNotIn("script-src 'self'",policy);self.assertIn('/files/',policy)
@@ -127,7 +132,7 @@ class LocalKnowledgeTests(unittest.TestCase):
             self.assertEqual(client.get('/api/media',params={'path':path}).headers['content-security-policy'].split(';')[0],'sandbox')
             self.assertEqual(client.get('/api/media',params={'path':'网页 示例/next.htm'}).headers['content-security-policy'].split(';')[0],'sandbox')
             prefix=url.split('/files/')[0]+'/files/'
-            (self.root/'escape').symlink_to(self.home,target_is_directory=True)
+            self.directory_link(self.root/'escape',self.home)
             for forbidden in ('.vault-rag/status.json','escape/file','%2e%2e/other','%2Fetc/passwd'):
                 self.assertEqual(client.get(prefix+forbidden,headers={'origin':'null'}).status_code,400,forbidden)
             self.assertEqual(client.get('/html-preview/unknown/files/index.html').status_code,410)
@@ -145,7 +150,7 @@ class LocalKnowledgeTests(unittest.TestCase):
 
     def test_http_browser_session_csrf_host_origin_and_ranges(self):
         self.populate();app=create_app(self.config,self.runtime,start_background=False)
-        token=(self.config.directory/'auth-token').read_text();headers={'host':'127.0.0.1:18080','authorization':'Bearer '+token}
+        token=(self.config.directory/'auth-token').read_text(encoding='utf-8');headers={'host':'127.0.0.1:18080','authorization':'Bearer '+token}
         self.put('test.mp4','0123456789')
         with TestClient(app,headers=headers) as client:
             self.assertEqual(client.get('/api/status').status_code,200)

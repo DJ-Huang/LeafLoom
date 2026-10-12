@@ -33,6 +33,7 @@ def chunks(entries,model=None):
 class Knowledge:
     def __init__(self,config,catalog,model):
         self.config=config;self.catalog=catalog;self.model=model;self.snapshot={'nodes':[],'docs':[]};self.lock=threading.RLock();self.build_lock=threading.Lock();self.progress={'state':'等待关联目录'};self.last_signature=None;self.last_error=None;self.query_ms=None;self.live_chunks={}
+        self.stop_event=threading.Event()
     def eligible_entries(self):
         return [e for e in self.catalog.entries.values() if self.config.eligible(e['path'],e['metadata'])]
     def signature(self,entries):
@@ -42,14 +43,14 @@ class Knowledge:
     def load(self):
         root=self.config.root;index=root/'.vault-rag';pointer=index/'current.json'
         if pointer.is_file():
-            current=json.loads(pointer.read_text());generation=index/'generations'/current['generation']
-            status=json.loads((generation/'status.json').read_text());nodes=[json.loads(x) for x in (generation/'nodes.jsonl').read_text().splitlines() if x]
-            docs=json.loads((generation/'documents.json').read_text())
+            current=json.loads(pointer.read_text(encoding='utf-8'));generation=index/'generations'/current['generation']
+            status=json.loads((generation/'status.json').read_text(encoding='utf-8'));nodes=[json.loads(x) for x in (generation/'nodes.jsonl').read_text(encoding='utf-8').splitlines() if x]
+            docs=json.loads((generation/'documents.json').read_text(encoding='utf-8'))
             if status.get('vault_root')!=str(root):return
-            self.snapshot={'nodes':nodes,'docs':docs,'status':status,'directory':str(generation),'root':str(root),'wikis':json.loads((generation/'wiki-sources.json').read_text()) if (generation/'wiki-sources.json').exists() else {}};self.last_signature=status.get('signature') if status.get('policy_revision')==self.config.data.get('revision') else None;self.progress={'state':'已同步','completed':len(nodes),'total':len(nodes)}
+            self.snapshot={'nodes':nodes,'docs':docs,'status':status,'directory':str(generation),'root':str(root),'wikis':json.loads((generation/'wiki-sources.json').read_text(encoding='utf-8')) if (generation/'wiki-sources.json').exists() else {}};self.last_signature=status.get('signature') if status.get('policy_revision')==self.config.data.get('revision') else None;self.progress={'state':'已同步','completed':len(nodes),'total':len(nodes)}
         elif (index/'nodes.jsonl').is_file() and (index/'status.json').is_file():
-            status=json.loads((index/'status.json').read_text())
-            if status.get('vault_root')==str(root):self.snapshot={'nodes':[json.loads(x) for x in (index/'nodes.jsonl').read_text().splitlines() if x],'docs':[],'status':status,'root':str(root)}
+            status=json.loads((index/'status.json').read_text(encoding='utf-8'))
+            if status.get('vault_root')==str(root):self.snapshot={'nodes':[json.loads(x) for x in (index/'nodes.jsonl').read_text(encoding='utf-8').splitlines() if x],'docs':[],'status':status,'root':str(root)}
     def build(self,force=False):
         if not self.build_lock.acquire(blocking=False):return
         stage=None
@@ -58,6 +59,7 @@ class Knowledge:
             if not force and signature==self.last_signature:return
             self.progress={'state':'整理索引','completed':0,'total':0,'started_at':time.time()}
             nodes=chunks(entries,self.model if self.model.ready else None);vectors={};fingerprint=self.model.fingerprint
+            if self.stop_event.is_set():return
             if nodes and not self.model.ready:
                 self.progress={'state':'等待模型准备','total':len(nodes),'completed':0};return
             index=root/'.vault-rag';index.mkdir(exist_ok=True)
@@ -73,6 +75,7 @@ class Knowledge:
                         else:missing.append(i)
                     self.progress.update(state='更新向量',total=len(missing),completed=0,reused=len(nodes)-len(missing))
                     for offset in range(0,len(missing),4):
+                        if self.stop_event.is_set():return
                         ids=missing[offset:offset+4];batch=self.model.encode([inputs[i] for i in ids])
                         for i,v in zip(ids,batch):
                             vectors[nodes[i]['id']]=v;db.execute('INSERT OR REPLACE INTO embeddings VALUES(?,?)',(keys[i],json.dumps(v)))
@@ -96,6 +99,7 @@ class Knowledge:
             atomic_write(stage/'nodes.jsonl',('\n'.join(json.dumps(n,ensure_ascii=False,default=str) for n in nodes)+'\n').encode())
             docs=[{k:e[k] for k in ('path','title','metadata','body','text','sha256')} for e in entries]
             atomic_write(stage/'documents.json',json.dumps(docs,ensure_ascii=False,default=str).encode());atomic_write(stage/'status.json',json.dumps(status,ensure_ascii=False,indent=2).encode())
+            if self.stop_event.is_set():return
             if self.config.data.get('revision')!=policy_revision or str(self.config.root)!=str(root):raise RuntimeError('索引范围已变化，本次构建未发布；将重新同步')
             with self.lock:
                 atomic_write(index/'current.json',json.dumps({'generation':generation}).encode())
@@ -111,17 +115,19 @@ class Knowledge:
         except Exception as e:
             self.last_error=str(e);self.progress['state']='同步失败';log.exception('Index sync failed')
             if stage and self.snapshot.get('directory')!=str(stage):shutil.rmtree(stage,ignore_errors=True)
-        finally:self.build_lock.release()
+        finally:
+            if stage and self.snapshot.get('directory')!=str(stage):shutil.rmtree(stage,ignore_errors=True)
+            self.build_lock.release()
     def write_catalog(self,entries):
         roots=self.config.data['wiki_roots']
         if not roots or not entries:return
         target=self.config.path_for(roots[0]+'/_generated-index.md',writable=True)
-        if target.exists() and 'managed_by: vault-rag' not in target.read_text():return
+        if target.exists() and 'managed_by: vault-rag' not in target.read_text(encoding='utf-8'):return
         target.parent.mkdir(parents=True,exist_ok=True)
         lines=['---','type: moc','rag_index: false','managed_by: vault-rag','---','','# 可检索知识目录','','本页由服务维护；主题总结在显式整理时更新。','']
         for e in entries:lines.append('- [['+e['path']+'|'+e['title'].replace('|',' ')+']]')
         text='\n'.join(lines)+'\n'
-        if not target.exists() or target.read_text()!=text:atomic_write(target,text.encode())
+        if not target.exists() or target.read_text(encoding='utf-8')!=text:atomic_write(target,text.encode())
     def allowed(self,node,*,domain=None,type_=None,rules=False):
         path=node['metadata'].get('file_path','')
         try:live_meta={**self.catalog.files.read(path)['metadata'],'file_path':path}
@@ -286,10 +292,13 @@ class Runtime:
                 if root!=self.root:
                     self.root=root;self.catalog.entries={};self.knowledge.snapshot={'nodes':[],'docs':[]};self.knowledge.last_signature=None;self.knowledge.load()
                 self.catalog.scan();self.knowledge.build()
-                if self.model.ready and not getattr(self.model,'warmed',True):
+                if not self.stop_event.is_set() and self.model.ready and not getattr(self.model,'warmed',True):
                     self.progress_before_warmup=dict(self.knowledge.progress);self.knowledge.progress={'state':'正在预热检索'}
                     self.model.warmup();self.knowledge.progress=self.progress_before_warmup
             except ValueError as e:self.knowledge.progress={'state':str(e)}
             except Exception as e:self.knowledge.last_error=str(e);log.exception('File scan failed')
             self.event.wait(2);self.event.clear()
-    def stop(self):self.stop_event.set();self.event.set()
+    def stop(self):
+        self.stop_event.set();self.knowledge.stop_event.set();self.event.set()
+        # Let the current batch/transaction finish before a restart opens the index.
+        if self.thread and self.thread is not threading.current_thread():self.thread.join()

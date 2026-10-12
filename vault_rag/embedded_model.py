@@ -14,7 +14,7 @@ class EmbeddedModel:
     @property
     def fingerprint(self):
         if not self.ready:return None
-        m=json.loads(self.manifest.read_text())
+        m=json.loads(self.manifest.read_text(encoding='utf-8'))
         return digest(json.dumps({'model':self.model_id,'revision':m['revision'],'pooling':'official-sentence-transformers','normalize':True,'dimension':1024,'backend':'torch','dtype':'float32','input_version':1},sort_keys=True))
     def status(self):return {'model':self.model_id,'prepared':self.ready,'loaded':self.model is not None,'loading':self.loading,'error':self.error,'device':self.device,'load_count':self.loads,'load_seconds':self.load_seconds,'download':self.download_state,'fingerprint':self.fingerprint,'warmed':self.warmed,'warming':self.warming,'warmup_seconds':self.warmup_seconds}
     def prepare(self):

@@ -1,3 +1,7 @@
-"""Obsidian vault RAG: LanceDB + Ollama (bge-m3) + BM25 hybrid + MCP."""
+"""Local knowledge web app, embedded BGE-M3, hybrid retrieval and HTTP MCP."""
+
+from vault_rag.platform_support import prepare_windows_runtime
+
+prepare_windows_runtime()
 
 __version__ = "0.1.0"
