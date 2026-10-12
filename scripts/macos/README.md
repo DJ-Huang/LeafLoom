@@ -1,6 +1,6 @@
 # macOS 菜单栏应用
 
-支持 macOS 14+ Apple 芯片。双击仓库的 `.command` 或 `.app` 自动准备运行环境、网页、依赖、模型及服务，不需要预装 Homebrew、Python、Node 或 Xcode。
+支持 macOS 14+ Apple 芯片。在仓库目录的终端运行 `sh Start.sh` 或双击仓库 `.app` 自动准备运行环境、网页、依赖、模型及服务，不需要预装 Homebrew、Python、Node 或 Xcode。主动安装或修复可在仓库目录的终端运行 `sh Install.sh`，停止运行 `sh Stop.sh`。三个 `.sh` 入口均不需要可执行权限。
 
 `MenuBar.swift` 是原生 AppKit 菜单栏程序。仓库根目录的 `本地知识库.app` 与 `~/Applications/本地知识库.app` 使用同一份服务。`.app` 的 shell 入口先检查安装状态，需要安装或修复时在 Terminal 中显示进度，正常启动时直接打开网页。
 
@@ -10,7 +10,7 @@
 
 维护端构建：运行 `scripts/create_mac_launcher.py`，需要 macOS Command Line Tools（Swift、iconutil）和 Pillow；这是发布包维护步骤，用户端仅复制预编译程序。构建目标固定为 ARM64/macOS 14，结果默认写入仓库根目录；`build(destination=...)` 可指定输出位置。手动 CI 工作流也会生成预编译菜单栏归档。
 
-仓库内应用优先使用相邻仓库路径，安装版使用安装时写入的仓库路径和 `VAULT_RAG_HOME`，没有作者机器路径。移动仓库后重新双击安装入口更新安装版，不需要用户重编译。
+仓库内应用优先使用相邻仓库路径，安装版使用安装时写入的仓库路径和 `VAULT_RAG_HOME`，没有作者机器路径。移动仓库后在新目录运行 `sh Install.sh` 更新安装版，不需要用户重编译。
 
 登录启动图标：`~/Library/LaunchAgents/com.djhuang.vault-rag.menubar.plist`。它独立于知识库服务的 LaunchAgent；没有 KeepAlive，所以退出菜单栏后不会自动重新打开，下一次登录会再次打开。菜单栏程序只轮询状态，不加载 embedding 模型。
 
