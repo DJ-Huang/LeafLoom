@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ExternalLink,Maximize,Minimize,RefreshCw} from 'lucide-react';
-import {api} from './api';
+import {api,Change} from './api';
 
 const sandbox='allow-scripts allow-modals allow-downloads allow-popups allow-popups-to-escape-sandbox';
 
@@ -11,6 +11,7 @@ export function HtmlPreview({path,root,text,active}:{path:string,root:string,tex
  const [error,setError]=useState('');const [refresh,setRefresh]=useState(0);
  const loaded=useRef<{path:string,root:string,text:string,refresh:number}|undefined>(undefined);
  const currentLocation=useRef('');const currentSrc=useRef('');
+ useEffect(()=>{if(!active)return;const changed=(event:Event)=>{const change=(event as CustomEvent<Change>).detail;if(change.reset||change.type==='config'||change.paths?.some(path=>!(/\.(md|txt|base)$/i.test(path))))setRefresh(value=>value+1);};window.addEventListener('vault-data-changed',changed);return()=>window.removeEventListener('vault-data-changed',changed);},[active]);
 
  useEffect(()=>{
   if(!active)return;

@@ -1,11 +1,12 @@
 """Whole-vault file metadata, links, safe property queries and existing view adapters."""
 from __future__ import annotations
 from contextlib import closing
-import datetime as dt, json, re, sqlite3, threading
-from pathlib import Path
+import datetime as dt, json, re, sqlite3, threading, posixpath
+from pathlib import Path, PurePosixPath
 from collections import defaultdict
 import frontmatter, yaml
 from vault_rag.local_state import Files, LINK_RE, digest, under
+from vault_rag.platform_support import path_key
 
 def tokens(text):
     text=text.lower();words=re.findall(r'[a-z0-9_]+(?:[-/][a-z0-9_]+)*|[\u3400-\u9fff]+',text);out=[]
@@ -79,44 +80,145 @@ def columns(source):
     return [x.strip() for x in re.split(r',(?=(?:[^"\']*["\'][^"\']*["\'])*[^"\']*$)',source) if x.strip()]
 
 class Catalog:
-    def __init__(self,files:Files):self.files=files;self.entries={};self.lock=threading.RLock();self.links=[];self.version=0;self.root=None;self.resolver_indexes=None
+    def __init__(self,files:Files):
+        self.files=files;self.entries={};self.lock=threading.RLock();self.links=[]
+        self.version=0;self.root=None;self.resolver_indexes=None
+        self.references={};self.reference_keys={};self.edges={};self.changed_paths=[]
+        self.persist=True
+        self.directories={''};self.directory_table={}
+
+    def _entry(self,root,p,old=None,force=False,stat_value=None):
+        rel=p.relative_to(root).as_posix();stat=stat_value or p.stat();stamp=(stat.st_mtime_ns,stat.st_size)
+        if old and old['_stat']==stamp and not force:return old
+        meta={};text='';body='';sha=''
+        # Assets stay in the filename registry without being read/hashed/parsed.
+        if p.suffix.lower() in ('.md','.txt','.base') and stat.st_size<=10*1024*1024:
+            raw=p.read_bytes();sha=digest(raw);text=raw.decode('utf-8-sig',errors='replace')
+            try:
+                post=frontmatter.loads(text) if p.suffix.lower()=='.md' else None
+                meta=post.metadata if post else {};body=post.content if post else text
+            except Exception:body=text
+        title=str(meta.get('name') or meta.get('title') or p.stem)
+        tags=[str(t).lstrip('#') for t in list_value(meta.get('tags'))]
+        file={'path':rel,'name':p.stem,'folder':p.parent.relative_to(root).as_posix() if p.parent!=root else '',
+              'ext':p.suffix.lstrip('.'),'tags':tags,'size':stat.st_size,'mtime':stat.st_mtime,
+              'ctime':getattr(stat,'st_birthtime',stat.st_ctime),'basename':p.stem,'modified':stat.st_mtime,
+              'link':{'path':rel,'label':title},'inlinks':[],'outlinks':[]}
+        return {'path':rel,'title':title,'metadata':meta,'text':text,'body':body,'sha256':sha,'file':file,'_stat':stamp}
+
+    @staticmethod
+    def _keys(target,source=''):
+        from urllib.parse import unquote
+        value=unquote(target.split('|')[0].split('#')[0]).strip().strip('<>')
+        base=PurePosixPath(value).name
+        return {path_key(x) for x in (value,base,base+'.md',posixpath.normpath(str(PurePosixPath(source).parent/value)))}
+
+    def _publish(self,root,entries,changed,reset=False):
+        if not changed and not reset:self.changed_paths=[];return len(entries)
+        old=self.entries;indexes=self.indexes(entries);keys=set()
+        for rel in changed:
+            keys.update(self._keys(rel))
+            for entry in (old.get(rel),entries.get(rel)):
+                if entry:
+                    keys.update(path_key(str(x)) for x in [entry['title'],entry['metadata'].get('id',''),*list_value(entry['metadata'].get('aliases'))] if x)
+        references={} if reset else dict(self.references)
+        reference_keys={} if reset else dict(self.reference_keys)
+        edges={} if reset else dict(self.edges)
+        affected=set(entries) if reset else set(changed)|{source for source,values in reference_keys.items() if keys.intersection(values)}
+        for rel in affected:
+            entry=entries.get(rel)
+            if not entry or not rel.lower().endswith('.md'):
+                references.pop(rel,None);reference_keys.pop(rel,None);edges.pop(rel,None);continue
+            if reset or rel in changed:
+                body=re.sub(r'^```[^\n]*\n.*?^```[^\n]*(?:\n|$)','',entry['text'],flags=re.S|re.M)
+                references[rel]=[match.group(2) if match.group(1) else match.group(5) for match in LINK_RE.finditer(body)]
+                reference_keys[rel]=set().union(*(self._keys(target,rel) for target in references[rel])) if references[rel] else set()
+            links=[]
+            for target in references.get(rel,[]):
+                found=self.resolve(target,rel,entries=entries,indexes=indexes)
+                if len(found)==1:links.append({'source':rel,'target':found[0]})
+            edges[rel]=links
+        links=[link for values in edges.values() for link in values]
+        ins=defaultdict(list);outs=defaultdict(list)
+        for link in links:ins[link['target']].append(link['source']);outs[link['source']].append(link['target'])
+        # Readers keep immutable snapshots while this generation is assembled.
+        for rel,entry in list(entries.items()):
+            if entry['file'].get('inlinks')!=ins[rel] or entry['file'].get('outlinks')!=outs[rel]:
+                entries[rel]={**entry,'file':{**entry['file'],'inlinks':ins[rel],'outlinks':outs[rel]}}
+        if self.persist:self._persist(root,entries,changed,reset,old)
+        table=defaultdict(list)
+        for path in sorted(self.directories):
+            if not path:continue
+            parent,_,name=path.rpartition('/')
+            table[parent].append({'path':path,'name':name,'directory':True,'size':0,'mtime':0})
+        for path,entry in entries.items():
+            parent,_,name=path.rpartition('/')
+            table[parent].append({'path':path,'name':name,'directory':False,'size':entry['file']['size'],'mtime':entry['file']['mtime']})
+        self.directory_table={path:sorted(rows,key=lambda row:(not row['directory'],row['name'].lower())) for path,rows in table.items()}
+        self.entries=entries;self.links=links;self.resolver_indexes=indexes;self.root=str(root)
+        self.references=references;self.reference_keys=reference_keys;self.edges=edges
+        self.version+=1;self.changed_paths=sorted(changed)
+        return len(entries)
+
+    def _persist(self,root,entries,changed,reset,old):
+        cache=root/'.vault-rag/catalog.sqlite';cache.parent.mkdir(exist_ok=True)
+        with closing(sqlite3.connect(cache)) as db:
+            db.execute('CREATE TABLE IF NOT EXISTS files(path TEXT PRIMARY KEY, title TEXT, metadata TEXT, sha256 TEXT, mtime REAL)')
+            if reset:
+                stale={row[0] for row in db.execute('SELECT path FROM files')}-set(entries)
+            else:stale=set(old)-set(entries)
+            db.executemany('DELETE FROM files WHERE path=?',[(path,) for path in stale])
+            db.executemany('INSERT OR REPLACE INTO files VALUES(?,?,?,?,?)',
+                [(x['path'],x['title'],json.dumps(x['metadata'],ensure_ascii=False,default=str),x['sha256'],x['file']['mtime'])
+                 for path in (set(entries) if reset else changed) if (x:=entries.get(path)) is not None])
+            db.commit()
+
     def scan(self):
         with self.lock:
-            entries={};changed=self.root!=str(self.files.config.root)
-            for p in self.files.walk():
-                rel=p.relative_to(self.files.config.root).as_posix();stat=p.stat();old=self.entries.get(rel)
-                if old and old['_stat']==(stat.st_mtime_ns,stat.st_size):entries[rel]=old;continue
-                changed=True;meta={};text='';body='';sha=''
-                if p.suffix.lower() in ('.md','.txt','.base') and stat.st_size<=10*1024*1024:
-                    raw=p.read_bytes();sha=digest(raw);text=raw.decode('utf-8-sig',errors='replace')
-                    try:
-                        post=frontmatter.loads(text) if p.suffix.lower()=='.md' else None
-                        meta=post.metadata if post else {};body=post.content if post else text
-                    except Exception:body=text
-                title=str(meta.get('name') or meta.get('title') or p.stem)
-                tags=[str(t).lstrip('#') for t in list_value(meta.get('tags'))]
-                file={'path':rel,'name':p.stem,'folder':p.parent.relative_to(self.files.config.root).as_posix().replace('.','',1) if p.parent==self.files.config.root else p.parent.relative_to(self.files.config.root).as_posix(),'ext':p.suffix.lstrip('.'),'tags':tags,'size':stat.st_size,'mtime':stat.st_mtime,'ctime':getattr(stat,'st_birthtime',stat.st_ctime),'basename':p.stem,'modified':stat.st_mtime,'link':{'path':rel,'label':title}}
-                entries[rel]={'path':rel,'title':title,'metadata':meta,'text':text,'body':body,'sha256':sha,'file':file,'_stat':(stat.st_mtime_ns,stat.st_size)}
-            if not changed and set(entries)==set(self.entries):return len(entries)
-            indexes=self.indexes(entries);links=[];paths=set(entries)
-            for rel,entry in entries.items():
-                if not rel.endswith('.md'):continue
-                body=re.sub(r'^```[^\n]*\n.*?^```[^\n]*(?:\n|$)','',entry['text'],flags=re.S|re.M)
-                for match in LINK_RE.finditer(body):
-                    target=match.group(2) if match.group(1) else match.group(5)
-                    found=self.resolve(target,rel,entries=entries,indexes=indexes)
-                    if len(found)==1:links.append({'source':rel,'target':found[0]})
-            ins=defaultdict(list);outs=defaultdict(list)
-            for link in links:ins[link['target']].append(link['source']);outs[link['source']].append(link['target'])
-            for rel,entry in entries.items():entry['file']['inlinks']=ins[rel];entry['file']['outlinks']=outs[rel]
-            self.entries=entries;self.links=links;self.resolver_indexes=indexes;self.root=str(self.files.config.root);self.version+=1
-            cache=self.files.config.root/'.vault-rag/catalog.sqlite';cache.parent.mkdir(exist_ok=True)
-            with closing(sqlite3.connect(cache)) as db:
-                db.execute('CREATE TABLE IF NOT EXISTS files(path TEXT PRIMARY KEY, title TEXT, metadata TEXT, sha256 TEXT, mtime REAL)')
-                db.execute('DELETE FROM files')
-                db.executemany('INSERT INTO files VALUES(?,?,?,?,?)',[(x['path'],x['title'],json.dumps(x['metadata'],ensure_ascii=False,default=str),x['sha256'],x['file']['mtime']) for x in entries.values()])
-                db.commit()
-            return len(entries)
+            root=self.files.config.root;reset=self.root!=str(root);entries={};changed=set();directories={''};stats={}
+            for p in self.files.walk(directories=directories,stats=stats):
+                rel=p.relative_to(root).as_posix();old=None if reset else self.entries.get(rel)
+                try:entry=self._entry(root,p,old,stat_value=stats.pop(p))
+                except FileNotFoundError:continue
+                entries[rel]=entry
+                if entry is not old:changed.add(rel)
+            changed.update(set(self.entries)-set(entries));changed.update(self.directories.symmetric_difference(directories))
+            self.directories=directories
+            return self._publish(root,entries,changed,reset)
+
+    def apply(self,paths):
+        with self.lock:
+            root=self.files.config.root
+            if self.root!=str(root):return self.scan()
+            entries=dict(self.entries);changed=set()
+            for rel in set(paths):
+                try:p=self.files.config.path_for(rel)
+                except (ValueError,OSError):continue
+                old_paths={path for path in entries if path==rel or path.startswith(rel+'/')}
+                present=set()
+                if p.is_file():items=[p]
+                elif p.is_dir():
+                    self.directories.add(rel);items=self.files.walk(rel,directories=self.directories);changed.add(rel)
+                else:items=[]
+                for item in items:
+                    path=item.relative_to(root).as_posix()
+                    try:entry=self._entry(root,item,entries.get(path),force=True)
+                    except FileNotFoundError:continue
+                    entries[path]=entry;present.add(path);changed.add(path)
+                    parent=path.rpartition('/')[0]
+                    while parent:self.directories.add(parent);parent=parent.rpartition('/')[0]
+                for path in old_paths-present:entries.pop(path,None);changed.add(path)
+                if not p.exists():
+                    removed={path for path in self.directories if path==rel or path.startswith(rel+'/')}
+                    self.directories.difference_update(removed);changed.update(removed)
+            return self._publish(root,entries,changed)
+    def tree(self,rel=''):
+        # Every request still validates the directory before returning cached names.
+        with self.files.config.lock:
+            path=self.files.config.path_for(rel)
+            if not path.is_dir():raise ValueError('不是目录')
+            if self.root!=self.files.config.data.get('root'):return self.files.tree(rel)
+            return [{**row,'selected':self.files.config.selected(row['path'],validated=True)} for row in self.directory_table.get(rel,[])]
     @staticmethod
     def indexes(entries):
         names=defaultdict(list);identities=defaultdict(list)
@@ -124,17 +226,24 @@ class Catalog:
             names[path.rsplit('/',1)[-1]].append(path)
             for key in [str(entry['metadata'].get('id','')),entry['title']]+[str(x) for x in list_value(entry['metadata'].get('aliases'))]:
                 if key:identities[key].append(path)
-        return set(entries),dict(names),dict(identities)
+        return set(entries),dict(names),dict(identities),{path_key(p):p for p in entries}
     def resolve(self,target,source='',entries=None,indexes=None):
         current=entries is None;entries=self.entries if current else entries
         if not entries:return self.files.resolve(target,source)
         indexes=indexes or self.resolver_indexes or self.indexes(entries)
-        paths,names,identities=indexes
-        found=self.files.resolve(target,source,paths=paths,names=names)
+        paths,names,identities,canonical=indexes
+        found=self.files.resolve(target,source,paths=paths,names=names,canonical=canonical)
         if found:return found
         key=target.split('|')[0].split('#')[0]
         found=sorted(set(identities.get(key,[])))
-        return found or (self.files.resolve(target,source) if current else [])
+        if found or not current:return found
+        # An in-app creation can precede the watcher by a few milliseconds.
+        for candidate in (str(PurePosixPath(source).parent/target),target):
+            try:
+                p=self.files.config.path_for(candidate)
+                if p.is_file():return [p.relative_to(self.files.config.root).as_posix()]
+            except (ValueError,OSError):pass
+        return []
     def search(self,query,limit=40):
         terms=tokens(query)
         if not terms:return []
@@ -200,7 +309,7 @@ class Catalog:
             if not no_id:values['文件']=row['file']['link']
             out.append({'path':row['file'].get('path',''),'values':values})
         return {'kind':'table' if table else 'list','headers':headers,'rows':out,'total':len(out)}
-    def base(self,path):
+    def base(self,path,view_index=None):
         import hashlib
         raw=self.files.read(path)['text'];data=yaml.safe_load(raw) or {};rows=[]
         profiles=json.loads((Path(__file__).parent/'tasknotes_profiles.json').read_text(encoding='utf-8'))
@@ -233,14 +342,16 @@ class Catalog:
             if entry['path'].endswith('.md'):
                 row={**entry['metadata'],'file':entry['file']}
                 if matches(data.get('filters'),row):rows.append({'path':entry['path'],'title':entry['title'],'metadata':entry['metadata'],'file':entry['file'],'etag':entry['sha256']})
-        for view in data.get('views',[]):
+        for index,view in enumerate(data.get('views',[])):
+            if view_index is not None and index!=view_index:
+                view['rows']=[];continue
             try:
                 view['rows']=[r for r in rows if matches(view.get('filters'),{**r['metadata'],'file':r['file']})]
                 for sort in reversed(view.get('sort',[])):
                     key=sort.get('property') or sort.get('column');reverse=sort.get('direction','ASC')=='DESC'
                     view['rows'].sort(key=lambda r:(r['metadata'].get(key) is not None,str(r['metadata'].get(key,''))),reverse=reverse)
             except ValueError as e:view['rows']=[];view['error']=str(e)
-        return {'properties':data.get('properties',{}),'views':data.get('views',[])}
+        return {'properties':data.get('properties',{}),'views':data.get('views',[]),'active_view':view_index}
 
 def render_template(text,now=None):
     now=now or dt.datetime.now();cursor=None

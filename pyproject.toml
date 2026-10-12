@@ -20,6 +20,7 @@ dependencies = [
   "lancedb>=0.38.0,<0.39",
   "pandas>=2.0.0,<3",
   "pathspec>=0.12.1",
+  "watchfiles>=1.1,<2",
   "pydantic-settings>=2.2.0",
   "python-frontmatter>=1.1.0",
   "typer>=0.12.0",

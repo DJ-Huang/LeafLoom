@@ -4,16 +4,19 @@ from __future__ import annotations
 from collections import OrderedDict
 import re
 import secrets
+import threading
 from urllib.parse import quote
 
 from starlette.responses import FileResponse, HTMLResponse
 
 from vault_rag.local_state import ConflictError
+from vault_rag.http_cache import conditional_file
 
 
 SANDBOX = 'allow-scripts allow-modals allow-downloads allow-popups allow-popups-to-escape-sandbox'
 MAX_PREVIEWS = 32
 MAX_HTML_BYTES = 10 * 1024 * 1024
+MAX_PREVIEW_BYTES = 32 * 1024 * 1024
 
 # Only report navigation and Escape. Never expose a bridge to the file/write API.
 BRIDGE = """<script>
@@ -43,8 +46,13 @@ class HtmlPreviews:
     def __init__(self, config):
         self.config = config
         self.entries = OrderedDict()
+        self.lock = threading.RLock()
 
     def create(self, path: str, root: str, text: str) -> dict:
+        with self.config.lock, self.lock:
+            return self._create(path, root, text)
+
+    def _create(self, path: str, root: str, text: str) -> dict:
         if root != str(self.config.root):
             raise ConflictError('关联目录已切换，请重新打开网页；原草稿仍保留')
         p = self.config.path_for(path)
@@ -55,11 +63,15 @@ class HtmlPreviews:
         path = p.relative_to(self.config.root).as_posix()
         key = secrets.token_urlsafe(32)
         self.entries[key] = (root, self.config.data.get('revision'), path, text)
-        while len(self.entries) > MAX_PREVIEWS:
+        while len(self.entries) > MAX_PREVIEWS or sum(len(entry[3].encode('utf-8')) for entry in self.entries.values()) > MAX_PREVIEW_BYTES:
             self.entries.popitem(last=False)
         return {'url': f'/html-preview/{key}/files/{quote(path, safe="/")}'}
 
-    def response(self, key: str, path: str, origin: str, download: bool = False):
+    def response(self, key: str, path: str, origin: str, download: bool = False, request=None):
+        with self.config.lock, self.lock:
+            return self._response(key, path, origin, download, request)
+
+    def _response(self, key: str, path: str, origin: str, download: bool = False, request=None):
         entry = self.entries.get(key)
         valid = entry and entry[0] == self.config.data.get('root') and entry[1] == self.config.data.get('revision')
         # Never interpolate an untrusted route segment into CSP source expressions.
@@ -94,13 +106,13 @@ class HtmlPreviews:
                 response = HTMLResponse(with_bridge(text))
             else:
                 attachment = download or p.suffix.lower() in ('.md', '.txt', '.base')
-                response = FileResponse(p, filename=p.name if attachment else None,
-                                        content_disposition_type='attachment' if attachment else 'inline')
+                response = conditional_file(p,request,filename=p.name if attachment else None,
+                                            content_disposition_type='attachment' if attachment else 'inline')
             # Sandboxed module scripts, fonts and local fetches have Origin: null.
             # The unguessable URL grants only rooted file reads, never credentials.
             response.headers['Access-Control-Allow-Origin'] = 'null'
         response.headers['Content-Security-Policy'] = policy
-        response.headers['Cache-Control'] = 'no-store'
+        response.headers.setdefault('Cache-Control','no-store')
         response.headers['Referrer-Policy'] = 'no-referrer'
         response.headers['X-Content-Type-Options'] = 'nosniff'
         return response

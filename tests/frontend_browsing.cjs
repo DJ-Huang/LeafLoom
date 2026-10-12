@@ -1,0 +1,41 @@
+// Run from the repository root: node tests/frontend_browsing.cjs
+const assert=require('node:assert/strict');
+const fs=require('node:fs');const path=require('node:path');
+const root=path.resolve(__dirname,'..'),cache=path.join(root,'.cache/frontend-tests');fs.mkdirSync(cache,{recursive:true});
+fs.writeFileSync(path.join(cache,'entry.ts'),"export * from '../../web/src/api';export * from '../../web/src/document-state';");
+require(path.join(root,'web/node_modules/esbuild')).buildSync({entryPoints:[path.join(cache,'entry.ts')],outfile:path.join(cache,'entry.cjs'),bundle:true,platform:'node',format:'cjs'});
+global.window=new EventTarget();global.CustomEvent=class extends Event{constructor(type,options){super(type);this.detail=options?.detail;}};
+const storage=()=>{const values=new Map();return {getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};};
+global.localStorage=storage();global.sessionStorage=storage();
+const api=require(path.join(cache,'entry.cjs'));
+const config={root:'vault-a',revision:'v1'};const session={service_instance_id:'service',config,csrf:'test'};
+let calls=0,reader=(url,options)=>({path:new URL(url,'http://local').searchParams.get('path'),root:'vault-a',text:'disk',etag:'version-1',metadata:{}});
+global.fetch=async(url,options)=>{calls++;return new Response(JSON.stringify(await reader(url,options)),{headers:{'Content-Type':'application/json','ETag':'"http-version"'}});};
+async function run(){
+ api.applySession(session);
+ let resolve,aborted=0;
+ global.fetch=(url,options)=>{calls++;return new Promise((ok,no)=>{resolve=()=>ok(new Response(JSON.stringify({text:'joined'})));options.signal.addEventListener('abort',()=>{aborted++;no(new DOMException('cancelled','AbortError'));});});};
+ const a=new AbortController(),b=new AbortController();const first=api.api('file?path=joined.md',undefined,undefined,{signal:a.signal}),second=api.api('file?path=joined.md',undefined,undefined,{signal:b.signal});
+ assert.equal(calls,1);a.abort();await assert.rejects(first,{name:'AbortError'});assert.equal(aborted,0);resolve();assert.equal((await second).text,'joined');
+ const last=new AbortController();const cancelled=api.api('file?path=cancelled.md',undefined,undefined,{signal:last.signal});last.abort();await assert.rejects(cancelled,{name:'AbortError'});assert.equal(aborted,1);
+ await new Promise(resolve=>setImmediate(resolve));
+ global.fetch=async(url,options)=>{calls++;return new Response(JSON.stringify(await reader(url,options)),{headers:{'Content-Type':'application/json','ETag':'"http-version"'}});};
+ await api.api('file?path=a.md');let before=calls;await api.api('file?path=a.md');assert.equal(calls,before);
+ global.fetch=async(_,options)=>{calls++;assert.equal(options.headers['If-None-Match'],'"http-version"');return new Response(null,{status:304});};
+ assert.equal((await api.api('file?path=a.md',undefined,undefined,{force:true})).text,'disk');
+ global.fetch=async(url,options)=>{calls++;return new Response(JSON.stringify(await reader(url,options)),{headers:{'ETag':'"http-version"'}});};
+ for(let i=0;i<70;i++)await api.api('file?path=cache-'+i+'.md');before=calls;await api.api('file?path=cache-0.md');assert.equal(calls,before+1);
+ reader=()=>({text:'x'.repeat(9*1024*1024)});await api.api('file?path=big-a.md');await api.api('file?path=big-b.md');before=calls;await api.api('file?path=big-a.md');assert.equal(calls,before+1);
+ reader=url=>({path:new URL(url,'http://local').searchParams.get('path'),root:'vault-a',text:'disk',etag:'version-1',metadata:{}});
+ api.applySession({...session,config:{...config,root:'vault-b'}});before=calls;await api.api('file?path=a.md');assert.equal(calls,before+1);
+ const media=api.media('image.png');api.invalidate({paths:['other.md']});assert.equal(api.media('image.png'),media);api.invalidate({paths:['image.png']});assert.notEqual(api.media('image.png'),media);
+ api.applySession(session);const doc=api.documentState('vault-a','draft.md');await api.loadDocument(doc);
+ api.changeDocument(doc,'draft-kept');reader=()=>({path:'draft.md',root:'vault-a',text:'external',etag:'version-2',metadata:{}});await api.loadDocument(doc,undefined,true);
+ assert.equal(doc.text,'draft-kept');assert.match(doc.state,/冲突/);assert.match(localStorage.getItem(doc.key),/draft-kept/);
+ let writes=0;global.fetch=async(_,options)=>{writes++;const body=JSON.parse(options.body);assert.equal(body.root,'vault-a');assert.equal(body.etag,'version-1');return new Response(JSON.stringify({error:'changed',conflict:true}),{status:409});};
+ await api.saveDocument(doc);assert.equal(writes,1);assert.equal(doc.text,'draft-kept');assert.equal(doc.dirty,true);assert.match(doc.state,/冲突/);
+ const quota=api.documentState('vault-a','quota.md');quota.etag='version-1';const original=localStorage.setItem;localStorage.setItem=()=>{throw new DOMException('quota','QuotaExceededError');};
+ api.changeDocument(quota,'quota-kept');assert.equal(quota.text,'quota-kept');assert.match(quota.error,/草稿存储不可用/);await api.saveDocument(quota);assert.equal(quota.dirty,true);localStorage.setItem=original;
+ console.log('Frontend browsing contracts passed: dedupe, cancellation, 304, LRU limits, scope, resources and draft conflicts.');
+}
+run().catch(error=>{console.error(error);process.exitCode=1;});

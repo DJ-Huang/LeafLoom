@@ -1,6 +1,6 @@
 """Persistent single-vault configuration, rooted paths, and durable file operations."""
 from __future__ import annotations
-import hashlib, io, json, os, re, shutil, threading, time, uuid
+import hashlib, io, json, os, re, shutil, stat as statlib, threading, time, uuid
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, quote
 import frontmatter
@@ -94,13 +94,14 @@ class LocalConfig:
         if not p.resolve().is_relative_to(self.root):raise ValueError('路径越出关联目录')
         if writable and not rel: raise ValueError('不能修改关联根目录')
         return p
-    def selected(self, rel: str) -> bool:
+    def selected(self, rel: str, *, validated=False) -> bool:
         # The most specific explicit directory choice wins; exclusions win ties.
         matches=[(len(PurePosixPath(r).parts),True) for r in self.data['include_roots'] if under(rel,r)]
         matches += [(len(PurePosixPath(r).parts),False) for r in self.data['exclude_roots'] if under(rel,r)]
         if not matches or not max(matches,key=lambda item:(item[0],not item[1]))[1]:return False
-        try:self.path_for(rel)
-        except (ValueError,OSError):return False
+        if not validated:
+            try:self.path_for(rel)
+            except (ValueError,OSError):return False
         return True
     def role(self,rel):
         for name in ('rules','wiki','estimation'):
@@ -124,17 +125,23 @@ class LocalConfig:
         return not frontmatter_requests_skip(meta)
 
 class Files:
-    def __init__(self,config:LocalConfig):self.config=config; self.lock=threading.RLock();self.changed=lambda:None
+    def __init__(self,config:LocalConfig):self.config=config; self.lock=threading.RLock();self.changed=lambda *paths:None
     def tree(self,rel=''):
-        p=self.config.path_for(rel)
+        with self.config.lock:
+            return self._tree(rel)
+    def _tree(self,rel=''):
+        p=self.config.path_for(rel);root=self.config.root
         if not p.is_dir():raise ValueError('不是目录')
         out=[]
         for x in p.iterdir():
             if x.name.startswith('.') or path_key(x.name) in {path_key(x) for x in PROTECTED} or is_link(x):continue
-            rp=x.relative_to(self.config.root).as_posix();s=x.stat()
-            out.append({'path':rp,'name':x.name,'directory':x.is_dir(),'size':s.st_size,'mtime':s.st_mtime, 'selected':self.config.selected(rp)})
+            rp=x.relative_to(root).as_posix();s=x.stat()
+            out.append({'path':rp,'name':x.name,'directory':x.is_dir(),'size':s.st_size,'mtime':s.st_mtime, 'selected':self.config.selected(rp,validated=True)})
         return sorted(out,key=lambda x:(not x['directory'],x['name'].lower()))
     def read(self,rel):
+        with self.config.lock:
+            return self._read(rel)
+    def _read(self,rel):
         p=self.config.path_for(rel)
         if p.stat().st_size>10*1024*1024:raise ValueError('文本文件过大，请下载后打开')
         b=p.read_bytes();text=b.decode('utf-8-sig')
@@ -159,7 +166,7 @@ class Files:
             if b'\r\n' in old:normalized=normalized.replace('\n','\r\n')
             new=normalized.encode('utf-8')
             if old.startswith(b'\xef\xbb\xbf'):new=b'\xef\xbb\xbf'+new
-            if new!=old:self._history(p);atomic_write(p,new);self.changed()
+            if new!=old:self._history(p);atomic_write(p,new);self.changed(rel)
             return self.read(rel)
     def properties(self,rel,updates,etag,*,expected_root=None):
         read=self.read(rel);text=read['text'];nl='\r\n' if '\r\n' in text else '\n'
@@ -180,20 +187,20 @@ class Files:
             if directory:p.mkdir()
             else:
                 with p.open('xb') as f:f.write(text.encode())
-            self.changed();return {'path':rel}
+            self.changed(rel);return {'path':rel}
     def upload(self,folder,name,data):
         if '/' in name or '\\' in name:raise ValueError('上传文件名无效')
         rel='/'.join(x for x in (relative(folder),name) if x);p=self.config.path_for(rel,writable=True)
         if p.exists():raise ConflictError('同名文件已存在')
         with p.open('xb') as f:f.write(data)
-        self.changed();return {'path':rel}
+        self.changed(rel);return {'path':rel}
     def delete(self,rel):
         with self.lock:
             p=self.config.path_for(rel,writable=True)
             if not p.exists():raise FileNotFoundError(rel)
             key=uuid.uuid4().hex;trash=self.config.root/'.vault-rag/trash'/key;trash.mkdir(parents=True)
             atomic_write(trash/'record.json',json.dumps({'id':key,'path':rel,'time':time.time()},ensure_ascii=False).encode())
-            shutil.move(str(p),str(trash/'content'));self.changed();return {'id':key,'path':rel}
+            shutil.move(str(p),str(trash/'content'));self.changed(rel);return {'id':key,'path':rel}
     def records(self,kind,rel=None):
         if kind not in ('history','trash','operations'):raise ValueError('记录类型无效')
         d=self.config.root/'.vault-rag'/kind;out=[]
@@ -213,14 +220,21 @@ class Files:
                 p.parent.mkdir(parents=True,exist_ok=True);shutil.move(str(d/'content'),str(p));shutil.rmtree(d)
             else:
                 self._history(p);atomic_write(p,(d/'content').read_bytes())
-            self.changed();return {'path':record['path']}
-    def resolve(self,target,source='',*,paths=None,names=None):
+            self.changed(record['path']);return {'path':record['path']}
+    def resolve(self,target,source='',*,paths=None,names=None,canonical=None):
         target=unquote(split_link(target)[0]).strip().strip('<>')
         if not target:return [source] if source else []
         if re.match(r'^[a-zA-Z]+:',target):return []
         if paths is None:
+            # Known file paths remain fast before the first catalog generation.
+            for candidate in (str(PurePosixPath(source).parent/target),target):
+                for option in (candidate,candidate+'.md'):
+                    try:
+                        path=self.config.path_for(option)
+                        if path.is_file():return [path.relative_to(self.config.root).as_posix()]
+                    except (ValueError,OSError):pass
             paths={p.relative_to(self.config.root).as_posix() for p in self.walk()}
-        canonical={path_key(p):p for p in paths}
+        canonical=canonical if canonical is not None else {path_key(p):p for p in paths}
         candidates=[]
         for name in [str(PurePosixPath(source).parent/target),target]:
             # Normalize relative links, but never escape the root.
@@ -240,12 +254,28 @@ class Files:
         bases={path_key(base),path_key(base+'.md')}
         if names is not None:return sorted({p for name,items in names.items() if path_key(name) in bases for p in items})
         return sorted(p for p in paths if path_key(p.rsplit('/',1)[-1]) in bases)
-    def walk(self):
-        for folder,dirs,files in os.walk(self.config.root,followlinks=False):
-            dirs[:]=[d for d in dirs if not d.startswith('.') and path_key(d) not in {path_key(x) for x in PROTECTED} and not is_link(Path(folder)/d)]
-            for name in files:
-                p=Path(folder)/name
-                if not name.startswith('.') and not is_link(p):yield p
+    def walk(self,rel='',*,directories=None,stats=None):
+        root=self.config.root
+        pending=[self.config.path_for(rel)];protected={path_key(x) for x in PROTECTED}
+        while pending:
+            folder=pending.pop()
+            try:
+                if self.config.path_for(folder.relative_to(root).as_posix())!=folder:continue
+            except (ValueError,OSError):continue
+            if directories is not None:directories.add('' if folder==root else folder.relative_to(root).as_posix())
+            try:
+                with os.scandir(folder) as items:
+                    for item in items:
+                        if item.name.startswith('.') or path_key(item.name) in protected:continue
+                        try:s=item.stat(follow_symlinks=False)
+                        except OSError:continue
+                        if statlib.S_ISLNK(s.st_mode) or getattr(s,'st_reparse_tag',0) in (0xA0000003,0xA000000C):continue
+                        p=Path(item.path)
+                        if statlib.S_ISDIR(s.st_mode):pending.append(p)
+                        elif statlib.S_ISREG(s.st_mode):
+                            if stats is not None:stats[p]=s
+                            yield p
+            except OSError:continue
     def move(self,source,destination):
         with self.lock:
             a=self.config.path_for(source,writable=True);b=self.config.path_for(destination,writable=True)
@@ -294,7 +324,7 @@ class Files:
                 if moved:b.rename(a)
                 for rel,(old,new) in edits.items():atomic_write(self.config.root/rel,old)
                 shutil.rmtree(d);raise
-            self.changed();return {'path':destination,'updated_links':len(edits),'operation_id':key}
+            self.changed(source,destination,*edits);return {'path':destination,'updated_links':len(edits),'operation_id':key}
     def undo_move(self,d,record):
         a=self.config.path_for(record['path'],writable=True);b=self.config.path_for(record['destination'],writable=True)
         if a.exists() or not b.exists():raise ConflictError('移动后的目录已变化，不能自动恢复')
@@ -303,4 +333,4 @@ class Files:
             if not p.is_file() or digest(p.read_bytes())!=item['after_hash']:raise ConflictError('关联笔记后来已修改，不能覆盖恢复')
         b.rename(a)
         for item in record['edits']:atomic_write(self.config.path_for(item['path'],writable=True),(d/item['backup']).read_bytes())
-        shutil.rmtree(d);self.changed();return {'path':record['path']}
+        shutil.rmtree(d);self.changed(record['path'],record['destination'],*[item['path'] for item in record['edits']]);return {'path':record['path']}

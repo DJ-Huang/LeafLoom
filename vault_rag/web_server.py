@@ -3,16 +3,26 @@ from __future__ import annotations
 import asyncio, contextlib, hashlib, hmac, json, logging, mimetypes, os, secrets, subprocess, threading
 from pathlib import Path
 from fastapi import FastAPI, Request
-from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
+from starlette.middleware.gzip import GZipMiddleware
 from mcp.server.fastmcp import FastMCP
 from vault_rag.local_state import LocalConfig,ConflictError,atomic_write
 from vault_rag.knowledge import Runtime
 from vault_rag.html_preview import HtmlPreviews
 from vault_rag.platform_support import choose_directory, private_file_mode, is_windows
+from vault_rag.http_cache import conditional_file
 
 def json_response(value,status=200):return JSONResponse(json.loads(json.dumps(value,ensure_ascii=False,default=str)),status_code=status)
 
-def create_app(config=None,runtime=None,*,start_background=True):
+class StaticCompression:
+    """Compress app bundles without buffering SSE or changing media Range bodies."""
+    def __init__(self,app):
+        self.app=app;self.compressed=GZipMiddleware(app,minimum_size=1024,compresslevel=6)
+    async def __call__(self,scope,receive,send):
+        app=self.compressed if scope['type']=='http' and scope.get('path','').startswith('/assets/') else self.app
+        await app(scope,receive,send)
+
+def create_app(config=None,runtime=None,*,start_background=True,static_dir=None):
     config=config or LocalConfig();runtime=runtime or Runtime(config);port=config.data.get('port',18080)
     previews=HtmlPreviews(config)
     secret_file=config.directory/'auth-token'
@@ -45,7 +55,7 @@ def create_app(config=None,runtime=None,*,start_background=True):
     @mcp.tool()
     def vault_index_status()->str:
         """Report configured directory, indexed roots, write targets, model and sync state."""
-        return result(runtime.knowledge.status)
+        return result(runtime.status)
     mcp_app=mcp.streamable_http_app()
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -54,6 +64,7 @@ def create_app(config=None,runtime=None,*,start_background=True):
             yield
             runtime.stop()
     app=FastAPI(lifespan=lifespan,docs_url=None,redoc_url=None)
+    app.add_middleware(StaticCompression)
     app.state.runtime=runtime;app.state.csrf=csrf
     @app.middleware('http')
     async def local_security(request,call_next):
@@ -69,39 +80,67 @@ def create_app(config=None,runtime=None,*,start_background=True):
         if is_api and not (bearer or (session and path!='/mcp')):return json_response({'error':'请从本机网页入口打开，或配置 MCP 本机令牌'},401)
         if path.startswith('/api/') and request.method not in ('GET','HEAD') and not bearer:
             if not hmac.compare_digest(request.headers.get('x-vault-csrf',''),csrf):return json_response({'error':'写入请求校验失败'},403)
+        if path in ('/api/search-files','/api/graph','/api/related','/api/query','/api/base','/api/templates') and runtime.catalog.root!=config.data.get('root'):
+            return json_response({'error':'目录信息正在更新，请稍后重试'},503)
         try:response=await call_next(request)
         except ConflictError as e:return json_response({'error':str(e),'conflict':True},409)
         except (ValueError,FileNotFoundError,UnicodeDecodeError) as e:return json_response({'error':str(e)},400)
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Referrer-Policy']='no-referrer'
-        response.headers.setdefault('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'")
+        if path.startswith('/api/') and path!='/api/media':response.headers.setdefault('Cache-Control','no-store')
+        response.headers.setdefault('Content-Security-Policy',"default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'")
         return response
     @app.get('/healthz')
     async def health():return {'ok':True,'service':'vault-rag'}
+    def session_data():
+        return {'config':config.data,'csrf':csrf,'suggested_root':str(Path.home()/'DJKnowledges'),
+                'service_instance_id':runtime.events.instance,'catalog_version':runtime.catalog.version}
+    @app.get('/api/session')
+    async def session():return json_response(session_data())
+    @app.get('/api/events')
+    async def events(request:Request):
+        async def stream():
+            async with runtime.events.listen() as (queue,after):
+                initial={'type':'reset','sequence':after,**session_data()}
+                yield 'data: '+json.dumps(initial,ensure_ascii=False)+'\n\n'
+                while not runtime.stop_event.is_set():
+                    try:message=await asyncio.wait_for(queue.get(),timeout=15)
+                    except asyncio.TimeoutError:
+                        yield ': keepalive\n\n';continue
+                    if message is None:break
+                    if message['sequence']<=after:continue
+                    after=message['sequence']
+                    yield 'id: '+str(after)+'\ndata: '+json.dumps(message,ensure_ascii=False,default=str)+'\n\n'
+        return StreamingResponse(stream(),media_type='text/event-stream',headers={'Cache-Control':'no-store','X-Accel-Buffering':'no'})
     @app.get('/api/bootstrap')
-    async def bootstrap():return json_response({'config':config.data,'status':runtime.knowledge.status(),'csrf':csrf,'suggested_root':str(Path.home()/'DJKnowledges')})
+    async def bootstrap():return json_response({'config':config.data,'status':runtime.status(),'csrf':csrf,'suggested_root':str(Path.home()/'DJKnowledges')})
     @app.get('/api/status')
-    async def status():return json_response(await asyncio.to_thread(runtime.knowledge.status))
+    async def status():return json_response(runtime.status())
     @app.post('/api/config')
     async def configure(request:Request):
-        body=await request.json();value=config.save(body);runtime.event.set();return json_response(value)
+        body=await request.json();value=await asyncio.to_thread(config.save,body);runtime.configuration_changed();return json_response(value)
     @app.post('/api/choose-directory')
     async def choose_current_directory():
         # Triggered only by an explicit click in the local webpage, not at login.
         return json_response(await asyncio.to_thread(choose_directory))
     @app.get('/api/tree')
-    async def tree(path:str=''):return await asyncio.to_thread(runtime.files.tree,path)
+    async def tree(path:str=''):return await asyncio.to_thread(runtime.catalog.tree,path)
     @app.get('/api/file')
-    async def read_file(path:str):return json_response(await asyncio.to_thread(runtime.files.read,path))
+    async def read_file(request:Request,path:str):
+        value=await asyncio.to_thread(runtime.files.read,path)
+        etag='"'+hashlib.sha256((str(value['root'])+str(config.data.get('revision'))+str(value['mtime'])+value['etag']).encode()).hexdigest()+'"'
+        if any(tag.strip().removeprefix('W/') in ('*',etag) for tag in request.headers.get('if-none-match','').split(',')):
+            return Response(status_code=304,headers={'ETag':etag,'Cache-Control':'private, no-cache'})
+        response=json_response(value);response.headers['ETag']=etag;response.headers['Cache-Control']='private, no-cache';return response
     @app.post('/api/html-preview')
     async def html_preview(request:Request):
         body=await request.json()
         if not isinstance(body,dict) or any(not isinstance(body.get(key),str) for key in ('path','root','text')):
             raise ValueError('网页预览需要文件路径、关联根目录和 HTML 内容')
-        return json_response(previews.create(body['path'],body['root'],body['text']))
+        return json_response(await asyncio.to_thread(previews.create,body['path'],body['root'],body['text']))
     @app.api_route('/html-preview/{key}/files/{path:path}',methods=['GET','HEAD'])
     async def html_resource(request:Request,key:str,path:str,download:bool=False):
-        return previews.response(key,path,str(request.base_url).rstrip('/'),download)
+        return await asyncio.to_thread(previews.response,key,path,str(request.base_url).rstrip('/'),download,request)
     @app.put('/api/file')
     async def save_file(request:Request):
         body=await request.json();return json_response(await asyncio.to_thread(runtime.files.save,body['path'],body['text'],body['etag'],expected_root=body.get('root')))
@@ -137,29 +176,31 @@ def create_app(config=None,runtime=None,*,start_background=True):
                 if dest.exists():raise ConflictError('同名文件已存在')
                 os.link(temp,dest);temp.unlink()
         finally:temp.unlink(missing_ok=True)
-        runtime.event.set();return {'path':dest.relative_to(config.root).as_posix()}
+        rel=dest.relative_to(config.root).as_posix();runtime.files_changed(rel);return {'path':rel}
     @app.get('/api/media')
-    async def media(path:str,download:bool=False):
-        p=config.path_for(path)
-        if not p.is_file():raise FileNotFoundError(path)
-        response=FileResponse(p,filename=p.name if download else None,content_disposition_type='attachment' if download else 'inline')
-        if p.suffix.lower() in ('.html','.htm','.svg'):response.headers['Content-Security-Policy']="sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:;"
-        return response
+    async def media(request:Request,path:str,download:bool=False):
+        def response():
+            with config.lock:
+                p=config.path_for(path)
+                if not p.is_file():raise FileNotFoundError(path)
+                headers={'Content-Security-Policy':"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:;"} if p.suffix.lower() in ('.html','.htm','.svg') else None
+                return conditional_file(p,request,headers=headers,identity=str(config.root)+str(config.data.get('revision')),filename=p.name if download else None,content_disposition_type='attachment' if download else 'inline')
+        return await asyncio.to_thread(response)
     @app.get('/api/search-files')
-    async def search_files(query:str):return runtime.catalog.search(query)
+    async def search_files(query:str):return await asyncio.to_thread(runtime.catalog.search,query)
     @app.get('/api/resolve')
     async def resolve(target:str,source:str=''):return {'candidates':await asyncio.to_thread(runtime.catalog.resolve,target,source)}
     @app.get('/api/graph')
-    async def graph(path:str|None=None):return runtime.catalog.graph(path)
+    async def graph(path:str|None=None):return await asyncio.to_thread(runtime.catalog.graph,path)
     @app.get('/api/related')
     async def related(path:str):
         entry=runtime.catalog.entries.get(path,{})
         links=runtime.catalog.links
         return {'incoming':sorted(set(x['source'] for x in links if x['target']==path)),'outgoing':sorted(set(x['target'] for x in links if x['source']==path)),'metadata':entry.get('metadata',{})}
     @app.post('/api/query')
-    async def query(request:Request):return json_response(runtime.catalog.query((await request.json())['query']))
+    async def query(request:Request):return json_response(await asyncio.to_thread(runtime.catalog.query,(await request.json())['query']))
     @app.get('/api/base')
-    async def base(path:str):return json_response(runtime.catalog.base(path))
+    async def base(path:str,view:int|None=None):return json_response(await asyncio.to_thread(runtime.catalog.base,path,view))
     @app.get('/api/templates')
     async def templates():return [{'path':p,'title':e['title']} for p,e in runtime.catalog.entries.items() if p.startswith(config.data['templates']+'/') and p.endswith('.md')]
     @app.post('/api/template')
@@ -172,38 +213,39 @@ def create_app(config=None,runtime=None,*,start_background=True):
         import datetime
         folder=config.data['daily_folder'];config.path_for(folder).mkdir(exist_ok=True)
         path=folder+'/'+datetime.date.today().isoformat()+'.md'
-        if not config.path_for(path).exists():
+        created=not config.path_for(path).exists()
+        if created:
             template_path=config.data['templates']+'/tpl-daily-note.md'
             text=runtime.files.read(template_path)['text'] if config.path_for(template_path).is_file() else '# {{date}}\n\n'
             runtime.files.create(path,text=render_template(text)['text'])
-        return {'path':path}
+        return {'path':path,'created':created}
     @app.post('/api/knowledge-search')
     async def knowledge_search(request:Request):
         body=await request.json();return json_response(await asyncio.to_thread(runtime.knowledge.search,body.get('query',''),top_k=body.get('top_k',3),type_=body.get('note_type'),mode=body.get('mode','hybrid'),domain=body.get('domain')))
     @app.post('/api/reindex')
     async def reindex():
-        runtime.knowledge.last_signature=None;runtime.event.set();return {'ok':True,'state':'已排队'}
+        runtime.request_index(force=True);return {'ok':True,'state':'已排队'}
     @app.post('/api/model-prepare')
     async def prepare():
         if runtime.model.download_state=='下载模型中':return {'state':'下载中'}
         def download():
-            try:runtime.model.prepare();runtime.event.set()
+            try:runtime.model.prepare();runtime.request_index(force=True)
             except Exception:logging.exception('Model preparation failed')
         threading.Thread(target=download,daemon=True,name='model-download').start();return {'state':'模型准备已开始'}
     # The SDK owns /mcp; share its single session manager in the root lifespan.
     app.router.routes.extend(mcp_app.routes)
-    static=Path(__file__).parent/'static'
+    static=Path(static_dir) if static_dir else Path(__file__).parent/'static'
     @app.get('/assets/{path:path}')
     async def asset(path:str):
         p=(static/'assets'/path).resolve()
         if not p.is_relative_to(static/'assets') or not p.is_file():return Response(status_code=404)
         # Windows registry MIME associations can label .js as text/plain.
         media_type={'.js':'text/javascript','.mjs':'text/javascript','.css':'text/css'}.get(p.suffix.lower())
-        return FileResponse(p,media_type=media_type)
+        return FileResponse(p,media_type=media_type,headers={'Cache-Control':'public, max-age=31536000, immutable'})
     @app.get('/')
     async def index():
         if not (static/'index.html').is_file():return HTMLResponse('网页尚未构建，请运行前端构建',status_code=503)
-        response=HTMLResponse((static/'index.html').read_text(encoding='utf-8'));response.set_cookie('vault_session',token,httponly=True,samesite='strict',max_age=365*86400);return response
+        response=HTMLResponse((static/'index.html').read_text(encoding='utf-8'),headers={'Cache-Control':'no-store'});response.set_cookie('vault_session',token,httponly=True,samesite='strict',max_age=365*86400);return response
     return app
 
 def serve(*, instance=None):
