@@ -1,8 +1,8 @@
 # 安装与配置
 
-## 首次双击即可安装
+## 首次启动即可安装
 
-支持 Windows 10/11 x64（内置 Windows PowerShell 5.1）和 macOS 14+ Apple 芯片。将仓库放到可写的本机目录，允许中文和空格路径。Windows 双击 `Start.cmd`，macOS 双击 `Start.command` 或仓库内 `.app`；首次或需要修复时显示安装进度。对应的 `Install.cmd` / `.command` 可主动安装或更新。
+支持 Windows 10/11 x64（内置 Windows PowerShell 5.1）和 macOS 14+ Apple 芯片。将仓库放到可写的本机目录，允许中文和空格路径。Windows 双击 `Start.cmd`，macOS 在仓库目录的终端运行 `sh Start.sh` 或双击仓库内 `.app`；首次或需要修复时显示安装进度。Windows 用 `Install.cmd`，macOS 在仓库目录的终端运行 `sh Install.sh`，可主动安装或更新。
 
 安装按顺序进行：
 
@@ -60,7 +60,7 @@ Codex 使用 `url` 与 `http_headers.Authorization`；Cursor 使用 `url` 与 `h
 
 ## macOS
 
-首次双击 `Start.command` 或仓库 `.app` 即可；主动修复用 `Install.command`。服务使用当前用户 LaunchAgent，菜单栏安装到 `~/Applications/本地知识库.app`，不需要管理员权限。正常登录只启动服务和菜单栏，不打开网页；退出菜单栏后服务继续运行。移动仓库后再次双击新目录的安装入口更新路径。
+首次在仓库目录的终端运行 `sh Start.sh` 或双击仓库 `.app` 即可；主动修复在仓库目录的终端运行 `sh Install.sh`，停止运行 `sh Stop.sh`。三个 `.sh` 入口均不需要可执行权限。服务使用当前用户 LaunchAgent，菜单栏安装到 `~/Applications/本地知识库.app`，不需要管理员权限。正常登录只启动服务和菜单栏，不打开网页；退出菜单栏后服务继续运行。移动仓库后在新目录运行 `sh Install.sh` 更新路径。
 
 Intel Mac 和 macOS 13 及以下不在支持范围。菜单栏维护端构建说明见 [macOS 说明](../scripts/macos/README.md)，用户端不编译 Swift。
 
