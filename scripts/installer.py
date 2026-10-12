@@ -57,23 +57,30 @@ def platform_key():
 
 class InstallLock:
     """OS-owned lock: a crash never leaves a stale installation lock."""
-    def __init__(self, path):
+    def __init__(self, path, *, timeout=0):
         self.path = Path(path)
+        self.timeout = timeout
 
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.stream = self.path.open('a+b')
         self.stream.seek(0)
-        try:
-            if sys.platform == 'win32':
-                import msvcrt
-                msvcrt.locking(self.stream.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(self.stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as error:
-            self.stream.close()
-            raise RuntimeError('另一个安装或启动操作正在进行，请等待完成后重试。') from error
+        deadline = time.monotonic() + self.timeout
+        while True:
+            try:
+                self.stream.seek(0)
+                if sys.platform == 'win32':
+                    import msvcrt
+                    msvcrt.locking(self.stream.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(self.stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError as error:
+                if time.monotonic() >= deadline:
+                    self.stream.close()
+                    raise RuntimeError('另一个安装或启动操作正在进行，请等待完成后重试。') from error
+                time.sleep(.1)
         if os.fstat(self.stream.fileno()).st_size == 0:
             self.stream.write(b'0'); self.stream.flush()
         return self
@@ -139,14 +146,21 @@ class Installer:
             raise RuntimeError(f'命令退出码 {code}: {Path(args[0]).name}\n{detail}')
 
     def input_hash(self):
-        names = ['pyproject.toml', 'uv.lock', 'web/package.json', 'web/package-lock.json', 'scripts/runtimes.json']
-        paths = [self.repo / name for name in names]
+        # App sources are editable; changing a tray/launcher does not require
+        # reinstalling dependencies or rebuilding the website.
+        paths = [self.repo / name for name in ('pyproject.toml', 'uv.lock', 'scripts/runtimes.json')]
+        return hashlib.sha256((self.hash_paths(paths) + self.web_input_hash()).encode()).hexdigest()
+
+    def web_input_hash(self):
+        paths = [self.repo / name for name in ('web/package.json', 'web/package-lock.json')]
         paths.extend(sorted((self.repo / 'web').glob('*.ts*')))
+        paths.extend(sorted((self.repo / 'web').glob('*.js*')))
         paths.append(self.repo / 'web/index.html')
         paths.extend(sorted((self.repo / 'web/src').rglob('*')))
-        paths.extend(sorted((self.repo / 'vault_rag').rglob('*.py')))
-        for pattern in ('*.py', '*.ps1', '*.sh', '*.swift', '*.js'):
-            paths.extend(sorted((self.repo / 'scripts').rglob(pattern)))
+        paths.extend(sorted((self.repo / 'web/public').rglob('*')))
+        return self.hash_paths(paths)
+
+    def hash_paths(self, paths):
         digest = hashlib.sha256()
         for path in paths:
             if path.is_file():
@@ -200,8 +214,7 @@ class Installer:
                 return False
             if not marker.get('web_files') or marker['web_files'] != self.web_files():
                 return False
-            # Missing/broken dependencies trigger repair, even if python.exe still exists.
-            self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'check'], capture=True)
+            self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'check-runtime'], capture=True)
             return True
         except (OSError, ValueError, KeyError, TypeError, RuntimeError):
             return False
@@ -323,21 +336,24 @@ class Installer:
                     subprocess.run(['/bin/launchctl', 'bootout', f'gui/{os.getuid()}/{label}'], capture_output=True)
 
     def install(self):
-        self.marker.unlink(missing_ok=True)
         self.step('准备 Node 运行环境')
         npm = self.node()
         self.step('安装网页依赖并生成网页')
         build_marker = self.state / 'web-build.json'
         try: cached = json.loads(build_marker.read_text())
         except (OSError, ValueError): cached = {}
-        if cached.get('input_hash') != self.input_hash() or not self.web_files() or cached.get('web_files') != self.web_files():
+        web_hash = self.web_input_hash()
+        if cached.get('input_hash') != web_hash or not self.web_files() or cached.get('web_files') != self.web_files():
             self.run([*npm, 'ci', '--prefix', 'web', '--no-audit', '--no-fund'], retry=True)
             self.run([*npm, 'run', 'build', '--prefix', 'web'])
             if not self.web_files():
                 raise RuntimeError('网页构建没有生成 index.html 和 assets 资源')
-            atomic_json(build_marker, {'input_hash': self.input_hash(), 'web_files': self.web_files()})
+            atomic_json(build_marker, {'input_hash': web_hash, 'web_files': self.web_files()})
         self.step('正常停止旧服务并准备项目环境')
         self.stop_owned()
+        # Keep the previous success record if stopping the old service failed.
+        # From here onward the environment is being modified and needs recheck.
+        self.marker.unlink(missing_ok=True)
         self.prepare_environment()
         self.step('安装锁定的 Python 依赖及项目')
         self.run([self.uv, 'sync', '--locked', '--no-dev', '--python', sys.executable], retry=True)
@@ -361,7 +377,7 @@ class Installer:
             atomic_json(self.state / 'windows-install.json', marker)  # legacy launchers remain usable
         self.emit('安装完成。日志：' + str(self.state / 'logs/setup.log'))
 
-    def execute(self, action, *, no_open=False):
+    def execute(self, action, *, no_open=False, no_install=False):
         if action == 'check':
             return 0 if self.ready() else 3
         self.state.mkdir(parents=True, exist_ok=True)
@@ -369,11 +385,13 @@ class Installer:
         with (logs / ('setup.log' if action == 'install' else 'launcher.log')).open('a', encoding='utf-8', buffering=1) as log:
             self.log = log
             with ExitStack() as locks:
-                locks.enter_context(InstallLock(self.state / 'install.lock'))
-                locks.enter_context(InstallLock(self.repo / '.install.lock'))
+                wait = 90 if action == 'open' else 0
+                locks.enter_context(InstallLock(self.state / 'install.lock', timeout=wait))
+                locks.enter_context(InstallLock(self.repo / '.install.lock', timeout=wait))
                 if action == 'stop':
                     self.stop_owned(include_ui=False); return 0
                 if action == 'install' or not self.ready():
+                    if no_install: return 3
                     self.install()
                 if not no_open:
                     self.step('打开本地知识库')
@@ -388,11 +406,12 @@ def main(argv=None):
     parser.add_argument('--state', type=Path, required=True)
     parser.add_argument('--action', choices=['install', 'open', 'stop', 'check'], default='install')
     parser.add_argument('--no-open', action='store_true')
+    parser.add_argument('--no-install', action='store_true')
     args = parser.parse_args(argv)
     installer = None
     try:
         installer = Installer(args.repository, args.state)
-        return installer.execute(args.action, no_open=args.no_open)
+        return installer.execute(args.action, no_open=args.no_open, no_install=args.no_install)
     except Exception as error:
         stage = installer.stage if installer else '检查系统'
         message = f'失败阶段：{stage}\n{error}\n日志：{args.state / "logs"}\n再次双击入口可重试。'

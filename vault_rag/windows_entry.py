@@ -26,8 +26,11 @@ def main(argv=None):
         handler = RotatingFileHandler(logs / (args.action + '.log'), maxBytes=5_000_000, backupCount=3, encoding='utf-8')
         logging.basicConfig(level=logging.INFO, handlers=[handler], force=True)
         if args.action == 'service':
-            from vault_rag.web_server import serve
-            serve()
+            from vault_rag.windows_native import Instance
+            with Instance(config.directory, 'service') as instance:
+                if not instance.primary: return
+                from vault_rag.web_server import serve
+                serve(instance=instance)
         elif args.action == 'tray':
             from vault_rag.windows_tray import run
             run(config)

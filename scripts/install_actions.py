@@ -21,6 +21,18 @@ def check():
     print(f'Native dependency check passed: Python 3.12, PyTorch {torch.__version__}, LanceDB {lancedb.__version__}')
 
 
+def check_runtime():
+    # Installation already checked native DLLs. Daily launch only detects missing
+    # packages, without loading another PyTorch/transformers instance.
+    import importlib.util
+    names = ('vault_rag', 'lancedb', 'numpy', 'pandas', 'torch',
+             'sentence_transformers', 'fastapi', 'uvicorn', 'mcp', 'httpx')
+    if sys.platform == 'win32': names += ('pystray', 'PIL', 'msvc_runtime')
+    missing = [name for name in names if importlib.util.find_spec(name) is None]
+    if missing: raise RuntimeError('运行依赖缺失：' + ', '.join(missing))
+    assert sys.version_info[:2] == (3, 12) and sys.maxsize > 2**32
+
+
 def verify():
     import urllib.request
     from vault_rag.local_state import LocalConfig
@@ -43,6 +55,7 @@ def verify():
 
 def main(action):
     if action == 'check': return check()
+    if action == 'check-runtime': return check_runtime()
     if action == 'verify': return verify()
     if os.environ.get('VAULT_RAG_INSTALL_TEST_SERVER') == '1':
         return test_server(action)

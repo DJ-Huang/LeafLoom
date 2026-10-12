@@ -6,7 +6,14 @@ $VaultRagRoot=(Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 . (Join-Path $PSScriptRoot 'common.ps1')
 $VaultRagState=Get-VaultRagState
 $env:VAULT_RAG_HOME=$VaultRagState
+$LaunchMutex=$null
+$OwnsLaunch=$false
 try {
+    if ($Action -ne 'stop') {
+        $LaunchMutex=[Threading.Mutex]::new($false, ('Local\VaultRagLaunch-' + (Get-TextHash $VaultRagState.ToLowerInvariant())))
+        # Repeated clicks queue invisibly; only one controller can open setup.
+        try { $OwnsLaunch=$LaunchMutex.WaitOne() } catch [Threading.AbandonedMutexException] { $OwnsLaunch=$true }
+    }
     if ($Action -eq 'install') { exit (Start-VaultRagSetup $VaultRagRoot) }
     $Bootstrap=Join-Path $VaultRagState 'bootstrap-python.json'
     $Python=$null
@@ -20,13 +27,14 @@ try {
         exit (Start-VaultRagSetup $VaultRagRoot)
     }
     $Base=@('-X','utf8',(Join-Path $VaultRagRoot 'scripts\installer.py'),'--repository',$VaultRagRoot,'--state',$VaultRagState)
-    if ($Action -eq 'open') {
-        try { $null=Invoke-BootstrapTool $Python ($Base + @('--action','check')) -Capture }
-        catch { exit (Start-VaultRagSetup $VaultRagRoot) }
-    }
-    $null=Invoke-BootstrapTool $Python ($Base + @('--action',$Action)) -Capture
+    # One check inside the locked operation; exit 3 requests a visible installer.
+    $null=Invoke-BootstrapTool $Python ($Base + @('--action',$Action,'--no-install')) -Capture -AllowSetup
+    if ($LASTEXITCODE -eq 3) { exit (Start-VaultRagSetup $VaultRagRoot) }
     exit 0
 } catch {
     Show-VaultRagError ($_.Exception.Message + "`nLogs: " + (Join-Path $VaultRagState 'logs'))
     exit 1
+} finally {
+    if ($OwnsLaunch) { $LaunchMutex.ReleaseMutex() }
+    if ($null -ne $LaunchMutex) { $LaunchMutex.Dispose() }
 }
