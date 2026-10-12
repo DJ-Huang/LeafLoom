@@ -118,6 +118,7 @@ class Settings(BaseSettings):
         default=(),
         description="Extra gitignore-style lines (see EXCLUDE_PATHSPEC_EXTRA env).",
     )
+    # Read-only compatibility with old .env files; current HTTP runtime does not use this.
     ollama_base_url: str = Field(default="http://127.0.0.1:11434")
     embedding_model: str = Field(default="bge-m3")
     embed_dim: int = Field(default=1024, description="Dense dimension for bge-m3.")

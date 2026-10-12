@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from llama_index.core import StorageContext, VectorStoreIndex
-from llama_index.embeddings.ollama import OllamaEmbedding
+from vault_rag.embedded_model import llama_embedding
+from vault_rag.local_state import LocalConfig
 from llama_index.vector_stores.lancedb import LanceDBVectorStore
 
 from vault_rag.chunking import documents_to_nodes
@@ -45,13 +46,7 @@ def _write_index(project_root: Path, settings: Settings, index_dir: Path) -> dic
     insert_batch = max(1, len(nodes))
 
     logger.info("Embedding %s chunks from %s markdown files…", len(nodes), num_files)
-    # macOS System proxy (Clash/Surge via scutil) is picked up by httpx when
-    # trust_env=True and can 502 localhost Ollama; force direct connection.
-    embed_model = OllamaEmbedding(
-        model_name=settings.embedding_model,
-        base_url=settings.ollama_base_url,
-        client_kwargs={"trust_env": False},
-    )
+    embed_model = llama_embedding(LocalConfig().directory)
 
     vector_store = LanceDBVectorStore(
         uri=str(lance_path),
@@ -80,7 +75,6 @@ def _write_index(project_root: Path, settings: Settings, index_dir: Path) -> dic
         "num_files": num_files,
         "num_chunks": len(nodes),
         "embedding_model": settings.embedding_model,
-        "ollama_base_url": settings.ollama_base_url,
         "lance_uri": str(lance_path),
         "lance_table": settings.lance_table,
         "nodes_jsonl": str(nodes_path),

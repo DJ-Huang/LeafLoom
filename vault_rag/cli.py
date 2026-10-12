@@ -29,39 +29,35 @@ def project_root() -> Path:
 
 @app.command()
 def reindex() -> None:
-    """Rebuild LanceDB + nodes.jsonl + status.json (full rebuild)."""
-    logging.basicConfig(level=logging.INFO)
-    root = project_root()
-    settings = Settings()
-    console.print(f"[bold]Vault[/bold]: {settings.vault_root}")
-    console.print(f"[bold]Content[/bold]: {settings.resolved_content_root()}")
-    console.print(f"[bold]Index dir[/bold]: {settings.resolved_index_dir(root)}")
-    status = build_index(root, settings)
-    _print_json_utf8(status)
+    """Queue a rebuild in the shared service; no duplicate model process."""
+    from vault_rag.service_control import request
+    _print_json_utf8(request('/api/reindex', {}))
+
+@app.command()
+def serve() -> None:
+    """Run the shared web and HTTP MCP service."""
+    from vault_rag.web_server import serve as run
+    run()
+
+@app.command()
+def service(action: str = typer.Argument('status')) -> None:
+    """install/start/stop/restart/status/open/uninstall the macOS user service."""
+    from vault_rag.service_control import control
+    control(action)
+
+@app.command()
+def model_prepare() -> None:
+    """Download and pin the official local model before normal offline use."""
+    from vault_rag.embedded_model import EmbeddedModel
+    from vault_rag.local_state import LocalConfig
+    _print_json_utf8(EmbeddedModel(LocalConfig().directory).prepare())
 
 
 @app.command()
 def doctor() -> None:
-    """Print resolved settings and whether index artifacts exist."""
-    root = project_root()
-    settings = Settings()
-    idx = settings.resolved_index_dir(root)
-    artifacts = {
-        "vault_root_exists": settings.vault_root.is_dir(),
-        "nodes_jsonl": (idx / "nodes.jsonl").is_file(),
-        "lancedb_dir": (idx / "lancedb").exists(),
-        "status_json": (idx / "status.json").is_file(),
-    }
-    payload = {
-        "vault_root": str(settings.vault_root),
-        "vault_content_folder": settings.vault_content_folder,
-        "vault_content_root": str(settings.resolved_content_root()),
-        "index_dir": str(idx),
-        "embedding_model": settings.embedding_model,
-        "ollama_base_url": settings.ollama_base_url,
-        "artifacts": artifacts,
-    }
-    _print_json_utf8(payload)
+    """Inspect the shared service without loading another model."""
+    from vault_rag.service_control import request
+    _print_json_utf8(request('/api/status'))
 
 
 @app.command()
@@ -85,13 +81,10 @@ def audit(
 
 
 @app.command()
-def search(query: str, top_k: int = 8, note_type: str | None = None, domain: str | None = None) -> None:
-    """Run one hybrid search locally (uses the built index)."""
-    from vault_rag.service import VaultRagService
-
-    svc = VaultRagService(project_root(), Settings())
-    rows = svc.search(query, top_k=top_k, type_=note_type, domain=domain)
-    _print_json_utf8({"ok": True, "results": rows})
+def search(query: str, top_k: int = 3, note_type: str | None = None, domain: str | None = None, mode: str = 'hybrid') -> None:
+    """Query the shared service without loading a second model."""
+    from vault_rag.service_control import request
+    _print_json_utf8(request('/api/knowledge-search', {'query':query,'top_k':top_k,'note_type':note_type,'domain':domain,'mode':mode}))
 
 
 def main() -> None:
