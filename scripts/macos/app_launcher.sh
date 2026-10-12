@@ -10,7 +10,7 @@ fi
 STATE=$(/usr/bin/plutil -extract VaultRagState raw -o - "$BUNDLE/Contents/Info.plist" 2>/dev/null || true)
 if [[ -n "$STATE" ]]; then export VAULT_RAG_HOME="$STATE"; fi
 if [[ ! -f "$REPOSITORY/scripts/macos/launch.sh" ]]; then
-    /usr/bin/osascript -e 'display alert "无法找到知识库目录" message "请双击仓库内的安装本地知识库.command，更新应用路径。" as critical'
+    /usr/bin/osascript -e 'display alert "无法找到知识库目录" message "请双击仓库内的Install.command，更新应用路径。" as critical'
     exit 1
 fi
 if [[ ${1:-} == --menubar ]]; then
