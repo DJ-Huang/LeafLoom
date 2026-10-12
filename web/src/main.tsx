@@ -2,11 +2,11 @@ import React,{lazy,Suspense,useCallback,useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {BookOpen,Calendar,FilePlus,FolderPlus,Home,History,Network,PanelLeft,Plus,RefreshCw,Search,Settings,Trash2,Upload,ArrowLeft} from 'lucide-react';
 import {api,applySession,csrf,invalidate,media,Config,OpenNote,Session} from './api';
-import {DirectoryTree} from './tree';
+import {DirectoryTree,FolderView} from './tree';
 import {Action,Modal,LoadingShell,LazyBoundary,FormDialog,FormField} from './ui';
 import {updateStatus} from './hooks';
 import {Association,ConnectedSettings} from './settings';
-import {Dashboard,Sidebar,Tabs,IndexStatus,fileName,usePreferences} from './layout';
+import {Dashboard,Sidebar,PathNavigation,IndexStatus,fileName,usePreferences} from './layout';
 import './style.css';
 
 let documentModule:Promise<typeof import('./document')>|undefined;
@@ -19,7 +19,7 @@ function DocumentPane(props:React.ComponentProps<typeof import('./document')['Do
 const GraphView=lazy(()=>import('./graph').then(module=>({default:module.GraphView})));
 const FileSearch=lazy(()=>import('./search').then(module=>({default:module.FileSearch})));
 const KnowledgeSearch=lazy(()=>import('./search').then(module=>({default:module.KnowledgeSearch})));
-type View='home'|'document'|'knowledge';
+type View='home'|'document'|'knowledge'|'folder';
 type FileOperation={kind:'file'|'folder'|'template'|'rename'|'move'|'delete',path?:string,templates?:{path:string,title:string}[]};
 const folderOf=(path:string)=>path.includes('/')?path.slice(0,path.lastIndexOf('/')):'';
 const within=(path:string,parent:string)=>path===parent||path.startsWith(parent+'/');
@@ -37,7 +37,7 @@ function App(){
  const loadSession=useCallback(async()=>{
   const request=++sessionRequest.current;
   try{const next=await api<Session>('session');if(request!==sessionRequest.current)return;const previous=session.current,scopeChanged=applySession(next);session.current=next;setConfig(value=>JSON.stringify(value)===JSON.stringify(next.config)?value:next.config);setSuggestion(next.suggested_root);setConnectionError('');
-   if(!previous){const params=new URLSearchParams(location.search),target=params.get('note');if(target&&next.config.root){setTabs([target]);setActive(target);setView('document');}else if(params.get('view')==='knowledge'){setView('knowledge');setKnowledgeVisited(true);}}
+   if(!previous){const params=new URLSearchParams(location.search),target=params.get('note'),folder=params.get('folder');if(target&&next.config.root){setTabs([target]);setActive(target);setView('document');}else if(folder!==null&&next.config.root){setCurrentFolder(folder);setView('folder');}else if(params.get('view')==='knowledge'){setView('knowledge');setKnowledgeVisited(true);}}
    else if(previous.config.root!==next.config.root)resetWorkspace();
    if(scopeChanged&&previous)invalidate({reset:true});
    const status=await api('status');if(request===sessionRequest.current)updateStatus(status);
@@ -65,9 +65,7 @@ function App(){
   }catch(error){notify((error as Error).message);}
  },[active,notify,selectDocument]);
  const openFile:OpenNote=(path,anchor)=>{setBackToKnowledge(false);void open(path,anchor);};
- const closeTab=(path:string)=>{const index=tabs.indexOf(path),remaining=tabs.filter(item=>item!==path);setTabs(remaining);
-  if(path===active){const next=remaining[Math.min(index,remaining.length-1)]||'';setActive(next);if(view==='document'){if(next)selectDocument(next);else showHome();}}
- };
+ const showFolder=(path:string)=>{setCurrentFolder(path);setView('folder');setMobileOpen(false);setBackToKnowledge(false);history.replaceState(null,'','/?folder='+encodeURIComponent(path));};
  const toggleSidebar=useCallback(()=>{if(narrow)setMobileOpen(value=>!value);else setPreferences(value=>({sidebarCollapsed:!value.sidebarCollapsed}));},[narrow,setPreferences]);
  useEffect(()=>{const key=(event:KeyboardEvent)=>{if(event.isComposing||document.querySelector('dialog[open]'))return;if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();if(session.current?.config.root)setQuickSearch(true);}if((event.metaKey||event.ctrlKey)&&event.key==='\\'){event.preventDefault();toggleSidebar();}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[toggleSidebar]);
  const saved=(next:Config)=>{sessionRequest.current++;if(next.root!==config?.root)resetWorkspace();if(session.current){session.current={...session.current,config:next};applySession(session.current);}setConfig(next);invalidate({reset:true});changed();void loadSession();};
@@ -75,7 +73,7 @@ function App(){
   const origin=session.current?.config.root,result=await api('move',{source:path,destination:target});if(origin!==session.current?.config.root)return;
   const remap=(item:string)=>within(item,path)?target+item.slice(path.length):item;
   setTabs(value=>value.map(remap));setActive(value=>value?remap(value):value);setCurrentFolder(value=>value?remap(value):value);setPreferences(value=>({recent:value.recent.map(remap)}));
-  if(view==='document'&&active)history.replaceState(null,'','/?note='+encodeURIComponent(remap(active)));
+  if(view==='document'&&active)history.replaceState(null,'','/?note='+encodeURIComponent(remap(active)));else if(view==='folder')history.replaceState(null,'','/?folder='+encodeURIComponent(remap(currentFolder)));
   changed();notify('已移动，修复 '+result.updated_links+' 篇文档的引用');
  };
  const manage=(action:string,path:string,destination?:string)=>{
@@ -90,11 +88,11 @@ function App(){
  const submitOperation=async(values:Record<string,string>)=>{
   if(!operation)return;const {kind,path=''}=operation,origin=session.current?.config.root;
   if(kind==='rename'||kind==='move'){const value=values.name.trim();if(!value)throw new Error('请输入名称或目标路径');await moveFile(path,kind==='rename'?[folderOf(path),value].filter(Boolean).join('/'):value);return;}
-  if(kind==='delete'){await api('delete',{path});if(origin!==session.current?.config.root)return;const remaining=tabs.filter(item=>!within(item,path));setTabs(remaining);setPreferences(value=>({recent:value.recent.filter(item=>!within(item,path))}));if(within(active,path)){setActive(remaining[0]||'');if(view==='document'){if(remaining[0])selectDocument(remaining[0]);else showHome();}}if(within(currentFolder,path))setCurrentFolder(folderOf(path));changed();notify('已移入回收区，可以恢复');return;}
+  if(kind==='delete'){await api('delete',{path});if(origin!==session.current?.config.root)return;const remaining=tabs.filter(item=>!within(item,path));setTabs(remaining);setPreferences(value=>({recent:value.recent.filter(item=>!within(item,path))}));if(within(active,path)){setActive(remaining[0]||'');if(view==='document'){if(remaining[0])selectDocument(remaining[0]);else showHome();}}if(within(currentFolder,path)){if(view==='folder')showFolder(folderOf(path));else setCurrentFolder(folderOf(path));}changed();notify('已移入回收区，可以恢复');return;}
   const name=values.name.trim();if(!name)throw new Error('请输入名称');const target=[currentFolder,name].filter(Boolean).join('/');
   const created=kind==='template'?await api('template',{path:target,template:values.template}):await api('create',{path:target,directory:kind==='folder'});
   if(origin!==session.current?.config.root)return;
-  if(kind==='folder')setCurrentFolder(created.path);else{if(created.cursor!==null&&created.cursor!==undefined)sessionStorage.setItem('cursor:'+created.path,String(created.cursor));sessionStorage.setItem('edit:'+created.path,'1');setBackToKnowledge(false);selectDocument(created.path);}changed();
+  if(kind==='folder')showFolder(created.path);else{if(created.cursor!==null&&created.cursor!==undefined)sessionStorage.setItem('cursor:'+created.path,String(created.cursor));sessionStorage.setItem('edit:'+created.path,'1');setBackToKnowledge(false);selectDocument(created.path);}changed();
  };
  const fields:FormField[]=operation?.kind==='delete'?[]:operation?[{name:'name',label:operation.kind==='move'?'目标路径（相对知识库根目录）':'名称',required:true,value:operation.kind==='rename'?fileName(operation.path!):operation.kind==='move'?operation.path:operation.kind==='folder'?'新目录':'未命名.md'},...(operation.kind==='template'?[{name:'template',label:'模板',value:operation.templates?.[0]?.path,required:true,options:operation.templates?.map(template=>({value:template.path,label:template.title}))}]:[])]:[];
  if(!config)return <LoadingShell error={connectionError} onRetry={()=>void loadSession()}/>;
@@ -114,8 +112,9 @@ function App(){
   </Sidebar>
   <main className="main" inert={narrow&&mobileOpen}>
    {connectionError&&<div role="status" className="connection-banner">{connectionError}<button onClick={refreshData}>刷新数据</button></div>}
-   <div className="workspace-topbar"><button className="icon-button sidebar-toggle" aria-label="切换导航" aria-controls="workspace-sidebar" aria-expanded={narrow?mobileOpen:!preferences.sidebarCollapsed} onClick={toggleSidebar}><PanelLeft size={17}/></button><Tabs tabs={tabs} active={active} view={view} knowledgeVisited={knowledgeVisited} onSelect={path=>{setBackToKnowledge(false);selectDocument(path);}} onClose={closeTab} onHome={showHome} onKnowledge={showKnowledge}/></div>
+   <div className="workspace-topbar"><button className="icon-button sidebar-toggle" aria-label="切换导航" aria-controls="workspace-sidebar" aria-expanded={narrow?mobileOpen:!preferences.sidebarCollapsed} onClick={toggleSidebar}><PanelLeft size={17}/></button><PathNavigation view={view} path={view==='document'?active:currentFolder} onFolder={showFolder}/></div>
    {view==='home'&&<Dashboard config={config} recent={preferences.recent} onOpen={openFile} onCreate={()=>newFile('file')} onKnowledge={showKnowledge} onDaily={()=>void daily()}/>}
+   {view==='folder'&&<FolderView key={config.root+'\n'+currentFolder} path={currentFolder} onOpen={openFile} onFolder={showFolder} onCreate={()=>newFile('file')} refresh={refresh} manage={manage}/>}
    {knowledgeVisited&&<LazyBoundary><Suspense fallback={view==='knowledge'?<p className="pad subtle">正在打开知识检索…</p>:null}><KnowledgeSearch key={config.root} active={view==='knowledge'} revision={config.revision} onOpen={path=>{setBackToKnowledge(true);void open(path);}} onSettings={()=>setSettings(true)}/></Suspense></LazyBoundary>}
    {view==='document'&&backToKnowledge&&<div className="return-search"><button onClick={showKnowledge}><ArrowLeft size={14}/>返回检索结果</button></div>}
    <div className="panes" hidden={view!=='document'}>{mounted.map(path=><div key={path} style={{display:view==='document'&&active===path?'contents':'none'}}><LazyBoundary><DocumentPane vaultRoot={config.root!} key={config.root+path} path={path} onOpen={open} notify={notify} onRecord={record} active={view==='document'&&active===path} wide={preferences.wide} onWidthChange={()=>setPreferences(value=>({wide:!value.wide}))}/></LazyBoundary></div>)}</div>
