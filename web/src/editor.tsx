@@ -49,9 +49,9 @@ export function LiveEditor({initial,path,onChange,onOpen,source,onReady,onReleas
   // Block decorations are a direct state facet, not viewport decorations.
   const plugin=EditorView.decorations.compute(['doc','selection'],state=>makeDecorations({state} as EditorView));
   const bold={key:'Mod-b',run:(v:EditorView)=>{const s=v.state.selection.main;v.dispatch({changes:{from:s.from,to:s.to,insert:'**'+v.state.doc.sliceString(s.from,s.to)+'**'}});return true;}};
-  const state=EditorState.create({doc:initial,extensions:[markdown(),history(),search(),keymap.of([bold,...searchKeymap,...defaultKeymap,...historyKeymap]),EditorState.phrases.of({'Find':'查找','Replace':'替换','next':'下一个','previous':'上一个','all':'全部','match case':'区分大小写','regexp':'正则表达式','by word':'整词','close':'关闭','replace':'替换','replace all':'全部替换'}),EditorView.lineWrapping,plugin,EditorView.updateListener.of(update=>{if(update.docChanged)callbacks.current.onChange(update.state.doc.toString());}),EditorView.theme({'&':{fontSize:'16px'},'.cm-content':{fontFamily:'inherit',padding:'26px 44px',minHeight:'65vh'},'.cm-focused':{outline:'none'}})]});
+  const state=EditorState.create({doc:initial,extensions:[markdown(),history(),search(),keymap.of([bold,...searchKeymap,...defaultKeymap,...historyKeymap]),EditorState.phrases.of({'Find':'查找','Replace':'替换','next':'下一个','previous':'上一个','all':'全部','match case':'区分大小写','regexp':'正则表达式','by word':'整词','close':'关闭','replace':'替换','replace all':'全部替换'}),EditorView.lineWrapping,plugin,EditorView.updateListener.of(update=>{if(update.docChanged)callbacks.current.onChange(update.state.doc.toString());}),EditorView.theme({'&':{fontSize:'16px'},'.cm-content':{fontFamily:'inherit',padding:'32px',minHeight:'65vh'},'.cm-focused':{outline:'none'}})]});
   const editor=new EditorView({state,parent:host.current});view.current=editor;onReady?.(editor);
   return()=>{onRelease?.(editor);view.current=null;editor.destroy();};
  },[path,source]);
- return <div className="live-editor" ref={host}/>;
+ return <div className={'live-editor'+(source?' source-editor':'')} ref={host}/>;
 }

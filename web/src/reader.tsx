@@ -10,7 +10,7 @@ import {Block,blocks,createMarkdown,hasMath,stripFrontmatter} from './markdown-c
 export {stripFrontmatter};
 const BaseViewer=lazy(()=>import('./base').then(module=>({default:module.BaseViewer})));
 let diagramModule:Promise<typeof import('mermaid')>|undefined;
-const diagrams=()=>diagramModule||(diagramModule=import('mermaid').then(module=>{module.default.initialize({startOnLoad:false,securityLevel:'strict',theme:'neutral',flowchart:{htmlLabels:false}});return module;}));
+const diagrams=()=>diagramModule||(diagramModule=import('mermaid').then(module=>{module.default.initialize({startOnLoad:false,securityLevel:'strict',theme:'neutral',htmlLabels:false,flowchart:{htmlLabels:false}});return module;}));
 
 export function QueryView({query,onOpen}:{query:string,onOpen:OpenNote}){
  const [data,setData]=useState<any>(),[error,setError]=useState('');
