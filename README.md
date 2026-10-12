@@ -1,44 +1,54 @@
-# vault-rag
+# 本地知识库
 
-Obsidian Markdown 的 BM25 + Ollama 向量混合检索，供 MCP 使用。
+一个进程提供本地网页、HTTP MCP 和 BGE-M3 推理。原文件保留在关联目录内；不依赖 Ollama，也不另外启动 Node 网页服务。
 
-## 内容范围
+- 网页：http://127.0.0.1:18080/
+- MCP：http://127.0.0.1:18080/mcp
+- 配置与模型：macOS 用户 Application Support/VaultRag；本机令牌私有保存。
+- 元数据、索引、版本历史和回收区：关联目录下 `.vault-rag/`，始终排除正文检索。
 
-`VAULT_ROOT` 是完整 Vault 根目录；`VAULT_CONTENT_FOLDER` 默认 `RAG`，只扫描该子树。
-子树必须存在且严格位于 Vault 内，不能设置为空、`.`、绝对路径、上级路径或符号链接根目录。
-目录外内容不需要 `.ragignore`，即使关闭排除文件也不会进入索引。
-
-内容结构：`RAG/Notes/`（正文平铺）、`RAG/Rules/`（规则平铺）、`RAG/Navigation/`（导航）。
-`README.md`、`_README.md`、Navigation、Attachments 固定不入索引；目录符号链接不遍历，文件符号链接不能跨出内容子树。
-库根 `.ragignore` 的模式仍相对 Vault 根，用于目录内细粒度排除；保留 `rag_index: false` / `vault_rag_exclude: true`。
-
-## 配置与运行
-
-使用 Python 3.11+ 建立虚拟环境并安装 `pip install -e .`，将 `.env.example` 复制为 `.env`。
-配置 `VAULT_ROOT`、`VAULT_CONTENT_FOLDER=RAG`、本机 Ollama 地址及 embedding model。
-`VAULT_RULES_FOLDER=Rules` 表示内容目录下的规则子目录，即 `RAG/Rules/`。
-MCP 启动文件为 `mcp_server.py`，使用虚拟环境 Python；建议设置本仓为 cwd，并显式传入相同配置。
+## 安装与启动
 
 ```sh
-vault-rag doctor
-vault-rag audit
-vault-rag reindex
-vault-rag search "关键词" --top-k 3
+.venv/bin/python -m pip install -e .
+npm ci --prefix web
+npm run build --prefix web
+.venv/bin/python -m vault_rag.cli model-prepare
+.venv/bin/python -m vault_rag.cli service install
+.venv/bin/python -m vault_rag.cli service open
 ```
 
-索引默认位于 `<VAULT_ROOT>/.vault-rag/`，包含 LanceDB、nodes.jsonl 和 status.json。
-重建在旁路临时目录完成，成功后切换；加载/embedding 失败不会删除旧索引。
-旧索引未记录内容范围，或与当前配置不一致时，搜索和全文读取会要求重新索引。
-状态提供 `vault_content_folder`、`vault_content_root`、`indexed_content_root`、`content_scope_version`、`scope_matches_settings`。
+`service start/stop/restart/status/uninstall` 管理 macOS 用户 LaunchAgent。登录后启动、异常退出重启；只有一个 worker 和一个模型实例。首次网页关联本机目录，之后在设置中切换。手动运行用 `vault-rag serve`；启动前确保没有另一实例占用端口。
 
-## 检索
+## 文件与日常功能
 
-- `vault_search`：正文经验，排除规则；`rule_search`：仅内容目录下 Rules，保留领域及项目约束。
-- 类型以 frontmatter `type` 或 `type/*` 标签识别；领域以 `domain` 或保守的技术标签识别，平铺 DCC 笔记须保留领域信息。
-- `limited` / `verified_true` 优先；`unverified` 和缺少状态的笔记仅作补充，不因所在目录获得隐含信任。
-- 相似度门槛默认 `MIN_VECTOR_SCORE=0.40`；RRF 分数仅用于排序，不是置信度。
-- 默认返回最多 3 篇及证据范围，可用 `compact=false` 取得完整字段。
-- `vault_get_chunk` 取得全文；`vault_index_status` 查询索引与当前扫描范围。
-- 路径相对完整 Vault 根，例如 `RAG/Notes/pit-example.md`。移动路径会改变 chunk ID，需重新检索。
+实时 Markdown 编辑、源码与阅读切换、自动保存、草稿保护、属性、双链与嵌入、目录和关系图。保存必须携带文件版本；冲突保留编辑内容。原子写入保留换行方式，属性修改保留 YAML 注释和未知字段。
 
-笔记变化后重建索引；程序变化后重新连接 MCP。PCG-AI 的项目知识仍由工程内工具维护。
+移动或重命名修复明确可解析的 Markdown/wikilink/附件引用；歧义不猜测，代码块不替换。删除进入回收区，历史和目录操作可恢复。媒体按需读取，视频支持 Range；HTML/SVG 隔离内容不执行脚本。
+
+支持当前资料使用的 Dataview TABLE/LIST、FROM、WHERE、GROUP BY、SORT、LIMIT、contains/length 与 file 属性；不执行查询脚本。支持当前 `.base` 的表格、TaskNotes 看板、日历、迷你日历和任务列表。模板支持现有日期和光标占位符，不执行任意 Templater JavaScript。未实现通用 Obsidian 插件、Canvas 编辑器、云同步和通知提醒。
+
+## 检索范围
+
+网页浏览完整关联目录；知识检索仅使用设置里勾选的目录。默认 RAG，允许多目录和子目录排除，空选择是零语料。仅索引 `.md`/`.txt`，媒体不转写。保留 `.ragignore` 和 frontmatter 退出状态，拒绝路径与符号链接越界。Navigation 是路由资料，不作为正文证据；规则和工时保持专用范围。
+
+- `vault_search(query, top_k=3, note_type=None, domain=None, compact=True, mode="hybrid")`
+- `mode=hybrid|wiki|rag|keyword`；精确关键词可以独立命中，向量失败明确降级。
+- `domain="estimation"` 查询 EstimationDB；一般技术检索排除工时。
+- `rule_search` 仅查询选中的规则目录；PCG 项目知识仍由项目本地工具管理。
+- `vault_get_chunk` 读取证据片段；`vault_get_note(note_id)` 读取合格笔记完整正文和公式。
+- `vault_index_status` 返回范围、写入位置、模型、同步进度和最近错误。
+
+`limited`/`verified_true` 优先，缺少状态或 unverified 补充；Wiki 不提高来源可信度。机械目录自动维护，主题总结仅在显式整理时修改；来源版本变化标记待更新。
+
+文件变化自动检测，embedding 以模型/输入指纹缓存。每次发布完整独立 generation，失败保留旧版本；取消目录或退出文件立即过滤。保留最近两代索引，旧 Ollama 向量不复用。模型版本、pooling、维度和归一化写入指纹。
+
+## 客户端
+
+Codex 使用 `[mcp_servers.user-vault-rag]` 的 `url` 与 `http_headers.Authorization`。Cursor 使用 `url`、`headers.Authorization`；Claude Code 使用 `type: http`、`url`、`headers.Authorization`。本机令牌来自私有配置目录，勿提交到共享配置或日志。共享示例只使用占位符。
+
+网页本地会话、写入 CSRF 校验、Host/Origin 检查以及 MCP bearer token 分别落实。服务仅监听 127.0.0.1。程序升级后重启服务，客户端重新连接。
+
+## 检查
+
+相关自动检查在 `tests/test_local_knowledge.py`，覆盖版本冲突、CRLF/YAML 保留、目录/符号链接隔离、移动回滚、查询解释器、领域隔离、构建失败和 HTTP/媒体 Range。本次部署的实际检索与浏览器验收记录保存在 `~/Library/Application Support/VaultRag/backups/local-knowledge-2026-10-12/`。

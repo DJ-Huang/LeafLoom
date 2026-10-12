@@ -178,6 +178,8 @@ def build_mcp() -> FastMCP:
     ) -> str:
         """Hybrid search (BM25 + dense vectors) over the Obsidian vault index.
 
+        Use domain="estimation" for the dedicated EstimationDB cost-estimation scope.
+        Estimation cards are excluded from other searches.
         Use for missing project history or platform/compatibility evidence, not
         every coding task. Excludes rules; prefers verified/limited notes.
         Defaults to 3 compact results, retaining excerpts and evidence scope.

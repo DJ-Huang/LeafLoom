@@ -5,12 +5,16 @@ build-backend = "hatchling.build"
 [project]
 name = "vault-rag"
 version = "0.1.0"
-description = "Obsidian vault RAG: LanceDB + Ollama bge-m3 + BM25 hybrid + MCP for Cursor"
+description = "Obsidian vault RAG: Local knowledge web app + embedded BGE-M3 + Wiki/BM25 + HTTP MCP"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "llama-index-core>=0.11.0,<0.15.0",
-  "llama-index-embeddings-ollama>=0.3.0",
+  "sentence-transformers>=5.7,<6",
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.30,<1",
+  "ruamel.yaml>=0.18,<0.19",
+  "httpx>=0.27,<1",
   "llama-index-vector-stores-lancedb>=0.2.0",
   "llama-index-retrievers-bm25>=0.2.0",
   "lancedb>=0.10.0",
@@ -20,7 +24,7 @@ dependencies = [
   "python-frontmatter>=1.1.0",
   "typer>=0.12.0",
   "rich>=13.7.0",
-  "mcp>=1.2.0,<2.0.0",
+  "mcp>=1.30.0,<2.0.0",
 ]
 
 [project.scripts]
@@ -31,3 +35,6 @@ packages = ["vault_rag"]
 
 [tool.uv]
 dev-dependencies = []
+
+[tool.hatch.build.targets.wheel.force-include]
+"vault_rag/static" = "vault_rag/static"

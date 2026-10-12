@@ -41,18 +41,17 @@ if (-not (Test-Path $EnvFile)) {
   }
 }
 
-Write-Host "Pulling embedding model (ignore errors if Ollama is offline)..."
-try {
-  & ollama pull bge-m3 2>&1 | Write-Host
-} catch {
-  Write-Warning "ollama pull bge-m3 failed: $_"
-}
+Write-Host "Building the local webpage..."
+& npm ci --prefix web
+& npm run build --prefix web
+Write-Host "Preparing the pinned official local embedding model..."
+& $VenvPython -m vault_rag.cli model-prepare
 
 Write-Host "Writing Cursor MCP fragment..."
 & $VenvPython (Join-Path $VaultRagRoot "scripts\write_mcp_fragment.py")
 
 Write-Host ""
 Write-Host "Done. Next:"
-Write-Host "  1) Start Ollama, then:  .\.venv\Scripts\Activate.ps1  ;  vault-rag reindex"
-Write-Host "  2) Merge vault-rag\_generated\cursor-mcp-vault-rag.fragment.json into %USERPROFILE%\.cursor\mcp.json"
+Write-Host "  1) Run the shared service: .\.venv\Scripts\python.exe -m vault_rag.cli serve ; open http://127.0.0.1:18080/"
+Write-Host "  2) Fill the private local token in _generated\cursor-mcp-vault-rag.fragment.json and merge into %USERPROFILE%\.cursor\mcp.json"
 Write-Host "  3) Restart Cursor fully."

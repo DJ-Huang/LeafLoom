@@ -1,0 +1,6 @@
+import React,{useRef,useState} from 'react';
+import {media} from './api';
+export function VideoPlayer({path}:{path:string}){
+ const player=useRef<HTMLVideoElement>(null);const [duration,setDuration]=useState(0);const [seconds,setSeconds]=useState('0');const [playing,setPlaying]=useState(false);const [error,setError]=useState('');
+ return <div className="video-player"><video ref={player} controls preload="metadata" src={media(path)} onLoadedMetadata={()=>setDuration(player.current?.duration||0)} onPlay={()=>setPlaying(true)} onPause={()=>setPlaying(false)} onError={()=>setError('浏览器无法播放此编码，可以下载原文件打开。')}/><div className="video-actions"><button disabled={!duration} onClick={async()=>{const video=player.current;if(!video)return;if(!video.paused)video.pause();else try{await video.play();}catch(e){setError(String(e));}}}>{playing?'暂停':'播放'}</button><label>跳转秒数 <input aria-label="跳转秒数" type="number" min="0" max={duration||undefined} step="1" value={seconds} onChange={e=>setSeconds(e.target.value)}/></label><button disabled={!duration} onClick={()=>{if(player.current)player.current.currentTime=Math.max(0,Math.min(Number(seconds)||0,duration));}}>跳转</button>{duration>0&&<span className="subtle">共 {Math.ceil(duration)} 秒</span>}</div>{error&&<p className="error">{error}</p>}</div>;
+}

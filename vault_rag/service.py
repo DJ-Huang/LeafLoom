@@ -9,7 +9,8 @@ import re
 from typing import Any
 
 from llama_index.core import VectorStoreIndex
-from llama_index.embeddings.ollama import OllamaEmbedding
+from vault_rag.embedded_model import llama_embedding
+from vault_rag.local_state import LocalConfig
 from llama_index.retrievers.bm25 import BM25Retriever
 from llama_index.vector_stores.lancedb import LanceDBVectorStore
 from llama_index.core.schema import NodeWithScore, TextNode
@@ -165,6 +166,14 @@ def _metadata_match(meta: dict[str, Any], *, type_: str | None, domain: str | No
     return True
 
 
+def _matches_estimation_scope(meta: dict[str, Any], *, settings: Settings, type_: str | None, domain: str | None) -> bool:
+    """Cost-estimation cards require an explicit estimation request."""
+    wants_estimation = (domain or "").strip().lower() == "estimation" or (type_ or "").strip().lower() in {"estimation", "estimation-index"}
+    is_estimation = _path_under_prefix(str(meta.get("file_path", "")),
+        str(Path(settings.vault_content_folder) / "EstimationDB")) or "estimation" in _metadata_tokens(meta.get("domain"))
+    return wants_estimation == is_estimation
+
+
 def _passes_relevance_gate(
     candidate: NodeWithScore,
     *,
@@ -300,12 +309,7 @@ class VaultRagService:
             raise RuntimeError("Index contains paths outside the content scope. Run `vault-rag reindex`.")
         self._nodes_by_id = {n.node_id: n for n in nodes}
 
-        # Bypass macOS System proxy so localhost Ollama is not 502'd.
-        embed_model = OllamaEmbedding(
-            model_name=self.settings.embedding_model,
-            base_url=self.settings.ollama_base_url,
-            client_kwargs={"trust_env": False},
-        )
+        embed_model = llama_embedding(LocalConfig().directory)
         vector_store = LanceDBVectorStore(
             uri=str(lance_path),
             table_name=self.settings.lance_table,
@@ -380,6 +384,8 @@ class VaultRagService:
             meta = dict(nws.node.metadata or {})
             file_path = str(meta.get("file_path", ""))
             if not indexed_path_is_in_scope(file_path, self.settings):
+                continue
+            if not _matches_estimation_scope(meta, settings=self.settings, type_=type_, domain=domain):
                 continue
             if not _path_under_prefix(file_path, path_prefix):
                 continue

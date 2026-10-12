@@ -16,23 +16,10 @@ def main() -> None:
     os.chdir(root)
     sys.path.insert(0, str(root))
 
-    from vault_rag.settings import Settings  # noqa: E402
-
-    settings = Settings()
-    venv_py = root / ".venv" / "Scripts" / "python.exe"
-    if not venv_py.is_file():
-        venv_py = Path(sys.executable)
-
     fragment = {
-        "vault-rag": {
-            "command": str(venv_py),
-            "args": [str(root / "mcp_server.py")],
-            "cwd": str(root),
-            "env": {
-                "VAULT_ROOT": str(settings.vault_root.resolve()),
-                "OLLAMA_BASE_URL": settings.ollama_base_url,
-                "EMBEDDING_MODEL": settings.embedding_model,
-            },
+        "user-vault-rag": {
+            "url": "http://127.0.0.1:18080/mcp",
+            "headers": {"Authorization": "Bearer <LOCAL_TOKEN>"},
         }
     }
     out = root / "_generated" / "cursor-mcp-vault-rag.fragment.json"

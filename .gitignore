@@ -71,3 +71,7 @@ $RECYCLE.BIN/
 # Note: when INDEX_IN_VAULT=true (default), index lives at
 #   <VAULT_ROOT>/.vault-rag/
 # Add `.vault-rag/` to your Obsidian vault's .gitignore — not this repo.
+
+web/node_modules/
+web/tsconfig.tsbuildinfo
+vault_rag/static/
