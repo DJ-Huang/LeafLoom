@@ -9,6 +9,7 @@ class EmbeddedModel:
     def __init__(self,directory):
         self.directory=Path(directory);self.path=self.directory/'models/bge-m3';self.manifest=self.directory/'models/model-lock.json'
         self.model=None;self.lock=threading.RLock();self.loading=False;self.error=None;self.device=None;self.loads=0;self.load_seconds=None;self.download_state=None;self.warmed=False;self.warmup_seconds=None;self.warming=False
+        self._prepared=False;self._status_fingerprint=None;self.integrity_checked_at=None
     @property
     def ready(self):
         try:
@@ -36,15 +37,24 @@ class EmbeddedModel:
                 with path.open('rb') as stream:checksum=hashlib.file_digest(stream,'sha256').hexdigest()
                 files[name]={'size':path.stat().st_size,'sha256':checksum}
         atomic_write(self.manifest,json.dumps({'model':self.model_id,'revision':revision,'prepared_at':time.time(),'files':files},indent=2).encode())
+        self.refresh_status()
     @property
     def fingerprint(self):
         if not self.ready:return None
+        return self._fingerprint()
+    def _fingerprint(self):
         m=json.loads(self.manifest.read_text(encoding='utf-8'))
         return digest(json.dumps({'model':self.model_id,'revision':m['revision'],'pooling':'official-sentence-transformers','normalize':True,'dimension':1024,'backend':'torch','dtype':'float32','input_version':1},sort_keys=True))
-    def status(self):return {'model':self.model_id,'prepared':self.ready,'loaded':self.model is not None,'loading':self.loading,'error':self.error,'device':self.device,'load_count':self.loads,'load_seconds':self.load_seconds,'download':self.download_state,'fingerprint':self.fingerprint,'warmed':self.warmed,'warming':self.warming,'warmup_seconds':self.warmup_seconds}
+    def refresh_status(self):
+        prepared=self.ready
+        try:fingerprint=self._fingerprint() if prepared else None
+        except (OSError,ValueError,KeyError):prepared=False;fingerprint=None
+        self._prepared=prepared;self._status_fingerprint=fingerprint;self.integrity_checked_at=time.time()
+        return self.status()
+    def status(self):return {'model':self.model_id,'prepared':self._prepared,'loaded':self.model is not None,'loading':self.loading,'error':self.error,'device':self.device,'load_count':self.loads,'load_seconds':self.load_seconds,'download':self.download_state,'fingerprint':self._status_fingerprint,'warmed':self.warmed,'warming':self.warming,'warmup_seconds':self.warmup_seconds,'integrity_checked_at':self.integrity_checked_at}
     def prepare(self):
         with self.lock:
-            if self.ready:return self.status()
+            if self.ready:return self.refresh_status()
             self.download_state='下载模型中';self.error=None
             try:
                 previous={}
@@ -99,6 +109,10 @@ class EmbeddedModel:
             self.loading=True;start=time.perf_counter()
             try:
                 import torch
+                torch.set_num_threads(2)
+                try:torch.set_num_interop_threads(2)
+                except RuntimeError:pass  # Another torch user may already have started work.
+                os.environ.setdefault('RAYON_NUM_THREADS','2')
                 from sentence_transformers import SentenceTransformer
                 self.device='mps' if torch.backends.mps.is_available() else 'cpu'
                 try:self.model=SentenceTransformer(str(self.path),device=self.device,local_files_only=True,trust_remote_code=False)
@@ -107,7 +121,7 @@ class EmbeddedModel:
                     self.device='cpu';self.model=SentenceTransformer(str(self.path),device='cpu',local_files_only=True,trust_remote_code=False)
                 self.model.max_seq_length=8192;self.loads+=1;self.load_seconds=time.perf_counter()-start;self.error=None
             except Exception as e:self.error=str(e);raise
-            finally:self.loading=False
+            finally:self.loading=False;self.refresh_status()
     def warmup(self):
         if self.warmed:return
         self.warming=True;start=time.perf_counter()
