@@ -83,6 +83,66 @@ class LocalKnowledgeTests(unittest.TestCase):
         k.snapshot={'nodes':[],'docs':[]}
         self.assertTrue(k.search('闪烁栅格',mode='keyword')['results'])
 
+    def test_html_preview_snapshot_resources_and_api_isolation(self):
+        from urllib.parse import urljoin
+        original='<!doctype html><meta charset="utf-8"><h1>磁盘版本</h1>'
+        path='网页 示例/index.html';p=self.put(path,original)
+        self.put('网页 示例/样式.css','h1 { color: red }')
+        self.put('网页 示例/app.js','document.querySelector("h1").textContent="已运行"')
+        self.put('网页 示例/文章.md','# 正文')
+        self.put('网页 示例/next.htm','<!doctype html><h1>下一页</h1>')
+        self.put('common.json','{"value":1}')
+        app=create_app(self.config,self.runtime,start_background=False)
+        token=(self.config.directory/'auth-token').read_text()
+        with TestClient(app,base_url='http://127.0.0.1:18080') as client:
+            payload={'path':path,'root':str(self.config.root),'text':'<!doctype html><h1>草稿版本</h1>'}
+            self.assertEqual(client.post('/api/html-preview',json=payload).status_code,401)
+            client.cookies.set('vault_session',token)
+            self.assertEqual(client.post('/api/html-preview',json=payload).status_code,403)
+            headers={'x-vault-csrf':app.state.csrf}
+            response=client.post('/api/html-preview',json=payload,headers=headers)
+            self.assertEqual(response.status_code,200);url=response.json()['url']
+            self.assertIn('%E7',url);self.assertIn('%20',url)
+            client.cookies.clear()
+            response=client.get(url,headers={'origin':'null'})
+            self.assertEqual(response.status_code,200);self.assertIn('草稿版本',response.text)
+            self.assertEqual(p.read_text(),original)
+            policy=response.headers['content-security-policy']
+            self.assertIn('sandbox allow-scripts',policy);self.assertNotIn('allow-same-origin',policy)
+            self.assertNotIn("script-src 'self'",policy);self.assertIn('/files/',policy)
+            self.assertEqual(response.headers['cache-control'],'no-store')
+            for resource in ('样式.css','app.js','next.htm','../common.json'):
+                r=client.get(urljoin(url,resource),headers={'origin':'null'})
+                self.assertEqual(r.status_code,200,resource)
+                self.assertEqual(r.headers['access-control-allow-origin'],'null')
+            r=client.get(urljoin(url,'文章.md'));self.assertIn('attachment',r.headers['content-disposition'])
+            self.assertEqual(client.head(url).status_code,200)
+            self.assertEqual(client.post(url,headers={'origin':'null'}).status_code,403)
+            self.assertEqual(client.get(url,headers={'origin':'https://evil.example'}).status_code,403)
+            self.assertEqual(client.get(url,headers={'host':'evil.example'}).status_code,403)
+            client.cookies.set('vault_session',token)
+            self.assertEqual(client.get('/api/bootstrap',headers={'origin':'null'}).status_code,403)
+            self.assertEqual(client.post('/api/create',json={'path':'attack.md'},headers={'origin':'null',**headers}).status_code,403)
+            self.assertFalse((self.root/'attack.md').exists())
+            self.assertEqual(client.get('/api/media',params={'path':path}).headers['content-security-policy'].split(';')[0],'sandbox')
+            self.assertEqual(client.get('/api/media',params={'path':'网页 示例/next.htm'}).headers['content-security-policy'].split(';')[0],'sandbox')
+            prefix=url.split('/files/')[0]+'/files/'
+            (self.root/'escape').symlink_to(self.home,target_is_directory=True)
+            for forbidden in ('.vault-rag/status.json','escape/file','%2e%2e/other','%2Fetc/passwd'):
+                self.assertEqual(client.get(prefix+forbidden,headers={'origin':'null'}).status_code,400,forbidden)
+            self.assertEqual(client.get('/html-preview/unknown/files/index.html').status_code,410)
+            self.assertEqual(client.post('/api/html-preview',json={},headers=headers).status_code,400)
+            self.assertEqual(client.post('/api/html-preview',json={**payload,'root':'/other'},headers=headers).status_code,409)
+            # Restarted processes cannot recover in-memory preview credentials.
+            restarted=create_app(self.config,self.runtime,start_background=False)
+            with TestClient(restarted,base_url='http://127.0.0.1:18080') as fresh:
+                self.assertEqual(fresh.get(url).status_code,410)
+            other=self.home/'other';other.mkdir();self.config.save({'root':str(other)})
+            expired=client.get(url);self.assertEqual(expired.status_code,410)
+            self.assertIn('vault-html-preview-expired',expired.text)
+            self.config.save({'root':str(self.root)})
+            self.assertEqual(client.get(url).status_code,410)
+
     def test_http_browser_session_csrf_host_origin_and_ranges(self):
         self.populate();app=create_app(self.config,self.runtime,start_background=False)
         token=(self.config.directory/'auth-token').read_text();headers={'host':'127.0.0.1:18080','authorization':'Bearer '+token}
