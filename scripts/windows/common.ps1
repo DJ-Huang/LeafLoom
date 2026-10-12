@@ -4,6 +4,22 @@ function Get-VaultRagState {
     return Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'VaultRag'
 }
 
+function Test-VaultRagPrivateDirectory([string]$Path) {
+    try {
+        $Acl=[IO.Directory]::GetAccessControl($Path)
+        $Rules=@($Acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
+        $Sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        if (-not $Acl.AreAccessRulesProtected -or $Rules.Count -ne 2) { return $false }
+        $Seen=@()
+        foreach ($Rule in $Rules) {
+            if ($Rule.AccessControlType -ne 'Allow' -or [int]$Rule.FileSystemRights -ne 2032127 -or
+                [int]$Rule.InheritanceFlags -ne 3 -or [int]$Rule.PropagationFlags -ne 0) { return $false }
+            $Seen += $Rule.IdentityReference.Value
+        }
+        return ($Seen -contains $Sid -and $Seen -contains 'S-1-5-18')
+    } catch { return $false }
+}
+
 function Get-TextHash([string]$Text) {
     $Hash = [Security.Cryptography.SHA256]::Create()
     try { return ([BitConverter]::ToString($Hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($Text)))).Replace('-','').Substring(0,24) }
@@ -20,7 +36,7 @@ function ConvertTo-NativeArgument([string]$Value) {
     return '"' + [regex]::Replace([regex]::Replace($Value, '(\\*)"', '$1$1\"'), '(\\+)$', '$1$1') + '"'
 }
 
-function Invoke-BootstrapTool([string]$Executable, [string[]]$ToolArguments, [switch]$Capture, [switch]$Retry) {
+function Invoke-BootstrapTool([string]$Executable, [string[]]$ToolArguments, [switch]$Capture, [switch]$Retry, [switch]$AllowSetup) {
     for ($Attempt=1; $Attempt -le 3; $Attempt++) {
         $Info = [Diagnostics.ProcessStartInfo]::new()
         $Info.FileName = $Executable
@@ -51,7 +67,9 @@ function Invoke-BootstrapTool([string]$Executable, [string[]]$ToolArguments, [sw
                 if (-not $Progressed) { Start-Sleep -Milliseconds 30 }
             }
             $Process.WaitForExit()
+            $global:LASTEXITCODE = $Process.ExitCode
             $StandardOut = ($OutLines -join "`n").Trim(); $StandardError = ($ErrorLines -join "`n").Trim()
+            if ($AllowSetup -and $Process.ExitCode -eq 3) { return }
             if ($Process.ExitCode -eq 0) {
                 if ($Capture) { return $StandardOut }
 

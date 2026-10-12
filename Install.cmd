@@ -1,4 +1,4 @@
 @echo off
 setlocal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0scripts\windows\launch.ps1" -Action install
+wscript.exe "%~dp0scripts\windows\launch.vbs" install
 exit /b %errorlevel%

@@ -68,6 +68,26 @@ def protect_private_directory(directory: Path) -> None:
     if not is_windows():
         directory.chmod(0o700)
         return
+    # Reapplying an unchanged inheritable ACL propagates through the large
+    # runtime/model cache. Verify its exact protection before doing any write.
+    path = str(directory).replace("'", "''")
+    result = powershell(f"""$ErrorActionPreference='Stop'
+try {{
+    $acl=[IO.Directory]::GetAccessControl('{path}')
+    $rules=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
+    $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $valid=$acl.AreAccessRulesProtected -and $rules.Count -eq 2
+    $seen=@()
+    foreach ($rule in $rules) {{
+        $valid=$valid -and $rule.AccessControlType -eq 'Allow' -and [int]$rule.FileSystemRights -eq 2032127 -and
+            [int]$rule.InheritanceFlags -eq 3 -and [int]$rule.PropagationFlags -eq 0
+        $seen += $rule.IdentityReference.Value
+    }}
+    if ($valid -and $seen -contains $sid -and $seen -contains 'S-1-5-18') {{ 'private' }}
+}} catch {{ }}
+""")
+    if result.returncode == 0 and result.stdout.strip() == 'private':
+        return
     # Replace inherited access with current-user and SYSTEM access. Children inherit it.
     sid = current_sid()
     result = subprocess.run(

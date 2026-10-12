@@ -79,11 +79,16 @@ class WindowsCompatibilityTests(unittest.TestCase):
 
     def test_windows_acl_is_current_user_and_system_not_chmod(self):
         directory=self.directory/'acl'
-        with patch.object(platform,'is_windows',return_value=True),patch.object(platform,'current_sid',return_value='S-1-5-21-123'),patch.object(platform,'hidden_process_options',return_value={}),patch.object(platform.subprocess,'run',return_value=SimpleNamespace(returncode=0)) as run:
+        with patch.object(platform,'is_windows',return_value=True),patch.object(platform,'powershell',return_value=SimpleNamespace(returncode=0,stdout='')),patch.object(platform,'current_sid',return_value='S-1-5-21-123'),patch.object(platform,'hidden_process_options',return_value={}),patch.object(platform.subprocess,'run',return_value=SimpleNamespace(returncode=0)) as run:
             platform.protect_private_directory(directory)
         args=run.call_args.args[0]
         self.assertIn('/inheritance:r',args);self.assertIn('*S-1-5-21-123:(OI)(CI)F',args)
         self.assertIn('*S-1-5-18:(OI)(CI)F',args)
+
+    def test_already_private_directory_does_not_reapply_inheritable_acl(self):
+        with patch.object(platform,'is_windows',return_value=True),patch.object(platform,'powershell',return_value=SimpleNamespace(returncode=0,stdout='private\n')),patch.object(platform.subprocess,'run') as run:
+            platform.protect_private_directory(self.directory/'private')
+            run.assert_not_called()
 
     def test_msvc_dll_paths_are_app_local_and_handles_are_retained(self):
         prefix=self.directory/'venv';scripts=prefix/'Scripts';scripts.mkdir(parents=True)
@@ -123,6 +128,56 @@ class WindowsCompatibilityTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):windows.control('start',self.config)
             scheduler.assert_not_called()
 
+    def test_repeated_start_does_not_reschedule_an_instance_or_pending_task(self):
+        for running, pending in ((True, False), (False, True)):
+            with self.subTest(running=running, pending=pending), patch.object(windows,'installed',return_value=True), patch.object(service,'health',return_value='unresponsive'), patch.object(service,'ensure_ready'), patch('vault_rag.windows_native.running',return_value=running), patch.object(windows,'task_active',return_value=pending), patch.object(windows,'scheduler') as scheduler:
+                windows.control('start',self.config)
+                scheduler.assert_not_called()
+
+    def test_tray_exit_stops_service_before_closing_and_failure_keeps_icon(self):
+        from vault_rag.windows_tray import TrayController
+        import threading
+        with patch('vault_rag.windows_tray.autostart_enabled',return_value=True):
+            controller=TrayController(self.config)
+        controller.icon=Mock(); done=threading.Event()
+        controller.icon.stop.side_effect=done.set
+        with patch('vault_rag.windows_tray.control') as control:
+            controller.action('exit'); self.assertTrue(done.wait(5))
+            control.assert_called_once_with('stop',self.config)
+            self.assertTrue(controller.stop.is_set()); controller.icon.stop.assert_called_once()
+        with patch('vault_rag.windows_tray.autostart_enabled',return_value=True):
+            controller=TrayController(self.config)
+        controller.icon=Mock(); done.clear()
+        with patch('vault_rag.windows_tray.control',side_effect=RuntimeError('stop failed')), patch('vault_rag.windows_tray.show_error') as error, patch.object(controller,'refresh',side_effect=done.set):
+            controller.action('exit'); self.assertTrue(done.wait(5))
+            error.assert_called_once(); self.assertFalse(controller.stop.is_set()); controller.icon.stop.assert_not_called()
+
+    def test_tray_stop_is_independent_of_blocked_refresh_and_exit_menu_exists(self):
+        from vault_rag import windows_tray as tray
+        import threading
+        refreshing=threading.Event(); release=threading.Event(); signal=threading.Event(); closed=threading.Event()
+        menu=Mock(side_effect=lambda *items: items); menu.SEPARATOR=None
+        entries=[]
+        class FakeInstance:
+            primary=True
+            def __init__(self,*args):pass
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def wait_for_stop(self,timeout):return signal.wait(timeout/1000)
+        class FakeIcon:
+            def __init__(self,name,image,title,items):entries.extend(items)
+            def run(self,setup):setup(self); closed.wait(5)
+            def stop(self):release.set(); closed.set()
+        def refresh():refreshing.set(); release.wait(5)
+        fake=SimpleNamespace(Menu=menu,MenuItem=lambda text,action,**kwargs:SimpleNamespace(text=text,action=action),Icon=FakeIcon)
+        with patch.dict(sys.modules,{'pystray':fake}),patch.object(tray,'Instance',FakeInstance),patch.object(tray,'autostart_enabled',return_value=True),patch.object(tray,'tray_image'),patch.object(tray.TrayController,'refresh',side_effect=refresh):
+            worker=threading.Thread(target=tray.run,args=(self.config,),daemon=True); worker.start()
+            try:
+                self.assertTrue(refreshing.wait(3)); signal.set(); worker.join(timeout=3)
+                self.assertFalse(worker.is_alive()); self.assertTrue(closed.is_set())
+                self.assertIn('退出',[entry.text for entry in entries if entry is not None])
+            finally:release.set();signal.set();worker.join(timeout=3)
+
     def test_stop_signals_owned_service_and_reports_timeout_without_forced_kill(self):
         with patch('vault_rag.windows_native.running',side_effect=[True,False]),patch('vault_rag.windows_native.signal_stop') as stop,patch.object(windows.time,'sleep'),patch.object(windows,'task_active',return_value=False):
             windows.wait_stopped(self.config)
@@ -157,6 +212,20 @@ class WindowsCompatibilityTests(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform=='win32','requires Windows native APIs')
 class WindowsNativeTests(unittest.TestCase):
+    def test_concurrent_processes_have_only_one_primary_service(self):
+        from vault_rag.windows_native import Instance, running
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            program="from pathlib import Path; import sys; from vault_rag.windows_native import Instance; instance=Instance(Path(sys.argv[1]), 'service'); print(int(instance.primary)); instance.close()"
+            with Instance(root,'service') as primary:
+                self.assertTrue(primary.primary)
+                children=[subprocess.Popen([sys.executable,'-X','utf8','-c',program,str(root)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,**platform.hidden_process_options()) for _ in range(4)]
+                for child in children:
+                    output,error=child.communicate(timeout=15)
+                    self.assertEqual(child.returncode,0,error.decode()); self.assertEqual(output.strip(),b'0')
+                self.assertTrue(running(root))
+            self.assertFalse(running(root))
+
     def test_named_mutex_and_cooperative_stop(self):
         from vault_rag.windows_native import Instance,running,signal_stop
         with tempfile.TemporaryDirectory() as directory:

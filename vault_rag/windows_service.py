@@ -130,7 +130,7 @@ def start_tray(config):
     from vault_rag.windows_native import running
     if not installed(config, 'tray'):
         register(config)
-    if not running(config.directory, 'tray'):
+    if not running(config.directory, 'tray') and not task_active(config, 'tray'):
         scheduler('/Run', '/TN', task_name(config, 'tray'))
 
 
@@ -145,7 +145,7 @@ def control(action, config):
         state = health(config)
         if state == 'other':
             raise RuntimeError('配置端口已被其他程序占用，请修改端口或关闭占用程序')
-        if state != 'ready' and not running(config.directory):
+        if state != 'ready' and not running(config.directory) and not task_active(config):
             scheduler('/Run', '/TN', task_name(config, 'service'))
         ensure_ready(config)
     elif action == 'stop':

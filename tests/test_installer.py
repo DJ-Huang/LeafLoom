@@ -129,6 +129,32 @@ class InstallerTests(unittest.TestCase):
         initial = self.setup.input_hash(); (self.repo / 'web/src/main.tsx').write_text('changed')
         self.assertNotEqual(initial, self.setup.input_hash())
 
+    def test_backend_and_launcher_changes_do_not_rebuild_web_or_reinstall(self):
+        initial = self.setup.input_hash(); web_hash = self.setup.web_input_hash()
+        for name in ('vault_rag/windows_tray.py', 'scripts/windows/launch.ps1'):
+            path = self.repo / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_text('changed')
+        self.assertEqual(initial, self.setup.input_hash())
+        self.assertEqual(web_hash, self.setup.web_input_hash())
+        (self.repo / 'uv.lock').write_text('new dependency lock')
+        self.assertNotEqual(initial, self.setup.input_hash())
+        self.assertEqual(web_hash, self.setup.web_input_hash())
+
+    def test_stop_failure_preserves_previous_success_and_web_cache(self):
+        self.install()
+        previous = self.setup.marker.read_bytes(); self.calls.clear()
+        with patch.object(self.setup, 'node', return_value=['node', 'npm-cli.js']), patch.object(self.setup, 'run', side_effect=self.run_stage), patch.object(self.setup, 'stop_owned', side_effect=RuntimeError('stop timeout')):
+            with self.assertRaisesRegex(RuntimeError, 'stop timeout'): self.setup.install()
+        self.assertEqual(previous, self.setup.marker.read_bytes())
+        self.assertFalse(any('build' in args or 'ci' in args for args in self.calls))
+
+    def test_open_checks_once_and_requests_setup_without_silent_install(self):
+        with patch.object(self.setup, 'ready', return_value=False) as ready, patch.object(self.setup, 'install') as install:
+            self.assertEqual(self.setup.execute('open', no_install=True), 3)
+            ready.assert_called_once(); install.assert_not_called()
+        with patch.object(self.setup, 'ready', return_value=True) as ready, patch.object(self.setup, 'run') as run:
+            self.assertEqual(self.setup.execute('open', no_install=True), 0)
+            ready.assert_called_once(); self.assertEqual(run.call_args.args[0][-1], 'open')
+
     def test_download_reuses_verified_archive_and_rejects_corrupt_bytes(self):
         self.setup.runtime.mkdir(parents=True)
         value = b'archive'; checksum = hashlib.sha256(value).hexdigest()

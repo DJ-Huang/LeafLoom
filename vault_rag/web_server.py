@@ -204,13 +204,13 @@ def create_app(config=None,runtime=None,*,start_background=True):
         response=HTMLResponse((static/'index.html').read_text(encoding='utf-8'));response.set_cookie('vault_session',token,httponly=True,samesite='strict',max_age=365*86400);return response
     return app
 
-def serve():
+def serve(*, instance=None):
     import uvicorn
     config=LocalConfig();logging.basicConfig(level=logging.INFO)
     if is_windows():
         from vault_rag.windows_native import Instance
         import socket
-        with Instance(config.directory, 'service') as instance:
+        with (contextlib.nullcontext(instance) if instance is not None else Instance(config.directory, 'service')) as instance:
             if not instance.primary:return
             with socket.socket() as probe:
                 probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
@@ -218,12 +218,15 @@ def serve():
                 except OSError as e:raise RuntimeError('配置端口已被其他程序占用') from e
             # Python 3.12's Proactor transport can leave reset loopback sockets
             # awaiting closure indefinitely. HTTP MCP needs TCP, not async pipes.
-            server=uvicorn.Server(uvicorn.Config(create_app(config),host='127.0.0.1',port=config.data.get('port',18080),workers=1,access_log=False,
+            app=create_app(config)
+            server=uvicorn.Server(uvicorn.Config(app,host='127.0.0.1',port=config.data.get('port',18080),workers=1,access_log=False,
                                                 loop='asyncio:SelectorEventLoop',timeout_graceful_shutdown=20))
             finished=threading.Event()
             def watch():
                 while not finished.is_set():
-                    if instance.wait_for_stop(200):server.should_exit=True;return
+                    if instance.wait_for_stop(200):
+                        app.state.runtime.request_stop()
+                        server.should_exit=True;return
             watcher=threading.Thread(target=watch,daemon=True);watcher.start()
             try:server.run()
             finally:finished.set();watcher.join()

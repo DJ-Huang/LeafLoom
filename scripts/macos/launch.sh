@@ -36,11 +36,17 @@ if [[ $ACTION == stop ]]; then
     exit 0
 fi
 if [[ $ACTION == open || $ACTION == menubar ]]; then
-    if [[ -x "$PYTHON" ]] && "$PYTHON" -X utf8 "$REPOSITORY/scripts/installer.py" --repository "$REPOSITORY" --state "$STATE" --action check; then
-        if [[ $ACTION == menubar ]]; then
+    if [[ -x "$PYTHON" ]]; then
+        if [[ $ACTION == open ]]; then
+            if "$PYTHON" -X utf8 "$REPOSITORY/scripts/installer.py" --repository "$REPOSITORY" --state "$STATE" --action open --no-install; then
+                exit 0
+            else
+                RESULT=$?
+                if [[ $RESULT != 3 ]]; then exit "$RESULT"; fi
+            fi
+        elif "$PYTHON" -X utf8 "$REPOSITORY/scripts/installer.py" --repository "$REPOSITORY" --state "$STATE" --action check; then
             exec /bin/bash "$REPOSITORY/scripts/macos/start_menu.sh" "$REPOSITORY" "$STATE"
         fi
-        exec "$PYTHON" -X utf8 "$REPOSITORY/scripts/installer.py" --repository "$REPOSITORY" --state "$STATE" --action open
     fi
 fi
 
@@ -88,7 +94,7 @@ for ATTEMPT in 1 2 3; do
     echo "暂时性网络错误，重试 $ATTEMPT/2…"
     /bin/sleep $((ATTEMPT * 2))
 done
-PYTHON=$("$UV" python find --managed-python --no-project --no-python-downloads "$PYTHON_VERSION")
+PYTHON=$("$UV" python find --system --managed-python --no-project --no-python-downloads "$PYTHON_VERSION")
 "$PYTHON" -c 'import json,sys,pathlib,os; p=pathlib.Path(sys.argv[1]); t=p.with_suffix(".tmp"); t.write_text(json.dumps({"python":sys.executable,"version":sys.argv[2]})); os.replace(t,p)' "$STATE/bootstrap-python.json" "$PYTHON_VERSION"
 ARGS=(--repository "$REPOSITORY" --state "$STATE" --action install)
 if [[ $NO_OPEN == --no-open || $ACTION == menubar ]]; then ARGS+=(--no-open); fi

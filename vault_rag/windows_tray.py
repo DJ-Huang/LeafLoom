@@ -54,6 +54,9 @@ class TrayController:
             try:
                 if action=='refresh':self.refresh()
                 elif action=='logs':os.startfile(str(self.config.directory/'logs'))
+                elif action=='exit':
+                    control('stop',self.config)
+                    self.quit()
                 else:
                     control(action,self.config)
                     if action.endswith('autostart'):self.autostart=action=='enable-autostart'
@@ -61,7 +64,8 @@ class TrayController:
                 logging.exception('Tray action failed: %s',action)
                 show_error(str(error)+'\n日志：'+str(self.config.directory/'logs'))
             finally:
-                self.busy.release();self.refresh()
+                self.busy.release()
+                if not self.stop.is_set():self.refresh()
         threading.Thread(target=work,daemon=True).start()
 
     def quit(self):
@@ -87,6 +91,7 @@ def run(config):
             item(lambda entry:'取消登录启动' if controller.autostart else '恢复登录启动',
                  lambda icon,entry:controller.action('disable-autostart' if controller.autostart else 'enable-autostart')),
             item('退出托盘（服务继续运行）',lambda icon,entry:controller.quit()),
+            item('退出',invoke('exit'),enabled=lambda entry:not controller.busy.locked()),
         )
         icon=pystray.Icon('vault-rag',tray_image('stopped'),'本地知识库',menu)
         controller.icon=icon
@@ -94,14 +99,20 @@ def run(config):
         def poll():
             while not controller.stop.is_set():
                 if not controller.busy.locked():controller.refresh()
-                for _ in range(25):
-                    if controller.stop.is_set():return
-                    if instance.wait_for_stop(200):controller.quit();return
+                controller.stop.wait(5)
+        def watch_stop():
+            # Shutdown must work even if a status refresh is blocked or failed.
+            while not controller.stop.is_set():
+                if instance.wait_for_stop(200):controller.quit();return
         def setup(icon):
             nonlocal poll_thread
+            if controller.stop.is_set():icon.stop();return
             icon.visible=True
             poll_thread=threading.Thread(target=poll,daemon=True);poll_thread.start()
+        stop_thread=threading.Thread(target=watch_stop,daemon=True);stop_thread.start()
         try:icon.run(setup)
         finally:
             controller.stop.set()
-            if poll_thread:poll_thread.join()
+            stop_thread.join()
+            # This worker only reads status; it must not hold the icon alive.
+            if poll_thread:poll_thread.join(timeout=5)

@@ -17,9 +17,11 @@ try {
         throw 'Supported systems: Windows 10/11 x64.'
     }
     New-Item -ItemType Directory -Force -Path $VaultRagState | Out-Null
-    $Sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    & icacls.exe $VaultRagState /inheritance:r /grant:r "*${Sid}:(OI)(CI)F" '*S-1-5-18:(OI)(CI)F' | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot protect the private state directory.' }
+    if (-not (Test-VaultRagPrivateDirectory $VaultRagState)) {
+        $Sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        & icacls.exe $VaultRagState /inheritance:r /grant:r "*${Sid}:(OI)(CI)F" '*S-1-5-18:(OI)(CI)F' | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot protect the private state directory.' }
+    }
     $Logs = Join-Path $VaultRagState 'logs'
     $RuntimeRoot = Join-Path $VaultRagState 'runtimes'
     New-Item -ItemType Directory -Force -Path $Logs,$RuntimeRoot | Out-Null
@@ -65,7 +67,7 @@ try {
     $DownloadMetadata = @{}; $DownloadMetadata[$PythonSpec.key] = $PythonSpec
     [IO.File]::WriteAllText($PythonDownloads, ($DownloadMetadata | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
     Invoke-BootstrapTool $Uv @('python','install','--no-bin','--no-registry','--python-downloads-json-url',$PythonDownloads,$Manifest.python) -Retry
-    $Python = (Invoke-BootstrapTool $Uv @('python','find','--managed-python','--no-project','--no-python-downloads',$Manifest.python) -Capture).Trim()
+    $Python = (Invoke-BootstrapTool $Uv @('python','find','--system','--managed-python','--no-project','--no-python-downloads',$Manifest.python) -Capture).Trim()
     if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) { throw 'Private Python was not found after preparation.' }
     $BootstrapMarker = Join-Path $VaultRagState 'bootstrap-python.json'
     $TemporaryMarker = $BootstrapMarker + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'

@@ -1,4 +1,4 @@
 @echo off
 setlocal
-powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0scripts\windows\launch.ps1" -Action stop
+wscript.exe "%~dp0scripts\windows\launch.vbs" stop
 exit /b %errorlevel%

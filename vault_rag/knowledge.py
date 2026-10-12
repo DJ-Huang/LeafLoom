@@ -298,7 +298,9 @@ class Runtime:
             except ValueError as e:self.knowledge.progress={'state':str(e)}
             except Exception as e:self.knowledge.last_error=str(e);log.exception('File scan failed')
             self.event.wait(2);self.event.clear()
-    def stop(self):
+    def request_stop(self):
         self.stop_event.set();self.knowledge.stop_event.set();self.event.set()
+    def stop(self):
+        self.request_stop()
         # Let the current batch/transaction finish before a restart opens the index.
         if self.thread and self.thread is not threading.current_thread():self.thread.join()
