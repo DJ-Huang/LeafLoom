@@ -8,6 +8,8 @@
 
 A local knowledge workspace for people who want to keep their files and make better use of them. Read and write Markdown, search your notes with source links, and explore how ideas connect.
 
+**Demo:** [▶ English promotional video (MP4)](https://github.com/DJ-Huang/LeafLoom/raw/refs/heads/main/assets/promo/leafloom-en.mp4) · [Video attachments — Issue #1](https://github.com/DJ-Huang/LeafLoom/issues/1)
+
 ![LeafLoom](assets/screenshots/en/03-reading.png)
 
 | Your files stay yours | Read and write | Find the source | See the connections |
@@ -30,9 +32,7 @@ cd LeafLoom
 
 No folders are indexed by default. You can start by browsing and enable search later.
 
-[📖 User guide and FAQ](docs/en/GUIDE.md) · [✨ AI connections](docs/en/AI.md) · [▶ English promotional video](assets/promo/leafloom-en.mp4)
-
-[![English promotional video](assets/promo/cover.png)](assets/promo/leafloom-en.mp4)
+[📖 User guide and FAQ](docs/en/GUIDE.md) · [✨ AI connections](docs/en/AI.md) · [▶ English promotional video](https://github.com/DJ-Huang/LeafLoom/raw/refs/heads/main/assets/promo/leafloom-en.mp4)
 
 ## Languages
 
