@@ -6,10 +6,11 @@ REPOSITORY=$(cd -- "$(dirname -- "$0")/../.." && pwd -P)
 ACTION=${1:-open}
 NO_OPEN=${2:-}
 STATE=${VAULT_RAG_HOME:-"$HOME/Library/Application Support/VaultRag"}
+leafloom_text() { /usr/bin/osascript -l JavaScript "$REPOSITORY/scripts/macos/localize.js" "$REPOSITORY" "$STATE" "$1"; }
 export VAULT_RAG_HOME="$STATE" PYTHONUTF8=1 PYTHONUNBUFFERED=1
 MANIFEST="$REPOSITORY/scripts/runtimes.json"
 if [[ $(/usr/bin/uname -m) != arm64 || $(/usr/bin/sw_vers -productVersion | /usr/bin/cut -d. -f1) -lt 14 ]]; then
-    echo '支持 macOS 14+ Apple 芯片。' >&2
+    leafloom_text '支持 macOS 14+ Apple 芯片。' >&2
     exit 1
 fi
 read_manifest() { /usr/bin/plutil -extract "$1" raw -o - "$MANIFEST"; }
@@ -70,21 +71,21 @@ if ! mkdir "$BOOTSTRAP_LOCK" 2>/dev/null; then
         /bin/rmdir "$BOOTSTRAP_LOCK"
         mkdir "$BOOTSTRAP_LOCK"
     else
-        echo '另一个安装正在进行，请等待完成。' >&2; exit 1
+        leafloom_text '另一个安装正在进行，请等待完成。' >&2; exit 1
     fi
 fi
 echo $$ > "$BOOTSTRAP_LOCK/pid"
 release_lock() { /bin/rm -f "$BOOTSTRAP_LOCK/pid"; /bin/rmdir "$BOOTSTRAP_LOCK"; }
 trap release_lock EXIT
 exec > >(/usr/bin/tee -a "$STATE/logs/bootstrap.log") 2>&1
-echo '[1/2] 准备已校验的依赖安装器…'
+echo "[1/2] $(leafloom_text '准备已校验的依赖安装器…')"
 UV_URL=$(read_manifest 'platforms.macos-arm64.uv.url')
 UV_SHA=$(read_manifest 'platforms.macos-arm64.uv.sha256')
 UV_ARCHIVE="$STATE/runtimes/${UV_URL##*/}"
 if [[ ! -x "$UV" || ! -f "$UV_DIR/.verified" || $(cat "$UV_DIR/.verified") != "$UV_SHA" ]] || ! "$UV" --version | /usr/bin/grep -q "^uv $UV_VERSION "; then
     if [[ ! -f "$UV_ARCHIVE" || $(/usr/bin/shasum -a 256 "$UV_ARCHIVE" | /usr/bin/awk '{print $1}') != "$UV_SHA" ]]; then
         /usr/bin/curl --fail --location --retry 2 --connect-timeout 30 --output "$UV_ARCHIVE.part" "$UV_URL"
-        [[ $(/usr/bin/shasum -a 256 "$UV_ARCHIVE.part" | /usr/bin/awk '{print $1}') == "$UV_SHA" ]] || { echo 'uv 下载校验失败'; exit 1; }
+        [[ $(/usr/bin/shasum -a 256 "$UV_ARCHIVE.part" | /usr/bin/awk '{print $1}') == "$UV_SHA" ]] || { leafloom_text 'uv 下载校验失败'; exit 1; }
         /bin/mv "$UV_ARCHIVE.part" "$UV_ARCHIVE"
     fi
     if [[ -e "$UV_DIR" ]]; then /bin/mv "$UV_DIR" "$UV_DIR-old-$(/usr/bin/uuidgen)"; fi
@@ -93,9 +94,9 @@ if [[ ! -x "$UV" || ! -f "$UV_DIR/.verified" || $(cat "$UV_DIR/.verified") != "$
     "$UV" --version | /usr/bin/grep -q "^uv $UV_VERSION "
     printf '%s' "$UV_SHA" > "$UV_DIR/.verified"
 fi
-echo '[2/2] 准备私有 Python，复用已有下载…'
+echo "[2/2] $(leafloom_text '准备私有 Python，复用已有下载…')"
 if python_current; then
-    echo 'Python 版本符合要求，跳过下载安装。'
+    leafloom_text 'Python 版本符合要求，跳过下载安装。'
 else
     PYTHON_KEY=$(read_manifest 'platforms.macos-arm64.python.key')
     PYTHON_DOWNLOADS="$STATE/runtimes/python-downloads.json"
@@ -103,9 +104,9 @@ else
     for ATTEMPT in 1 2 3; do
         if "$UV" python install --no-bin --python-downloads-json-url "$PYTHON_DOWNLOADS" "$PYTHON_VERSION" 2>&1 | /usr/bin/tee "$STATE/logs/python-bootstrap-last.log"; then break; fi
         if [[ $ATTEMPT == 3 ]] || ! /usr/bin/grep -Eiq 'timed? ?out|connection (reset|refused|aborted)|temporar|429|502|503|504|name resolution' "$STATE/logs/python-bootstrap-last.log"; then
-            echo "Python 准备失败。日志：$STATE/logs/bootstrap.log；再次双击入口重试。" >&2; exit 1
+            echo "$(leafloom_text 'Python 准备失败。') $(leafloom_text '日志：')$STATE/logs/bootstrap.log $(leafloom_text '再次双击入口可重试。')" >&2; exit 1
         fi
-        echo "暂时性网络错误，重试 $ATTEMPT/2…"
+        echo "$(leafloom_text '暂时性网络错误，重试 ')$ATTEMPT/2…"
         /bin/sleep $((ATTEMPT * 2))
     done
     PYTHON=$("$UV" python find --system --managed-python --no-project --no-python-downloads "$PYTHON_VERSION")

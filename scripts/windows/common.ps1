@@ -28,7 +28,7 @@ function Get-TextHash([string]$Text) {
 
 function Show-VaultRagError([string]$Message) {
     Add-Type -AssemblyName System.Windows.Forms
-    [Windows.Forms.MessageBox]::Show($Message, 'VaultRag', [Windows.Forms.MessageBoxButtons]::OK, [Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+    [Windows.Forms.MessageBox]::Show($Message, (Get-LeafLoomText '本地知识库'), [Windows.Forms.MessageBoxButtons]::OK, [Windows.Forms.MessageBoxIcon]::Error) | Out-Null
 }
 
 function ConvertTo-NativeArgument([string]$Value) {
@@ -122,4 +122,17 @@ function Start-VaultRagSetup([string]$Repository) {
     # This is the user-visible installer progress window requested by the double-click flow.
     $Process = Start-Process -FilePath powershell.exe -ArgumentList $Arguments -WorkingDirectory $Repository -WindowStyle Normal -PassThru
     try { $Process.WaitForExit(); return $Process.ExitCode } finally { $Process.Dispose() }
+}
+function Get-LeafLoomText([string]$Message) {
+    $Locale = 'auto'
+    $PreferencePath = Join-Path (Get-VaultRagState) 'preferences.json'
+    if (Test-Path -LiteralPath $PreferencePath) {
+        try { $Locale = (Get-Content -LiteralPath $PreferencePath -Raw -Encoding UTF8 | ConvertFrom-Json).locale } catch { }
+    }
+    if ($Locale -eq 'auto') { $Locale = [Globalization.CultureInfo]::CurrentUICulture.Name }
+    $Code = if ($Locale -like 'zh*') { 'zh-CN' } elseif ($Locale -like 'ja*') { 'ja' } else { 'en' }
+    $Catalogue = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../../vault_rag/locales/$Code.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    $Property = $Catalogue.PSObject.Properties[$Message]
+    if ($null -ne $Property) { return $Property.Value }
+    return $Message
 }

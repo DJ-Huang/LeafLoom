@@ -1,0 +1,141 @@
+{
+  "language": "en",
+  "viewport": [
+    1600,
+    900
+  ],
+  "fixture": "Fictional notes; external AI disabled",
+  "scenes": [
+    {
+      "name": "search",
+      "source": "assets/promo/recordings/search.webm",
+      "start": 0.867,
+      "duration": 5.8,
+      "actions": [
+        {
+          "time": 0.8690000000000002,
+          "label": "Search the vault",
+          "x": 901,
+          "y": 357
+        },
+        {
+          "time": 2.4410000000000003,
+          "label": "Search",
+          "x": 1305,
+          "y": 357
+        },
+        {
+          "time": 4.1290000000000004,
+          "label": "Open the original",
+          "x": 920,
+          "y": 592
+        }
+      ]
+    },
+    {
+      "name": "graph",
+      "source": "assets/promo/recordings/graph.webm",
+      "start": 2.367,
+      "duration": 6.767,
+      "actions": [
+        {
+          "time": 0.7410000000000001,
+          "label": "Find a connected idea",
+          "x": 485,
+          "y": 197
+        },
+        {
+          "time": 1.7079999999999997,
+          "label": "Focus this note",
+          "x": 472,
+          "y": 286
+        },
+        {
+          "time": 2.8429999999999995,
+          "label": "Explore connections",
+          "x": 1393,
+          "y": 459
+        },
+        {
+          "time": 4.025,
+          "label": "Zoom into the graph",
+          "x": 1137,
+          "y": 811
+        }
+      ]
+    },
+    {
+      "name": "ai-review",
+      "source": "assets/promo/recordings/ai-review.webm",
+      "start": 1.567,
+      "duration": 4.867,
+      "actions": [
+        {
+          "time": 0.776,
+          "label": "Preview changes",
+          "x": 1406,
+          "y": 450
+        },
+        {
+          "time": 2.2800000000000002,
+          "label": "Accept into draft",
+          "x": 1298,
+          "y": 591
+        },
+        {
+          "time": 3.6790000000000003,
+          "label": "Review the draft",
+          "x": 1574,
+          "y": 67
+        }
+      ]
+    },
+    {
+      "name": "scope",
+      "source": "assets/promo/recordings/scope.webm",
+      "start": 0.667,
+      "duration": 3.533,
+      "actions": [
+        {
+          "time": 0.6940000000000001,
+          "label": "Choose the search scope",
+          "x": 556,
+          "y": 294
+        },
+        {
+          "time": 1.3860000000000001,
+          "label": "Include only Notes",
+          "x": 558,
+          "y": 320
+        },
+        {
+          "time": 2.1790000000000003,
+          "label": "Save your choice",
+          "x": 1241,
+          "y": 800
+        }
+      ]
+    },
+    {
+      "name": "write",
+      "source": "assets/promo/recordings/write.webm",
+      "start": 3.167,
+      "duration": 6.567,
+      "actions": [
+        {
+          "time": 0.8760000000000003,
+          "label": "Write a note",
+          "x": 920,
+          "y": 493
+        },
+        {
+          "time": 4.5649999999999995,
+          "label": "Read",
+          "x": 1326,
+          "y": 68
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

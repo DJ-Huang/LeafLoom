@@ -84,7 +84,7 @@ SETTINGS_TEST_URL=http://127.0.0.1:18082 node tests/frontend_settings.cjs
 
 RAG 验收使用未加载向量模型时的真实后端降级路径；未执行模型下载、真实向量构建或性能压测。未进行 Windows 原生浏览器验收，也未重跑完整后端套件。
 
-本机临时服务与验收脚本保存在 `.cache/notion-ui/`，不属于发布内容。实际截图和 JSON 结果保存在本次 Codex 的可视化附件目录。
+公开截图采用虚构演示资料，见 [媒体制作](MEDIA.md)；运行验收使用独立配置和端口。
 
 ## 构建与使用
 

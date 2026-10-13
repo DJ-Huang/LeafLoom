@@ -9,9 +9,9 @@ from vault_rag.local_state import Files, LINK_RE, digest, under
 from vault_rag.platform_support import path_key
 
 def tokens(text):
-    text=text.lower();words=re.findall(r'[a-z0-9_]+(?:[-/][a-z0-9_]+)*|[\u3400-\u9fff]+',text);out=[]
+    text=text.lower();words=re.findall(r'[a-z0-9_]+(?:[-/][a-z0-9_]+)*|[\u3040-\u30ff\u3400-\u9fff]+',text);out=[]
     for w in words:
-        if re.search(r'[\u3400-\u9fff]',w):out.extend([w] if len(w)==1 else [w[i:i+2] for i in range(len(w)-1)])
+        if re.search(r'[\u3040-\u30ff\u3400-\u9fff]',w):out.extend([w] if len(w)==1 else [w[i:i+2] for i in range(len(w)-1)])
         else:out.append(w)
     return out
 

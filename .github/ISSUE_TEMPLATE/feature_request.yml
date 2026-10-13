@@ -1,0 +1,15 @@
+name: Feature request / 功能建议 / 機能提案
+description: Describe a need and the outcome you want.
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What are you trying to do? / 使用需求 / 実現したいこと
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome / 期望效果 / 期待する結果
+    validations:
+      required: true

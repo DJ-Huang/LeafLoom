@@ -5,9 +5,11 @@ build-backend = "hatchling.build"
 [project]
 name = "vault-rag"
 version = "0.1.0"
-description = "Obsidian vault RAG: Local knowledge web app + embedded BGE-M3 + Wiki/BM25 + HTTP MCP"
+description = "LeafLoom: local knowledge workspace, source-linked search, knowledge graph and HTTP MCP"
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.11"
+
 dependencies = [
   "llama-index-core>=0.11.0,<0.15.0",
   "sentence-transformers>=5.7,<6",
@@ -32,6 +34,11 @@ dependencies = [
   "msvc-runtime==14.44.35112; sys_platform == 'win32' and python_version < '3.15'",
 ]
 
+[project.urls]
+Homepage = "https://github.com/DJ-Huang/LeafLoom"
+Repository = "https://github.com/DJ-Huang/LeafLoom"
+Issues = "https://github.com/DJ-Huang/LeafLoom/issues"
+
 [project.scripts]
 vault-rag = "vault_rag.cli:main"
 
@@ -48,4 +55,7 @@ torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'win32'" }]
 
 [tool.hatch.build.targets.wheel.force-include]
 "vault_rag/static" = "vault_rag/static"
+"vault_rag/locales" = "vault_rag/locales"
+"vault_rag/examples" = "vault_rag/examples"
+"assets/brand" = "vault_rag/brand"
 "wiki-search/SKILL.md" = "vault_rag/skills/wiki-search/SKILL.md"

@@ -1,3 +1,5 @@
+import {Diagnostic} from './i18n';
+import {t,useLocale} from './i18n';
 import React,{forwardRef,useEffect,useImperativeHandle,useMemo,useRef,useState} from 'react';
 import cytoscape,{Core,CollectionReturnValue,NodeSingular} from 'cytoscape';
 import {ArrowUpRight,ChevronLeft,Focus,Network,Plus,Minus,Search,SlidersHorizontal,X,RotateCcw,FileText,ChevronRight} from 'lucide-react';
@@ -6,12 +8,14 @@ import {useApi} from './hooks';
 import {StatusNotice} from './settings-ui';
 import {Action} from './ui';
 import {GraphData,GraphIndex,graphIndex,graphSlice,groupOf} from './graph-model';
+const displayGroup=(name:string)=>name==='根目录'?t('根目录'):name;
 import './graph.css';
 import {graphWebGLAvailable} from './graph-renderer';
 
 const empty:GraphData={nodes:[],links:[]};
 type Camera={fit:()=>void,zoom:(factor:number)=>void};
 export function GraphPage({path,onOpen,active}:{path:string,onOpen:OpenNote,active:boolean}){
+ useLocale();
  const {data,error,refresh}=useApi('graph'),index=useMemo(()=>graphIndex(data||empty),[data]);
  const [center,setCenter]=useState(''),[depth,setDepth]=useState(1),[group,setGroup]=useState(''),[orphans,setOrphans]=useState(false);
  const [selected,setSelected]=useState(''),[query,setQuery]=useState(''),[searching,setSearching]=useState(false),[cursor,setCursor]=useState(0);
@@ -29,32 +33,32 @@ export function GraphPage({path,onOpen,active}:{path:string,onOpen:OpenNote,acti
  const select=(id:string)=>{setSelected(id);setSearching(false);setQuery('');};
  const find=(id:string)=>{if(!slice.nodes.some(node=>node.id===id)){setCenter('');setGroup('');setOrphans(true);}select(id);};
  const reset=()=>{setCenter('');setGroup('');setOrphans(false);setSelected('');setQuery('');setDepth(1);};
- return <section className="graph-page" hidden={!active} aria-label="关系图谱">
-  <header className="graph-page-header"><div><div className="graph-eyebrow"><Network size={15}/>探索与连接</div><h1>关系图谱</h1><p>沿着一条连接，发现下一个想法。</p></div><div className="graph-scope" aria-label="图谱范围"><button aria-pressed={!center} onClick={()=>{setCenter('');setSelected('');}}>全部笔记</button><button disabled={!path.toLowerCase().endsWith('.md')} aria-pressed={center===path&&!!path} onClick={()=>{setCenter(path);setGroup('');setSelected(path);}}>当前笔记</button></div></header>
-  {error?<StatusNotice kind="error">{error}<button onClick={()=>void refresh()}>重试</button></StatusNotice>:!data?<StatusNotice kind="busy">正在读取笔记关系…</StatusNotice>:<>
+ return <section className="graph-page" hidden={!active} aria-label={t("关系图谱")}>
+  <header className="graph-page-header"><div><div className="graph-eyebrow"><Network size={15}/>{t("探索与连接")}</div><h1>{t("关系图谱")}</h1><p>{t("沿着一条连接，发现下一个想法。")}</p></div><div className="graph-scope" aria-label={t("图谱范围")}><button aria-pressed={!center} onClick={()=>{setCenter('');setSelected('');}}>{t("全部笔记")}</button><button disabled={!path.toLowerCase().endsWith('.md')} aria-pressed={center===path&&!!path} onClick={()=>{setCenter(path);setGroup('');setSelected(path);}}>{t("当前笔记")}</button></div></header>
+  {error?<StatusNotice kind="error">{<Diagnostic message={error}/>}<button onClick={()=>void refresh()}>{t("重试")}</button></StatusNotice>:!data?<StatusNotice kind="busy">{t("正在读取笔记关系…")}</StatusNotice>:<>
    <div className="graph-toolbar">
     <div className="graph-search" onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))setSearching(false);}}>
-     <Search size={16}/><input ref={searchRef} aria-label="搜索图谱笔记" placeholder="搜索笔记，定位连接…" value={query} role="combobox" aria-expanded={searching} aria-controls="graph-search-results" aria-autocomplete="list" aria-activedescendant={searching&&matches[cursor]?'graph-result-'+cursor:undefined} onFocus={()=>setSearching(true)} onChange={event=>{setQuery(event.target.value);setCursor(0);setSearching(true);}} onKeyDown={event=>{
+     <Search size={16}/><input ref={searchRef} aria-label={t("搜索图谱笔记")} placeholder={t("搜索笔记，定位连接…")} value={query} role="combobox" aria-expanded={searching} aria-controls="graph-search-results" aria-autocomplete="list" aria-activedescendant={searching&&matches[cursor]?'graph-result-'+cursor:undefined} onFocus={()=>setSearching(true)} onChange={event=>{setQuery(event.target.value);setCursor(0);setSearching(true);}} onKeyDown={event=>{
       if(event.key==='Escape'){event.preventDefault();setSearching(false);searchRef.current?.blur();}
       if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();setSearching(true);setCursor(value=>Math.max(0,Math.min(matches.length-1,value+(event.key==='ArrowDown'?1:-1))));}
       if(event.key==='Enter'&&matches[cursor]){event.preventDefault();find(matches[cursor].id);searchRef.current?.blur();}
-     }}/>{query&&<Action title="清除图谱搜索" onClick={()=>{setQuery('');setCursor(0);searchRef.current?.focus();}}><X size={14}/></Action>}
-     {searching&&<div id="graph-search-results" role="listbox" className="graph-search-results"><small>{query?'匹配的笔记':'从连接最多的笔记开始'}</small>{matches.length?matches.map((node,i)=><button key={node.id} id={'graph-result-'+i} role="option" aria-selected={i===cursor} onMouseDown={event=>event.preventDefault()} onClick={()=>find(node.id)}><i style={{background:index.colors.get(groupOf(node.id))}}/><span><strong>{node.label}</strong><small>{node.id}</small></span><em>{index.neighbors.get(node.id)!.size}</em></button>):<p>没有匹配的笔记，试试标题或路径。</p>}</div>}
+     }}/>{query&&<Action title={t("清除图谱搜索")} onClick={()=>{setQuery('');setCursor(0);searchRef.current?.focus();}}><X size={14}/></Action>}
+     {searching&&<div id="graph-search-results" role="listbox" className="graph-search-results"><small>{query?t("匹配的笔记"):t("从连接最多的笔记开始")}</small>{matches.length?matches.map((node,i)=><button key={node.id} id={'graph-result-'+i} role="option" aria-selected={i===cursor} onMouseDown={event=>event.preventDefault()} onClick={()=>find(node.id)}><i style={{background:index.colors.get(groupOf(node.id))}}/><span><strong>{node.label}</strong><small>{node.id}</small></span><em>{index.neighbors.get(node.id)!.size}</em></button>):<p>{t("没有匹配的笔记，试试标题或路径。")}</p>}</div>}
     </div>
-    <button className={'graph-filter-toggle'+(filters?' active':'')} aria-expanded={filters} aria-controls="graph-filters" onClick={()=>setFilters(!filters)}><SlidersHorizontal size={15}/>显示与筛选</button>
+    <button className={'graph-filter-toggle'+(filters?' active':'')} aria-expanded={filters} aria-controls="graph-filters" onClick={()=>setFilters(!filters)}><SlidersHorizontal size={15}/>{t("显示与筛选")}</button>
    </div>
-   {filters&&<div id="graph-filters" className="graph-filters"><label>目录<select aria-label="筛选图谱目录" value={group} onChange={event=>{setGroup(event.target.value);setSelected('');}}><option value="">全部目录</option>{groups.map(([name,count])=><option key={name} value={name}>{name} · {count}</option>)}</select></label><label><input type="checkbox" checked={orphans} onChange={event=>setOrphans(event.target.checked)}/>显示独立笔记 <span>{orphanCount}</span></label><label><input type="checkbox" checked={labels} onChange={event=>setLabels(event.target.checked)}/>全部名称</label><label><input type="checkbox" checked={arrows} onChange={event=>setArrows(event.target.checked)}/>连接方向</label></div>}
-   {center&&<div className="graph-focus-bar"><button onClick={reset}><ChevronLeft size={14}/>返回全图</button><span title={center}>围绕「{centerNode?.label||center}」探索</span><label>连接层级<select aria-label="连接层级" value={depth} onChange={event=>setDepth(Number(event.target.value))}>{[1,2,3].map(value=><option key={value} value={value}>{value} 层</option>)}</select></label></div>}
+   {filters&&<div id="graph-filters" className="graph-filters"><label>{t("目录")}<select aria-label={t("筛选图谱目录")} value={group} onChange={event=>{setGroup(event.target.value);setSelected('');}}><option value="">{t("全部目录")}</option>{groups.map(([name,count])=><option key={name} value={name}>{displayGroup(name)} · {count}</option>)}</select></label><label><input type="checkbox" checked={orphans} onChange={event=>setOrphans(event.target.checked)}/>{t("显示独立笔记")}{" "}<span>{orphanCount}</span></label><label><input type="checkbox" checked={labels} onChange={event=>setLabels(event.target.checked)}/>{t("全部名称")}</label><label><input type="checkbox" checked={arrows} onChange={event=>setArrows(event.target.checked)}/>{t("连接方向")}</label></div>}
+   {center&&<div className="graph-focus-bar"><button onClick={reset}><ChevronLeft size={14}/>{t("返回全图")}</button><span title={center}>{t("围绕「")}{centerNode?.label||center}{t("」探索")}</span><label>{t("连接层级")}<select aria-label={t("连接层级")} value={depth} onChange={event=>setDepth(Number(event.target.value))}>{[1,2,3].map(value=><option key={value} value={value}>{value} {" "}{t("层")}</option>)}</select></label></div>}
    <div className={'graph-workspace'+(selectedNode?' with-inspector':'')}>
     <div className="graph-stage">
-     <div className="graph-summary"><strong>{slice.nodes.length.toLocaleString()}</strong> / {index.nodes.size.toLocaleString()} 篇笔记<span>·</span>{slice.links.length.toLocaleString()} 条连接{group&&<button onClick={()=>setGroup('')}>{group}<X size={12}/></button>}</div>
-     {slice.nodes.length?<GraphCanvas ref={camera} data={slice} index={index} selected={selected} onSelect={select} labels={labels} arrows={arrows} revision={revision} active={active} onZoom={setZoom}/>:<div className="graph-empty"><Network size={36} strokeWidth={1.2}/><h2>{index.nodes.size?'这个范围还没有连接':'从第一篇笔记开始'}</h2><p>{index.nodes.size?'切换目录，或显示尚未链接到其他内容的独立笔记。':'在 Markdown 中使用 [[笔记名称]] 建立连接。'}</p>{index.nodes.size>0&&<button onClick={()=>{setGroup('');setCenter('');setOrphans(true);}}>显示全部笔记</button>}</div>}
-     <div className="graph-camera"><Action title="放大图谱" onClick={()=>camera.current?.zoom(1.3)}><Plus size={17}/></Action><span aria-label="图谱缩放比例">{Math.round(zoom*100)}%</span><Action title="缩小图谱" onClick={()=>camera.current?.zoom(1/1.3)}><Minus size={17}/></Action><hr/><Action title="适应画布" onClick={()=>camera.current?.fit()}><Focus size={17}/></Action><Action title="重新布局" onClick={()=>setRevision(value=>value+1)}><RotateCcw size={15}/></Action></div>
-     <div className="graph-gesture-hint">拖动画布移动 · 滚轮或双指缩放 · 单击查看关联</div>
+     <div className="graph-summary"><strong>{slice.nodes.length.toLocaleString()}</strong> / {index.nodes.size.toLocaleString()} {" "}{t("篇笔记")}<span>·</span>{slice.links.length.toLocaleString()} {" "}{t("条连接")}{group&&<button onClick={()=>setGroup('')}>{displayGroup(group)}<X size={12}/></button>}</div>
+     {slice.nodes.length?<GraphCanvas ref={camera} data={slice} index={index} selected={selected} onSelect={select} labels={labels} arrows={arrows} revision={revision} active={active} onZoom={setZoom}/>:<div className="graph-empty"><Network size={36} strokeWidth={1.2}/><h2>{index.nodes.size?t("这个范围还没有连接"):t("从第一篇笔记开始")}</h2><p>{index.nodes.size?t("切换目录，或显示尚未链接到其他内容的独立笔记。"):t("在 Markdown 中使用 [[笔记名称]] 建立连接。")}</p>{index.nodes.size>0&&<button onClick={()=>{setGroup('');setCenter('');setOrphans(true);}}>{t("显示全部笔记")}</button>}</div>}
+     <div className="graph-camera"><Action title={t("放大图谱")} onClick={()=>camera.current?.zoom(1.3)}><Plus size={17}/></Action><span aria-label={t("图谱缩放比例")}>{Math.round(zoom*100)}%</span><Action title={t("缩小图谱")} onClick={()=>camera.current?.zoom(1/1.3)}><Minus size={17}/></Action><hr/><Action title={t("适应画布")} onClick={()=>camera.current?.fit()}><Focus size={17}/></Action><Action title={t("重新布局")} onClick={()=>setRevision(value=>value+1)}><RotateCcw size={15}/></Action></div>
+     <div className="graph-gesture-hint">{t("拖动画布移动 · 滚轮或双指缩放 · 单击查看关联")}</div>
     </div>
-    {selectedNode&&<aside className="graph-inspector" aria-label="笔记关联详情"><header><span>笔记与连接</span><Action title="关闭笔记详情" onClick={()=>setSelected('')}><X size={16}/></Action></header><div className="graph-note-icon" style={{color:index.colors.get(groupOf(selected))}}><FileText size={25} strokeWidth={1.4}/></div><h2>{selectedNode.label}</h2><p className="graph-note-path">{selected}</p><div className="graph-note-actions"><button className="primary" onClick={()=>onOpen(selected)}>打开笔记<ArrowUpRight size={14}/></button><button onClick={()=>{setCenter(selected);setGroup('');}}>探索连接<Network size={14}/></button></div><div className="graph-neighbor-heading">相连笔记<span>{neighbors.length}</span></div><div className="graph-neighbors">{neighbors.length?neighbors.map(node=><button key={node.id} onClick={()=>find(node.id)} title={node.id}><i style={{background:index.colors.get(groupOf(node.id))}}/><span>{node.label}</span><ChevronRight size={13}/></button>):<p>这篇笔记还没有双链连接。</p>}</div></aside>}
+    {selectedNode&&<aside className="graph-inspector" aria-label={t("笔记关联详情")}><header><span>{t("笔记与连接")}</span><Action title={t("关闭笔记详情")} onClick={()=>setSelected('')}><X size={16}/></Action></header><div className="graph-note-icon" style={{color:index.colors.get(groupOf(selected))}}><FileText size={25} strokeWidth={1.4}/></div><h2>{selectedNode.label}</h2><p className="graph-note-path">{selected}</p><div className="graph-note-actions"><button className="primary" onClick={()=>onOpen(selected)}>{t("打开笔记")}<ArrowUpRight size={14}/></button><button onClick={()=>{setCenter(selected);setGroup('');}}>{t("探索连接")}<Network size={14}/></button></div><div className="graph-neighbor-heading">{t("相连笔记")}<span>{neighbors.length}</span></div><div className="graph-neighbors">{neighbors.length?neighbors.map(node=><button key={node.id} onClick={()=>find(node.id)} title={node.id}><i style={{background:index.colors.get(groupOf(node.id))}}/><span>{node.label}</span><ChevronRight size={13}/></button>):<p>{t("这篇笔记还没有双链连接。")}</p>}</div></aside>}
    </div>
-   <footer className="graph-legend"><span>按目录着色</span>{groups.slice(0,7).map(([name,count])=><button key={name} aria-pressed={group===name} title={name+' · '+count+' 篇'} onClick={()=>{setGroup(group===name?'':name);setSelected('');}}><i style={{background:index.colors.get(name)}}/>{name}</button>)}{groups.length>7&&<button onClick={()=>setFilters(true)}>另 {groups.length-7} 个目录</button>}<small>节点越大，连接越多</small></footer>
+   <footer className="graph-legend"><span>{t("按目录着色")}</span>{groups.slice(0,7).map(([name,count])=><button key={name} aria-pressed={group===name} title={name+' · '+count+t(" 篇")} onClick={()=>{setGroup(group===name?'':name);setSelected('');}}><i style={{background:index.colors.get(name)}}/>{displayGroup(name)}</button>)}{groups.length>7&&<button onClick={()=>setFilters(true)}>{t("另")}{" "}{groups.length-7} {" "}{t("个目录")}</button>}<small>{t("节点越大，连接越多")}</small></footer>
   </>}
  </section>;
 }
@@ -103,7 +107,7 @@ const GraphCanvas=forwardRef<Camera,{data:GraphData,index:GraphIndex,selected:st
   ]});}catch{
    // Cytoscape associates the core before allocating its renderer. Dispose a partial init too.
    const partial=(container.current as HTMLDivElement&{_cyreg?:{cy?:Core}})._cyreg?.cy;
-   partial?.destroy();setBusy(false);setRendererError('图谱绘制未能启动，请重新尝试或刷新页面。');return;
+   partial?.destroy();setBusy(false);setRendererError(t("图谱绘制未能启动，请重新尝试或刷新页面。"));return;
   }
   cyRef.current=cy;
   const gpuCanvas=container.current.querySelector<HTMLCanvasElement>('canvas[data-id$="-webgl"]');
@@ -141,7 +145,7 @@ const GraphCanvas=forwardRef<Camera,{data:GraphData,index:GraphIndex,selected:st
   worker.onerror=()=>{if(alive){setBusy(false);setFailed(true);}worker.terminate();};
   const lost=(event:Event)=>{event.preventDefault();alive=false;clearTimeout(settle);clearTimeout(hover);worker.terminate();cy.stop();cyRef.current=null;
    if(cy.nodes().length)savedView.current={data,revision,positions:cy.nodes().map(node=>({id:node.id(),...node.position()})),zoom:cy.zoom(),pan:{...cy.pan()}};
-   setBusy(false);setRendererError('图形加速连接中断。重新连接后可继续浏览原来的位置。');
+   setBusy(false);setRendererError(t("图形加速连接中断。重新连接后可继续浏览原来的位置。"));
   };
   gpuCanvas?.addEventListener('webglcontextlost',lost);
   if(restore)populate(restore.positions);else worker.postMessage(data);
@@ -151,8 +155,8 @@ const GraphCanvas=forwardRef<Camera,{data:GraphData,index:GraphIndex,selected:st
  useEffect(()=>{cyRef.current?.stop();highlight(selected);if(selected)focus(selected);},[selected]);
  useEffect(()=>{const cy=cyRef.current;if(cy)cy.emit('zoom');},[labels,arrows]);
  useEffect(()=>{if(active){cyRef.current?.resize();}},[active]);
- return <><div className="graph" ref={container} tabIndex={0} role="region" aria-label="笔记关系图。方向键平移，加减号缩放，0 适应画布；可用搜索选择笔记。" data-renderer={gpu?'webgl2':'canvas'} aria-busy={!failed&&!rendererError&&(busy||completed!==data)} onKeyDown={event=>{
+ return <><div className="graph" ref={container} tabIndex={0} role="region" aria-label={t("笔记关系图。方向键平移，加减号缩放，0 适应画布；可用搜索选择笔记。")} data-renderer={gpu?'webgl2':'canvas'} aria-busy={!failed&&!rendererError&&(busy||completed!==data)} onKeyDown={event=>{
   const cy=cyRef.current;if(!cy||event.target!==event.currentTarget)return;cy.stop();
   if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=','-','0','Escape'].includes(event.key)){event.preventDefault();if(event.key==='0')fit();else if(event.key==='Escape')latest.current.onSelect('');else if(['+','=','-'].includes(event.key))zoomBy(event.key==='-'?1/1.3:1.3);else cy.panBy({x:event.key==='ArrowLeft'?50:event.key==='ArrowRight'?-50:0,y:event.key==='ArrowUp'?50:event.key==='ArrowDown'?-50:0});}
- }}/>{(busy||completed!==data)&&!failed&&!rendererError&&<div className="graph-loading"><StatusNotice kind="busy">正在展开笔记之间的连接…</StatusNotice></div>}{failed&&<div className="graph-loading"><StatusNotice kind="error">图谱布局未能完成。<button onClick={()=>setRetry(value=>value+1)}>重新尝试</button></StatusNotice></div>}{rendererError&&<div className="graph-loading"><StatusNotice kind="error">{rendererError}<button onClick={()=>setRetry(value=>value+1)}>重新连接</button></StatusNotice></div>}<span className="graph-renderer-badge" title={gpu?'WebGL 2 绘制；是否使用硬件加速由浏览器决定。':'浏览器未提供 WebGL 2，使用兼容绘制。'}>{rendererError?'绘制已暂停':gpu?'WebGL 加速':'兼容绘制'}</span></>;
+ }}/>{(busy||completed!==data)&&!failed&&!rendererError&&<div className="graph-loading"><StatusNotice kind="busy">{t("正在展开笔记之间的连接…")}</StatusNotice></div>}{failed&&<div className="graph-loading"><StatusNotice kind="error">{t("图谱布局未能完成。")}<button onClick={()=>setRetry(value=>value+1)}>{t("重新尝试")}</button></StatusNotice></div>}{rendererError&&<div className="graph-loading"><StatusNotice kind="error">{rendererError}<button onClick={()=>setRetry(value=>value+1)}>{t("重新连接")}</button></StatusNotice></div>}<span className="graph-renderer-badge" title={gpu?t("WebGL 2 绘制；是否使用硬件加速由浏览器决定。"):t("浏览器未提供 WebGL 2，使用兼容绘制。")}>{rendererError?t("绘制已暂停"):gpu?t("WebGL 加速"):t("兼容绘制")}</span></>;
 });

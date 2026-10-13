@@ -7,13 +7,20 @@ from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Respon
 from starlette.middleware.gzip import GZipMiddleware
 from mcp.server.fastmcp import FastMCP
 from vault_rag.local_state import LocalConfig,ConflictError,atomic_write
-from vault_rag.knowledge import Runtime
 from vault_rag.html_preview import HtmlPreviews
 from vault_rag.platform_support import choose_directory, private_file_mode, is_windows
 from vault_rag.http_cache import conditional_file
 from vault_rag.skill_install import install_skill, skill_status
+from vault_rag.ai_service import AiService
+from vault_rag.ai_routes import ai_router, ai_mcp_server
+from vault_rag.preferences import Preferences
+from vault_rag.demo import create_demo
+from vault_rag.i18n import error_code
 
-def json_response(value,status=200):return JSONResponse(json.loads(json.dumps(value,ensure_ascii=False,default=str)),status_code=status)
+def json_response(value,status=200):
+    if isinstance(value,dict) and isinstance(value.get('error'),str):
+        value={**value,'error_code':value.get('error_code',error_code(value['error']))}
+    return JSONResponse(json.loads(json.dumps(value,ensure_ascii=False,default=str)),status_code=status)
 
 class StaticCompression:
     """Compress app bundles without buffering SSE or changing media Range bodies."""
@@ -24,11 +31,19 @@ class StaticCompression:
         await app(scope,receive,send)
 
 def create_app(config=None,runtime=None,*,start_background=True,static_dir=None):
-    config=config or LocalConfig();runtime=runtime or Runtime(config);port=config.data.get('port',18080)
+    config=config or LocalConfig()
+    if runtime is None:
+        from vault_rag.knowledge import Runtime
+        runtime=Runtime(config)
+    port=config.data.get('port',18080)
     previews=HtmlPreviews(config)
+    preferences=Preferences(config.directory)
     secret_file=config.directory/'auth-token'
     if not secret_file.exists():atomic_write(secret_file,secrets.token_hex(32).encode());private_file_mode(secret_file)
     token=secret_file.read_text(encoding='utf-8').strip();csrf=hmac.new(token.encode(),b'browser-write-v1',hashlib.sha256).hexdigest()
+    ai=AiService(config,runtime)
+    ai_mcp=ai_mcp_server(ai)
+    ai_app=ai_mcp.streamable_http_app()
     mcp=FastMCP('vault-rag',host='127.0.0.1',port=port,stateless_http=True,json_response=True)
     def result(fn,*args,**kwargs):
         try:return json.dumps(fn(*args,**kwargs),ensure_ascii=False,default=str)
@@ -60,18 +75,26 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     mcp_app=mcp.streamable_http_app()
     @contextlib.asynccontextmanager
     async def lifespan(app):
-        async with mcp.session_manager.run():
+        async with mcp.session_manager.run(),ai_mcp.session_manager.run():
+            ai.loop=asyncio.get_running_loop()
             if start_background:runtime.start()
-            yield
-            runtime.stop()
+            try:yield
+            finally:
+                await ai.close()
+                runtime.stop()
     app=FastAPI(lifespan=lifespan,docs_url=None,redoc_url=None)
     app.add_middleware(StaticCompression)
     app.state.runtime=runtime;app.state.csrf=csrf
+    app.state.ai=ai
+    app.include_router(ai_router(ai))
     @app.middleware('http')
     async def local_security(request,call_next):
         allowed={f'127.0.0.1:{port}',f'localhost:{port}'}
         if request.headers.get('host') not in allowed:return json_response({'error':'仅允许本机访问'},403)
         path=request.url.path
+        if path=='/ai-mcp':
+            try:ai.authorized(request.headers.get('authorization',''))
+            except (ValueError,KeyError):return json_response({'error':'知识助手连接未授权或会话已停止'},401)
         preview_read=path.startswith('/html-preview/') and request.method in ('GET','HEAD')
         origin=request.headers.get('origin')
         if origin and origin not in {f'http://{h}' for h in allowed} and not (preview_read and origin=='null'):return json_response({'error':'来源不允许'},403)
@@ -84,8 +107,10 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         if path in ('/api/search-files','/api/graph','/api/related','/api/query','/api/base','/api/templates') and runtime.catalog.root!=config.data.get('root'):
             return json_response({'error':'目录信息正在更新，请稍后重试'},503)
         try:response=await call_next(request)
-        except ConflictError as e:return json_response({'error':str(e),'conflict':True},409)
-        except (ValueError,FileNotFoundError,UnicodeDecodeError) as e:return json_response({'error':str(e)},400)
+        except ConflictError as e:return json_response({'error':str(e),'error_code':'write_conflict','conflict':True},409)
+        except FileNotFoundError as e:return json_response({'error':str(e),'error_code':'not_found'},400)
+        except UnicodeDecodeError as e:return json_response({'error':str(e),'error_code':'invalid_text_encoding'},400)
+        except ValueError as e:return json_response({'error':str(e),'error_code':'invalid_request'},400)
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Referrer-Policy']='no-referrer'
         if path.startswith('/api/') and path!='/api/media':response.headers.setdefault('Cache-Control','no-store')
@@ -94,10 +119,22 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     @app.get('/healthz')
     async def health():return {'ok':True,'service':'vault-rag'}
     def session_data():
-        return {'config':config.data,'csrf':csrf,'suggested_root':str(Path.home()/'DJKnowledges'),
+        return {'config':config.data,'csrf':csrf,'suggested_root':'','demo':getattr(app.state,'demo',False),
                 'service_instance_id':runtime.events.instance,'catalog_version':runtime.catalog.version}
     @app.get('/api/session')
     async def session():return json_response(session_data())
+    @app.get('/api/preferences')
+    async def read_preferences():
+        return json_response(await asyncio.to_thread(preferences.for_root,config.data.get('root')))
+    @app.put('/api/preferences')
+    async def save_preferences(request:Request):
+        await asyncio.to_thread(preferences.save,await request.json(),config.data.get('root'))
+        return json_response(preferences.for_root(config.data.get('root')))
+    @app.post('/api/demo')
+    async def demo(request:Request):
+        body=await request.json()
+        if not isinstance(body,dict):raise ValueError('Invalid demo request')
+        return json_response(await asyncio.to_thread(create_demo,config.directory,body.get('locale','en')))
     @app.get('/api/events')
     async def events(request:Request):
         async def stream():
@@ -114,12 +151,15 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
                     yield 'id: '+str(after)+'\ndata: '+json.dumps(message,ensure_ascii=False,default=str)+'\n\n'
         return StreamingResponse(stream(),media_type='text/event-stream',headers={'Cache-Control':'no-store','X-Accel-Buffering':'no'})
     @app.get('/api/bootstrap')
-    async def bootstrap():return json_response({'config':config.data,'status':runtime.status(),'csrf':csrf,'suggested_root':str(Path.home()/'DJKnowledges')})
+    async def bootstrap():return json_response({'config':config.data,'status':runtime.status(),'csrf':csrf,'suggested_root':''})
     @app.get('/api/status')
     async def status():return json_response(runtime.status())
     @app.post('/api/config')
     async def configure(request:Request):
-        body=await request.json();value=await asyncio.to_thread(config.save,body);runtime.configuration_changed();return json_response(value)
+        body=await request.json()
+        if 'root' in body and body['root']!=config.data.get('root'):
+            for key in list(ai.tasks):await ai.stop(key)
+        value=await asyncio.to_thread(config.save,body);runtime.configuration_changed();return json_response(value)
     @app.post('/api/choose-directory')
     async def choose_current_directory():
         # Triggered only by an explicit click in the local webpage, not at login.
@@ -250,7 +290,10 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         threading.Thread(target=download,daemon=True,name='model-download').start();return {'state':'模型准备已开始'}
     # The SDK owns /mcp; share its single session manager in the root lifespan.
     app.router.routes.extend(mcp_app.routes)
+    app.router.routes.extend(ai_app.routes)
     static=Path(static_dir) if static_dir else Path(__file__).parent/'static'
+    @app.get('/favicon.svg')
+    async def favicon():return FileResponse(static/'favicon.svg',media_type='image/svg+xml')
     @app.get('/assets/{path:path}')
     async def asset(path:str):
         p=(static/'assets'/path).resolve()
@@ -263,6 +306,20 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         if not (static/'index.html').is_file():return HTMLResponse('网页尚未构建，请运行前端构建',status_code=503)
         response=HTMLResponse((static/'index.html').read_text(encoding='utf-8'),headers={'Cache-Control':'no-store'});response.set_cookie('vault_session',token,httponly=True,samesite='strict',max_age=365*86400);return response
     return app
+
+def create_server(app, **options):
+    import uvicorn
+    class LocalServer(uvicorn.Server):
+        async def shutdown(self, sockets=None):
+            # CLI HTTP MCP clients keep SSE connections open. Close workers BEFORE
+            # uvicorn waits for those connections, not only in ASGI lifespan cleanup.
+            runtime=app.state.runtime
+            if hasattr(runtime,'request_stop'):runtime.request_stop()
+            await app.state.ai.close()
+            await super().shutdown(sockets)
+    return LocalServer(uvicorn.Config(app,host='127.0.0.1',workers=1,access_log=False,
+                                    timeout_graceful_shutdown=20,**options))
+
 
 def serve(*, instance=None):
     import uvicorn
@@ -279,8 +336,7 @@ def serve(*, instance=None):
             # Python 3.12's Proactor transport can leave reset loopback sockets
             # awaiting closure indefinitely. HTTP MCP needs TCP, not async pipes.
             app=create_app(config)
-            server=uvicorn.Server(uvicorn.Config(app,host='127.0.0.1',port=config.data.get('port',18080),workers=1,access_log=False,
-                                                loop='asyncio:SelectorEventLoop',timeout_graceful_shutdown=20))
+            server=create_server(app,port=config.data.get('port',18080),loop='asyncio:SelectorEventLoop')
             finished=threading.Event()
             def watch():
                 while not finished.is_set():
@@ -291,4 +347,4 @@ def serve(*, instance=None):
             try:server.run()
             finally:finished.set();watcher.join()
     else:
-        uvicorn.run(create_app(config),host='127.0.0.1',port=config.data.get('port',18080),workers=1,access_log=False)
+        create_server(create_app(config),port=config.data.get('port',18080)).run()

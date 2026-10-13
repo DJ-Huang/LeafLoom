@@ -1,3 +1,4 @@
+import {t,useLocale} from './i18n';
 import React,{useEffect,useRef,useState} from 'react';
 import {ExternalLink,Maximize,Minimize,RefreshCw} from 'lucide-react';
 import {api,Change} from './api';
@@ -5,6 +6,7 @@ import {api,Change} from './api';
 const sandbox='allow-scripts allow-modals allow-downloads allow-popups allow-popups-to-escape-sandbox';
 
 export function HtmlPreview({path,root,text,active}:{path:string,root:string,text:string,active:boolean}){
+ useLocale();
  const frame=useRef<HTMLIFrameElement>(null);
  const [src,setSrc]=useState('');const [location,setLocation]=useState('');
  const [full,setFull]=useState(false);const [busy,setBusy]=useState(false);
@@ -43,7 +45,7 @@ export function HtmlPreview({path,root,text,active}:{path:string,root:string,tex
   const listener=(event:MessageEvent)=>{
    if(event.source!==frame.current?.contentWindow||event.origin!=='null')return;
    const data=event.data;if(!data||typeof data!=='object')return;
-   if(data.type==='vault-html-preview-expired'){setError('网页预览已失效，请点击刷新重新打开。');loaded.current=undefined;}
+   if(data.type==='vault-html-preview-expired'){setError(t("网页预览已失效，请点击刷新重新打开。"));loaded.current=undefined;}
    if(data.type==='vault-html-preview-exit')setFull(false);
    if(data.type==='vault-html-preview-location'&&typeof data.url==='string'){
     try{
@@ -61,14 +63,14 @@ export function HtmlPreview({path,root,text,active}:{path:string,root:string,tex
  },[]);
  useEffect(()=>{if(!active)setFull(false);},[active]);
 
- return <section className={'html-preview'+(full?' html-preview-full':'')} hidden={!active} aria-label="HTML 网页浏览">
+ return <section className={'html-preview'+(full?' html-preview-full':'')} hidden={!active} aria-label={t("HTML 网页浏览")}>
   <div className="html-preview-toolbar">
-   <span>{full?'全屏阅读 · '+path.split('/').pop():'网页浏览'}</span>
-   <button title="刷新网页" disabled={busy} onClick={()=>setRefresh(x=>x+1)}><RefreshCw size={15}/>刷新</button>
-   <a className="button" href={location||undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!src||!!error} onClick={e=>{if(!src||error)e.preventDefault();}}><ExternalLink size={15}/>独立标签页</a>
-   <button title={full?'退出全屏阅读':'全屏阅读'} onClick={()=>setFull(x=>!x)}>{full?<Minimize size={15}/>:<Maximize size={15}/>} {full?'退出全屏':'全屏阅读'}</button>
+   <span>{full?t("全屏阅读 · ")+path.split('/').pop():t("网页浏览")}</span>
+   <button title={t("刷新网页")} disabled={busy} onClick={()=>setRefresh(x=>x+1)}><RefreshCw size={15}/>{t("刷新")}</button>
+   <a className="button" href={location||undefined} target="_blank" rel="noopener noreferrer" aria-disabled={!src||!!error} onClick={e=>{if(!src||error)e.preventDefault();}}><ExternalLink size={15}/>{t("独立标签页")}</a>
+   <button title={full?t("退出全屏阅读"):t("全屏阅读")} onClick={()=>setFull(x=>!x)}>{full?<Minimize size={15}/>:<Maximize size={15}/>} {full?t("退出全屏"):t("全屏阅读")}</button>
   </div>
-  {(busy||error)&&<div className={'html-preview-message'+(error?' error':'')} role={error?'alert':'status'}>{error||'正在打开网页…'}</div>}
-  {src&&<iframe ref={frame} className="html-preview-frame" title={'网页 · '+path.split('/').pop()} sandbox={sandbox} src={src}/>}
+  {(busy||error)&&<div className={'html-preview-message'+(error?' error':'')} role={error?'alert':'status'}>{error||t("正在打开网页…")}</div>}
+  {src&&<iframe ref={frame} className="html-preview-frame" title={t("网页 · ")+path.split('/').pop()} sandbox={sandbox} src={src}/>}
  </section>;
 }

@@ -20,7 +20,7 @@ trap cleanup EXIT
 /bin/rm -f "$STATE/menubar.stop"
 BUNDLE="$HOME/Applications/本地知识库.app"
 REVISION=$(/usr/bin/plutil -extract VaultRagMenuRevision raw -o - "$BUNDLE/Contents/Info.plist" 2>/dev/null || true)
-if [[ $REVISION == 3 ]]; then
+if [[ $REVISION == 4 ]]; then
     "$BUNDLE/Contents/MacOS/menubar" &
 else
     # The legacy binary targets macOS 15 and does not honor a custom state.

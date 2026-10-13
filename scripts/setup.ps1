@@ -39,7 +39,7 @@ try {
     $env:UV_PYTHON_CACHE_DIR = Join-Path $RuntimeRoot 'python-archives'
     $Manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'runtimes.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     $Spec = $Manifest.platforms.'windows-x64'.uv
-    Write-Host '[1/2] Preparing verified dependency installer...'
+    Write-Host ('[1/2] ' + (Get-LeafLoomText '准备已校验的依赖安装器…'))
     $UvDir = Join-Path $RuntimeRoot ('uv-' + $Manifest.uv_version)
     $Uv = Join-Path $UvDir 'uv.exe'
     $ValidUv = $false
@@ -61,7 +61,7 @@ try {
         if (-not (Invoke-BootstrapTool $Uv @('--version') -Capture).StartsWith('uv ' + $Manifest.uv_version + ' ')) { throw 'Unexpected uv version.' }
         [IO.File]::WriteAllText((Join-Path $UvDir '.verified'), $Spec.sha256)
     }
-    Write-Host '[2/2] Preparing private Python (existing downloads are reused)...'
+    Write-Host ('[2/2] ' + (Get-LeafLoomText '准备私有 Python，复用已有下载…'))
     $PythonSpec = $Manifest.platforms.'windows-x64'.python
     $PythonDownloads = Join-Path $RuntimeRoot 'python-downloads.json'
     $DownloadMetadata = @{}; $DownloadMetadata[$PythonSpec.key] = $PythonSpec
@@ -82,7 +82,7 @@ try {
     $ErrorActionPreference = 'Stop'
     exit $Result
 } catch {
-    $Message = "Bootstrap failed: $($_.Exception.Message)`nLogs: $(Join-Path $VaultRagState 'logs')`nRun the same installer again to retry."
+    $Message = (Get-LeafLoomText '启动准备失败：') + $_.Exception.Message + "`n" + (Get-LeafLoomText '日志：') + (Join-Path $VaultRagState 'logs') + "`n" + (Get-LeafLoomText '再次双击入口可重试。')
     Write-Host $Message -ForegroundColor Red
     if (-not $NoOpen) { Show-VaultRagError $Message }
     exit 1

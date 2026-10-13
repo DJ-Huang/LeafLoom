@@ -21,6 +21,8 @@ import uuid
 import zipfile
 
 REPOSITORY = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPOSITORY))
+from vault_rag.i18n import t
 TRANSIENT = re.compile(r'timed? ?out|connection (?:reset|refused|aborted)|temporar|\b(?:429|502|503|504)\b|name resolution|network is unreachable', re.I)
 
 
@@ -110,6 +112,7 @@ class Installer:
             self.env.pop(name, None)
 
     def emit(self, line):
+        line = t(str(line), self.state)
         # Do not expose credentials carried by proxy/download URLs.
         line = re.sub(r'(https?://)[^\s/@]+:[^\s/@]+@', r'\1<redacted>@', str(line))
         line = re.sub(r'Bearer\s+[^\s"\']+', 'Bearer <redacted>', line)
@@ -119,8 +122,8 @@ class Installer:
             self.log.write(line + '\n'); self.log.flush()
 
     def step(self, title):
-        self.stage = title
-        self.emit('\n[' + title + ']')
+        self.stage = t(title, self.state)
+        self.emit('\n[' + self.stage + ']')
 
     def run(self, args, *, retry=False, capture=False):
         args = [str(a) for a in args]
@@ -158,6 +161,7 @@ class Installer:
         paths.append(self.repo / 'web/index.html')
         paths.extend(sorted((self.repo / 'web/src').rglob('*')))
         paths.extend(sorted((self.repo / 'web/public').rglob('*')))
+        paths.extend(sorted((self.repo / 'vault_rag/locales').glob('*.json')))
         return self.hash_paths(paths)
 
     def dependency_hash(self):
