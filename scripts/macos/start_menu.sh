@@ -1,5 +1,5 @@
 #!/bin/bash
-# One supervisor per state directory, including Finder and login launches.
+# One supervisor per state directory, including manual and login launches.
 set -euo pipefail
 REPOSITORY=${1:?repository required}
 STATE=${2:?state required}
@@ -18,15 +18,8 @@ echo $$ > "$LOCK/pid"
 cleanup() { /bin/rm -f "$LOCK/pid"; /bin/rmdir "$LOCK"; }
 trap cleanup EXIT
 /bin/rm -f "$STATE/menubar.stop"
-BUNDLE="$HOME/Applications/本地知识库.app"
-REVISION=$(/usr/bin/plutil -extract VaultRagMenuRevision raw -o - "$BUNDLE/Contents/Info.plist" 2>/dev/null || true)
-if [[ $REVISION == 4 ]]; then
-    "$BUNDLE/Contents/MacOS/menubar" &
-else
-    # The legacy binary targets macOS 15 and does not honor a custom state.
-    # System AppKit through JXA needs no end-user compiler or third-party runtime.
-    /usr/bin/osascript -l JavaScript "$REPOSITORY/scripts/macos/menu.js" "$REPOSITORY" "$STATE" &
-fi
+# System AppKit through JXA needs no compiler, app bundle or third-party runtime.
+/usr/bin/osascript -l JavaScript "$REPOSITORY/scripts/macos/menu.js" "$REPOSITORY" "$STATE" &
 CHILD=$!
 trap 'kill -TERM "$CHILD" 2>/dev/null || true' TERM INT
 wait "$CHILD" || true

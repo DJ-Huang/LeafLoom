@@ -22,7 +22,6 @@ def main():
     (output/'logo.svg').write_text(SVG,encoding='utf-8')
     (output/'logo-monochrome.svg').write_text(SVG.replace('#245C48','#111111').replace('#8AAE93','#111111').replace('#FBF7ED','#ffffff'),encoding='utf-8')
     image=icon();image.save(output/'logo.png');image.save(output/'leafloom.ico',sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
-    image.save(output/'leafloom.icns')
     for size in (32,64,256):image.resize((size,size),Image.Resampling.LANCZOS).save(output/f'icon-{size}.png')
     public=ROOT/'web/public';public.mkdir(exist_ok=True);(public/'favicon.svg').write_text(SVG,encoding='utf-8')
 if __name__=='__main__':main()
