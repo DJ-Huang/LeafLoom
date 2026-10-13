@@ -79,13 +79,15 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = macOS ]; then test "$(uname -m)" = arm64; fi
-      - name: Install locked build dependencies
-        run: uv sync --locked --python 3.12.13 --group desktop-build
       - name: Install locked frontend and desktop dependencies
         run: |
           npm ci --prefix web
           npm ci --prefix desktop
           node desktop/node_modules/electron/install.js
+      - name: Build frontend assets before Python package installation
+        run: npm --prefix web run build
+      - name: Install locked build dependencies
+        run: uv sync --locked --python 3.12.13 --group desktop-build
       - name: Focused release checks
         run: |
           uv run --no-sync python -m unittest discover -s tests -p test_desktop.py -q
@@ -95,9 +97,9 @@ jobs:
       - name: Prepare signing credentials
         if: ${{ inputs.signed }}
         run: uv run --no-sync python scripts/desktop_signing.py
-      - name: Build frontend and frozen backend
+      - name: Freeze backend and collect release resources
         shell: bash
-        run: uv run --no-sync python scripts/prepare_desktop.py --version "$RELEASE_VERSION"
+        run: uv run --no-sync python scripts/prepare_desktop.py --skip-web-build --version "$RELEASE_VERSION"
       - name: Build test installer
         if: ${{ !inputs.signed }}
         run: npm --prefix desktop run dist -- --publish never
@@ -130,6 +132,7 @@ jobs:
             desktop/release/SHA256SUMS.txt
             desktop/release/artifacts.json
             desktop/release/acceptance-*.json
+            desktop/release/acceptance-*.png
             _generated/desktop-licenses/**
   release:
     if: ${{ inputs.draft_release }}

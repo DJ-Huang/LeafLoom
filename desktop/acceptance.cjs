@@ -53,7 +53,7 @@ async function main() {
   const root = path.join(fixture, '中文 知识库'); fs.mkdirSync(path.join(root, 'RAG/Notes'), {recursive: true});
   fs.writeFileSync(path.join(root, 'RAG/Notes/release.md'), '# 安装包验收\n\n桌面本地知识库。\n');
   fs.writeFileSync(path.join(root, 'RAG/Notes/preview.html'), '<h1>HTML 验收</h1><script>document.body.dataset.executed="yes"</script>');
-  const servicePort = await port(), debugPort = await port(), origin = 'http://127.0.0.1:' + servicePort;
+  const servicePort = await port(), debugPort = await port(), mainDebugPort = await port(), origin = 'http://127.0.0.1:' + servicePort;
   fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify({root, revision: 'acceptance', port: servicePort,
     include_roots: ['RAG'], exclude_roots: [], rules_roots: ['RAG/Rules'], wiki_roots: ['RAG/Navigation'], estimation_roots: ['RAG/EstimationDB'],
     write_targets: {notes: 'RAG/Notes', rules: 'RAG/Rules', navigation: 'RAG/Navigation', estimation: 'RAG/EstimationDB'}, homepage: 'RAG/Notes/release.md', templates: 'Templates', daily_folder: 'Daily'}));
@@ -64,7 +64,7 @@ async function main() {
     PATH: process.platform === 'win32' ? [process.env.SystemRoot, path.join(process.env.SystemRoot, 'System32')].join(path.delimiter) : '/usr/bin:/bin:/usr/sbin:/sbin'};
   if (!options['with-model']) env.HF_HUB_OFFLINE = '1';
   let executable = options.app ? path.resolve(options.app) : null;
-  let backend, child, cdp, installer = options.installer ? path.resolve(options.installer) : null;
+  let backend, child, cdp, mainCdp, installer = options.installer ? path.resolve(options.installer) : null;
   const report = {platform: process.platform, architecture: process.arch, fixture, installed_from: installer,
     global_tools_hidden: true, checks: [], pending: ['原生目录选择对话框', 'PDF与文件保存对话框', '登录后的自动启动', '保存冲突时的退出提示', '覆盖升级及卸载'], passed: false};
   function passed(check) { report.checks.push(check); console.log('PASS:', check); }
@@ -92,7 +92,7 @@ async function main() {
     const result = JSON.parse(execFileSync(backend, ['self-check'], {env, cwd: fixture, encoding: 'utf8'}).trim().split('\n').at(-1));
     assert.ok(result.ok); passed('安装后 Torch、LanceDB、MCP 和内置资源检查');
     const log = fs.openSync(path.join(fixture, 'app-output.log'), 'a');
-    child = spawn(executable, ['--remote-debugging-port=' + debugPort], {env, cwd: fixture, stdio: ['ignore', log, log]});
+    child = spawn(executable, ['--remote-debugging-port=' + debugPort, '--inspect=' + mainDebugPort], {env, cwd: fixture, stdio: ['ignore', log, log]});
     fs.closeSync(log);
     const request = async (route, body, method) => {
       const token = fs.readFileSync(path.join(home, 'auth-token'), 'utf8').trim();
@@ -105,6 +105,10 @@ async function main() {
     const target = await until(async () => (await (await fetch('http://127.0.0.1:' + debugPort + '/json')).json()).find(target => target.type === 'page' && target.url.startsWith(origin + '/')));
     const socket = new WebSocket(target.webSocketDebuggerUrl); await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, {once: true}); socket.addEventListener('error', reject, {once: true}); });
     cdp = new Debugger(socket);
+    const mainTarget = await until(async () => (await (await fetch('http://127.0.0.1:' + mainDebugPort + '/json')).json())[0]);
+    const mainSocket = new WebSocket(mainTarget.webSocketDebuggerUrl);
+    await new Promise((resolve, reject) => {mainSocket.addEventListener('open', resolve, {once: true}); mainSocket.addEventListener('error', reject, {once: true});});
+    mainCdp = new Debugger(mainSocket);
     await until(() => cdp.evaluate('!!window.vaultDesktop && !!document.querySelector(".sidebar-shortcuts")'));
     assert.equal(await cdp.evaluate('typeof require'), 'undefined');
     assert.equal(await cdp.evaluate('window.vaultDesktop.getAutostart()'), false);
@@ -112,6 +116,15 @@ async function main() {
     const second = spawn(executable, ['--background'], {env, cwd: fixture, stdio: 'ignore'});
     const [secondCode] = await once(second, 'exit'); assert.equal(secondCode, 0);
     assert.equal((await request('/api/status')).body.desktop_instance_id, instance); passed('重复启动复用同一后台');
+    const windowExpression = 'process.mainModule.require("electron").BrowserWindow.getAllWindows()[0]';
+    assert.equal(await mainCdp.evaluate(windowExpression + '.isVisible()'), true);
+    await mainCdp.evaluate(windowExpression + '.close(); true');
+    await until(async () => (await mainCdp.evaluate(windowExpression + '.isVisible()')) === false, 10000);
+    assert.equal((await request('/api/status')).body.desktop_instance_id, instance);
+    const reopened = spawn(executable, [], {env, cwd: fixture, stdio: 'ignore'});
+    assert.equal((await once(reopened, 'exit'))[0], 0);
+    await until(() => mainCdp.evaluate(windowExpression + '.isVisible()'), 10000);
+    passed('关闭窗口继续后台运行，重新打开恢复 App 窗口');
     const session = (await request('/api/session')).body;
     await cdp.send('Page.navigate', {url: origin + '/?note=RAG%2FNotes%2Frelease.md'});
     await until(() => cdp.evaluate('!!document.querySelector("button[title=源码]")'));
@@ -121,6 +134,11 @@ async function main() {
     await cdp.send('Input.insertText', {text: '桌面编辑验收\n'});
     await until(async () => (await request('/api/file?path=RAG%2FNotes%2Frelease.md')).body.text.includes('桌面编辑验收'), 15000);
     passed('App 内编辑和自动保存');
+    const screenshot = await cdp.send('Page.captureScreenshot', {format: 'png'});
+    const screenshotFile = path.join(__dirname, 'release', 'acceptance-' + process.platform + '.png');
+    fs.mkdirSync(path.dirname(screenshotFile), {recursive: true});
+    fs.writeFileSync(screenshotFile, Buffer.from(screenshot.data, 'base64'));
+    report.screenshot = path.basename(screenshotFile);
     const stale = (await request('/api/file?path=RAG%2FNotes%2Frelease.md')).body;
     fs.appendFileSync(path.join(root, 'RAG/Notes/release.md'), '\n外部修改');
     assert.equal((await request('/api/file', {path: stale.path, root, text: '不应覆盖', etag: stale.etag}, 'PUT')).status, 409);
@@ -141,6 +159,8 @@ async function main() {
       await until(async () => (await request('/api/status')).body.model.prepared, 1800000); passed('首次模型准备完成');
     } else report.pending.push('首次模型联网下载与推理（本次使用离线失败场景）');
     const maintenance = spawn(executable, ['--prepare-update'], {env, cwd: fixture, stdio: 'pipe'});
+    // An attached Node inspector otherwise waits for its debugger before final process exit.
+    mainCdp.socket.close(); mainCdp = null;
     const [exitCode] = await once(maintenance, 'exit'); assert.equal(exitCode, 0);
     await until(() => child.exitCode !== null, 20000); passed('升级前保存并正常停止后台');
     assert.equal(fs.readFileSync(path.join(root, 'RAG/Notes/release.md'), 'utf8').includes('外部修改'), true);
@@ -153,6 +173,7 @@ async function main() {
   } catch (error) { report.error = error.stack; throw error; }
   finally {
     cdp?.socket.close();
+    mainCdp?.socket.close();
     if (child && child.exitCode === null) {
       // Ask for a normal stop. Never forcibly terminate the backend during a failed check.
       spawn(executable, ['--prepare-update'], {env, cwd: fixture, stdio: 'ignore'});
