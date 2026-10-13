@@ -2,3 +2,6 @@
 *.command text eol=lf
 scripts/macos/menu.js text eol=lf
 本地知识库.app/Contents/MacOS/launcher text eol=lf
+
+# Prefix labels intentionally end with a space before dynamic content.
+vault_rag/locales/messages.tsv whitespace=-blank-at-eol
