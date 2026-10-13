@@ -1,18 +1,33 @@
-import React,{useEffect,useId,useRef,useState} from 'react';
+import React,{useEffect,useId,useLayoutEffect,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import {BookOpen,X} from 'lucide-react';
 export class LazyBoundary extends React.Component<{children:React.ReactNode},{failed:boolean}>{
  state={failed:false};
  static getDerivedStateFromError(){return {failed:true};}
  render(){return this.state.failed?<div className="empty-state"><p>内容模块未能加载，可能是页面版本已更新。</p><button onClick={()=>window.location.reload()}>重新加载页面</button></div>:this.props.children;}
 }
-export const Action=({title,children,onClick}:{title:string,children:React.ReactNode,onClick:()=>void})=><button className="icon-button" title={title} aria-label={title} onClick={onClick}>{children}</button>;
-export function Modal({title,children,onClose,wide=false,className=''}:{title:string,children:React.ReactNode,onClose:()=>void,wide?:boolean,className?:string}){
+export const Action=({title,children,onClick}:{title:string,children:React.ReactNode,onClick:(event:React.MouseEvent<HTMLButtonElement>)=>void})=><button className="icon-button" title={title} aria-label={title} onClick={onClick}>{children}</button>;
+export function Modal({title,children,onClose,wide=false,className='',hideHeader=false}:{title:string,children:React.ReactNode,onClose:()=>void,wide?:boolean,className?:string,hideHeader?:boolean}){
  const ref=useRef<HTMLDialogElement>(null),label=useId(),close=useRef(onClose);close.current=onClose;
  useEffect(()=>{const previous=document.activeElement as HTMLElement|null,dialog=ref.current!;dialog.showModal();
   return()=>{dialog.close();if(previous?.isConnected)previous.focus();};},[]);
  return <dialog ref={ref} className={'modal '+(wide?'wide ':'')+className} aria-labelledby={label} onCancel={event=>{event.preventDefault();close.current();}} onClick={event=>{if(event.target===event.currentTarget){const box=event.currentTarget.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)close.current();}}}>
-  <header><h2 id={label}>{title}</h2><Action title="关闭" onClick={onClose}><X size={18}/></Action></header>{children}
+  {hideHeader?<h2 id={label} className="sr-only">{title}</h2>:<header><h2 id={label}>{title}</h2><Action title="关闭" onClick={onClose}><X size={18}/></Action></header>}{children}
  </dialog>;
+}
+export function ActionMenu({title,anchor,children,onClose}:{title:string,anchor:HTMLElement,children:React.ReactNode,onClose:()=>void}){
+ const ref=useRef<HTMLDivElement>(null),close=useRef(onClose);close.current=onClose;
+ useLayoutEffect(()=>{
+  const menu=ref.current!;
+  const place=()=>{const box=anchor.getBoundingClientRect();menu.style.left=Math.max(8,Math.min(box.left,window.innerWidth-menu.offsetWidth-8))+'px';menu.style.top=Math.max(8,Math.min(box.bottom+5,window.innerHeight-menu.offsetHeight-8))+'px';};
+  const items=()=>Array.from(menu.querySelectorAll<HTMLElement>('button:not(:disabled),a[href]'));
+  items().forEach(item=>item.setAttribute('role','menuitem'));place();items()[0]?.focus();
+  const outside=(event:PointerEvent)=>{if(!menu.contains(event.target as Node)&&!anchor.contains(event.target as Node))close.current();};
+  const key=(event:KeyboardEvent)=>{if(event.key==='Escape'||event.key==='Tab'){if(event.key==='Escape')event.preventDefault();close.current();return;}const list=items(),index=list.indexOf(document.activeElement as HTMLElement);if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();list[event.key==='Home'?0:event.key==='End'?list.length-1:(index+(event.key==='ArrowDown'?1:list.length-1))%list.length]?.focus();}};
+  document.addEventListener('pointerdown',outside);menu.addEventListener('keydown',key);window.addEventListener('resize',place);window.addEventListener('scroll',place,true);
+  return()=>{document.removeEventListener('pointerdown',outside);menu.removeEventListener('keydown',key);window.removeEventListener('resize',place);window.removeEventListener('scroll',place,true);if(anchor.isConnected)anchor.focus();};
+ },[anchor]);
+ return createPortal(<div ref={ref} className="action-menu action-list" role="menu" aria-label={title} onClick={event=>{if((event.target as HTMLElement).closest('button:not(:disabled),a[href]'))onClose();}}>{children}</div>,document.body);
 }
 export type FormField={name:string,label:string,value?:string,multiline?:boolean,required?:boolean,options?:{value:string,label:string}[]};
 export function FormDialog({title,description,fields=[],submitLabel='保存',danger=false,onSubmit,onClose}:{title:string,description?:string,fields?:FormField[],submitLabel?:string,danger?:boolean,onSubmit:(values:Record<string,string>)=>Promise<void>,onClose:()=>void}){
