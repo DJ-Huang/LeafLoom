@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs');
+const root=path.resolve(__dirname,'..'),out=path.join(root,'.cache/frontend-tests/graph-model.cjs');fs.mkdirSync(path.dirname(out),{recursive:true});
+require(path.join(root,'web/node_modules/esbuild')).buildSync({entryPoints:[path.join(root,'web/src/graph-model.ts')],outfile:out,bundle:true,platform:'node',format:'cjs'});
+const {graphIndex,graphSlice,neighborhood}=require(out);
+const nodes=['A/a.md','A/b.md','B/c.md','B/orphan.md'].map(id=>({id,label:id}));
+const index=graphIndex({nodes,links:[{source:nodes[0].id,target:nodes[1].id},{source:nodes[0].id,target:nodes[1].id},{source:nodes[1].id,target:nodes[2].id},{source:nodes[2].id,target:'missing.md'}]});
+assert.equal(index.links.length,2);assert.equal(index.neighbors.get('A/a.md').size,1);
+assert.deepEqual([...neighborhood(index,'A/a.md',1)],['A/a.md','A/b.md']);assert.equal(neighborhood(index,'A/a.md',2).size,3);assert.equal(neighborhood(index,'missing.md',3).size,0);
+assert.equal(graphSlice(index,{}).nodes.length,3);assert.equal(graphSlice(index,{orphans:true}).nodes.length,4);
+assert.equal(graphSlice(index,{group:'A'}).links.length,1);assert.equal(graphSlice(index,{center:'B/orphan.md'}).nodes.length,1);
+assert.equal(graphSlice(index,{center:'A/a.md',depth:2,group:'B'}).links.length,0);
+assert.equal(nodes.length,4);assert.deepEqual(graphSlice(graphIndex({nodes:[],links:[]}),{}),{nodes:[],links:[]});
+console.log('Graph contracts passed: invalid/duplicate links, unique neighbors, depth, filters, isolated notes, empty graph.');

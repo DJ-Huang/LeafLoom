@@ -209,6 +209,21 @@ class Files:
                 item=json.loads(p.read_text(encoding='utf-8'))
                 if rel is None or item.get('path')==rel:out.append(item)
         return sorted(out,key=lambda x:x['time'],reverse=True)[:200]
+    def clear_trash(self,*,expected_root):
+        with self.config.lock,self.lock:
+            root=self.config.root
+            if expected_root!=str(root):raise ConflictError('关联目录已切换，未清空回收区；请重新打开回收区')
+            state=root/'.vault-rag';trash=state/'trash'
+            if is_link(state) or is_link(trash):raise ValueError('回收区不能指向符号链接或 junction')
+            if not trash.exists():return {'deleted':0}
+            if not trash.is_dir():raise ValueError('回收区不是目录')
+            entries=list(trash.iterdir())
+            # Validate every entry before deleting anything; never traverse linked records.
+            if any(is_link(entry) for entry in entries):raise ValueError('回收区包含符号链接或 junction，未清空')
+            for entry in entries:
+                if entry.is_dir():shutil.rmtree(entry)
+                else:entry.unlink()
+            return {'deleted':len(entries)}
     def restore(self,kind,key):
         if kind not in ('history','trash','operations') or not re.fullmatch(r'[a-f0-9]{32}',key):raise ValueError('恢复记录无效')
         with self.lock:

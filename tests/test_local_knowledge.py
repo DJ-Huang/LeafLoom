@@ -42,6 +42,24 @@ class LocalKnowledgeTests(unittest.TestCase):
             self.assertEqual(response.status_code,200)
             self.assertEqual(response.json(),{'path':str(self.root)})
             picker.assert_called_once_with()
+    def test_clear_trash_api_requires_confirmation_root_and_csrf(self):
+        self.put('RAG/Notes/deleted.md','discard')
+        self.files.delete('RAG/Notes/deleted.md')
+        app=create_app(self.config,self.runtime,start_background=False)
+        token=(self.config.directory/'auth-token').read_text().strip()
+        with TestClient(app,base_url='http://127.0.0.1:18080') as client:
+            client.cookies.set('vault_session',token)
+            payload={'root':str(self.config.root),'confirm':True}
+            self.assertEqual(client.post('/api/trash/clear',json=payload).status_code,403)
+            headers={'X-Vault-CSRF':app.state.csrf}
+            for body in ({'root':str(self.root)}, {'confirm':True}, {'root':str(self.root),'confirm':'true'}):
+                self.assertEqual(client.post('/api/trash/clear',headers=headers,json=body).status_code,400)
+            self.assertEqual(client.post('/api/trash/clear',headers=headers,json={**payload,'root':'old-root'}).status_code,409)
+            self.assertEqual(len(self.files.records('trash')),1)
+            response=client.post('/api/trash/clear',headers=headers,json=payload)
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.json(),{'deleted':1})
+            self.assertEqual(self.files.records('trash'),[])
     def test_scope_lexical_wiki_and_immediate_withdrawal(self):
         self.populate();k=self.runtime.knowledge
         self.put('RAG/_archive/old.md','# 信号调试 旧归档');self.assertFalse(self.config.eligible('RAG/_archive/old.md'))

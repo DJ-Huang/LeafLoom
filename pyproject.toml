@@ -48,3 +48,4 @@ torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'win32'" }]
 
 [tool.hatch.build.targets.wheel.force-include]
 "vault_rag/static" = "vault_rag/static"
+"wiki-search/SKILL.md" = "vault_rag/skills/wiki-search/SKILL.md"

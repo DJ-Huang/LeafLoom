@@ -11,6 +11,7 @@ from vault_rag.knowledge import Runtime
 from vault_rag.html_preview import HtmlPreviews
 from vault_rag.platform_support import choose_directory, private_file_mode, is_windows
 from vault_rag.http_cache import conditional_file
+from vault_rag.skill_install import install_skill, skill_status
 
 def json_response(value,status=200):return JSONResponse(json.loads(json.dumps(value,ensure_ascii=False,default=str)),status_code=status)
 
@@ -123,6 +124,14 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     async def choose_current_directory():
         # Triggered only by an explicit click in the local webpage, not at login.
         return json_response(await asyncio.to_thread(choose_directory))
+    @app.get('/api/skills/wiki-search')
+    async def installed_search_skill():
+        try:return json_response(await asyncio.to_thread(skill_status))
+        except OSError as e:return json_response({'error':f'无法读取技能安装状态：{e}'},400)
+    @app.post('/api/skills/wiki-search/install')
+    async def install_search_skill():
+        try:return json_response(await asyncio.to_thread(install_skill))
+        except OSError as e:return json_response({'error':f'无法安装 wiki-search：{e}'},400)
     @app.get('/api/tree')
     async def tree(path:str=''):return await asyncio.to_thread(runtime.catalog.tree,path)
     @app.get('/api/file')
@@ -157,6 +166,13 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     async def delete(request:Request):return await asyncio.to_thread(runtime.files.delete,(await request.json())['path'])
     @app.get('/api/records')
     async def records(kind:str='history',path:str|None=None):return runtime.files.records(kind,path)
+    @app.post('/api/trash/clear')
+    async def clear_trash(request:Request):
+        body=await request.json()
+        if not isinstance(body,dict) or body.get('confirm') is not True or not isinstance(body.get('root'),str):
+            raise ValueError('清空回收区需要确认并指定关联目录')
+        try:return await asyncio.to_thread(runtime.files.clear_trash,expected_root=body['root'])
+        except OSError as e:return json_response({'error':f'清空未完成，部分内容可能已删除，请重新打开回收区：{e}'},400)
     @app.post('/api/restore')
     async def restore(request:Request):
         body=await request.json();return await asyncio.to_thread(runtime.files.restore,body['kind'],body['id'])

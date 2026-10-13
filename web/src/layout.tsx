@@ -1,5 +1,5 @@
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {BookOpen,Calendar,ChevronRight,FileText,Folder,Home,PanelLeftClose,Search} from 'lucide-react';
+import {BookOpen,Calendar,ChevronRight,FileText,Folder,Home,PanelLeftClose,Search,Network} from 'lucide-react';
 import {Config,OpenNote} from './api';
 import {useStatus} from './hooks';
 import {Action} from './ui';
@@ -47,10 +47,10 @@ export function PathNavigation({path,view,onFolder}:{path:string,view:string,onF
   {browsing?<><li><button onClick={()=>onFolder('')} title="打开知识库根目录"><BookOpen size={15}/><span>知识库</span></button></li>{parts.map((part,index)=>{
    const current=index===parts.length-1,target=parts.slice(0,index+1).join('/');
    return <li key={target}><ChevronRight size={13} aria-hidden="true"/>{current?<span className="path-current" aria-current="page" title={path}>{view==='document'?<FileText size={15}/>:<Folder size={15}/>}<span>{part}</span></span>:<button title={'打开 '+target} onClick={()=>onFolder(target)}>{part}</button>}</li>;
-  })}</>:<li><span className="path-current" aria-current="page">{view==='knowledge'?<Search size={15}/>:<Home size={15}/>}<span>{view==='knowledge'?'知识检索':'首页'}</span></span></li>}
+  })}</>:<li><span className="path-current" aria-current="page">{view==='knowledge'?<Search size={15}/>:view==='graph'?<Network size={15}/>:<Home size={15}/>}<span>{view==='knowledge'?'知识检索':view==='graph'?'关系图谱':'首页'}</span></span></li>}
  </ol></nav>;
 }
-export function IndexStatus(){const status=useStatus();return <div className="index-status"><span className={'status-dot '+(status?.last_error?'error':'')}/><div><strong>{status?.sync?.state||'正在同步目录'}</strong><small>{status?.num_files||0} 篇检索资料 · {status?.catalog_files||0} 个文件</small>{status?.watch?.error&&<small>监听不可用 · 每 10 秒检查</small>}{status?.last_error&&<small className="error">{status.last_error}</small>}</div></div>;}
+export function IndexStatus({onOpen}:{onOpen:()=>void}){const status=useStatus(),failed=!!(status?.last_error||status?.watch?.error);return <button className="index-status" onClick={onOpen} aria-label="查看同步与索引" title={status?.last_error||`${status?.num_files||0} 篇检索资料 · ${status?.catalog_files||0} 个文件`}><span className={'status-dot '+(failed?'error':'')}/><span>{failed?'同步需要关注':status?.sync?.state||'正在同步目录'}</span><ChevronRight size={13}/></button>;}
 export function Dashboard({config,recent,onOpen,onCreate,onKnowledge,onDaily}:{config:Config,recent:string[],onOpen:OpenNote,onCreate:()=>void,onKnowledge:()=>void,onDaily:()=>void}){
  return <div className="dashboard"><div className="page-icon"><BookOpen size={42} strokeWidth={1.4}/></div><h1>你的知识库</h1><p className="dashboard-intro">从上次的思路继续，或记下新的想法。</p>
   <div className="home-shortcuts"><button onClick={onCreate}><FileText size={20}/><span>新建笔记</span></button><button onClick={onDaily}><Calendar size={20}/><span>今日笔记</span></button><button onClick={onKnowledge}><Search size={20}/><span>检索知识</span></button></div>
