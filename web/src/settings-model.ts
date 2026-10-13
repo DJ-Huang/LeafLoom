@@ -1,32 +1,33 @@
+import {t} from './i18n';
 import {Config} from './api';
 
 export const settingsSections = [
- {id:'general',title:'常规',description:'管理关联目录与知识库首页。'},
- {id:'files',title:'文件与导入',description:'在指定目录创建内容，或导入本地文件。'},
- {id:'templates',title:'模板与写入',description:'设置模板、日记与各类资料的默认位置。'},
- {id:'index',title:'检索与索引',description:'选择检索资料，查看模型与同步状态。'},
- {id:'ai',title:'AI 集成',description:'让 AI 从你的本地知识库中查找依据。'},
- {id:'history',title:'操作历史',description:'查看目录操作和文档版本，恢复需要的内容。'},
- {id:'trash',title:'回收区',description:'找回已删除的内容，或永久清空回收区。'},
+ {id:'general',get title(){return t("常规");},get description(){return t("管理关联目录与知识库首页。");}},
+ {id:'files',get title(){return t("文件与导入");},get description(){return t("在指定目录创建内容，或导入本地文件。");}},
+ {id:'templates',get title(){return t("模板与写入");},get description(){return t("设置模板、日记与各类资料的默认位置。");}},
+ {id:'index',get title(){return t("检索与索引");},get description(){return t("选择检索资料，查看模型与同步状态。");}},
+ {id:'ai',get title(){return t("AI 集成");},get description(){return t("让 AI 从你的本地知识库中查找依据。");}},
+ {id:'history',get title(){return t("操作历史");},get description(){return t("查看目录操作和文档版本，恢复需要的内容。");}},
+ {id:'trash',get title(){return t("回收区");},get description(){return t("找回已删除的内容，或永久清空回收区。");}},
 ] as const;
 export type SettingsSection=typeof settingsSections[number]['id'];
 export type SettingsLocation={section:SettingsSection,path?:string,targetId?:string};
 export type SettingsResult={path:string,directory?:boolean,edit?:boolean,cursor?:number};
 export const settingsEntries:{section:SettingsSection,id:string,title:string,description:string}[]=[
- {section:'general',id:'root',title:'关联目录',description:'选择或切换本地知识库文件夹'},
- {section:'general',id:'homepage',title:'知识库首页',description:'默认首页文件路径'},
- {section:'files',id:'create',title:'新建笔记与目录',description:'创建文件、新建目录、文件夹、目标位置'},
- {section:'files',id:'upload',title:'上传文件',description:'导入本地文件、附件'},
- {section:'files',id:'template-create',title:'从模板新建',description:'选择模板创建笔记'},
- {section:'templates',id:'templates',title:'模板与日记目录',description:'模板目录、今日笔记、日记位置'},
- {section:'templates',id:'write-targets',title:'默认写入位置',description:'知识正文、规则、主题导航、工时资料'},
- {section:'index',id:'scope',title:'检索目录',description:'索引范围、勾选目录、子目录排除'},
- {section:'index',id:'special-folders',title:'专用目录',description:'规则目录、Wiki 导航目录、工时资料目录'},
- {section:'index',id:'model',title:'本地检索模型',description:'BGE-M3 模型准备与加载状态'},
- {section:'index',id:'sync',title:'同步与索引',description:'重新同步、进度、文件数量、错误'},
- {section:'ai',id:'skill',title:'知识库查询技能',description:'安装或更新 wiki-search'},
- {section:'history',id:'records',title:'操作与版本历史',description:'目录操作历史、文档版本、恢复'},
- {section:'trash',id:'trash',title:'回收区',description:'垃圾箱、恢复已删除文件、永久清空'},
+ {section:'general',id:'root',get title(){return t("关联目录");},get description(){return t("选择或切换本地知识库文件夹");}},
+ {section:'general',id:'homepage',get title(){return t("知识库首页");},get description(){return t("默认首页文件路径");}},
+ {section:'files',id:'create',get title(){return t("新建笔记与目录");},get description(){return t("创建文件、新建目录、文件夹、目标位置");}},
+ {section:'files',id:'upload',get title(){return t("上传文件");},get description(){return t("导入本地文件、附件");}},
+ {section:'files',id:'template-create',get title(){return t("从模板新建");},get description(){return t("选择模板创建笔记");}},
+ {section:'templates',id:'templates',get title(){return t("模板与日记目录");},get description(){return t("模板目录、今日笔记、日记位置");}},
+ {section:'templates',id:'write-targets',get title(){return t("默认写入位置");},get description(){return t("知识正文、规则、主题导航、工时资料");}},
+ {section:'index',id:'scope',get title(){return t("检索目录");},get description(){return t("索引范围、勾选目录、子目录排除");}},
+ {section:'index',id:'special-folders',get title(){return t("专用目录");},get description(){return t("规则目录、Wiki 导航目录、工时资料目录");}},
+ {section:'index',id:'model',get title(){return t("本地检索模型");},get description(){return t("BGE-M3 模型准备与加载状态");}},
+ {section:'index',id:'sync',get title(){return t("同步与索引");},get description(){return t("重新同步、进度、文件数量、错误");}},
+ {section:'ai',id:'skill',get title(){return t("知识库查询技能");},get description(){return t("安装或更新 wiki-search");}},
+ {section:'history',id:'records',get title(){return t("操作与版本历史");},get description(){return t("目录操作历史、文档版本、恢复");}},
+ {section:'trash',id:'trash',get title(){return t("回收区");},get description(){return t("垃圾箱、恢复已删除文件、永久清空");}},
 ];
 export function searchSettings(query:string){
  const words=query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);

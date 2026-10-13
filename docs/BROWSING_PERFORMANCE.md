@@ -1,59 +1,13 @@
-# 浏览性能与验收
+# Browsing performance
 
-## 日常浏览
+LeafLoom separates file browsing from model inference. Directory and link metadata are cached, and non-note assets do not enter text/vector indexing. External changes use file watching, periodic reconciliation and a polling fallback.
 
-普通笔记默认阅读，新建笔记和新建日记直接编辑。点击目录旁的“刷新数据”会更新当前正文、已展开目录及相关视图，保留标签；F5 重建前端，服务和已加载模型继续运行。
+Large lists are virtualized; the editor, graph, formulas and diagrams load on demand. Long Markdown is parsed in a worker and rendered incrementally. Recent document caching is bounded, preserves drafts, and is scoped to the connected folder. Media is loaded as needed; inactive playback pauses.
 
-外部修改自动更新未编辑文档；有草稿时保留正文和原版本，提示合并。编辑内容自动保存，草稿可在重新打开后恢复。近期最多驻留三个文档，释放前保存光标、阅读位置和媒体进度；HTML/PDF iframe 只在当前标签驻留，重新打开 HTML 会重新加载脚本。
+## Validate a change
 
-编辑器、图谱、公式、图表和 Base 按需加载。超过 256 KiB 的 Markdown 在 Worker 中解析，主线程分批净化展示；嵌入和图表靠近视口才加载。超过 200 项的目录、搜索结果、表格和任务视图使用虚拟化，阅读态查找和目录跳转不需要加载编辑器。
+Use fictional, isolated folders and ports. Check initial rendering, repeated navigation, long documents, large file lists and foreground responsiveness while indexing. Record platform, browser, dataset size, cold/warm state and measurement method. A timing measured on one device is not a universal promise.
 
-## 实测结果（2026-10-12，Windows）
+Relevant checks are `tests/test_browsing.py`, `tests/frontend_browsing.cjs` and the UI fixtures. Use `VAULT_WEB_OUTPUT` for a separate build if an existing service serves current assets. Application updates need installation and service restart; browser reload alone is insufficient.
 
-Chrome 无头浏览器，服务已启动，不限制网络。原知识库仅进行只读浏览；另建 20,000 个可访问文件的临时样本，其中 4,000 个笔记、16,000 个其他文件。样本包含 1,107,019 字节的 Markdown、千行任务列表和表格、HTML、Base 和媒体。所有写入、草稿冲突及目录切换使用临时目录。
-
-| 场景 | 优化前 | 优化后 | 目标 |
-| --- | ---: | ---: | ---: |
-| 首页入口 JavaScript，gzip | 约 692 KiB | 约 90 KiB | ≤100 KiB |
-| 原知识库热缓存 F5，可操作界面 p95 | 159 ms | 46 ms | ≤500 ms |
-| 原知识库普通笔记导航、首次正文 p95 | 227 ms | 99 ms | ≤300 ms |
-| 两万文件样本内普通笔记切换 p95 | — | 37 ms | ≤300 ms |
-| 已缓存笔记标签切换 p95 | — | 41 ms | ≤100 ms |
-| 外部单文件修改到当前正文可见 | — | 326 ms | ≤2秒 |
-| 约 1 MiB Markdown 首批正文 | — | 225 ms | ≤1秒 |
-| 真实 BGE-M3 更新向量期间，文件/目录读取 p95 | — | 64 ms | ≤200 ms |
-
-F5 20 次、原库笔记导航 10 次、样本笔记切换 10 次、缓存切换 10 次。后台推理阶段交替读取文件与四千条目的目录，共 40 次，模型加载计数为 1。p95 使用样本排序后的最近秩；这些数字是本机结果，不保证其他设备或任意文档也有相同表现。
-
-长文档场景未观察到 ≥50 ms 的主线程长任务，因此没有 ≥200 ms 的连续任务；解析 Worker 的耗时单独于主线程。千行任务列表和表格首屏分别仅驻留 16 和 23 行。HTML 测试页面自身脚本的标记时间约 20 ms，单独记录，不计入工具性能；对编辑 API 的访问被沙箱/CSP 拦截。任意 HTML 自身脚本的性能不由知识库控制。
-
-本次原始测量保存在工作区 `.cache/performance-before.json`、`performance-after.json`、`performance-fixture.json` 和 `performance-index.json`。这些是本机临时结果，不提交知识库内容。
-
-## 验证范围
-
-- 后端相关回归 21 项通过，另对最终缓存、监听、状态和扫描改动运行定向检查。
-- 前端请求合并、无消费者取消、304、64 条/32 MiB LRU、目录作用域、素材失效和草稿冲突检查通过。
-- 浏览器确认虚拟列表/表格查找末行无需编辑器，末行任务写入正确原始位置；Base 表格虚拟化可用。
-- 浏览器确认新建笔记直接编辑、HTML 沙箱与配套资源刷新、切换目录读取新正文、F5 恢复阅读位置。
-- 视频切走暂停，超过三页释放视图后仍恢复播放进度；HTML iframe 在切走后释放。Range、缓存跨目录隔离、失效预览地址和路径/junction 隔离有后端回归覆盖。
-- 前端 TypeScript 与生产构建、依赖锁校验及 diff 空白检查通过。未进行 macOS 原生验收。
-
-检查命令（在仓库根目录、已安装依赖的可用环境中）：
-
-```text
-python -m unittest tests.test_local_knowledge tests.test_installer_models tests.test_browsing
-node tests/frontend_browsing.cjs
-npm --prefix web run build
-uv lock --check
-git diff --check
-```
-
-原 `.venv` 引用的私有 Python 3.12.13 已不存在。本次使用已找到的 Python 3.12.14 和现有依赖完成测试；解释器失效是验证环境问题，不能据此解释原网页卡顿。
-
-本次在独立本机端口验证新版本，保留现有运行实例及其静态文件。安装更新并重启服务后，新页面和新接口才对常用入口生效；平时 F5 或“刷新数据”仍不会重启服务。生产构建可用 `VAULT_WEB_OUTPUT` 指定独立输出目录，避免在验证期间覆盖现有入口。
-
-## 维护依据
-
-监听采用 [watchfiles watch](https://watchfiles.helpmanual.io/api/watch/)，虚拟化采用 [TanStack React Virtual](https://tanstack.com/virtual/latest/docs/framework/react/react-virtual)。目录同步、向量构建和状态校验分开运行；SSE 使用有界异步队列，等待连接不会占用文件读取线程池。目录表复用扫描所得元数据，浏览目录不逐项重新访问磁盘；后台核对复用同次扫描的文件属性。
-
-哈希静态资源长期缓存，并只对应用静态资源启用 gzip；SSE 和视频 Range 不压缩。素材采用私有条件缓存，返回 304 前仍校验目录权限，媒体 ETag 包含根目录与配置版本。HTML 快照正文不缓存，配套资源可条件校验。
+See [the user guide](en/GUIDE.md) and [current productization validation](PRODUCTIZATION_VALIDATION.md).

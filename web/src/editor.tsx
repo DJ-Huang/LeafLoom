@@ -1,3 +1,4 @@
+import {t,useLocale} from './i18n';
 import React,{useEffect,useRef} from 'react';
 import {createRoot,Root} from 'react-dom/client';
 import {EditorState} from '@codemirror/state';
@@ -25,6 +26,7 @@ class MarkdownWidget extends WidgetType{
 }
 
 export function LiveEditor({initial,path,onChange,onOpen,source,onReady,onRelease}:{initial:string,path:string,onChange:(text:string)=>void,onOpen:OpenNote,source:boolean,onReady?:(view:EditorView)=>void,onRelease?:(view:EditorView)=>void}){
+ useLocale();
  const host=useRef<HTMLDivElement>(null);const view=useRef<EditorView|null>(null);const callbacks=useRef({onChange,onOpen});callbacks.current={onChange,onOpen};
  useEffect(()=>{
   if(!host.current)return;
@@ -49,7 +51,7 @@ export function LiveEditor({initial,path,onChange,onOpen,source,onReady,onReleas
   // Block decorations are a direct state facet, not viewport decorations.
   const plugin=EditorView.decorations.compute(['doc','selection'],state=>makeDecorations({state} as EditorView));
   const bold={key:'Mod-b',run:(v:EditorView)=>{const s=v.state.selection.main;v.dispatch({changes:{from:s.from,to:s.to,insert:'**'+v.state.doc.sliceString(s.from,s.to)+'**'}});return true;}};
-  const state=EditorState.create({doc:initial,extensions:[markdown(),history(),search(),keymap.of([bold,...searchKeymap,...defaultKeymap,...historyKeymap]),EditorState.phrases.of({'Find':'查找','Replace':'替换','next':'下一个','previous':'上一个','all':'全部','match case':'区分大小写','regexp':'正则表达式','by word':'整词','close':'关闭','replace':'替换','replace all':'全部替换'}),EditorView.lineWrapping,plugin,EditorView.updateListener.of(update=>{if(update.docChanged)callbacks.current.onChange(update.state.doc.toString());}),EditorView.theme({'&':{fontSize:'16px'},'.cm-content':{fontFamily:'inherit',padding:'32px',minHeight:'65vh'},'.cm-focused':{outline:'none'}})]});
+  const state=EditorState.create({doc:initial,extensions:[markdown(),history(),search(),keymap.of([bold,...searchKeymap,...defaultKeymap,...historyKeymap]),EditorState.phrases.of({'Find':t("查找"),'Replace':t("替换"),'next':t("下一个"),'previous':t("上一个"),'all':t("全部"),'match case':t("区分大小写"),'regexp':t("正则表达式"),'by word':t("整词"),'close':t("关闭"),'replace':t("替换"),'replace all':t("全部替换")}),EditorView.lineWrapping,plugin,EditorView.updateListener.of(update=>{if(update.docChanged)callbacks.current.onChange(update.state.doc.toString());}),EditorView.theme({'&':{fontSize:'16px'},'.cm-content':{fontFamily:'inherit',padding:'32px',minHeight:'65vh'},'.cm-focused':{outline:'none'}})]});
   const editor=new EditorView({state,parent:host.current});view.current=editor;onReady?.(editor);
   return()=>{onRelease?.(editor);view.current=null;editor.destroy();};
  },[path,source]);

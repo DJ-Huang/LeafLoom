@@ -1,0 +1,148 @@
+[
+  {
+    "name": "brand",
+    "duration": 2.5,
+    "caption": "Your knowledge. Your deployment. Your control.",
+    "start": 0,
+    "transition": 0.3,
+    "source": null
+  },
+  {
+    "name": "write",
+    "duration": 6.5,
+    "title": "Capture\nan idea.",
+    "step": "01 / KEEP YOUR FILES",
+    "body": "Write in Markdown.\nKeep the original.",
+    "tag": "READ + WRITE",
+    "caption": "Capture an idea. Keep your original files.",
+    "camera": [
+      [
+        0,
+        1,
+        0.5,
+        0.5
+      ],
+      [
+        0.6,
+        1.03,
+        0.5,
+        0.5
+      ]
+    ],
+    "start": 2.5,
+    "transition": 0.3,
+    "source": "assets/promo/recordings/write.webm"
+  },
+  {
+    "name": "search",
+    "duration": 7,
+    "title": "Find it.\nOpen it.",
+    "step": "02 / FIND THE SOURCE",
+    "body": "Search your knowledge.\nGo straight to the evidence.",
+    "tag": "SEARCH + SOURCE",
+    "caption": "Find the evidence. Open the source.",
+    "camera": [
+      [
+        0,
+        1,
+        0.6,
+        0.49
+      ],
+      [
+        0.6,
+        1.38,
+        0.6,
+        0.49
+      ]
+    ],
+    "start": 9.0,
+    "transition": 0.3,
+    "source": "assets/promo/recordings/search.webm"
+  },
+  {
+    "name": "graph",
+    "duration": 7,
+    "title": "Follow the\nconnections.",
+    "step": "03 / CONNECT YOUR IDEAS",
+    "body": "Focus on one note.\nSee where it leads.",
+    "tag": "LINKS + GRAPH",
+    "caption": "Focus a note. Explore its connections.",
+    "camera": [
+      [
+        0,
+        1,
+        0.6,
+        0.55
+      ],
+      [
+        0.6,
+        1.15,
+        0.6,
+        0.55
+      ]
+    ],
+    "start": 16.0,
+    "transition": 0.3,
+    "source": "assets/promo/recordings/graph.webm"
+  },
+  {
+    "name": "ai-review",
+    "duration": 5.5,
+    "title": "Review.\nThen save.",
+    "step": "04 / OPTIONAL AI",
+    "body": "Preview the changes.\nYou decide what stays.",
+    "tag": "FICTIONAL AI DEMO",
+    "caption": "Optional AI. Preview changes. Accept into a draft.",
+    "camera": [
+      [
+        0,
+        1,
+        0.63,
+        0.5
+      ],
+      [
+        0.6,
+        1.15,
+        0.63,
+        0.5
+      ]
+    ],
+    "start": 23.0,
+    "transition": 0.3,
+    "source": "assets/promo/recordings/ai-review.webm"
+  },
+  {
+    "name": "scope",
+    "duration": 3.5,
+    "title": "Keep\ncontrol.",
+    "step": "05 / YOUR DEPLOYMENT",
+    "body": "Run it yourself.\nChoose the search scope.",
+    "tag": "LOCAL FIRST",
+    "caption": "Your deployment. Your files. Your search scope.",
+    "camera": [
+      [
+        0,
+        1,
+        0.5,
+        0.5
+      ],
+      [
+        0.6,
+        1.18,
+        0.5,
+        0.5
+      ]
+    ],
+    "start": 28.5,
+    "transition": 0.3,
+    "source": "assets/promo/recordings/scope.webm"
+  },
+  {
+    "name": "outro",
+    "duration": 3,
+    "caption": "LeafLoom. Open source. Make it yours.",
+    "start": 32.0,
+    "transition": 0,
+    "source": null
+  }
+]

@@ -34,7 +34,7 @@
 <text x="867" y="478" class="body">三个客户端用本机令牌连接同一个 HTTP 服务</text>
 <text x="867" y="502" class="body">五个工具：搜索知识、搜索规则、读片段、读全文、查状态</text>
 <text x="867" y="526" class="body">AI 只读取当前允许检索的资料；目录外内容不能借 Wiki 绕过</text>
-<text x="867" y="550" class="body">默认关联：DJKnowledges；默认索引：RAG/（可在设置中更改）</text>
+<text x="867" y="550" class="body">自行关联本地目录；默认不索引，按需选择检索范围</text>
 <text x="867" y="574" class="body">正文 Notes/；规则 Rules/；导航 Navigation/；工时 EstimationDB/</text>
 <text x="56" y="653" class="small">原文件是正文真源；SQLite 目录表覆盖全库，向量只为选中的合格正文生成。</text>
 <rect x="32" y="694" width="1616" height="280" rx="18" fill="#edf1e9"/>

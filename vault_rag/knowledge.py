@@ -320,7 +320,10 @@ class Runtime:
         self.index_event.set()
 
     def status(self):
-        return {**self.knowledge.status(),'watch':{'state':'监听中' if self.watching else '定期检查','error':self.watch_error}}
+        from vault_rag.i18n import error_code
+        status=self.knowledge.status()
+        status['sync']['state_code']=error_code(status['sync'].get('state',''))
+        return {**status,'watch':{'state':'监听中' if self.watching else '定期检查','error':self.watch_error}}
 
     def _needs_index(self,paths):
         return any(path=='.ragignore' or

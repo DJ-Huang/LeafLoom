@@ -161,12 +161,15 @@ try {
 
 
 def show_error(message: str) -> None:
+    from vault_rag.i18n import t
+    title=t('本地知识库',state_directory())
+    message=t(message,state_directory())
     if is_windows():
-        ctypes.windll.user32.MessageBoxW(None, message, '本地知识库', 0x10)
+        ctypes.windll.user32.MessageBoxW(None, message, title, 0x10)
     elif sys.platform == 'darwin':
         import json
         subprocess.run(['/usr/bin/osascript', '-e',
-                        'display alert "本地知识库暂时无法启动" message ' + json.dumps(message, ensure_ascii=False) + ' as critical'],
+                        'display alert ' + json.dumps(title,ensure_ascii=False) + ' message ' + json.dumps(message, ensure_ascii=False) + ' as critical'],
                        check=False)
     else:
         print(message, file=sys.stderr)

@@ -56,7 +56,7 @@ class Settings(BaseSettings):
         )
 
     vault_root: Path = Field(
-        default=Path.home() / "DJKnowledges",
+        default=Path.home() / "Documents",
         description="Obsidian vault root (folder that contains notes).",
     )
     vault_content_folder: str = Field(

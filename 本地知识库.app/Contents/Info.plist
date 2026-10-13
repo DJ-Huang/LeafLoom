@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>本地知识库</string>
+	<string>LeafLoom</string>
 	<key>CFBundleExecutable</key>
 	<string>launcher</string>
 	<key>CFBundleIconFile</key>
@@ -11,7 +11,7 @@
 	<key>CFBundleIdentifier</key>
 	<string>com.djhuang.vault-rag.launcher</string>
 	<key>CFBundleName</key>
-	<string>本地知识库</string>
+	<string>LeafLoom</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

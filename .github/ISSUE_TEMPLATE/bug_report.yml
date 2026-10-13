@@ -1,0 +1,26 @@
+name: Bug report / 问题反馈 / 不具合報告
+description: Report a reproducible problem using redacted examples.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and expected behavior / 问题与预期 / 問題と期待する動作
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce / 复现步骤 / 再現手順
+      description: Use fictional notes. Remove usernames, paths, tokens and private conversations.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS, architecture, browser, revision / 系统与版本 / 環境とバージョン
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Redacted diagnostics / 脱敏诊断 / 匿名化した診断情報

@@ -54,7 +54,7 @@ class LocalConfig:
         self.data=json.loads(self.path.read_text(encoding='utf-8')) if self.path.exists() else self.defaults()
     @staticmethod
     def defaults():
-        return {'root':None,'include_roots':['RAG'],'exclude_roots':[], 'rules_roots':['RAG/Rules'], 'wiki_roots':['RAG/Navigation'], 'estimation_roots':['RAG/EstimationDB'], 'write_targets':{'notes':'RAG/Notes','rules':'RAG/Rules','navigation':'RAG/Navigation','estimation':'RAG/EstimationDB'}, 'homepage':'000-Home.md', 'templates':'Templates', 'daily_folder':'Daily', 'port':18080}
+        return {'root':None,'include_roots':[],'exclude_roots':[], 'rules_roots':[], 'wiki_roots':[], 'estimation_roots':[], 'write_targets':{'notes':'Notes','rules':'Rules','navigation':'Topics','estimation':'Estimation'}, 'homepage':'', 'templates':'Templates', 'daily_folder':'Daily', 'port':18080}
     @property
     def root(self):
         if not self.data.get('root'): raise ValueError('请先在网页关联一个本地目录')

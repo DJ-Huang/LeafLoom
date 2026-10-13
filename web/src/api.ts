@@ -3,7 +3,7 @@ export function setCsrf(value:string){csrf=value;}
 export type Note={path:string,root?:string,text:string,etag:string,metadata:Record<string,any>};
 export type Config={root:string|null,revision?:string,include_roots:string[],exclude_roots:string[],rules_roots:string[],wiki_roots:string[],estimation_roots:string[],write_targets:Record<string,string>,homepage:string,templates:string,daily_folder:string,port:number};
 export type OpenNote=(path:string,anchor?:string)=>void;
-export type Session={config:Config,csrf:string,suggested_root:string,service_instance_id:string,catalog_version:number};
+export type Session={config:Config,csrf:string,suggested_root:string,service_instance_id:string,catalog_version:number,demo?:boolean};
 export type Change={type?:string,root?:string,config_revision?:string,service_instance_id?:string,catalog_version?:number,paths?:string[],reset?:boolean};
 type Cached={value:any,etag?:string,bytes:number,valid:boolean};
 type Pending={promise:Promise<any>,controller:AbortController,users:number,settled:boolean};
@@ -38,7 +38,7 @@ function remember(key:string,value:Cached){
  cache.delete(key);cache.set(key,value);bytes+=value.bytes;
  while(cache.size>64||bytes>32*1024*1024){const first=cache.keys().next().value!;bytes-=cache.get(first)!.bytes;cache.delete(first);}
 }
-function aborted(){return new DOMException('请求已取消','AbortError');}
+function aborted(){return new DOMException("请求已取消",'AbortError');}
 function consume<T>(entry:Pending,signal?:AbortSignal):Promise<T>{
  entry.users++;
  return new Promise((resolve,reject)=>{
@@ -50,7 +50,7 @@ function consume<T>(entry:Pending,signal?:AbortSignal):Promise<T>{
 }
 export async function api<T=any>(path:string,body?:any,method?:string,options:{signal?:AbortSignal,force?:boolean}={}):Promise<T>{
  if(options.signal?.aborted)throw aborted();
- const verb=method||(body===undefined?'GET':'POST'),readable=(verb==='GET'&&!/^(session|status|bootstrap|records)(\?|$)/.test(path))||(verb==='POST'&&path==='query');
+ const verb=method||(body===undefined?'GET':'POST'),readable=(verb==='GET'&&!path.startsWith('ai/')&&!/^(session|status|bootstrap|records|preferences)(\?|$)/.test(path))||(verb==='POST'&&path==='query');
  const resource=path+(verb==='POST'&&path==='query'?'?query='+encodeURIComponent(JSON.stringify(body)):'');
  const key=scope+'\n'+resource,previous=cache.get(key);
  if(readable&&previous?.valid&&!options.force){cache.delete(key);cache.set(key,previous);return previous.value;}
@@ -66,9 +66,9 @@ export async function api<T=any>(path:string,body?:any,method?:string,options:{s
   if(verb==='GET'&&response.status===503){await new Promise(resolve=>setTimeout(resolve,150));response=await fetchRead();}
   if(response.status===304&&!previous){delete headers['If-None-Match'];response=await fetch('/api/'+path,{headers,signal:controller.signal});}
   const data=response.status===304?previous!.value:await response.json();
-  if(!response.ok&&response.status!==304)throw Object.assign(new Error(data.error||(response.status===404&&path==='trash/clear'?'当前后台服务尚未加载清空功能，请重启服务后重试':typeof data.detail==='string'?data.detail:'操作未完成')),{conflict:response.status===409,status:response.status});
+  if(!response.ok&&response.status!==304)throw Object.assign(new Error(data.error||(response.status===404&&path==='trash/clear'?"当前后台服务尚未加载清空功能，请重启服务后重试":typeof data.detail==='string'?data.detail:"操作未完成")),{conflict:response.status===409,status:response.status});
   if(readable&&scope+'\n'+resource===key&&(versions.get(key)||0)===generation)remember(key,{value:data,etag:response.headers.get('ETag')||previous?.etag,bytes:typeof data.text==='string'?data.text.length*2+512:JSON.stringify(data).length*2,valid:true});
-  if(verb!=='GET'&&verb!=='HEAD'&&!['query','knowledge-search','html-preview','choose-directory','model-prepare','reindex','skills/wiki-search/install'].includes(path))invalidate({type:'write',paths:[body?.path,body?.source,body?.destination,data.path].filter(Boolean)});
+  if(verb!=='GET'&&verb!=='HEAD'&&!path.startsWith('ai/')&&!['preferences','demo','query','knowledge-search','html-preview','choose-directory','model-prepare','reindex','skills/wiki-search/install'].includes(path))invalidate({type:'write',paths:[body?.path,body?.source,body?.destination,data.path].filter(Boolean)});
   return data;
  };
  const entry:Pending={controller,users:0,settled:false,promise:Promise.resolve()};

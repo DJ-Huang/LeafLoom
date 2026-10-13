@@ -12,9 +12,17 @@ function run(argv) {
         var value = $.NSString.stringWithContentsOfFileEncodingError(path, $.NSUTF8StringEncoding, null);
         return value.isNil() ? '' : ObjC.unwrap(value);
     }
+    var labels = [];
+    function tr(key) {
+        var language = 'auto';
+        try { language = JSON.parse(text(state + '/preferences.json')).locale || 'auto'; } catch (_) {}
+        if (language === 'auto') language = ObjC.unwrap($.NSLocale.preferredLanguages.objectAtIndex(0));
+        var code = language.indexOf('zh') === 0 ? 'zh-CN' : language.indexOf('ja') === 0 ? 'ja' : 'en';
+        try { return JSON.parse(text(repo + '/vault_rag/locales/' + code + '.json'))[key] || key; } catch (_) { return key; }
+    }
     function alert(message) {
         var box = $.NSAlert.alloc.init;
-        box.messageText = '服务操作失败'; box.informativeText = message;
+        box.messageText = tr('服务操作失败'); box.informativeText = message;
         box.runModal;
     }
     function execute(action) {
@@ -49,13 +57,15 @@ function run(argv) {
     });
     var target = $.VaultRagCompatibilityMenu.alloc.init;
     var item = $.NSStatusBar.systemStatusBar.statusItemWithLength($.NSVariableStatusItemLength);
-    item.button.title = '知 ○';
-    var menu = $.NSMenu.alloc.initWithTitle('本地知识库');
+    item.button.image = $.NSImage.alloc.initWithContentsOfFile(repo + '/assets/brand/icon-64.png');
+    item.button.image.size = $.NSMakeSize(20, 20);
+    item.button.title = ' ○';
+    var menu = $.NSMenu.alloc.initWithTitle(tr('本地知识库'));
     menu.autoenablesItems = false;
     function entry(title, selector) {
-        var value = $.NSMenuItem.alloc.initWithTitleActionKeyEquivalent(title, selector || null, '');
+        var value = $.NSMenuItem.alloc.initWithTitleActionKeyEquivalent(tr(title), selector || null, '');
         if (selector) value.target = target; else value.enabled = false;
-        menu.addItem(value); return value;
+        menu.addItem(value); if (selector) labels.push([value,title]); return value;
     }
     var status = entry('正在检查服务…'), detail = entry('');
     menu.addItem($.NSMenuItem.separatorItem);
@@ -66,10 +76,11 @@ function run(argv) {
     entry('查看日志文件夹', 'openLogs:'); entry('退出菜单栏（服务继续运行）', 'quitMenu:');
     item.menu = menu;
     function refresh() {
+        labels.forEach(function(pair) { pair[0].title = tr(pair[1]); });
         if (fm.fileExistsAtPath(state + '/menubar.stop')) { app.terminate(null); return; }
-        if (task && task.running) { status.title = '正在处理服务操作…'; return; }
+        if (task && task.running) { status.title = tr('处理中…'); return; }
         if (task) {
-            if (task.terminationStatus !== 0) alert('请查看 ' + state + '/logs/menubar-actions.log');
+            if (task.terminationStatus !== 0) alert(tr('查看日志') + ': ' + state + '/logs/menubar-actions.log');
             task = null;
         }
         try {
@@ -82,11 +93,11 @@ function run(argv) {
             var data = $.NSURLConnection.sendSynchronousRequestReturningResponseError(request, response, error);
             if (data.isNil() || response[0].statusCode !== 200) throw Error('Service unavailable');
             var value = JSON.parse(ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding)));
-            status.title = '服务运行中 · HTTP MCP';
-            detail.title = (value.num_files || 0) + ' 篇 · ' + ((value.sync || {}).state || '检查中') + ' · ' + ((value.model || {}).loaded ? '模型已加载' : '模型未加载');
-            item.button.title = '知 ●';
+            status.title = tr('服务运行中 · HTTP MCP');
+            detail.title = (value.num_files || 0) + ' ' + tr('篇') + ' · ' + tr((value.sync || {}).state || '检查中') + ' · ' + tr((value.model || {}).loaded ? '模型已加载' : '模型未加载');
+            item.button.title = ' ●';
         } catch (_) {
-            status.title = '服务未响应 / 已停止'; detail.title = '点击「启动服务」恢复'; item.button.title = '知 ○';
+            status.title = tr('服务未响应 / 已停止'); detail.title = tr('点击启动服务恢复'); item.button.title = ' ○';
         }
         item.button.toolTip = status.title;
     }

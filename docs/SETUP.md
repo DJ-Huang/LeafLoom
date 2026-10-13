@@ -1,3 +1,5 @@
+[English](en/GUIDE.md) · [中文](zh-CN/GUIDE.md) · [日本語](ja/GUIDE.md)
+
 # 安装与配置
 
 ## 首次启动即可安装
@@ -86,4 +88,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows\check.ps1 -S
 
 安装器回归检查：`python -m unittest discover -s tests -p 'test_installer*.py'`。完整安装验收：使用已安装的 Python 运行 `scripts/install_smoke.py`，在独立中文/空格临时目录中复制源码，从无 `.venv`、网页和运行环境缓存开始安装，验证模型推理、网页、HTTP MCP 及服务启停，结束后删除自己的后台任务，保留日志与 `_generated/install-validation.json`。可用 `--reuse-model-from 私有配置目录` 复用模型，报告会明确记录。
 
-GitHub 的 `Desktop installer acceptance` 手动工作流提供 Windows 与 macOS ARM64 检查。CI 使用独立子服务，不创建桌面登录任务，报告中的 `desktop_tasks=false` 不能算作托盘或登录启动验收。实际结果见 [安装验收](INSTALL_VALIDATION.md)。macOS 原生验收本次按用户要求跳过；Windows 图标显示、实际重新登录和 Finder 双击同样不能用静态检查代替。
+GitHub 的 `Desktop installer acceptance` 手动工作流提供 Windows 与 macOS ARM64 检查。CI 使用独立子服务，不创建桌面登录任务，报告中的 `desktop_tasks=false` 不能算作托盘或登录启动验收。实际结果见 [安装验收](INSTALL_VALIDATION.md)。平台验收应在目标系统上记录；Windows 图标显示、实际重新登录和 Finder 双击不能用静态检查代替。
