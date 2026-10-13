@@ -1,8 +1,25 @@
 name: Desktop installer acceptance
 on:
   workflow_dispatch:
+    inputs:
+      desktop:
+        description: 'Build and validate standalone desktop installers'
+        type: boolean
+        default: false
 jobs:
+  desktop:
+    if: ${{ inputs.desktop }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/desktop-release.yml
+    with:
+      version: '0.2.0-beta.1'
+      with_model: false
+      signed: false
+      draft_release: false
+    secrets: inherit
   cold-install:
+    if: ${{ !inputs.desktop }}
     strategy:
       fail-fast: false
       matrix:

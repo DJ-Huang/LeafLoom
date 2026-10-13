@@ -388,3 +388,4 @@ td { line-height: 1.6; }
  .reading-search { gap: 7px; padding: 8px; }
 }
 @media(prefers-reduced-motion:reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+.model-preparation{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:12px 20px;background:#f5f3e9;color:#504a31;font-size:13px}.model-preparation span{flex:1;min-width:220px}.disk-comparison{white-space:pre-wrap;overflow:auto;max-height:55vh;padding:16px;border:1px solid #ddd;border-radius:8px}

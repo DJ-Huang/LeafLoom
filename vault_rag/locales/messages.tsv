@@ -669,3 +669,35 @@ Wiki 导航目录|Wiki navigation folders|Wiki ナビゲーションのフォル
 默认首页文件路径|Default start-note path|開始メモの既定パス
 （未打开）| (none open)|（未選択）
 ＋ 添加属性|＋ Add property|＋ プロパティを追加
+
+桌面应用|Desktop app|デスクトップアプリ
+登录后在后台提供检索服务，不打开主窗口。|Start retrieval in the background at login without opening a window.|ログイン時にウィンドウを開かず、検索サービスをバックグラウンドで起動します。
+关闭窗口后继续在后台运行；从托盘或菜单栏选择“退出”停止服务。|Closing the window keeps the service running. Choose Quit from the tray or menu bar to stop it.|ウィンドウを閉じても動作を続けます。停止するにはトレイまたはメニューバーから終了してください。
+本地检索模型正在准备|Preparing local search model|ローカル検索モデルを準備中
+本地检索模型尚未就绪|Local search model is not ready|ローカル検索モデルはまだ準備されていません
+首次需要联网下载 BGE-M3；你可以继续浏览和编辑，暂时使用关键词检索。|BGE-M3 downloads on first use. You can continue browsing, editing and keyword search.|初回は BGE-M3 をダウンロードします。閲覧、編集、キーワード検索は引き続き利用できます。
+重试下载|Retry download|ダウンロードを再試行
+使用当前编辑内容保存|Save current edits|現在の編集内容を保存
+打开 LeafLoom|Open LeafLoom|LeafLoom を開く
+关于 LeafLoom|About LeafLoom|LeafLoom について
+退出 LeafLoom|Quit LeafLoom|LeafLoom を終了
+正在检查本地服务…|Checking local service…|ローカルサービスを確認中…
+正在保存并停止本地服务…|Saving and stopping the local service…|保存してローカルサービスを停止中…
+正在重启本地服务…|Restarting local service…|ローカルサービスを再起動中…
+本地知识库：服务需要处理|LeafLoom: service needs attention|LeafLoom：サービスを確認してください
+本地知识库：后台正在重新启动|LeafLoom: restarting background service|LeafLoom：バックグラウンドサービスを再起動中
+尚未退出|App is still running|アプリはまだ実行中です
+请先处理未保存的设置或文档。保存冲突的草稿仍保留在 App 中。|Review unsaved settings or documents first. Conflicting drafts remain in the App.|先に未保存の設定や文書を確認してください。競合する下書きはアプリに保持されています。
+接管旧版本地知识库|Migrate the previous installation|以前のインストールを移行
+请先在旧浏览器保存尚未保存的草稿。继续后会备份旧启动项，保留配置、模型和知识库数据，并切换到桌面 App。|Save browser drafts first. Continuing backs up legacy startup entries, preserves settings, models and knowledge, and switches to the desktop App.|先にブラウザーの下書きを保存してください。続行すると以前の起動項目をバックアップし、設定、モデル、知識データを保持してデスクトップアプリへ移行します。
+已保存，继续|Saved, continue|保存済み、続行
+稍后|Later|後で
+旧版本迁移尚未完成；保存浏览器草稿后，退出并重新打开 App|Migration is pending. Save browser drafts, then quit and reopen the App.|移行は未完了です。ブラウザーの下書きを保存してから、アプリを終了し再度開いてください。
+打开主窗口|Open main window|メインウィンドウを開く
+保存文件|Save file|ファイルを保存
+日志位置：|Logs: |ログ：
+登录时启动|Start at login|ログイン時に起動
+关联本地知识目录|Connect a local knowledge folder|ローカル知識フォルダーを接続
+本地知识库启动失败|LeafLoom failed to start|LeafLoom の起動に失敗しました
+窗口|Window|ウィンドウ
+网页预览|Web preview|ウェブプレビュー

@@ -18,7 +18,13 @@ https://github.com/user-attachments/assets/56f37418-23cc-4763-af3c-3253fb06f517
 
 **Optional AI.** Connect a signed-in CLI or an HTTP MCP client. Review AI suggestions before saving. External AI services may receive the content you send.
 
-## Get started
+## Desktop releases
+
+The desktop release builds a Windows x64 `.exe` installer and a macOS Apple Silicon `.dmg` with a standalone LeafLoom App. Python and dependencies are bundled; BGE-M3 downloads inside the App on first use. Closing the window keeps local retrieval and MCP available; Quit stops the background service. Login startup is opt-in for new installations.
+
+Build and release instructions, signing, upgrade safety and platform acceptance: [Desktop release](docs/DESKTOP_RELEASE.md). Test builds are not yet signed with a verified publisher identity or notarized; available installers and actual verification are recorded with release artifacts.
+
+## Get started from source
 
 ```sh
 git clone https://github.com/DJ-Huang/LeafLoom.git

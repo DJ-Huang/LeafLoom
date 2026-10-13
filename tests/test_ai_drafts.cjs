@@ -26,6 +26,9 @@ async function flushTimers(){const callbacks=[...timers.values()];timers.clear()
  state.changeDocument(doc,'AI 修改后继续编辑');await flushTimers();assert.equal(writes,1);assert.equal(disk.text,'人工编辑');
  state=moduleInstance();doc=state.documentState(root,'a.md');await state.loadDocument(doc);assert(doc.manualSave);assert.equal(doc.text,'AI 修改后继续编辑');
  await state.saveDocument(doc,false);assert.equal(writes,1,'automatic saves must not publish AI drafts');
+ assert.equal(await state.flushDocuments(),false,'desktop quit must wait for AI draft review');
+ assert.equal(writes,1,'desktop quit must not publish AI drafts');
+ assert.equal(JSON.parse(storage.get(doc.key)).manualSave,true,'desktop quit must preserve the manual draft');
  await state.saveDocument(doc);assert.equal(writes,2);assert.equal(disk.text,'AI 修改后继续编辑');assert(!doc.manualSave);
  state.applyAiChange(doc,doc.text,'第二次 AI 修改',doc.etag);disk={...disk,text:'外部修改',etag:'external'};
  await state.saveDocument(doc);assert(doc.manualSave);assert(doc.dirty);assert.equal(doc.text,'第二次 AI 修改');assert.equal(disk.text,'外部修改');
@@ -35,5 +38,6 @@ async function flushTimers(){const callbacks=[...timers.values()];timers.clear()
  state.applyAiChange(doc,doc.text,'准备保存',doc.etag);let finish;pendingWrite=new Promise(resolve=>finish=resolve);
  const saving=state.saveDocument(doc);state.changeDocument(doc,'保存期间的新修改');finish();await saving;pendingWrite=undefined;
  assert(doc.manualSave);assert(doc.dirty);assert.equal(timers.size,0);assert.equal(doc.text,'保存期间的新修改');
+ assert.equal(await state.flushDocuments(),false);assert.equal(disk.text,'准备保存');
  console.log('AI draft tests passed: normal autosave, manual AI edits, refresh, conflicts, discard and in-flight edits.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

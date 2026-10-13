@@ -75,5 +75,7 @@ $RECYCLE.BIN/
 # Add `.vault-rag/` to your Obsidian vault's .gitignore — not this repo.
 
 web/node_modules/
+desktop/node_modules/
+desktop/release/
 web/tsconfig.tsbuildinfo
 vault_rag/static/

@@ -70,7 +70,7 @@ class EmbeddedModel:
                 pending=self.directory/'models/model-download.json'
                 try:pending_data=json.loads(pending.read_text())
                 except (OSError,ValueError):pending_data={}
-                revision=previous.get('revision') or pending_data.get('revision')
+                revision=previous.get('revision') or pending_data.get('revision') or os.environ.get('VAULT_RAG_MODEL_REVISION')
                 info=HfApi().model_info(self.model_id,revision=revision,files_metadata=True)
                 revision=info.sha
                 atomic_write(pending,json.dumps({'model':self.model_id,'revision':revision}).encode())

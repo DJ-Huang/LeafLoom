@@ -43,6 +43,16 @@ export async function saveDocument(session:DocumentState,explicit=true){
   finally{session.pending=undefined;emit(session);if(success&&session.dirty&&!session.manualSave){clearTimeout(session.timer);session.timer=setTimeout(()=>{session.timer=undefined;void saveDocument(session,false);},400);}trim();}
  })();return session.pending;
 }
+export async function flushDocuments(){
+ // A save already in flight may leave a newer edit dirty; flush that edit too.
+ for(const session of sessions.values()){
+  if(session.pending)await session.pending;
+  // AI suggestions remain manual: quitting is not permission to publish a draft.
+  if(session.dirty&&!session.manualSave)await saveDocument(session,false);
+  persist(session);
+ }
+ return [...sessions.values()].every(session=>!session.dirty);
+}
 export function applyProperties(session:DocumentState,note:Note){
  if(session.dirty)return false;
  session.note=note;if(session.text!==note.text)session.externalEpoch++;session.text=note.text;session.etag=note.etag;session.state='已保存';emit(session);return true;

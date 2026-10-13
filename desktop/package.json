@@ -1,0 +1,90 @@
+{
+  "name": "vault-rag-desktop",
+  "productName": "LeafLoom",
+  "version": "0.2.0-beta.1",
+  "description": "Local knowledge workspace with embedded search and HTTP MCP",
+  "author": "DJ-Huang",
+  "private": true,
+  "license": "MIT",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "acceptance": "node acceptance.cjs"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "com.djhuang.vault-rag.desktop",
+    "productName": "LeafLoom",
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "lib/**",
+      "assets/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../_generated/backend/vault-rag-backend",
+        "to": "backend"
+      },
+      {
+        "from": "../_generated/desktop-licenses",
+        "to": "licenses"
+      },
+      {
+        "from": "../vault_rag/locales",
+        "to": "locales"
+      }
+    ],
+    "artifactName": "VaultRag-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "minimumSystemVersion": "14.0",
+      "icon": "assets/icon.icns",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "notarize": false
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "executableName": "VaultRag",
+      "icon": "../assets/brand/leafloom.ico",
+      "signAndEditExecutable": true
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false,
+      "include": "installer.nsh"
+    }
+  }
+}

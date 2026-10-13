@@ -42,6 +42,9 @@ Issues = "https://github.com/DJ-Huang/LeafLoom/issues"
 [project.scripts]
 vault-rag = "vault_rag.cli:main"
 
+[dependency-groups]
+desktop-build = ["pyinstaller==6.22.3", "pyinstaller-hooks-contrib==2026.8"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["vault_rag"]
 

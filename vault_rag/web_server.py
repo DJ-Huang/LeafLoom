@@ -30,7 +30,7 @@ class StaticCompression:
         app=self.compressed if scope['type']=='http' and scope.get('path','').startswith('/assets/') else self.app
         await app(scope,receive,send)
 
-def create_app(config=None,runtime=None,*,start_background=True,static_dir=None):
+def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,desktop_info=None):
     config=config or LocalConfig()
     if runtime is None:
         from vault_rag.knowledge import Runtime
@@ -153,7 +153,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     @app.get('/api/bootstrap')
     async def bootstrap():return json_response({'config':config.data,'status':runtime.status(),'csrf':csrf,'suggested_root':''})
     @app.get('/api/status')
-    async def status():return json_response(runtime.status())
+    async def status():return json_response({**runtime.status(),**(desktop_info or {})})
     @app.post('/api/config')
     async def configure(request:Request):
         body=await request.json()

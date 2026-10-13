@@ -11,6 +11,8 @@ import {Association,ConnectedSettings} from './settings';
 import {SettingsLocation,SettingsResult,parentFolder} from './settings-model';
 import {Dashboard,Sidebar,PathNavigation,IndexStatus,fileName,usePreferences} from './layout';
 import './style.css';
+import {installQuitHandler} from './desktop';
+import {ModelPreparation} from './desktop-ui';
 import './ai.css';
 import {AiSelectionEvent} from './ai-context';
 import {Welcome,SetupGuide,GettingStarted,Guide,UserPreferences} from './onboarding';
@@ -34,6 +36,7 @@ type FileOperation={kind:'file'|'rename'|'move'|'delete',path?:string};
 const folderOf=(path:string)=>path.includes('/')?path.slice(0,path.lastIndexOf('/')):'';
 const within=(path:string,parent:string)=>path===parent||path.startsWith(parent+'/');
 function App(){
+ useEffect(()=>installQuitHandler(),[]);
  useLocale();
  const [guide,setGuide]=useState<Guide|null>(null),[demoMode,setDemoMode]=useState(false);
  const saveGuide=useCallback(async(values:Partial<Guide>)=>{const next=await api<UserPreferences>('preferences',{guide:values},'PUT');setGuide(next.guide);},[]);
@@ -115,7 +118,7 @@ function App(){
  };
  const fields:FormField[]=operation?.kind==='delete'?[]:operation?[{name:'name',label:operation.kind==='move'?t("目标路径（相对知识库根目录）"):t("名称"),required:true,value:operation.kind==='rename'?fileName(operation.path!):operation.kind==='move'?operation.path:t("未命名.md")}]:[];
  if(!config)return <LoadingShell error={connectionError} onRetry={()=>void loadSession()}/>;
- if(!config.root)return <><Welcome config={config} onSaved={saved} notify={notify}/>{toast&&<div role="status" className="toast">{toast}</div>}</>;
+ if(!config.root)return <><ModelPreparation/><Welcome config={config} onSaved={saved} notify={notify}/>{toast&&<div role="status" className="toast">{toast}</div>}</>;
  return <div className="app">
   <Sidebar width={preferences.sidebarWidth} collapsed={preferences.sidebarCollapsed} mobileOpen={mobileOpen} onToggle={toggleSidebar} onWidth={sidebarWidth=>setPreferences({sidebarWidth})} onDismiss={()=>setMobileOpen(false)}>
    <div className="brand"><div className="brand-mark small"><Logo size={30}/></div><div><strong>{t("本地知识库")}</strong><span title={config.root}>{fileName(config.root)}</span></div></div>
@@ -131,6 +134,7 @@ function App(){
    <div className="sidebar-tools"><button onClick={()=>openSettings()}><Settings size={16}/>{t("设置")}</button><button className="help-button" onClick={()=>{showHome();void saveGuide({step:'done',dismissed:false}).catch(error=>notify(error.message));}}>{t("新手指南")}</button></div><IndexStatus onOpen={()=>openSettings({section:'index',targetId:'sync'})}/>
   </Sidebar>
   <main className="main" inert={narrow&&mobileOpen}>
+   <ModelPreparation/>
    {connectionError&&<div role="status" className="connection-banner">{<Diagnostic message={connectionError}/>}<button onClick={refreshData}>{t("刷新数据")}</button></div>}
    <div className="workspace-topbar"><button className="icon-button sidebar-toggle" aria-label={t("切换导航")} aria-controls="workspace-sidebar" aria-expanded={narrow?mobileOpen:!preferences.sidebarCollapsed} onClick={toggleSidebar}><PanelLeft size={17}/></button><PathNavigation view={view} path={view==='document'?active:currentFolder} onFolder={showFolder}/><button className="ai-open-button" aria-expanded={aiOpen} onClick={()=>setAiOpen(value=>!value)}><MessageSquare size={15}/>{t("AI 对话")}</button></div>
    {view==='home'&&<Dashboard config={config} recent={preferences.recent} onOpen={openFile} onCreate={()=>newFile('file')} onKnowledge={showKnowledge} onDaily={()=>void daily()} guideContent={<GettingStarted guide={guide} onGuide={saveGuide} onAction={action=>{if(action==='create')newFile('file');else if(action==='search'||action==='source')showKnowledge();else if(action==='graph')showGraph();else if(action==='ai'){setAiOpen(true);setAiVisited(true);}else if(config.homepage)openFile(config.homepage);else showFolder('');}}/>}/>}

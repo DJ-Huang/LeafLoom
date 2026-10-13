@@ -1,0 +1,150 @@
+name: Desktop release
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        default: '0.2.0-beta.1'
+      with_model:
+        type: boolean
+        default: false
+      signed:
+        type: boolean
+        default: false
+      draft_release:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'SemVer release version'
+        required: true
+        default: '0.2.0-beta.1'
+      with_model:
+        description: 'Test first model download and packaged inference'
+        type: boolean
+        default: true
+      signed:
+        description: 'Use configured signing certificates and Apple notarization'
+        type: boolean
+        default: false
+      draft_release:
+        description: 'Create a GitHub prerelease draft after both builds pass'
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            platform: win32
+          - os: macos-15
+            platform: darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      UV_CACHE_DIR: ${{ runner.temp }}/desktop-uv
+      ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/desktop-builder
+      electron_config_cache: ${{ runner.temp }}/desktop-electron
+      CSC_LINK: ${{ inputs.signed && (matrix.platform == 'darwin' && secrets.MAC_CSC_LINK || secrets.WINDOWS_CSC_LINK) || '' }}
+      CSC_KEY_PASSWORD: ${{ inputs.signed && (matrix.platform == 'darwin' && secrets.MAC_CSC_KEY_PASSWORD || secrets.WINDOWS_CSC_KEY_PASSWORD) || '' }}
+      MAC_SIGNING_IDENTITY: ${{ inputs.signed && secrets.MAC_SIGNING_IDENTITY || '' }}
+      APPLE_API_KEY_CONTENT: ${{ inputs.signed && secrets.APPLE_API_KEY_CONTENT || '' }}
+      APPLE_API_KEY_ID: ${{ inputs.signed && secrets.APPLE_API_KEY_ID || '' }}
+      APPLE_API_ISSUER: ${{ inputs.signed && secrets.APPLE_API_ISSUER || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.0'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            desktop/package-lock.json
+      - name: Confirm native architecture
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then test "$(uname -m)" = arm64; fi
+      - name: Install locked build dependencies
+        run: uv sync --locked --python 3.12.13 --group desktop-build
+      - name: Install locked frontend and desktop dependencies
+        run: |
+          npm ci --prefix web
+          npm ci --prefix desktop
+          node desktop/node_modules/electron/install.js
+      - name: Focused release checks
+        run: |
+          uv run --no-sync python -m unittest discover -s tests -p test_desktop.py -q
+          uv run --no-sync python -m unittest discover -s tests -p test_productization.py -q
+          node tests/test_ai_drafts.cjs
+          npm --prefix desktop test
+      - name: Prepare signing credentials
+        if: ${{ inputs.signed }}
+        run: uv run --no-sync python scripts/desktop_signing.py
+      - name: Build frontend and frozen backend
+        shell: bash
+        run: uv run --no-sync python scripts/prepare_desktop.py --version "$RELEASE_VERSION"
+      - name: Build test installer
+        if: ${{ !inputs.signed }}
+        run: npm --prefix desktop run dist -- --publish never
+      - name: Build signed installer
+        if: ${{ inputs.signed }}
+        run: npm --prefix desktop run dist -- --config signing.cjs --publish never
+      - name: Test the installed application
+        shell: bash
+        env:
+          WITH_MODEL: ${{ inputs.with_model }}
+        run: |
+          extra=()
+          if [ "$WITH_MODEL" = true ]; then extra+=(--with-model); fi
+          for installer in desktop/release/VaultRag-*.dmg desktop/release/VaultRag-*.exe; do
+            [ -f "$installer" ] || continue
+            node desktop/acceptance.cjs --installer "$installer" "${extra[@]}"
+          done
+      - name: Create artifact checksums
+        run: uv run --no-sync python scripts/desktop_checksums.py
+      - name: Upload installer, checksums, license inventory and acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.dmg
+            desktop/release/SHA256SUMS.txt
+            desktop/release/artifacts.json
+            desktop/release/acceptance-*.json
+            _generated/desktop-licenses/**
+  release:
+    if: ${{ inputs.draft_release }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: _generated/release-downloads
+      - name: Prepare complete release assets
+        run: python scripts/assemble_desktop_release.py
+      - name: Prepare prerelease draft
+        shell: bash
+        run: |
+          gh release create "v$RELEASE_VERSION" _generated/release-assets/* --draft --prerelease --target "$GITHUB_SHA" --title "LeafLoom $RELEASE_VERSION" --notes-file docs/DESKTOP_RELEASE_NOTES.md
