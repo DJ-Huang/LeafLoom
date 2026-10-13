@@ -51,9 +51,6 @@ jobs:
     timeout-minutes: 90
     env:
       RELEASE_VERSION: ${{ inputs.version }}
-      UV_CACHE_DIR: ${{ runner.temp }}/desktop-uv
-      ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/desktop-builder
-      electron_config_cache: ${{ runner.temp }}/desktop-electron
       CSC_LINK: ${{ inputs.signed && (matrix.platform == 'darwin' && secrets.MAC_CSC_LINK || secrets.WINDOWS_CSC_LINK) || '' }}
       CSC_KEY_PASSWORD: ${{ inputs.signed && (matrix.platform == 'darwin' && secrets.MAC_CSC_KEY_PASSWORD || secrets.WINDOWS_CSC_KEY_PASSWORD) || '' }}
       MAC_SIGNING_IDENTITY: ${{ inputs.signed && secrets.MAC_SIGNING_IDENTITY || '' }}
@@ -62,6 +59,12 @@ jobs:
       APPLE_API_ISSUER: ${{ inputs.signed && secrets.APPLE_API_ISSUER || '' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Use isolated build caches
+        shell: bash
+        run: |
+          echo "UV_CACHE_DIR=$RUNNER_TEMP/desktop-uv" >> "$GITHUB_ENV"
+          echo "ELECTRON_BUILDER_CACHE=$RUNNER_TEMP/desktop-builder" >> "$GITHUB_ENV"
+          echo "electron_config_cache=$RUNNER_TEMP/desktop-electron" >> "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@v6
         with:
           version: '0.13.0'
