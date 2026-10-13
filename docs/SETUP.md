@@ -52,6 +52,8 @@ Windows 可将新图标放入“隐藏图标”；在任务栏设置中选择显
 
 `VAULT_RAG_HOME` 可覆盖私有配置目录；任务会固定保存该路径。目录和检索范围通过网页设置管理，正常 HTTP 服务无需 `.env`。已有 `.env` 仅供旧版审计助手使用，不会自动关联知识库。
 
+旧版审计助手通过 `vault_rag.settings.Settings` 读取环境变量或私有 `.env`。需要兼容命令时，自行指定 `VAULT_ROOT`，并按需设置 `VAULT_CONTENT_FOLDER`（默认 `RAG`）、`VAULT_RULES_FOLDER`（默认 `Rules`）、`INDEX_IN_VAULT`（默认 `true`）和 `VAULT_INDEX_FOLDER`（默认 `.vault-rag`）。通用 `.env.example` 已移除，避免将旧版助手的配置误用于产品服务；私有 `.env` 不应提交。
+
 服务默认监听 `127.0.0.1:18080`，网页在 `/`，MCP 在 `/mcp`。端口冲突会提示错误，不结束占用端口的其他应用。修改私有 `config.json` 的 `port` 后重启，并重新生成 MCP 示例。关联目录仅支持本机盘符目录，不支持 UNC 网络共享；符号链接、junction 越界以及 Windows 非法相对文件名会被拒绝。
 
 ## MCP 客户端
@@ -62,11 +64,11 @@ Codex 使用 `url` 与 `http_headers.Authorization`；Cursor 使用 `url` 与 `h
 
 ## macOS
 
-首次在仓库目录的终端运行 `sh Start.sh` 或双击仓库 `.app` 即可；主动修复在仓库目录的终端运行 `sh Install.sh`，停止运行 `sh Stop.sh`。三个 `.sh` 入口均不需要可执行权限。服务使用当前用户 LaunchAgent，菜单栏安装到 `~/Applications/本地知识库.app`，不需要管理员权限。正常登录只启动服务和菜单栏，不打开网页；退出菜单栏后服务继续运行。移动仓库后在新目录运行 `sh Install.sh` 更新路径。
+首次在仓库目录的终端运行 `sh Start.sh`；主动修复在仓库目录的终端运行 `sh Install.sh`，停止运行 `sh Stop.sh`。三个 `.sh` 入口均不需要可执行权限。服务使用当前用户 LaunchAgent，菜单栏通过系统 AppKit 脚本运行，不依赖 `.app` 包或管理员权限。正常登录只启动服务和菜单栏，不打开网页；退出菜单栏后服务继续运行。移动仓库后在新目录运行 `sh Install.sh` 更新路径。
 
 `Install.sh` 会先检查现有环境，依赖、网页和模型完整且安装输入未变化时跳过安装。需要更新或修复时按组件处理：网页未变化不重建，Python 依赖未变化且检查通过不重新同步，完整模型不重新准备；缺失依赖在原有兼容环境中补齐，损坏的原生依赖重新安装修复，Python 版本不兼容时保留旧环境备份。跳过安装后仍按原有行为打开网页，传入 `--no-open` 可禁止打开。这里的更新以当前仓库的版本和锁定文件为准，不检查远程最新版本。
 
-Intel Mac 和 macOS 13 及以下不在支持范围。菜单栏维护端构建说明见 [macOS 说明](../scripts/macos/README.md)，用户端不编译 Swift。
+Intel Mac 和 macOS 13 及以下不在支持范围。菜单栏和登录项说明见 [macOS 说明](../scripts/macos/README.md)，无需安装 Swift 或 Xcode。
 
 ## 定向检查与 Windows 实机验收
 
@@ -88,4 +90,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows\check.ps1 -S
 
 安装器回归检查：`python -m unittest discover -s tests -p 'test_installer*.py'`。完整安装验收：使用已安装的 Python 运行 `scripts/install_smoke.py`，在独立中文/空格临时目录中复制源码，从无 `.venv`、网页和运行环境缓存开始安装，验证模型推理、网页、HTTP MCP 及服务启停，结束后删除自己的后台任务，保留日志与 `_generated/install-validation.json`。可用 `--reuse-model-from 私有配置目录` 复用模型，报告会明确记录。
 
-GitHub 的 `Desktop installer acceptance` 手动工作流提供 Windows 与 macOS ARM64 检查。CI 使用独立子服务，不创建桌面登录任务，报告中的 `desktop_tasks=false` 不能算作托盘或登录启动验收。实际结果见 [安装验收](INSTALL_VALIDATION.md)。平台验收应在目标系统上记录；Windows 图标显示、实际重新登录和 Finder 双击不能用静态检查代替。
+GitHub 的 `Desktop installer acceptance` 手动工作流提供 Windows 与 macOS ARM64 检查。CI 使用独立子服务，不创建桌面登录任务，报告中的 `desktop_tasks=false` 不能算作托盘或登录启动验收。实际结果见 [安装验收](INSTALL_VALIDATION.md)。平台验收应在目标系统上记录；Windows 图标、macOS 菜单栏显示和实际重新登录不能用静态检查代替。

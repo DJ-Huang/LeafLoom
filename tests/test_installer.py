@@ -256,6 +256,28 @@ class InstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Forced include not found'):
             self.setup.run([sys.executable, '-c', "import sys; print('Forced include not found'); sys.exit(1)"], retry=True)
 
+    def test_mac_menu_installs_without_bundle_and_preserves_login_preference(self):
+        import plistlib
+        import runpy
+        source = Path(__file__).resolve().parents[1]
+        state = self.home / 'state'
+        agent = self.home / 'Library/LaunchAgents/com.djhuang.vault-rag.menubar.plist'
+        agent.parent.mkdir(parents=True)
+        agent.write_bytes(plistlib.dumps({'RunAtLoad': False}))
+        with patch('pathlib.Path.home', return_value=self.home), \
+             patch('vault_rag.platform_support.state_directory', return_value=state), \
+             patch('os.getuid', return_value=501, create=True), \
+             patch('subprocess.run') as run:
+            runpy.run_path(str(source / 'scripts/macos/install_menu.py'), run_name='__main__')
+        data = plistlib.loads(agent.read_bytes())
+        self.assertFalse(data['RunAtLoad'])
+        self.assertFalse(data['KeepAlive'])
+        self.assertEqual(data['ProgramArguments'], ['/bin/bash', str(source / 'scripts/macos/start_menu.sh'), str(source), str(state)])
+        self.assertEqual(data['EnvironmentVariables']['VAULT_RAG_HOME'], str(state))
+        self.assertTrue((state / 'logs').is_dir())
+        self.assertEqual([call.args[0][1] for call in run.call_args_list], ['bootout', 'bootstrap', 'kickstart'])
+        self.assertFalse((self.home / 'Applications').exists())
+
     def test_concurrent_lock_and_release(self):
         path = self.home / 'install.lock'
         with installer.InstallLock(path):

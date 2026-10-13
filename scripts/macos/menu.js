@@ -1,4 +1,4 @@
-// AppKit compatibility menu until the maintained ARM64/macOS 14 binary is built.
+// Script-based AppKit menu for macOS 14+.
 // Uses the system Objective-C bridge, never loads an embedding model.
 ObjC.import('AppKit');
 ObjC.import('Foundation');

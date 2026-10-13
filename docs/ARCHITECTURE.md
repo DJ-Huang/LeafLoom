@@ -1,5 +1,7 @@
 # 本地知识库架构
 
+[架构与工作流程图](assets/workflow.svg)
+
 ## 进程和接口
 
 一个 Python ASGI 进程同时提供本地网页、文件 API、HTTP MCP 和 BGE-M3 推理。网页由预构建静态文件提供，Node 只用于安装/构建；模型在服务中延迟加载，共用一个模型对象。正常客户端不通过 stdio 再启动服务或加载模型。
@@ -23,7 +25,7 @@ Windows `windows_native` 以用户 SID 和配置目录生成命名对象身份�
 
 Windows `.cmd` 入口调用 PowerShell 引导脚本。安装脚本保护私有状态目录、验证固定运行环境下载的 SHA256、准备私有 Python/Node、使用跨平台 `uv.lock` 安装项目、构建网页、下载固定修订的 BGE-M3，再安装任务。所有步骤成功后才写安装完成标记；启动入口核对仓库路径、解释器及锁文件指纹。
 
-Windows 默认使用官方 CPU PyTorch 软件源；通过锁定的 `msvc-runtime` wheel 将 Visual C++ DLL 安装在项目虚拟环境中，包入口注册 DLL 搜索目录，安装脚本执行原生导入与小规模 CPU 张量检查，避免仅凭安装完成就误判可运行；LanceDB、模型和托盘库使用对应 Windows wheel。现有 `requirements.lock` 是历史 macOS 安装快照，保留用于该环境记录，Windows 安装依据为 `uv.lock`。自动下载的 Python 是 uv 管理的 python-build-standalone 分发，Node 和 uv 归档的固定版本/校验值在运行环境清单中。安装不修改系统 PATH、注册全局 Python或持久执行策略。
+Windows 默认使用官方 CPU PyTorch 软件源；通过锁定的 `msvc-runtime` wheel 将 Visual C++ DLL 安装在项目虚拟环境中，包入口注册 DLL 搜索目录，安装脚本执行原生导入与小规模 CPU 张量检查，避免仅凭安装完成就误判可运行；LanceDB、模型和托盘库使用对应 Windows wheel。Windows 与 macOS 均依据跨平台 `uv.lock` 安装，不再维护独立的历史依赖快照。自动下载的 Python 是 uv 管理的 python-build-standalone 分发，Node 和 uv 归档的固定版本/校验值在运行环境清单中。安装不修改系统 PATH、注册全局 Python或持久执行策略。
 
 ## 知识范围和索引
 

@@ -13,3 +13,27 @@ UI text belongs in `vault_rag/locales/messages.tsv` (source, English, Japanese).
 Use Python 3.12 and the locked project environment. Build the frontend with `npm ci` and `npm run build` in `web/`. Run checks relevant to the change; productization regressions are in `tests/test_productization.py`. Validate UI changes against a fictional, isolated folder. State clearly which checks were run and which platforms were not tested.
 
 For public media, see [media production](docs/MEDIA.md). Keep user data out of all screenshots. Contributions are distributed under the repository's MIT license; third-party material keeps its own license.
+
+## Repository layout
+
+Keep the root limited to product entry points, dependency manifests and project documentation.
+
+| Directory | Purpose |
+| --- | --- |
+| `vault_rag/` | Python application, translation catalogs and demo notes |
+| `web/` | Frontend source and its npm lockfile |
+| `scripts/` | Installation, platform integration and reproducible asset tools |
+| `tests/` | Automated regression checks and isolated fixtures |
+| `docs/` | User guides, architecture and validation instructions |
+| `assets/` | Brand assets, public screenshots and reusable promotional media |
+| `templates/`, `wiki-search/` | Ignore template and installable search skill |
+
+`uv.lock` locks Python dependencies for both supported platforms; `web/package-lock.json` locks the frontend. Generated catalogs and public media are intentionally tracked so a checkout includes documentation and product resources.
+
+Keep private `.env` files, indexes, `_generated/`, `.cache/`, virtual environments, `web/node_modules/` and built `vault_rag/static/` out of Git. The installer recreates dependencies and frontend output. Do not remove an active environment, configuration, model or index during routine source cleanup. Old environment backups can be removed after confirming the replacement works and no process uses them.
+
+## Moving or copying a checkout
+
+Place the repository in a writable local folder and run the installer after moving it to update the service path. Do not copy a virtual environment from another machine or platform; let the installer prepare a compatible environment.
+
+Keep your note folder and private state separate from the source checkout. Never mirror a checkout over a folder containing unique notes or credentials. See [the user guide](docs/en/GUIDE.md).
