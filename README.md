@@ -8,9 +8,9 @@
 
 A local knowledge workspace for people who want to keep their files and make better use of them. Read and write Markdown, search your notes with source links, and explore how ideas connect.
 
-**Demo:** [▶ English promotional video (MP4)](https://github.com/DJ-Huang/LeafLoom/raw/refs/heads/main/assets/promo/leafloom-en.mp4) · [Video attachments — Issue #1](https://github.com/DJ-Huang/LeafLoom/issues/1)
+**Demo:** 
 
-![LeafLoom](assets/screenshots/en/03-reading.png)
+https://github.com/user-attachments/assets/56f37418-23cc-4763-af3c-3253fb06f517
 
 | Your files stay yours | Read and write | Find the source | See the connections |
 | --- | --- | --- | --- |
