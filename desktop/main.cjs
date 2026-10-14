@@ -60,7 +60,21 @@ if (!ownLock) {
   function trusted(event) {
     if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !localApp(event.senderFrame.url, origin)) throw new Error('桌面操作来源不允许');
   }
-  function show() { if (!mainWindow) return; if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); }
+  function createMainWindow() {
+    mainWindow = new BrowserWindow({title: 'LeafLoom', width: 1240, height: 860, minWidth: 700, minHeight: 500,
+      show: !process.argv.includes('--background'), webPreferences: {...preferences, preload: path.join(__dirname, 'preload.cjs')}});
+    mainWindow.on('close', event => {if (!quitting) {event.preventDefault(); mainWindow.hide();}});
+    protect(mainWindow);
+  }
+  function show() {
+    if (quitting) return;
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      createMainWindow();
+      if (origin) void mainWindow.loadURL(origin + '/');
+      else void startup(t('正在启动本地服务…'));
+    }
+    if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus();
+  }
   function message(text) {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const script = `document.getElementById('message')?.replaceChildren(document.createTextNode(${JSON.stringify(text)}))`;
@@ -119,7 +133,7 @@ if (!ownLock) {
     ]));
   }
   async function prepareQuit() {
-    if (!mainWindow || !localApp(mainWindow.webContents.getURL(), origin)) return true;
+    if (!mainWindow || mainWindow.isDestroyed() || !localApp(mainWindow.webContents.getURL(), origin)) return true;
     const id = crypto.randomUUID();
     const answer = new Promise(resolve => {
       const timer = setTimeout(() => { quitResponses.delete(id); resolve(false); }, 60000);
@@ -177,10 +191,7 @@ if (!ownLock) {
   });
   app.whenReady().then(async () => {
     if (maintenance) { if (process.argv.includes('--prepare-uninstall')) autostart(false); quitting = true; app.quit(); return; }
-    mainWindow = new BrowserWindow({title: 'LeafLoom', width: 1240, height: 860, minWidth: 700, minHeight: 500,
-      show: !process.argv.includes('--background'), webPreferences: {...preferences, preload: path.join(__dirname, 'preload.cjs')}});
-    mainWindow.on('close', event => { if (!quitting) { event.preventDefault(); mainWindow.hide(); } });
-    protect(mainWindow);
+    createMainWindow();
     const icon = nativeImage.createFromPath(path.join(__dirname, 'assets/tray.png'));
     if (process.platform === 'darwin') icon.setTemplateImage(true);
     tray = new Tray(icon); tray.setToolTip('LeafLoom'); tray.on('double-click', show); menu();

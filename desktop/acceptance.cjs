@@ -51,7 +51,8 @@ async function main() {
   fs.writeFileSync(path.join(home, 'desktop/settings.json'), JSON.stringify({migrationComplete: true, autostart: false}));
   fs.writeFileSync(path.join(home, 'preferences.json'), JSON.stringify({locale: 'zh-CN', onboarding: {}}));
   const root = path.join(fixture, '中文 知识库'); fs.mkdirSync(path.join(root, 'RAG/Notes'), {recursive: true});
-  fs.writeFileSync(path.join(root, 'RAG/Notes/release.md'), '# 安装包验收\n\n桌面本地知识库。\n');
+  fs.writeFileSync(path.join(root, 'RAG/Notes/release.md'), '# 安装包验收\n\n桌面本地知识库。[[linked]]\n');
+  fs.writeFileSync(path.join(root, 'RAG/Notes/linked.md'), '# 图谱关联笔记\n');
   fs.writeFileSync(path.join(root, 'RAG/Notes/preview.html'), '<h1>HTML 验收</h1><script>document.body.dataset.executed="yes"</script>');
   const servicePort = await port(), debugPort = await port(), mainDebugPort = await port(), origin = 'http://127.0.0.1:' + servicePort;
   fs.writeFileSync(path.join(home, 'config.json'), JSON.stringify({root, revision: 'acceptance', port: servicePort,
@@ -113,6 +114,12 @@ async function main() {
     assert.equal(await cdp.evaluate('typeof require'), 'undefined');
     assert.equal(await cdp.evaluate('window.vaultDesktop.getAutostart()'), false);
     passed('独立 App 窗口、受限桌面接口和默认关闭登录启动');
+    if (!options['with-model']) {
+      await until(() => cdp.evaluate('document.querySelector(".model-preparation button")?.textContent === "重试下载"'));
+      await cdp.evaluate('document.querySelector(".model-preparation button").click()');
+      await until(() => cdp.evaluate('document.querySelector(".model-preparation button")?.textContent === "重试下载"'));
+      passed('首次模型下载失败可重试，App 继续提供浏览和编辑');
+    }
     const second = spawn(executable, ['--background'], {env, cwd: fixture, stdio: 'ignore'});
     const [secondCode] = await once(second, 'exit'); assert.equal(secondCode, 0);
     assert.equal((await request('/api/status')).body.desktop_instance_id, instance); passed('重复启动复用同一后台');
@@ -139,6 +146,10 @@ async function main() {
     fs.mkdirSync(path.dirname(screenshotFile), {recursive: true});
     fs.writeFileSync(screenshotFile, Buffer.from(screenshot.data, 'base64'));
     report.screenshot = path.basename(screenshotFile);
+    await cdp.send('Page.navigate', {url: origin + '/?view=graph'});
+    await until(() => cdp.evaluate('!!document.querySelector(".graph canvas") && document.querySelector(".graph")?.getAttribute("aria-busy") === "false"'));
+    assert.ok((await request('/api/graph')).body.links.length > 0);
+    passed('App 内关系图谱完成渲染');
     const stale = (await request('/api/file?path=RAG%2FNotes%2Frelease.md')).body;
     fs.appendFileSync(path.join(root, 'RAG/Notes/release.md'), '\n外部修改');
     assert.equal((await request('/api/file', {path: stale.path, root, text: '不应覆盖', etag: stale.etag}, 'PUT')).status, 409);
@@ -156,7 +167,9 @@ async function main() {
       body: JSON.stringify({jsonrpc: '2.0', id: 1, method: 'initialize', params: {protocolVersion: '2025-03-26', capabilities: {}, clientInfo: {name: 'desktop-acceptance', version: '1'}}})});
     assert.equal(mcp.status, 200); assert.ok((await mcp.json()).result); passed('安装后的 HTTP MCP 初始化');
     if (options['with-model']) {
-      await until(async () => (await request('/api/status')).body.model.prepared, 1800000); passed('首次模型准备完成');
+      await until(async () => (await request('/api/status')).body.model.prepared, 1800000);
+      passed(options['reuse-model-from'] ? '复用已有完整模型' : '首次模型准备完成');
+      if (options['reuse-model-from']) report.pending.push('首次模型联网下载（本次复用已有模型）');
     } else report.pending.push('首次模型联网下载与推理（本次使用离线失败场景）');
     const maintenance = spawn(executable, ['--prepare-update'], {env, cwd: fixture, stdio: 'pipe'});
     // An attached Node inspector otherwise waits for its debugger before final process exit.
@@ -166,8 +179,8 @@ async function main() {
     assert.equal(fs.readFileSync(path.join(root, 'RAG/Notes/release.md'), 'utf8').includes('外部修改'), true);
     assert.equal(fs.existsSync(path.join(home, 'auth-token')), true); passed('退出保留笔记和私有配置');
     if (options['with-model']) {
-      const inference = JSON.parse(execFileSync(backend, ['model-check', '--home', home], {env, cwd: fixture, encoding: 'utf8', timeout: 300000}).trim().split('\n').at(-1));
-      assert.equal(inference.dimension, 1024); passed('安装包内 BGE-M3 本地推理');
+      const inference = JSON.parse(execFileSync(backend, ['model-check', '--home', home], {env: {...env, HF_HUB_OFFLINE: '1'}, cwd: fixture, encoding: 'utf8', timeout: 300000}).trim().split('\n').at(-1));
+      assert.equal(inference.dimension, 1024); passed('安装包内 BGE-M3 离线推理');
     }
     report.passed = true;
   } catch (error) { report.error = error.stack; throw error; }

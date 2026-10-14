@@ -15,11 +15,12 @@ Python 用 PyInstaller onedir 打包。静态网页、技能、Python、Torch、
 必须在 Windows x64、macOS ARM64 分别构建；开发维护机器需要 Node 22.23.3 与 uv 0.13.0，用户安装机器不需要。
 
 ```sh
-uv sync --locked --python 3.12.13 --group desktop-build
 npm ci --prefix web
 npm ci --prefix desktop
 node desktop/node_modules/electron/install.js
-uv run --no-sync python scripts/prepare_desktop.py --version 0.2.0-beta.1
+npm --prefix web run build
+uv sync --locked --python 3.12.13 --group desktop-build
+uv run --no-sync python scripts/prepare_desktop.py --skip-web-build --version 0.2.0-beta.1
 npm --prefix desktop run dist -- --publish never
 uv run --no-sync python scripts/desktop_checksums.py
 ```
