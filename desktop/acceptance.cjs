@@ -109,7 +109,7 @@ async function main() {
     const instance = status.desktop_instance_id;
     // Exercise the same canonical association API as the settings UI. In
     // particular, Python resolves Windows' RUNNER~1 temp alias to its long name.
-    const associated = await request('/api/config', {root}, 'PUT');
+    const associated = await request('/api/config', {root}, 'POST');
     assert.equal(associated.status, 200); root = associated.body.root;
     const document = await request('/api/file?path=RAG%2FNotes%2Frelease.md');
     assert.equal(document.status, 200, JSON.stringify(document.body));
