@@ -46,11 +46,11 @@ class Debugger {
 }
 async function main() {
   // macOS /var is an alias for /private/var. Match LocalConfig.save's canonical root.
-  const fixture = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'VaultRag-桌面验收-')));
+  const fixture = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'VaultRag-桌面验收-')));
   const home = path.join(fixture, '私有 状态'); fs.mkdirSync(path.join(home, 'desktop'), {recursive: true});
   fs.writeFileSync(path.join(home, 'desktop/settings.json'), JSON.stringify({migrationComplete: true, autostart: false}));
   fs.writeFileSync(path.join(home, 'preferences.json'), JSON.stringify({locale: 'zh-CN', onboarding: {}}));
-  const root = path.join(fixture, '中文 知识库'); fs.mkdirSync(path.join(root, 'RAG/Notes'), {recursive: true});
+  let root = path.join(fixture, '中文 知识库'); fs.mkdirSync(path.join(root, 'RAG/Notes'), {recursive: true});
   fs.writeFileSync(path.join(root, 'RAG/Notes/release.md'), '# 安装包验收\n\n桌面本地知识库。[[linked]]\n');
   fs.writeFileSync(path.join(root, 'RAG/Notes/linked.md'), '# 图谱关联笔记\n');
   fs.writeFileSync(path.join(root, 'RAG/Notes/preview.html'), '<h1>HTML 验收</h1><script>document.body.dataset.executed="yes"</script>');
@@ -107,6 +107,14 @@ async function main() {
     };
     const status = await until(async () => { const response = await request('/api/status'); return response.status === 200 && response.body.distribution === 'desktop' && response.body; });
     const instance = status.desktop_instance_id;
+    // Exercise the same canonical association API as the settings UI. In
+    // particular, Python resolves Windows' RUNNER~1 temp alias to its long name.
+    const associated = await request('/api/config', {root}, 'PUT');
+    assert.equal(associated.status, 200); root = associated.body.root;
+    const document = await request('/api/file?path=RAG%2FNotes%2Frelease.md');
+    assert.equal(document.status, 200, JSON.stringify(document.body));
+    assert.ok(document.body.text.includes('安装包验收'));
+    report.associated_root = root; passed('关联中文与空格目录并读取文档');
     const target = await until(async () => (await (await fetch('http://127.0.0.1:' + debugPort + '/json')).json()).find(target => target.type === 'page' && target.url.startsWith(origin + '/')));
     const socket = new WebSocket(target.webSocketDebuggerUrl); await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, {once: true}); socket.addEventListener('error', reject, {once: true}); });
     cdp = new Debugger(socket);
@@ -187,7 +195,16 @@ async function main() {
       assert.equal(inference.dimension, 1024); passed('安装包内 BGE-M3 离线推理');
     }
     report.passed = true;
-  } catch (error) { report.error = error.stack; throw error; }
+  } catch (error) {
+    report.error = error.stack;
+    if (cdp) try {
+      report.renderer = await cdp.evaluate('({url:location.href,text:document.body.innerText.slice(-12000)})');
+      const screenshot = await cdp.send('Page.captureScreenshot', {format: 'png'});
+      const output = path.join(__dirname, 'release', 'acceptance-' + process.platform + '.png');
+      fs.mkdirSync(path.dirname(output), {recursive: true}); fs.writeFileSync(output, Buffer.from(screenshot.data, 'base64'));
+    } catch {}
+    throw error;
+  }
   finally {
     report.app_exit_code = child?.exitCode;
     if (!report.passed) {
