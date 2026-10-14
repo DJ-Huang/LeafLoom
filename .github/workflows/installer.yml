@@ -6,9 +6,13 @@ on:
         description: 'Build and validate standalone desktop installers'
         type: boolean
         default: false
+      acceptance_run_id:
+        description: 'Retest an existing Windows desktop installer from an Actions run'
+        type: string
+        default: ''
 jobs:
   desktop:
-    if: ${{ inputs.desktop }}
+    if: ${{ inputs.desktop && !inputs.acceptance_run_id }}
     permissions:
       contents: write
     uses: ./.github/workflows/desktop-release.yml
@@ -18,8 +22,16 @@ jobs:
       signed: false
       draft_release: false
     secrets: inherit
+  desktop-acceptance:
+    if: ${{ inputs.acceptance_run_id }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/desktop-acceptance.yml
+    with:
+      source_run_id: ${{ inputs.acceptance_run_id }}
   cold-install:
-    if: ${{ !inputs.desktop }}
+    if: ${{ !inputs.desktop && !inputs.acceptance_run_id }}
     strategy:
       fail-fast: false
       matrix:

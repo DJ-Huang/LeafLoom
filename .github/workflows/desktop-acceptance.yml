@@ -1,0 +1,41 @@
+name: Retest installed Windows App
+on:
+  workflow_call:
+    inputs:
+      source_run_id:
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-win32
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
+          path: _generated/desktop-retest
+      - name: Test the existing installer without rebuilding it
+        shell: bash
+        run: |
+          for installer in _generated/desktop-retest/desktop/release/VaultRag-*.exe; do
+            test -f "$installer"
+            node desktop/acceptance.cjs --installer "$installer"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-win32-retest
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            desktop/release/acceptance-win32.json
+            desktop/release/acceptance-win32.png

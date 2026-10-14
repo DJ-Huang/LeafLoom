@@ -62,7 +62,8 @@ async function main() {
     fs.cpSync(path.join(path.resolve(options['reuse-model-from']), 'models'), path.join(home, 'models'), {recursive: true, filter: file => !file.split(path.sep).includes('.cache')});
   }
   const env = {...process.env, VAULT_RAG_HOME: home, PYTHONUTF8: '1',
-    PATH: process.platform === 'win32' ? [process.env.SystemRoot, path.join(process.env.SystemRoot, 'System32')].join(path.delimiter) : '/usr/bin:/bin:/usr/sbin:/sbin'};
+    // Hide developer runtimes while retaining Windows' built-in ACL/UI tools.
+    PATH: process.platform === 'win32' ? [process.env.SystemRoot, path.join(process.env.SystemRoot, 'System32'), path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0')].join(path.delimiter) : '/usr/bin:/bin:/usr/sbin:/sbin'};
   if (!options['with-model']) env.HF_HUB_OFFLINE = '1';
   let executable = options.app ? path.resolve(options.app) : null;
   let backend, child, cdp, mainCdp, installer = options.installer ? path.resolve(options.installer) : null;
@@ -188,6 +189,13 @@ async function main() {
     report.passed = true;
   } catch (error) { report.error = error.stack; throw error; }
   finally {
+    report.app_exit_code = child?.exitCode;
+    if (!report.passed) {
+      report.logs = {};
+      for (const file of [path.join(fixture, 'app-output.log'), path.join(home, 'logs/desktop-process.log'), path.join(home, 'logs/desktop-backend.log')]) {
+        if (fs.existsSync(file)) report.logs[path.basename(file)] = fs.readFileSync(file, 'utf8').slice(-12000);
+      }
+    }
     cdp?.socket.close();
     mainCdp?.socket.close();
     if (child && child.exitCode === null) {
