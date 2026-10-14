@@ -102,7 +102,11 @@ jobs:
         run: uv run --no-sync python scripts/prepare_desktop.py --skip-web-build --version "$RELEASE_VERSION"
       - name: Build test installer
         if: ${{ !inputs.signed }}
-        run: npm --prefix desktop run dist -- --publish never
+        shell: bash
+        run: |
+          # An empty CSC_LINK is interpreted as the working directory by builder.
+          unset CSC_LINK CSC_KEY_PASSWORD MAC_SIGNING_IDENTITY APPLE_API_KEY_CONTENT APPLE_API_KEY_ID APPLE_API_ISSUER
+          npm --prefix desktop run dist -- --publish never
       - name: Build signed installer
         if: ${{ inputs.signed }}
         run: npm --prefix desktop run dist -- --config signing.cjs --publish never
