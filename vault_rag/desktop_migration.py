@@ -93,6 +93,15 @@ def launchctl(*arguments, check=True):
     return response
 
 
+def wait_unregistered(target, timeout=60):
+    # launchd may still report a job while its graceful termination is pending.
+    deadline = time.monotonic() + timeout
+    while launchctl('print', target, check=False).returncode == 0:
+        if time.monotonic() >= deadline:
+            raise RuntimeError('旧启动项仍在正常收尾：' + target)
+        time.sleep(.25)
+
+
 def migrate_legacy(config):
     entries = registrations(config)
     if not entries:
@@ -115,8 +124,7 @@ def migrate_legacy(config):
             for entry in reversed(entries):
                 target = f'gui/{os.getuid()}/{entry["name"]}'
                 launchctl('bootout', target, check=False)
-                if launchctl('print', target, check=False).returncode == 0:
-                    raise RuntimeError('旧启动项未停止：' + entry['name'])
+                wait_unregistered(target)
         else:
             from vault_rag.windows_native import signal_stop
             from vault_rag.windows_service import wait_stopped, scheduler
@@ -141,8 +149,12 @@ def migrate_legacy(config):
                 if sys.platform == 'darwin':
                     atomic_write(Path(entry['path']), entry['bytes'])
                     target = f'gui/{os.getuid()}/{entry["name"]}'
-                    if launchctl('print', target, check=False).returncode:
-                        launchctl('bootstrap', f'gui/{os.getuid()}', entry['path'])
+                    # A job that was still stopping when a timeout occurred can
+                    # disappear just after print. Finish deregistration before
+                    # restoring it instead of treating that stale job as restored.
+                    launchctl('bootout', target, check=False)
+                    wait_unregistered(target)
+                    launchctl('bootstrap', f'gui/{os.getuid()}', entry['path'])
                 else:
                     scheduler('/Create', '/TN', entry['name'], '/XML', entry['backup'], '/F')
             except Exception as restore_error:

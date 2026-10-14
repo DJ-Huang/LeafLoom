@@ -42,6 +42,7 @@ class DesktopTests(unittest.TestCase):
             'VAULT_RAG_HOME': str(home or self.config.directory)}, 'RunAtLoad': True}))
         return path
 
+    @unittest.skipIf(os.name == 'nt', 'macOS launchd migration')
     def test_foreign_legacy_home_is_never_modified(self):
         path = self.agent(LABELS[0], self.home / 'other')
         original = path.read_bytes()
@@ -50,6 +51,7 @@ class DesktopTests(unittest.TestCase):
                 migrate_legacy(self.config)
         self.assertEqual(path.read_bytes(), original)
 
+    @unittest.skipIf(os.name == 'nt', 'macOS launchd migration')
     def test_successful_takeover_backs_up_and_preserves_login_choice(self):
         path = self.agent(LABELS[0])
         original = path.read_bytes()
@@ -59,13 +61,23 @@ class DesktopTests(unittest.TestCase):
         self.assertTrue(result['autostart']); self.assertFalse(path.exists())
         self.assertEqual((Path(result['backup']) / '0.plist').read_bytes(), original)
 
+    @unittest.skipIf(os.name == 'nt', 'macOS launchd migration')
     def test_failed_takeover_restores_registration(self):
         path = self.agent(LABELS[0]); original = path.read_bytes()
         response = type('Result', (), {'returncode': 0})()
-        with patch('vault_rag.desktop_migration.sys.platform', 'darwin'), patch('pathlib.Path.home', return_value=self.home), patch('vault_rag.service_control.health', return_value='ready'), patch('vault_rag.desktop_migration.launchctl', return_value=response):
+        with patch('vault_rag.desktop_migration.sys.platform', 'darwin'), patch('pathlib.Path.home', return_value=self.home), patch('vault_rag.service_control.health', return_value='ready'), patch('vault_rag.desktop_migration.launchctl', return_value=response), patch('vault_rag.desktop_migration.time.monotonic', side_effect=[0, 61, 62, 123]):
             with self.assertRaisesRegex(RuntimeError, '迁移未完成'):
                 migrate_legacy(self.config)
         self.assertEqual(path.read_bytes(), original)
+
+    @unittest.skipIf(os.name == 'nt', 'macOS launchd migration')
+    def test_takeover_waits_for_asynchronous_job_removal(self):
+        self.agent(LABELS[0]); remaining = iter([0, 0, 1])
+        def control(action, *args, **kwargs):
+            return type('Result', (), {'returncode': next(remaining) if action == 'print' else 0})()
+        with patch('vault_rag.desktop_migration.sys.platform', 'darwin'), patch('pathlib.Path.home', return_value=self.home), patch('vault_rag.service_control.health', return_value='stopped'), patch('vault_rag.desktop_migration.launchctl', side_effect=control), patch('vault_rag.desktop_migration.port_open', return_value=False), patch('vault_rag.desktop_migration.time.sleep') as sleep:
+            self.assertTrue(migrate_legacy(self.config)['migrated'])
+        self.assertEqual(sleep.call_count, 2)
 
     @unittest.skipIf(os.name == 'nt', 'POSIX lock; Windows uses the existing service mutex')
     def test_backend_singleton_is_scoped_to_home(self):

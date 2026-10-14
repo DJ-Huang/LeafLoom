@@ -80,6 +80,7 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = macOS ]; then test "$(uname -m)" = arm64; fi
       - name: Install locked frontend and desktop dependencies
+        shell: bash
         run: |
           npm ci --prefix web
           npm ci --prefix desktop
@@ -89,6 +90,7 @@ jobs:
       - name: Install locked build dependencies
         run: uv sync --locked --python 3.12.13 --group desktop-build
       - name: Focused release checks
+        shell: bash
         run: |
           uv run --no-sync python -m unittest discover -s tests -p test_desktop.py -q
           uv run --no-sync python -m unittest discover -s tests -p test_productization.py -q

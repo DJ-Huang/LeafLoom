@@ -81,10 +81,13 @@ async function main() {
         backend = path.join(appBundle, 'Contents/Resources/backend/vault-rag-backend');
       } else if (process.platform === 'win32') {
         execFileSync(installer, ['/S'], {env, stdio: 'pipe'});
-        const script = "$x=Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' | Where-Object DisplayName -eq 'LeafLoom' | Select-Object -First 1; [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $x.InstallLocation";
+        // Builder stores InstallLocation in its private key. The uninstall entry
+        // uses 'LeafLoom <version>' and contains a quoted uninstall executable.
+        const script = "$x=Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' | Where-Object { $_.DisplayName -like 'LeafLoom *' } | Select-Object -First 1; [Console]::OutputEncoding=[Text.UTF8Encoding]::new(); if ($x.UninstallString -match '^\"([^\"]+)\"') { [IO.Path]::GetDirectoryName($Matches[1]) }";
         const installDir = execFileSync('powershell.exe', ['-NoProfile', '-Command', script], {encoding: 'utf8'}).trim();
         if (!installDir) throw new Error('没有找到实际安装目录');
         executable = path.join(installDir, 'VaultRag.exe'); backend = path.join(installDir, 'resources/backend/vault-rag-backend.exe');
+        assert.ok(fs.existsSync(executable), '实际安装的 App 可执行文件存在');
       } else throw new Error('不支持此平台的安装验收');
       passed('实际安装包安装完成');
     }

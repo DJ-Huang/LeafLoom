@@ -17,7 +17,7 @@ class Backend extends EventEmitter {
   env() { return {...process.env, PATH: cliPath(), VAULT_RAG_HOME: this.home, PYTHONUTF8: '1', PYTHONDONTWRITEBYTECODE: '1', TOKENIZERS_PARALLELISM: 'false', NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost'}; }
   run(action) {
     return new Promise((resolve, reject) => execFile(this.executable, [action, '--home', this.home],
-      {cwd: this.home, env: this.env(), windowsHide: true, timeout: 180000, maxBuffer: 2 * 1024 * 1024},
+      {cwd: this.home, env: this.env(), windowsHide: true, timeout: action === 'migrate-legacy' ? 420000 : 180000, maxBuffer: 2 * 1024 * 1024},
       (error, stdout, stderr) => {
         if (error) return reject(new Error(stderr.trim() || error.message));
         try { resolve(JSON.parse(stdout.trim().split('\n').at(-1))); } catch { reject(new Error('后台返回了无法识别的状态')); }
