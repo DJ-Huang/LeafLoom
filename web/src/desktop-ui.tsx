@@ -20,5 +20,5 @@ export function ModelPreparation(){
  useEffect(()=>{if(window.vaultDesktop&&model&&!model.prepared&&!model.error&&!attempted.current){attempted.current=true;void prepare();}},[model?.prepared,model?.error]);
  if(!window.vaultDesktop||!model||model.prepared)return null;
  const downloading=starting||model.download==='下载模型中';
- return <div role="status" className="model-preparation"><strong>{t(downloading?'本地检索模型正在准备':'本地检索模型尚未就绪')}</strong><span>{error||model.error||t('首次需要联网下载 BGE-M3；你可以继续浏览和编辑，暂时使用关键词检索。')}</span>{!downloading&&<button onClick={()=>void prepare()}>{t(error||model.error?'重试下载':'准备模型')}</button>}</div>;
+ return <div role="status" className="model-preparation"><strong>{t(downloading?'本地检索模型正在准备':'本地检索模型尚未就绪')}</strong><span>{t(error||model.error?'模型准备未完成，你可以重试；浏览和编辑仍可使用。':'首次需要联网下载 BGE-M3；你可以继续浏览和编辑，暂时使用关键词检索。')}</span>{!downloading&&<button onClick={()=>void prepare()}>{t(error||model.error?'重试下载':'准备模型')}</button>}{(error||model.error)&&<details><summary>{t('诊断详情')}</summary><pre>{error||model.error}</pre></details>}</div>;
 }

@@ -25,9 +25,16 @@ function writeSettings(settings) {
   fs.renameSync(temporary, settingsFile);
 }
 function autostart(enabled) {
-  app.setLoginItemSettings({openAtLogin: enabled, path: process.execPath, args: ['--background']});
+  const options = {path: process.execPath, args: ['--background']};
+  if (app.getLoginItemSettings(options).openAtLogin !== enabled) {
+    app.setLoginItemSettings({openAtLogin: enabled, ...options});
+    if (app.getLoginItemSettings(options).openAtLogin !== enabled) {
+      throw new Error(t('无法设置登录启动，请在系统设置中检查 LeafLoom 的权限。'));
+    }
+  }
   const settings = readSettings(); writeSettings({...settings, autostart: enabled});
 }
+function loginEnabled() {return app.getLoginItemSettings({path: process.execPath, args: ['--background']}).openAtLogin;}
 
 const maintenance = process.argv.includes('--prepare-update') || process.argv.includes('--prepare-uninstall');
 const requestId = crypto.randomUUID();
@@ -104,7 +111,10 @@ if (!ownLock) {
         } catch (error) { await failure(error); }
       }},
       {label: t('查看日志'), click: () => shell.openPath(path.join(home, 'logs'))},
-      {label: t('登录时启动'), type: 'checkbox', checked: !!readSettings().autostart, click: item => autostart(item.checked)},
+      {label: t('登录时启动'), type: 'checkbox', checked: loginEnabled(), click: async item => {
+        try {autostart(item.checked);} catch (error) {await dialog.showMessageBox(mainWindow, {type: 'warning', message: error.message});}
+        menu();
+      }},
       {type: 'separator'}, {label: t('退出'), click: () => void requestQuit()}
     ]));
   }
@@ -155,7 +165,7 @@ if (!ownLock) {
     trusted(event); const result = await dialog.showOpenDialog(mainWindow, {title: t('关联本地知识目录'), properties: ['openDirectory']});
     return result.canceled ? {cancelled: true} : {path: result.filePaths[0]};
   });
-  ipcMain.handle('desktop:get-autostart', event => { trusted(event); return !!readSettings().autostart; });
+  ipcMain.handle('desktop:get-autostart', event => { trusted(event); return loginEnabled(); });
   ipcMain.handle('desktop:set-autostart', (event, enabled) => {
     trusted(event); if (typeof enabled !== 'boolean') throw new Error('登录启动设置无效');
     autostart(enabled); menu(); return enabled;
@@ -197,7 +207,9 @@ if (!ownLock) {
         autostart: legacy.legacy ? migration.autostart : false};
       writeSettings(settings);
     }
-    autostart(!!settings.autostart); menu();
+    let loginError;
+    try {autostart(!!settings.autostart);} catch (error) {loginError = error.message;}
+    menu();
     fs.watch(home, {persistent: false}, (_, file) => {if(String(file)==='preferences.json')menu();});
     let readyOnce = false;
     backend.on('crash', async error => {
@@ -216,5 +228,6 @@ if (!ownLock) {
       finally { crashBusy = false; }
     });
     await backend.start(); readyOnce = true; await mainWindow.loadURL(origin + '/');
+    if (loginError) void dialog.showMessageBox(mainWindow, {type: 'warning', message: loginError});
   }).catch(error => { if (mainWindow) void failure(error); else { dialog.showErrorBox(t('本地知识库启动失败'), error.message); app.exit(1); } });
 }

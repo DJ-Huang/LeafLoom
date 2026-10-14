@@ -699,5 +699,7 @@
   "关联本地知识目录": "Connect a local knowledge folder",
   "本地知识库启动失败": "LeafLoom failed to start",
   "窗口": "Window",
-  "网页预览": "Web preview"
+  "网页预览": "Web preview",
+  "模型准备未完成，你可以重试；浏览和编辑仍可使用。": "Model setup did not finish. Retry when ready; browsing and editing still work.",
+  "无法设置登录启动，请在系统设置中检查 LeafLoom 的权限。": "Could not change login startup. Check LeafLoom permissions in system settings."
 }
