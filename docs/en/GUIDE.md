@@ -45,6 +45,16 @@ Only `.md` and `.txt` are indexed. Images, videos and other attachments remain b
 ![Knowledge search](../../assets/screenshots/en/04-search.png)
 ![Knowledge graph](../../assets/screenshots/en/05-graph.png)
 
+## Write with commands
+
+In **Edit** mode, type `/` at the start of a line or after a space to insert headings, lists, tasks, quotes, tables, code, images, links, equations or Mermaid diagrams. Search by name or aliases such as `/h2` and `/todo`; use the arrow keys and Enter, or Esc to keep the literal text. Code, formulas, properties and URLs do not open the menu.
+
+Select text for the formatting toolbar. `Ctrl/⌘+B`, `Ctrl/⌘+I` and `Ctrl/⌘+E` toggle bold, italic and inline code. Paste a URL over selected text to make a link, or use `Ctrl/⌘+Shift+K` to enter one. Type `[[` and a note name to choose a note by its full path.
+
+Use **+** beside the current block to insert content and **⋮⋮** to convert, duplicate, move or delete it. Nested lists, code and tables move as whole blocks. Paste screenshots or drop files into the editor: attachments go in the note's neighboring `attachments` folder with unique names. Uploading does not replace existing files; undoing the inserted link keeps the uploaded file. Failed or cancelled uploads may leave completed files in that folder.
+
+All changes remain ordinary Markdown. **Source** mode edits the text directly. Switching the interface language keeps the current editor and its undo history. Block dragging, multi-block selection and direct table-cell editing are not included.
+
 ## Recovery and everyday use
 
 External file changes are watched. **Refresh data** refreshes views; browser reload does not upgrade the background service. Switch folders in Settings. Delete sends content to Trash; use **Settings → Trash** to restore it. **History** keeps saved versions and file operations. Emptying Trash permanently cannot be undone.
