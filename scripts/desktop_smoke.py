@@ -52,10 +52,18 @@ def exercise(python, workspace, *, commit=True):
             except ValueError: pass
         events.put({'type': 'exit', 'code': child.wait()})
     threading.Thread(target=read, daemon=True).start()
+    def wait_event(expected, timeout):
+        deadline = time.monotonic() + timeout
+        while True:
+            event = events.get(timeout=max(0, deadline - time.monotonic()))
+            if event['type'] == 'tunnel-state':
+                continue
+            if event['type'] != expected:
+                raise RuntimeError(str(event))
+            return event
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
-        ready = events.get(timeout=100)
-        if ready['type'] != 'ready': raise RuntimeError(str(ready))
+        ready = wait_event('ready', 100)
         url = ready['url']; token = (state / 'auth-token').read_text().strip()
         def request(route, data=None, method=None, authorized=True):
             headers = {'Content-Type': 'application/json'}
@@ -96,7 +104,7 @@ def exercise(python, workspace, *, commit=True):
         assert not (state / 'models/bge-m3').exists(), 'Startup downloaded a model'
         if commit:
             child.stdin.write('{"type":"commit"}\n'); child.stdin.flush()
-            assert events.get(timeout=5)['type'] == 'committed'
+            wait_event('committed', 5)
             child.stdin.write('{"type":"shutdown"}\n'); child.stdin.flush()
         child.stdin.close()  # Exercise EOF ownership cleanup too.
         assert child.wait(timeout=35) == 0
