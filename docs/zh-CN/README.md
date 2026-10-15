@@ -12,7 +12,7 @@
 
 **[下载 Windows 安装包](https://github.com/DJ-Huang/LeafLoom/releases/latest) · [下载 Mac 安装包](https://github.com/DJ-Huang/LeafLoom/releases/latest)**
 
-[开始使用](#开始使用) · [连接 ChatGPT](#在-chatgpt-中使用本地知识库) · [MCP、Skill 与 AI Chat](#ai-connections) · [新手指南](GUIDE.md)
+[开始使用](#开始使用) · [连接 ChatGPT](#在-chatgpt-中使用本地知识库) · [MCP、Skill 与 AI Chat](#ai-connections) · [新手指南](GUIDE.md) · [文档目录](../README.md)
 
 **看看 LeafLoom 如何工作（英文演示）：**
 
@@ -81,7 +81,7 @@ App Key 由操作系统加密保存。连接随应用启动，关闭窗口留在
 
 ### Markdown 文档：从阅读到记录
 
-搭建项目 Wiki、记录决策、积累阅读笔记。表格、清单、属性、模板和可恢复历史，让日常记录逐渐成为可复用的知识；正文始终是自己的本地 Markdown 文件。
+直接在排版后的正文中编辑，用 `/` 命令插入内容、拖动块、修改表格、粘贴截图或拖入附件。正文与 Markdown 源码共用撤销历史，未修改原文和属性保持不变；普通编辑自动保存，AI 草稿手动保存。参阅 [Markdown 编辑指南](GUIDE.md#用命令快速编辑)。
 
 ![Markdown 项目笔记：表格、任务清单、双链与文档目录](../../assets/screenshots/zh-CN/showcase-markdown.png)
 
@@ -99,7 +99,7 @@ App Key 由操作系统加密保存。连接随应用启动，关闭窗口留在
 
 ### HTML 预览：把本地网页也放进知识库
 
-收藏的网页、排版丰富的指南、轻量交互文档，都能与笔记放在一起。隔离预览本地 `.html`、`.htm` 文件，呈现配套样式、图片和受支持的本地脚本。下图的 HTML 阅览室已包含在演示库中。
+打开本地 `.html`、`.htm` 文件，确认一次项目文件夹，即可运行带有配套样式、脚本和资源的网站。支持网页导航、下载与可选 SPA 路由，也可从侧栏「网页」打开已有 HTTP/HTTPS 网站或开发服务。参阅 [HTML 项目指南](GUIDE.md#打开-html-项目与网站)。下图的 HTML 阅览室已包含在演示库中。
 
 ![LeafLoom 内的本地 HTML 阅览室预览](../../assets/screenshots/zh-CN/showcase-html.png)
 
