@@ -14,7 +14,7 @@ const {execFileSync}=require('node:child_process');
  try{
   const env={...process.env,VAULT_RAG_HOME:state,LEAFLOOM_REGISTRATION_HOME:path.join(root,'registration')};delete env.ELECTRON_RUN_AS_NODE;
   application=await _electron.launch({executablePath:path.resolve(process.env.LEAFLOOM_DESKTOP_EXECUTABLE),env,timeout:120000});child=application.process();
-  const page=await application.firstWindow();await page.waitForURL('http://127.0.0.1:'+port+'/',{timeout:110000});await page.locator('main').waitFor();await page.waitForTimeout(2000);
+  const page=await application.firstWindow();await page.waitForURL(url=>/^app\.[a-f0-9]{32}\.localhost$/.test(url.hostname)&&url.port===String(port)&&url.pathname==='/',{timeout:110000});await page.locator('main').waitFor();await page.waitForTimeout(2000);
   const metrics=await application.evaluate(({app})=>app.getAppMetrics());
   const browserPid=await application.evaluate(()=>process.pid);
   const pids=[...new Set([child.pid,...metrics.map(m=>m.pid)])];

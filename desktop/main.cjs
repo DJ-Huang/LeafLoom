@@ -26,6 +26,7 @@ const statusFile = path.join(__dirname, 'status.html');
 const statusUrl = pathToFileURL(statusFile).href;
 const control = path.join(home, 'desktop-control');
 let window, tray, backend, origin = '', lastOrigin = '', workspaceLoaded = false, quitting = false, quitPending = false, failure = '', retrying = false;
+const websiteContents = new Set();
 let startupTimer, closeTimer;
 const tunnel = new TunnelSettings(home, safeStorage);
 let tunnelBackendReady = false;
@@ -91,7 +92,10 @@ function createWindow() {
     icon: image('icon-256.png'), webPreferences: {preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, spellcheck: false, devTools: !app.isPackaged}});
   const contents = window.webContents;
   let allowDiscard = false;
-  const permitted = url => url === statusUrl || policy.trustedPage(url, origin);
+  const permitted = url => {
+    if (url === statusUrl || policy.trustedPage(url, origin)) return true;
+    try {const target = new URL(url); return target.origin === origin && target.pathname === '/__leafloom__/migrate';} catch {return false;}
+  };
   contents.on('will-navigate', (event, url) => {
     if (permitted(url)) return;
     event.preventDefault();
@@ -101,8 +105,21 @@ function createWindow() {
       else void shell.openExternal(policy.externalUrl(url));
     } catch {}
   });
-  contents.on('will-redirect', (event, url) => {if (!permitted(url)) event.preventDefault();});
-  contents.setWindowOpenHandler(({url}) => {try {void shell.openExternal(policy.externalUrl(url));} catch {} return {action: 'deny'};});
+  contents.on('will-redirect', (event, url, _inPlace, isMainFrame) => {
+    // Website frames follow normal HTTP redirects. Only the privileged top-level
+    // workspace window is confined to application routes.
+    if ((event.isMainFrame ?? isMainFrame) && !permitted(url)) event.preventDefault();
+  });
+  contents.setWindowOpenHandler(({url}) => {
+    if (policy.projectUrl(url, origin)) return {action: 'allow', overrideBrowserWindowOptions: {webPreferences: {nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, preload: path.join(__dirname, 'web-preload.cjs')}}};
+    try {void shell.openExternal(policy.externalUrl(url));} catch {}
+    return {action: 'deny'};
+  });
+  contents.on('did-create-window', child => {
+    const site = child.webContents;
+    websiteContents.add(site);
+    child.on('closed', () => websiteContents.delete(site));
+  });
   contents.on('will-attach-webview', event => event.preventDefault());
   contents.on('render-process-gone', (_, details) => {workspaceLoaded = false; if (!quitting) fail(new Error('Window stopped: ' + details.reason));});
   contents.on('will-prevent-unload', event => {
@@ -180,16 +197,24 @@ async function startBackend() {
         const token = fs.readFileSync(path.join(home, 'auth-token'), 'utf8').trim();
         const response = await fetch(ready.url + '/api/status', {headers: {Authorization: 'Bearer ' + token}, signal: AbortSignal.timeout(10000)});
         if (!response.ok) throw new Error('Local service authentication failed');
-        origin = new URL(ready.url).origin; lastOrigin = origin;
+        const sessionResponse = await fetch(ready.url + '/api/session', {headers: {Authorization: 'Bearer ' + token}, signal: AbortSignal.timeout(10000)});
+        if (!sessionResponse.ok) throw new Error('Workspace address unavailable');
+        const sessionInfo = await sessionResponse.json();
+        origin = policy.workspaceOrigin(sessionInfo.ui_url, ready.url); lastOrigin = origin;
         if (!policy.trustedPage(window.webContents.getURL(), origin)) await window.loadURL(ready.url + '/');
-        await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
-          const limit = Date.now() + 15000;
-          const poll = () => {
-            if (document.querySelector('#root main') && window.leafloomDesktop) return resolve(true);
-            if (Date.now() > limit) return reject(new Error('Workspace interface did not become ready'));
-            setTimeout(poll, 100);
-          }; poll();
-        })`);
+        // The legacy entrance and collector intentionally navigate across origins.
+        // Poll from the main process; a promise in the old renderer is destroyed
+        // by those navigations and cannot reliably supervise readiness.
+        const interfaceDeadline = Date.now() + 45000;
+        let interfaceReady = false;
+        while (Date.now() < interfaceDeadline && !interfaceReady) {
+          if (!window || window.isDestroyed()) throw new Error('Workspace window closed during startup');
+          if (policy.trustedPage(window.webContents.getURL(), origin)) {
+            try {interfaceReady = await window.webContents.executeJavaScript('Boolean(document.querySelector("#root main") && window.leafloomDesktop)');} catch {}
+          }
+          if (!interfaceReady) await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        if (!interfaceReady) throw new Error('Workspace interface did not become ready');
         workspaceLoaded = true;
         if (!previousPreferences && app.isPackaged) {loginChanged = true; setLogin(Boolean(ready.autostart));}
         if (app.isPackaged) {
@@ -242,11 +267,24 @@ else {
     if (process.platform === 'darwin') background = background || loginSettings().wasOpenedAtLogin;
     if (process.argv.includes('--quit')) {quitting = true; app.quit(); return;}
     if (!((process.platform === 'win32' && process.arch === 'x64') || (process.platform === 'darwin' && process.arch === 'arm64'))) throw new Error('Supported platforms: Windows x64 and Apple Silicon macOS');
-    session.defaultSession.setPermissionRequestHandler((_, __, callback) => callback(false));
-    session.defaultSession.setPermissionCheckHandler(() => false);
+    const grants = new Set();
+    session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
+      const url = details.requestingUrl || details.securityOrigin || '';
+      let site; try {site = new URL(url).origin;} catch {callback(false); return;}
+      if (!window || (contents !== window.webContents && !websiteContents.has(contents)) || site === origin) {callback(false); return;}
+      if (permission === 'fullscreen') {callback(true); return;}
+      if (!['media', 'geolocation', 'notifications', 'clipboard-read', 'clipboard-sanitized-write', 'pointerLock'].includes(permission)) {callback(false); return;}
+      void dialog.showMessageBox(window, {type: 'question', title: 'LeafLoom', message: `${site}\n${permission}`, detail: 'Allow this website to use this capability? / 是否允许此网页使用该能力？', buttons: ['Deny / 拒绝', 'Allow / 允许'], defaultId: 0, cancelId: 0}).then(result => {
+        if (result.response === 1) grants.add(site + '\n' + permission);
+        callback(result.response === 1);
+      }).catch(() => callback(false));
+    });
+    session.defaultSession.setPermissionCheckHandler((_, permission, securityOrigin) => permission === 'fullscreen' || grants.has(securityOrigin + '\n' + permission));
     session.defaultSession.on('will-download', (event, item, contents) => {
       // Backend media responses already enforce the connected-folder boundary.
-      if (!window || contents !== window.webContents || !origin || !item.getURL().startsWith(origin + '/api/media?')) event.preventDefault();
+      const url = item.getURL();
+      const allowed = origin && (url.startsWith(origin + '/api/media?') || policy.projectUrl(url, origin) || /^blob:/.test(url) || /^https?:\/\//.test(url));
+      if (!window || (contents !== window.webContents && !websiteContents.has(contents)) || !allowed) event.preventDefault();
     });
     createWindow();
     const trayImage = nativeImage.createFromPath(image(process.platform === 'darwin' ? 'icon-32.png' : 'icon-64.png')).resize({width: process.platform === 'darwin' ? 18 : 32});
