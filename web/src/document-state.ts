@@ -1,6 +1,9 @@
 import {api,Note} from './api';
+import {createEditHistory,EditHistory,EditMeta,historyText,recordEdit} from './edit-history';
 export type DocumentState={root:string,path:string,key:string,text:string,etag:string,note?:Note,dirty:boolean,manualSave:boolean,stale?:boolean,pending?:Promise<void>,timer?:ReturnType<typeof setTimeout>,state:string,error:string,version:number,externalEpoch:number,readGeneration:number,listeners:Set<()=>void>,touched:number};
 const sessions=new Map<string,DocumentState>();
+const histories=new WeakMap<DocumentState,EditHistory>();
+export function documentHistory(session:DocumentState){let history=histories.get(session);if(!history){history=createEditHistory();histories.set(session,history);}return history;}
 export const draftKey=(root:string,path:string)=>'draft:'+root+'\n'+path;
 function emit(session:DocumentState){session.version++;session.touched=Date.now();for(const listener of session.listeners)listener();}
 function persist(session:DocumentState){try{if(session.dirty)localStorage.setItem(session.key,JSON.stringify({text:session.text,etag:session.etag,manualSave:session.manualSave}));else localStorage.removeItem(session.key);}catch{if(session.dirty)session.error='本地草稿存储不可用；当前内容仍在页面中，请保存或下载草稿';}}
@@ -25,11 +28,15 @@ export async function loadDocument(session:DocumentState,signal?:AbortSignal,for
   if(generation!==session.readGeneration||signal?.aborted)return;
   session.note=note;session.error='';session.stale=false;
   if(session.dirty){if(!session.pending&&session.etag&&session.etag!==note.etag){session.state='保存冲突 · 外部修改，草稿仍保留';session.error='磁盘正文已变化，请核对后合并；当前草稿不会被覆盖';}}
-  else{if(session.text!==note.text)session.externalEpoch++;session.text=note.text;session.etag=note.etag;session.state='已保存';}
+  else{if(session.text!==note.text){session.externalEpoch++;histories.delete(session);}session.text=note.text;session.etag=note.etag;session.state='已保存';}
   emit(session);
  }catch(error){if((error as Error).name!=='AbortError'&&generation===session.readGeneration){session.error=(error as Error).message;emit(session);}}
 }
-export function changeDocument(session:DocumentState,text:string){session.text=text;session.dirty=true;session.state=session.manualSave?'AI 草稿 · 请手动保存':'待保存';persist(session);emit(session);clearTimeout(session.timer);session.timer=undefined;if(!session.manualSave)session.timer=setTimeout(()=>{session.timer=undefined;void saveDocument(session,false);},1000);}
+export function changeDocument(session:DocumentState,text:string,meta:EditMeta={}){if(session.text===text)return;recordEdit(documentHistory(session),session.text,text,meta);session.text=text;session.dirty=true;session.state=session.manualSave?'AI 草稿 · 请手动保存':'待保存';persist(session);emit(session);clearTimeout(session.timer);session.timer=undefined;if(!session.manualSave)session.timer=setTimeout(()=>{session.timer=undefined;void saveDocument(session,false);},1000);}
+export function travelDocument(session:DocumentState,direction:'undo'|'redo'){
+ const history=documentHistory(session),result=historyText(history,session.text,direction);if(!result)return false;
+ history.replaying=true;try{changeDocument(session,result.text);session.externalEpoch++;emit(session);}finally{history.replaying=false;}return true;
+}
 export async function saveDocument(session:DocumentState,explicit=true){
  if(session.manualSave&&!explicit)return;
  if(session.pending)return session.pending;
@@ -45,11 +52,13 @@ export async function saveDocument(session:DocumentState,explicit=true){
 }
 export function applyProperties(session:DocumentState,note:Note){
  if(session.dirty)return false;
+ recordEdit(documentHistory(session),session.text,note.text,{kind:'external'});
  session.note=note;if(session.text!==note.text)session.externalEpoch++;session.text=note.text;session.etag=note.etag;session.state='已保存';emit(session);return true;
 }
 export function acceptDiskVersion(session:DocumentState,etag:string){session.etag=etag;persist(session);}
 export function applyAiChange(session:DocumentState,original:string,text:string,etag:string){
  if(session.pending||session.text!==original||session.etag!==etag)throw new Error('原文或草稿已改变，未应用建议；请重新生成或手动合并');
+ if(text===original)return;
  clearTimeout(session.timer);session.timer=undefined;session.manualSave=true;session.externalEpoch++;
  changeDocument(session,text);
 }
@@ -58,7 +67,7 @@ export async function discardAiDraft(session:DocumentState){
  const before=session.text;
  const note=await api<Note>('file?path='+encodeURIComponent(session.path),undefined,undefined,{force:true});
  if(session.text!==before)throw new Error('草稿又有修改，请重新确认后丢弃');
- session.note=note;session.text=note.text;session.etag=note.etag;session.dirty=false;session.manualSave=false;session.error='';session.state='已保存';session.externalEpoch++;persist(session);emit(session);
+ session.note=note;session.text=note.text;session.etag=note.etag;session.dirty=false;session.manualSave=false;session.error='';session.state='已保存';session.externalEpoch++;histories.delete(session);persist(session);emit(session);
 }
 window.addEventListener('beforeunload',event=>{if([...sessions.values()].some(session=>session.dirty)){event.preventDefault();event.returnValue='';}});
 // Never auto-accept an AI draft. Dirty/conflicting content remains guarded by

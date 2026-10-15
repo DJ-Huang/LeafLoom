@@ -1,0 +1,31 @@
+.live-editor { position: relative; }
+.live-editor:not(.source-editor) .cm-line { position: relative; }
+.editor-block-handle { position: absolute; left: -55px; top: 1px; display: inline-flex; width: 49px; gap: 1px; user-select: none; vertical-align: top; }
+.editor-block-handle button { border: 0; background: transparent; color: var(--muted); font-size: 15px; line-height: 24px; width: 24px; height: 28px; padding: 0; }
+.editor-block-handle button:hover, .editor-block-handle button:focus-visible { background: var(--hover); color: var(--accent); }
+.editor-empty-hint { color: var(--muted); font-size: 15px; pointer-events: none; user-select: none; position: absolute; }
+.cm-italic { font-style: italic; }
+.cm-strike { text-decoration: line-through; }
+.cm-inline-code { font-family: ui-monospace,SFMono-Regular,Consolas,monospace; font-size: .9em; color: #b84c4c; background: #f2f1ef; border-radius: 3px; padding: 1px 3px; }
+.cm-tooltip:has(.leafloom-editor-popup), .cm-tooltip-autocomplete { border: 1px solid var(--line) !important; background: var(--paper) !important; color: var(--accent); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; z-index: 100; }
+.leafloom-editor-popup { font-family: inherit; font-size: 13px; max-width: calc(100vw - 24px); }
+.editor-format-bar { display: flex; align-items: center; padding: 4px; gap: 2px; }
+.editor-format-bar button { border: 0; min-width: 32px; font-size: 14px; font-weight: 600; padding: 6px 9px; }
+.editor-format-bar button:nth-child(2) { font-style: italic; }
+.editor-block-menu { display: flex; flex-direction: column; width: 260px; max-height: min(440px,65vh); padding: 6px; overflow: auto; }
+.editor-block-menu button { display: block; text-align: left; width: 100%; border: 0; padding: 7px 10px; }
+.editor-block-menu input { width: 100%; margin-bottom: 5px; padding: 8px 10px; }
+.editor-menu-hint { padding: 9px 12px; color: var(--muted); margin: 0; font-size: 12px; }
+.cm-tooltip-autocomplete > ul { font-family: inherit !important; max-height: min(360px,55vh) !important; min-width: min(280px,calc(100vw - 24px)); max-width: min(420px,calc(100vw - 24px)) !important; }
+.cm-tooltip-autocomplete ul li.leafloom-completion-option { padding: 8px 12px; display: flex; gap: 12px; justify-content: space-between; align-items: center; }
+.cm-tooltip-autocomplete ul li[aria-selected] { background: var(--hover) !important; color: var(--accent) !important; }
+.cm-completionLabel { font-size: 14px; }
+.cm-completionDetail { color: var(--muted); font-style: normal !important; font-size: 11px; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+.cm-completionSection { color: var(--muted); padding: 7px 12px !important; font-size: 11px; border-top: 1px solid var(--line); }
+.editor-upload-status { position: sticky; bottom: 12px; margin: 0 20px 12px; display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); font-size: 12px; z-index: 2; }
+.editor-upload-status button { border: 0; padding: 2px 7px; }
+@media (max-width: 700px) {
+ .live-editor:not(.source-editor) .cm-content { padding-left: 56px !important; padding-right: 20px !important; }
+ .editor-block-handle { left: -50px; }
+ .cm-completionDetail { max-width: 130px; }
+}

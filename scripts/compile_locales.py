@@ -10,12 +10,13 @@ def main():
     for line in (ROOT/'vault_rag/locales/messages.tsv').read_text(encoding='utf-8').splitlines():
         if not line or line.startswith('#'):continue
         parts=line.split('|')
-        if len(parts)!=3:raise ValueError(f'Expected three translations: {line}')
-        key,english,japanese=parts
-        for language,text in zip(values,(key,english,japanese)):
+        if len(parts)==3:key,chinese,english,japanese=parts[0],*parts
+        elif len(parts)==4:key,chinese,english,japanese=parts
+        else:raise ValueError(f'Expected three translations, optionally preceded by a key: {line}')
+        for language,text in zip(values,(chinese,english,japanese)):
             values[language][key]=text
         fields=lambda text:set(re.findall(r'\{\w+\}',text))
-        if fields(key)!=fields(english) or fields(key)!=fields(japanese):raise ValueError(f'Placeholder mismatch: {key}')
+        if fields(chinese)!=fields(english) or fields(chinese)!=fields(japanese):raise ValueError(f'Placeholder mismatch: {key}')
     values['zh-CN']['本地知识库']='LeafLoom · 知织'
     values['zh-CN']['让零散笔记，织成知识。']='让零散笔记，\n织成知识。'
     values['ja']['让零散笔记，织成知识。']='ばらばらのメモを、\n知識へ。'
@@ -29,7 +30,7 @@ def main():
         for literal in re.findall(r'\bt\(\s*("(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\')',path.read_text(encoding='utf-8')):
             used.append(ast.literal_eval(literal))
     (ROOT/'.cache/leafloom').mkdir(parents=True,exist_ok=True)
-    missing=sorted(set(used)-set(values['en']))
+    missing=sorted(key for key in set(used)-set(values['en']) if not (key.endswith('.') and any(candidate.startswith(key) for candidate in values['en'])))
     (ROOT/'.cache/leafloom/missing-messages.json').write_text(json.dumps(missing,ensure_ascii=False,indent=2),encoding='utf-8')
     print(f'{len(values["en"])} authored translations; {len(missing)} missing')
     if missing:print('\n'.join(missing))
