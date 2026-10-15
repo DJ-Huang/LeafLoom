@@ -179,8 +179,12 @@ class Files:
             if p.suffix.lower() not in TEXT_EXTENSIONS:raise ValueError('该文件不支持文本编辑')
             old=p.read_bytes()
             if etag!=digest(old):raise ConflictError('文件已被其他窗口或程序修改，未覆盖；请合并后保存')
-            normalized=text.replace('\r\n','\n').replace('\r','\n')
-            if b'\r\n' in old:normalized=normalized.replace('\n','\r\n')
+            # Rich/source editors send the original line endings with local
+            # changes. Preserve those bytes, including mixed-EOL documents.
+            # Older clients send LF only: retain their uniform-CRLF behavior.
+            remainder=old.replace(b'\r\n',b'')
+            legacy_crlf=b'\r\n' in old and b'\n' not in remainder and b'\r' not in remainder
+            normalized=text.replace('\n','\r\n') if '\r' not in text and legacy_crlf else text
             new=normalized.encode('utf-8')
             if old.startswith(b'\xef\xbb\xbf'):new=b'\xef\xbb\xbf'+new
             if new!=old:self._history(p);atomic_write(p,new);self.changed(rel)

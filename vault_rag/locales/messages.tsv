@@ -680,6 +680,152 @@ Wiki 导航目录|Wiki navigation folders|Wiki ナビゲーションのフォル
 关闭窗口后留在托盘；退出会停止本地服务。|Closing the window keeps LeafLoom in the tray. Quit stops the local service.|ウィンドウを閉じるとトレイに残ります。終了するとローカルサービスも停止します。
 打开日志文件夹|Open logs folder|ログフォルダーを開く
 在文件管理器中显示|Show in file manager|ファイルマネージャーで表示
+
+# Editor commands and attachments
+正文|Text|本文
+一级标题|Heading 1|見出し 1
+二级标题|Heading 2|見出し 2
+三级标题|Heading 3|見出し 3
+无序列表|Bulleted list|箇条書き
+有序列表|Numbered list|番号付きリスト
+待办事项|To-do list|ToDo リスト
+引用|Quote|引用
+分割线|Divider|区切り線
+代码块|Code block|コードブロック
+表格|Table|表
+图片|Image|画像
+附件|Attachment|添付ファイル
+网页链接|Web link|Web リンク
+笔记链接|Note link|ノートリンク
+公式|Equation|数式
+Mermaid 图表|Mermaid diagram|Mermaid 図
+加粗|Bold|太字
+斜体|Italic|斜体
+删除线|Strikethrough|取り消し線
+行内代码|Inline code|インラインコード
+基础内容|Basic blocks|基本ブロック
+插入|Insert|挿入
+技术内容|Technical blocks|技術ブロック
+插入内容|Insert content|コンテンツを挿入
+块操作|Block actions|ブロック操作
+输入 / 插入内容|Type / to insert content|/ を入力してコンテンツを挿入
+文字格式|Text formatting|文字の書式
+搜索命令…|Search commands…|コマンドを検索…
+没有匹配的命令|No matching commands|一致するコマンドがありません
+转换为|Turn into|変換
+创建副本|Duplicate|複製
+上移|Move up|上へ移動
+下移|Move down|下へ移動
+删除块|Delete block|ブロックを削除
+输入笔记名称以搜索|Type a note name to search|ノート名を入力して検索
+正在上传附件 {current}/{total}…|Uploading attachment {current}/{total}…|添付ファイルをアップロード中 {current}/{total}…
+附件上传失败|Attachment upload failed|添付ファイルのアップロードに失敗しました
+附件已插入|Attachment inserted|添付ファイルを挿入しました
+附件插入已取消|Attachment insertion cancelled|添付ファイルの挿入をキャンセルしました
+链接地址|Link address|リンク先
+显示文字|Display text|表示テキスト
+插入位置已改变，请重新操作|The insertion location changed. Please try again.|挿入位置が変更されました。もう一度お試しください。
+请输入有效的网页或邮件链接|Enter a valid web or email link|有効な Web またはメールリンクを入力してください
+创建附件目录需要指定关联目录|A connected folder is required to create an attachment folder|添付フォルダーを作成するには接続先フォルダーが必要です
+关联目录已切换，附件未写入|The connected folder changed. The attachment was not saved.|接続先フォルダーが変更されたため、添付ファイルは保存されませんでした。
+附件目录已变化，未写入|The attachment folder changed. Nothing was saved.|添付フォルダーが変更されたため、保存しませんでした。
+
+# Named messages: key|Chinese|English|Japanese
+tunnel.title|ChatGPT 连接|ChatGPT connection|ChatGPT 接続
+tunnel.description|通过 OpenAI Secure MCP Tunnel，在 ChatGPT 网页中查询本机知识库。|Use OpenAI Secure MCP Tunnel to query your local knowledge in ChatGPT on the web.|OpenAI Secure MCP Tunnel 経由で、ChatGPT のウェブ版からローカルの知識を検索します。
+tunnel.desktopOnly|请在 LeafLoom 桌面 App 中配置 ChatGPT 连接。|Configure this connection in the LeafLoom desktop app.|LeafLoom デスクトップアプリで接続を設定してください。
+tunnel.id|Tunnel ID|Tunnel ID|Tunnel ID
+tunnel.key|App Key（Tunnel 运行密钥）|App Key (Tunnel runtime key)|App Key（Tunnel 実行用キー）
+tunnel.keyHelp|使用具有 Tunnel Read + Use 权限的运行密钥；由系统加密保存。留空保留已保存的密钥。|Use a runtime key with Tunnels Read + Use. It is encrypted by the system. Leave blank to keep the saved key.|Tunnels Read + Use 権限を持つ実行用キーを使用します。システムが暗号化して保存します。空欄の場合は保存済みキーを維持します。
+tunnel.keySaved|已保存密钥；输入可替换|Key saved; enter a replacement|保存済み（入力すると置き換え）
+tunnel.keyPlaceholder|输入 OpenAI Tunnel 运行密钥|Enter your OpenAI Tunnel runtime key|OpenAI Tunnel の実行用キーを入力
+tunnel.auto|启用并随应用自动连接|Enable and connect when the app starts|有効にしてアプリ起動時に自動接続
+tunnel.lifecycle|关闭窗口后连接继续保留；退出应用时停止。断开后，下次启动保持停用。|Closing the window keeps the connection running. Quitting stops it. Disconnecting also disables automatic connection.|ウィンドウを閉じても接続は継続し、アプリ終了時に停止します。切断後は自動接続も無効になります。
+tunnel.status|连接状态|Connection status|接続状態
+tunnel.statusHelp|通道就绪表示本机服务和 Tunnel 已准备好；首次仍需在 ChatGPT 中添加插件。|Channel ready means the local service and Tunnel are prepared. Add the plugin in ChatGPT the first time.|通路の準備完了後、初回は ChatGPT でプラグインを追加してください。
+tunnel.state.unconfigured|等待配置|Not configured|未設定
+tunnel.state.disabled|已停用|Disabled|無効
+tunnel.state.waiting|等待本机服务|Waiting for local service|ローカルサービスを待機中
+tunnel.state.starting|正在连接|Connecting|接続中
+tunnel.state.ready|通道就绪|Channel ready|通路の準備完了
+tunnel.state.reconnecting|正在重连|Reconnecting|再接続中
+tunnel.state.failed|连接失败|Connection failed|接続失敗
+tunnel.saveConnect|保存并连接|Save and connect|保存して接続
+tunnel.save|保存连接配置|Save connection settings|接続設定を保存
+tunnel.reconnect|重新连接|Reconnect|再接続
+tunnel.disconnect|断开|Disconnect|切断
+tunnel.clear|清除配置|Clear settings|設定を消去
+tunnel.unsaved|连接配置尚未保存，请使用此处的保存按钮。|Connection changes are not saved. Use the save button above.|接続設定は未保存です。上の保存ボタンを使用してください。
+tunnel.firstUse|首次接入 ChatGPT|First connection to ChatGPT|ChatGPT への初回接続
+tunnel.setup|通道就绪后，在 ChatGPT 添加自定义 MCP：连接选择 Tunnel，填写相同的 Tunnel ID，认证选择“无认证”，然后安装并在聊天中选用。|When the channel is ready, add a custom MCP in ChatGPT: choose Tunnel, use the same Tunnel ID, select No authentication, then install and select it in a chat.|準備完了後、ChatGPT でカスタム MCP を追加し、Tunnel、同じ Tunnel ID、認証なしを選びます。インストール後にチャットで選択してください。
+tunnel.privacy|ChatGPT 调用工具时，会收到该工具返回的知识库内容。请只将 Tunnel 关联到你信任的账号或工作区。已有手动客户端可先自行退出，避免同一 Tunnel 重复运行。|ChatGPT receives the knowledge returned by each tool call. Associate the Tunnel only with accounts or workspaces you trust. Stop any manually started client to avoid duplicate runtimes.|ツールの呼び出し時、返された知識が ChatGPT に送信されます。信頼できるアカウントやワークスペースにのみ関連付けてください。手動起動のクライアントは重複を避けるため終了してください。
+tunnel.openChatGPT|打开 ChatGPT|Open ChatGPT|ChatGPT を開く
+tunnel.guide|Tunnel 设置说明|Tunnel setup guide|Tunnel 設定ガイド
+tunnel.search|ChatGPT、Tunnel ID、App Key、密钥、连接|ChatGPT, Tunnel ID, App Key, credentials, connection|ChatGPT、Tunnel ID、App Key、キー、接続
+tunnel.error.config|Tunnel ID 或连接配置无效，请检查后重新连接。|Invalid Tunnel ID or configuration. Check the settings and reconnect.|Tunnel ID または接続設定が無効です。確認して再接続してください。
+tunnel.error.key|运行密钥缺失或被拒绝，请检查 App Key。|The runtime key is missing or was rejected. Check your App Key.|実行用キーがないか拒否されました。App Key を確認してください。
+tunnel.error.permission|没有此 Tunnel 的使用权限，请检查密钥的 Read + Use 权限及工作区关联。|Access denied. Check the runtime key’s Tunnels Read + Use permissions and workspace association.|利用権限がありません。キーの Tunnels Read + Use 権限とワークスペースの関連付けを確認してください。
+tunnel.error.tunnel|找不到此 Tunnel，请检查 Tunnel ID 和所属组织。|Tunnel not found. Check its ID and organization.|Tunnel が見つかりません。ID と組織を確認してください。
+tunnel.error.mcp|本机 MCP 尚未就绪或初始化失败，将自动重试。|Local MCP is unavailable or initialization failed. Retrying automatically.|ローカル MCP が利用できないか初期化に失敗しました。自動で再試行します。
+tunnel.error.binary|缺少内置 Tunnel 客户端，请重新安装包含 Tunnel 的 LeafLoom。|The bundled Tunnel runtime is missing. Reinstall LeafLoom with Tunnel support.|内蔵の Tunnel がありません。Tunnel 対応の LeafLoom を再インストールしてください。
+tunnel.error.encryption|系统凭据加密不可用或无法解密，请检查系统钥匙串并重新保存密钥。|System encryption is unavailable or decryption failed. Check the system key store and save the key again.|システム暗号化が利用できないか復号に失敗しました。キーストアを確認してキーを保存し直してください。
+tunnel.error.storage|无法保存或读取连接配置，请检查应用状态目录权限。|Unable to read or save connection settings. Check permissions on the app state directory.|接続設定を読み書きできません。アプリの保存先の権限を確認してください。
+tunnel.error.process|Tunnel 客户端未正常运行，请重新连接或查看日志。|The Tunnel runtime is not running correctly. Reconnect or open the logs.|Tunnel が正常に動作していません。再接続するかログを確認してください。
+tunnel.error.network|暂时无法连接 OpenAI Tunnel，将自动重试；请检查网络或代理设置。|OpenAI Tunnel is temporarily unreachable. Retrying automatically; check your network or proxy.|OpenAI Tunnel に接続できません。自動で再試行します。ネットワークやプロキシを確認してください。
+tunnel.error.link|无法打开外部页面或日志目录。|Unable to open the external page or log folder.|外部ページまたはログフォルダーを開けません。
+查看源码|View source|ソースを表示
+返回正文|Back to page|本文に戻る
+最近使用|Recently used|最近使った項目
+列表|Lists|リスト
+媒体|Media|メディア
+高级内容|Advanced|高度なコンテンツ
+添加内容|Add content|コンテンツを追加
+块类型|Block type|ブロックの種類
+在下方插入|Insert below|下に挿入
+拖动或打开块操作|Drag or open block actions|ドラッグまたはブロック操作を開く
+笔记正文|Note content|ノート本文
+笔记路径|Note path|ノートのパス
+请输入有效的笔记路径|Enter a valid note path|有効なノートのパスを入力してください
+保留的原文内容|Preserved content|保持された元のコンテンツ
+嵌入笔记|Embedded note|埋め込みノート
+查询|Query|クエリ
+正在搜索…|Searching…|検索中…
+没有匹配的笔记|No matching notes|一致するノートはありません
+笔记搜索失败，请重试|Note search failed. Please try again.|ノートの検索に失敗しました。もう一度お試しください。
+无法保存此编辑，请保留页面并查看源码|Unable to save this edit. Keep this page open and inspect the source.|編集を保存できません。このページを開いたままソースを確認してください。
+图表内容|Diagram content|図の内容
+查询内容|Query content|クエリの内容
+公式内容|Equation content|数式の内容
+移除链接|Remove link|リンクを解除
+在下方添加行|Add row below|下に行を追加
+在右侧添加列|Add column to the right|右に列を追加
+删除行|Delete row|行を削除
+删除列|Delete column|列を削除
+此行作为表头|Use this row as header|この行を見出しにする
+行|Row|行
+列|Column|列
+左对齐|Align left|左揃え
+居中对齐|Align center|中央揃え
+右对齐|Align right|右揃え
+开始写下你的想法|Start writing your thoughts|思いついたことを書き始める
+醒目的大标题|A prominent heading|目立つ大きな見出し
+划分章节与主题|Organize sections and topics|章やテーマを分ける
+为内容添加小标题|Add a smaller heading|小さな見出しを追加
+用项目符号整理要点|Organize points with bullets|箇条書きで要点を整理
+按顺序记录步骤|Write steps in order|手順を順番に記録
+可勾选的任务清单|A checklist for your tasks|チェックできるタスクリスト
+突出一段引用或想法|Highlight a quote or thought|引用や考えを目立たせる
+用细线分隔内容|Separate content with a line|細い線でコンテンツを区切る
+保留缩进的代码片段|A code snippet with indentation|インデントを保ったコード
+用行与列组织信息|Organize information in rows and columns|行と列で情報を整理
+上传图片或粘贴截图|Upload an image or paste a screenshot|画像を追加、スクリーンショットを貼り付け
+添加本地文件|Attach a local file|ローカルファイルを添付
+链接到网页或邮件地址|Link to a website or email address|ウェブページやメールアドレスへのリンク
+关联知识库中的另一篇笔记|Connect to another note in your knowledge base|ナレッジベース内の別のノートにリンク
+用 LaTeX 表达公式|Write an equation with LaTeX|LaTeX で数式を書く
+绘制流程图与关系图|Draw flowcharts and relationship diagrams|フローチャートや関係図を描く
+修改|Edit|変更
+表格操作|Table actions|テーブル操作
 网页会话已失效，请重新打开。|The website session has expired. Open it again.|ウェブセッションの有効期限が切れました。開き直してください。
 尚未确认网页加载完成，请重试或检查项目目录。|Page loading could not be confirmed. Retry or check the project folder.|ページの読み込みを確認できません。再試行するかプロジェクトフォルダーを確認してください。
 请选择知识库内的项目文件夹|Choose a project folder inside the connected knowledge folder.|ナレッジフォルダー内のプロジェクトフォルダーを選択してください。
@@ -710,3 +856,6 @@ macOS 14/15 的 Safari 需要本机解析配置。仅配置本应用的专属域
 启用 Safari 兼容|Enable Safari compatibility|Safari 互換性を有効化
 本机解析服务尚未运行，请重新启动本地服务后重试|The local resolver is not running. Restart the local service and retry.|名前解決サービスが未起動です。ローカルサービスを再起動して再試行してください。
 配置 Safari 本机网页兼容|Setting up Safari local website compatibility|Safari のローカルサイト互換性を設定
+已启用|Enabled|有効
+未启用|Disabled|無効
+正在处理…|Processing…|処理中…

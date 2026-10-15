@@ -4,7 +4,9 @@ LeafLoom's own source and original brand/media assets are licensed under [MIT](L
 
 Source installation prepares Python, Node, uv, Python packages and frontend dependencies. The desktop application bundles Electron, its Chromium/Node runtime, a private Python interpreter and locked Python dependencies. BGE-M3 is downloaded explicitly when needed. Retain all bundled license files, including `LICENSE.electron.txt`, `LICENSES.chromium.html`, Python notices and dependency LICENSE/NOTICE files. The repository does not contain model weights. For the model, consult the upstream [BGE-M3 model card](https://huggingface.co/BAAI/bge-m3) and the downloaded revision's license.
 
-Major components include React, Vite, TypeScript, CodeMirror, Lucide, markdown-it, DOMPurify, Mermaid, KaTeX, Cytoscape, D3, TanStack Virtual, FastAPI, Uvicorn, MCP SDK, LlamaIndex, LanceDB, PyTorch, sentence-transformers, watchfiles, pystray and Pillow. See `web/package-lock.json`, `uv.lock`, and each installed distribution's LICENSE/NOTICE and package metadata for exact versions and terms.
+Major components include React, Vite, TypeScript, Tiptap, ProseMirror, CodeMirror, Lucide, markdown-it, DOMPurify, Mermaid, KaTeX, Cytoscape, D3, TanStack Virtual, FastAPI, Uvicorn, MCP SDK, LlamaIndex, LanceDB, PyTorch, sentence-transformers, watchfiles, pystray and Pillow. See `web/package-lock.json`, `uv.lock`, and each installed distribution's LICENSE/NOTICE and package metadata for exact versions and terms.
+
+The added editor libraries' [license texts](web/public/assets/editor-licenses.txt) are copied into the application assets at `/assets/editor-licenses.txt`.
 
 The standalone FFmpeg CLI and Playwright tooling are used for media production and desktop acceptance, and are not bundled as LeafLoom application dependencies. Electron does include its own browser/media components, including `ffmpeg.dll` on Windows, covered by its bundled Chromium notices. The video soundtrack is an original synthesized composition; promotional screenshots contain only the repository's fictional demo. Font files are not redistributed by the media scripts.
 

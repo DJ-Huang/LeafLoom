@@ -275,22 +275,35 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     async def restore(request:Request):
         body=await request.json();return await asyncio.to_thread(runtime.files.restore,body['kind'],body['id'])
     @app.post('/api/upload')
-    async def upload(request:Request,folder:str='',name:str=''):
+    async def upload(request:Request,folder:str='',name:str='',root:str|None=None,create_folder:bool=False):
         # Stream to a staging file, then atomically publish without overwriting.
         import uuid
-        dest=config.path_for('/'.join(x for x in (folder,name) if x),writable=True)
         if '/' in name or '\\' in name or not name:raise ValueError('文件名无效')
-        if dest.exists():raise ConflictError('同名文件已存在')
-        temp=dest.with_name('.upload-'+uuid.uuid4().hex)
+        if create_folder and root is None:raise ValueError('创建附件目录需要指定关联目录')
+        rel='/'.join(x for x in (folder,name) if x)
+        with config.lock:
+            expected_root=str(config.root);revision=config.data.get('revision')
+            if root is not None and root!=expected_root:raise ConflictError('关联目录已切换，附件未写入')
+            dest=config.path_for(rel,writable=True)
+            if dest.exists():raise ConflictError('同名文件已存在')
+            if create_folder:dest.parent.mkdir(exist_ok=True)
+            # Revalidate newly created directories before opening a staging file.
+            dest=config.path_for(rel,writable=True)
+            temp=dest.with_name('.upload-'+uuid.uuid4().hex)
+            stream=temp.open('xb')
         try:
-            with temp.open('xb') as f:
+            with stream as f:
                 async for part in request.stream():f.write(part)
                 f.flush();os.fsync(f.fileno())
-            with runtime.files.lock:
+            with config.lock,runtime.files.lock:
+                if str(config.root)!=expected_root or config.data.get('revision')!=revision:
+                    raise ConflictError('关联目录已切换，附件未写入')
+                if config.path_for(rel,writable=True)!=dest:raise ConflictError('附件目录已变化，未写入')
                 if dest.exists():raise ConflictError('同名文件已存在')
                 os.link(temp,dest);temp.unlink()
+                rel=dest.relative_to(config.root).as_posix();runtime.files_changed(rel)
         finally:temp.unlink(missing_ok=True)
-        rel=dest.relative_to(config.root).as_posix();runtime.files_changed(rel);return {'path':rel}
+        return {'path':rel}
     @app.get('/api/media')
     async def media(request:Request,path:str,download:bool=False):
         def response():
