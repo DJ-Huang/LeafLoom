@@ -41,14 +41,19 @@ def verify():
     ensure_ready(config)
     status = request('/api/status', config=config)
     assert 'model' in status, 'Model status is missing'
+    # The legacy entrance now performs storage migration. Inspect the same UI
+    # bundle through its canonical Host, without depending on OS DNS setup.
+    from urllib.parse import urlsplit
+    ui = request('/api/session', config=config)['ui_url']
+    headers = {'Host': urlsplit(ui).netloc}
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    with opener.open(base_url(config) + '/', timeout=10) as response:
+    with opener.open(urllib.request.Request(base_url(config) + '/', headers=headers), timeout=10) as response:
         html = response.read().decode('utf-8')
     import re
     resources = re.findall(r'(?:src|href)="(/assets/[^"?#]+)', html)
     assert resources, 'Web assets are missing'
     for path in resources:
-        with opener.open(base_url(config) + path, timeout=10) as response:
+        with opener.open(urllib.request.Request(base_url(config) + path, headers=headers), timeout=10) as response:
             assert response.status == 200
     print('Authenticated service and web resources verified.')
 
@@ -57,6 +62,15 @@ def main(action):
     if action == 'check': return check()
     if action == 'check-runtime': return check_runtime()
     if action == 'verify': return verify()
+    if action == 'configure-resolver':
+        if sys.platform != 'darwin' or os.environ.get('VAULT_RAG_INSTALL_TEST_SERVER') == '1': return
+        from vault_rag.local_state import LocalConfig
+        from vault_rag.html_projects import HtmlProjects
+        from vault_rag.local_dns import LocalDns
+        config = LocalConfig(); websites = HtmlProjects(config, config.data['port'])
+        resolver = LocalDns(websites.install_id, config.data['port'])
+        if resolver.status()['needed']: resolver.configure(True)
+        return
     if os.environ.get('VAULT_RAG_INSTALL_TEST_SERVER') == '1':
         return test_server(action)
     from vault_rag.service_control import control

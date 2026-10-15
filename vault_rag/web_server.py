@@ -8,6 +8,9 @@ from starlette.middleware.gzip import GZipMiddleware
 from mcp.server.fastmcp import FastMCP
 from vault_rag.local_state import LocalConfig,ConflictError,atomic_write
 from vault_rag.html_preview import HtmlPreviews
+from vault_rag.html_projects import HtmlProjects
+from vault_rag.browser_storage import BrowserStorageMigration, migration_script
+from vault_rag.local_dns import LocalDns
 from vault_rag.platform_support import choose_directory, private_file_mode, is_windows
 from vault_rag.http_cache import conditional_file
 from vault_rag.skill_install import install_skill, skill_status
@@ -27,7 +30,8 @@ class StaticCompression:
     def __init__(self,app):
         self.app=app;self.compressed=GZipMiddleware(app,minimum_size=1024,compresslevel=6)
     async def __call__(self,scope,receive,send):
-        app=self.compressed if scope['type']=='http' and scope.get('path','').startswith('/assets/') else self.app
+        ranged=any(key==b'range' for key,_ in scope.get('headers',[]))
+        app=self.compressed if scope['type']=='http' and not ranged and scope.get('path','').startswith('/assets/') else self.app
         await app(scope,receive,send)
 
 def create_app(config=None,runtime=None,*,start_background=True,static_dir=None):
@@ -37,6 +41,9 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         runtime=Runtime(config)
     port=config.data.get('port',18080)
     previews=HtmlPreviews(config)
+    websites=HtmlProjects(config,port)
+    local_dns=LocalDns(websites.install_id,port)
+    storage_migration=BrowserStorageMigration(websites.ui_origin,port,config.directory)
     preferences=Preferences(config.directory)
     secret_file=config.directory/'auth-token'
     if not secret_file.exists():atomic_write(secret_file,secrets.token_hex(32).encode());private_file_mode(secret_file)
@@ -86,11 +93,16 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     app.add_middleware(StaticCompression)
     app.state.runtime=runtime;app.state.csrf=csrf
     app.state.ai=ai
+    app.state.websites=websites
+    app.state.local_dns=local_dns
     app.include_router(ai_router(ai))
     @app.middleware('http')
     async def local_security(request,call_next):
-        allowed={f'127.0.0.1:{port}',f'localhost:{port}'}
-        if request.headers.get('host') not in allowed:return json_response({'error':'仅允许本机访问'},403)
+        host=request.headers.get('host','')
+        if websites.is_project_host(host):
+            return await asyncio.to_thread(websites.response,request)
+        allowed={f'127.0.0.1:{port}',f'localhost:{port}',f'{websites.ui_host}:{port}'}
+        if host not in allowed:return json_response({'error':'仅允许本机访问'},403)
         path=request.url.path
         if path=='/ai-mcp':
             try:ai.authorized(request.headers.get('authorization',''))
@@ -122,15 +134,23 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Referrer-Policy']='no-referrer'
         if path.startswith('/api/') and path!='/api/media':response.headers.setdefault('Cache-Control','no-store')
-        response.headers.setdefault('Content-Security-Policy',"default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'")
+        response.headers.setdefault('Content-Security-Policy',"default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob: http: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'")
         return response
     @app.get('/healthz')
     async def health():return {'ok':True,'service':'vault-rag'}
     def session_data():
         return {'config':config.data,'csrf':csrf,'suggested_root':'','demo':getattr(app.state,'demo',False),
-                'service_instance_id':runtime.events.instance,'catalog_version':runtime.catalog.version}
+                'service_instance_id':runtime.events.instance,'catalog_version':runtime.catalog.version,'ui_url':websites.ui_origin+'/'}
     @app.get('/api/session')
     async def session():return json_response(session_data())
+    @app.get('/api/local-resolver')
+    async def resolver_status():return json_response(local_dns.status())
+    @app.post('/api/local-resolver')
+    async def resolver_configure(request:Request):
+        body=await request.json()
+        if not isinstance(body,dict) or not isinstance(body.get('enabled'),bool):raise ValueError('Invalid resolver request')
+        if body['enabled'] and local_dns.socket is None:raise ValueError('本机解析服务尚未运行，请重新启动本地服务后重试')
+        return json_response(await asyncio.to_thread(local_dns.configure,body['enabled']))
     @app.get('/api/preferences')
     async def read_preferences():
         return json_response(await asyncio.to_thread(preferences.for_root,config.data.get('root')))
@@ -208,6 +228,23 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         if not isinstance(body,dict) or any(not isinstance(body.get(key),str) for key in ('path','root','text')):
             raise ValueError('网页预览需要文件路径、关联根目录和 HTML 内容')
         return json_response(await asyncio.to_thread(previews.create,body['path'],body['root'],body['text']))
+    @app.get('/api/html-projects')
+    async def html_projects(root:str,path:str=''):
+        return json_response(await asyncio.to_thread(websites.list,root,path))
+    @app.post('/api/html-projects')
+    async def register_html_project(request:Request):
+        body=await request.json()
+        if not isinstance(body,dict) or any(not isinstance(body.get(key),str) for key in ('root','directory','entry')):raise ValueError('项目需要关联目录、项目文件夹和入口路径')
+        return json_response(await asyncio.to_thread(websites.register,body['root'],body['directory'],body['entry'],body.get('spa',False),body.get('id')))
+    @app.post('/api/html-sessions')
+    async def create_html_session(request:Request):
+        body=await request.json()
+        if not isinstance(body,dict) or not isinstance(body.get('root'),str) or not isinstance(body.get('path',''),str):raise ValueError('网页会话参数无效')
+        return json_response(await asyncio.to_thread(websites.create,body['root'],body.get('path',''),body.get('project_id'),body.get('draft'),body.get('url')))
+    @app.delete('/api/html-sessions/{sid}')
+    async def release_html_session(sid:str):
+        websites.release(sid)
+        return {'released':True}
     @app.api_route('/html-preview/{key}/files/{path:path}',methods=['GET','HEAD'])
     async def html_resource(request:Request,key:str,path:str,download:bool=False):
         return await asyncio.to_thread(previews.response,key,path,str(request.base_url).rstrip('/'),download,request)
@@ -348,22 +385,56 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         # Windows registry MIME associations can label .js as text/plain.
         media_type={'.js':'text/javascript','.mjs':'text/javascript','.css':'text/css'}.get(p.suffix.lower())
         return FileResponse(p,media_type=media_type,headers={'Cache-Control':'public, max-age=31536000, immutable'})
+    @app.get('/__leafloom__/storage.js')
+    async def storage_migration_script():return migration_script()
+    @app.get('/__leafloom__/migrate')
+    async def storage_migration_receiver(request:Request,ticket:str=''):
+        if request.url.hostname!=websites.ui_host:return Response(status_code=404)
+        return storage_migration.page(collector=True,ticket=ticket)
+    @app.api_route('/__leafloom__/transfer',methods=['GET','POST','DELETE'])
+    async def storage_transfer(request:Request,nonce:str='',ticket:str=''):
+        if request.method=='POST':
+            if request.url.hostname==websites.ui_host:raise ValueError('迁移来源无效')
+            raw=await request.body()
+            if len(raw)>32*1024*1024:raise ValueError('迁移数据过大；原草稿仍保留')
+            return json_response(storage_migration.submit(nonce,json.loads(raw),request.headers.get('origin','')))
+        if request.url.hostname!=websites.ui_host:return Response(status_code=403)
+        return json_response(storage_migration.read(ticket,acknowledge=request.method=='DELETE'))
+    @app.get('/__leafloom__/migration-state')
+    async def migration_state(receipt:str=''):
+        return json_response({'completed':storage_migration.completed(receipt)})
+    @app.post('/__leafloom__/local-resolver')
+    async def legacy_resolver(request:Request):
+        # Safari cannot reach the new UI until resolution is installed. This
+        # one-use capability is issued by the old entrance; no ambient privilege.
+        storage_migration.authorize_resolver((await request.json()).get('nonce',''),request.headers.get('origin',''))
+        if local_dns.socket is None:raise ValueError('本机解析服务尚未运行，请重新启动本地服务后重试')
+        return json_response(await asyncio.to_thread(local_dns.configure,True))
     @app.get('/')
-    async def index():
+    async def index(request:Request):
         if not (static/'index.html').is_file():return HTMLResponse('网页尚未构建，请运行前端构建',status_code=503)
+        if request.url.hostname!=websites.ui_host:
+            return storage_migration.page()
         response=HTMLResponse((static/'index.html').read_text(encoding='utf-8'),headers={'Cache-Control':'no-store'});response.set_cookie('vault_session',token,httponly=True,samesite='strict',max_age=365*86400);return response
     return app
 
 def create_server(app, **options):
     import uvicorn
     class LocalServer(uvicorn.Server):
+        async def startup(self, sockets=None):
+            import sys
+            if sys.platform=='darwin':app.state.local_dns.start()
+            try:await super().startup(sockets)
+            except BaseException:
+                app.state.local_dns.stop();raise
         async def shutdown(self, sockets=None):
             # CLI HTTP MCP clients keep SSE connections open. Close workers BEFORE
             # uvicorn waits for those connections, not only in ASGI lifespan cleanup.
             runtime=app.state.runtime
             if hasattr(runtime,'request_stop'):runtime.request_stop()
             await app.state.ai.close()
-            await super().shutdown(sockets)
+            try:await super().shutdown(sockets)
+            finally:app.state.local_dns.stop()
     options['proxy_headers']=False
     return LocalServer(uvicorn.Config(app,host='127.0.0.1',workers=1,access_log=False,
                                     timeout_graceful_shutdown=20,**options))

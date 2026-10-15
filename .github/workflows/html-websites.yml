@@ -1,0 +1,58 @@
+name: HTML website compatibility
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'vault_rag/html_projects.py'
+      - 'vault_rag/browser_storage.py'
+      - 'vault_rag/local_dns.py'
+      - 'vault_rag/web_server.py'
+      - 'web/src/**'
+      - 'tests/*html_project*'
+      - '.github/workflows/html-websites.yml'
+permissions:
+  contents: read
+jobs:
+  browser:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            browser: chrome
+          - os: macos-15
+            browser: msedge
+          - os: ubuntu-24.04
+            browser: webkit
+          - os: macos-15
+            browser: webkit
+            resolver: sudo
+          - os: ubuntu-24.04
+            browser: firefox
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      HTML_TEST_BROWSER: ${{ matrix.browser }}
+      HTML_TEST_RESOLVER: ${{ matrix.resolver }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.0'
+      - run: npm ci --prefix web --no-audit --no-fund
+      - run: npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
+      - run: npm run build --prefix web
+      - run: uv sync --locked --no-dev
+      - name: Install the selected test browser
+        run: npx --yes playwright@1.64.0 install --with-deps ${{ matrix.browser }}
+      - name: Project boundaries and migration contracts
+        run: uv run --no-sync python -X utf8 -m unittest discover -s tests -p test_html_projects.py
+      - name: Shared UI and browser capabilities
+        run: node tests/html_projects_browser.cjs

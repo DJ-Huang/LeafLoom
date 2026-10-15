@@ -117,6 +117,15 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[0][-1], 'check')
         self.assertEqual(self.setup.marker.read_bytes(), previous)
 
+    def test_macos_install_provisions_resolver_but_daily_open_does_not(self):
+        self.setup.key='macos-arm64'
+        with patch.object(self.setup,'ready',return_value=True),patch.object(self.setup,'run') as run:
+            self.assertEqual(self.setup.execute('install',no_open=True),0)
+            self.assertEqual(run.call_args.args[0][-1],'configure-resolver')
+            run.reset_mock()
+            self.assertEqual(self.setup.execute('open',no_open=True),0)
+            run.assert_not_called()
+
     def test_model_repair_skips_unchanged_web_and_python_dependencies(self):
         self.install()
         (self.setup.state / 'models/bge-m3/model.safetensors').unlink(missing_ok=True)
