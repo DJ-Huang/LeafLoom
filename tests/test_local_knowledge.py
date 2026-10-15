@@ -15,7 +15,7 @@ class FakeModel:
 class LocalKnowledgeTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.home=Path(self.temp.name);self.root=self.home/'vault';self.root.mkdir();(self.root/'RAG/Notes').mkdir(parents=True);(self.root/'RAG/Navigation').mkdir();(self.root/'RAG/Rules').mkdir();(self.root/'RAG/EstimationDB').mkdir();(self.root/'Outside').mkdir()
-        self.config=LocalConfig(self.home/'state');self.config.save({'root':str(self.root)})
+        self.config=LocalConfig(self.home/'state');self.config.save({'root':str(self.root),'include_roots':['RAG'],'rules_roots':['RAG/Rules'],'wiki_roots':['RAG/Navigation'],'estimation_roots':['RAG/EstimationDB']})
         self.runtime=Runtime(self.config);self.runtime.model=FakeModel();self.runtime.knowledge.model=self.runtime.model;self.files=self.runtime.files
     def tearDown(self):self.temp.cleanup()
     def put(self,path,text):p=self.root/path;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8');return p
@@ -98,6 +98,14 @@ class LocalKnowledgeTests(unittest.TestCase):
         self.populate();k=self.runtime.knowledge;previous=k.snapshot['status']['generation'];self.put('RAG/Notes/new.md','# Different\nNew text')
         self.runtime.catalog.scan();self.runtime.model.encode=lambda _:(_ for _ in ()).throw(RuntimeError('model failed'));k.build()
         self.assertEqual(k.snapshot['status']['generation'],previous);self.assertEqual(json.loads((self.root/'.vault-rag/current.json').read_text(encoding='utf-8'))['generation'],previous)
+    def test_one_changed_rag_note_only_encodes_missing_vectors(self):
+        self.populate();k=self.runtime.knowledge;calls=[]
+        def encode(texts):calls.extend(texts);return [[1.0]+[0.0]*1023 for _ in texts]
+        self.runtime.model.encode=encode
+        self.put('RAG/Notes/new.md','# New independent note\nnew incremental evidence')
+        self.runtime.catalog.scan();k.build()
+        self.assertEqual(len(calls),1)
+        self.assertIn('new incremental evidence',calls[0])
     def test_model_unavailable_current_keywords_and_revision_checks(self):
         self.populate();k=self.runtime.knowledge
         self.put('RAG/Navigation/sources.md','---\nsources: [a]\n---\n# 能量流导航');self.runtime.catalog.scan();k.build()

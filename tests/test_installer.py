@@ -119,14 +119,14 @@ class InstallerTests(unittest.TestCase):
 
     def test_model_repair_skips_unchanged_web_and_python_dependencies(self):
         self.install()
-        (self.setup.state / 'models/bge-m3/model.safetensors').unlink()
+        (self.setup.state / 'models/bge-m3/model.safetensors').unlink(missing_ok=True)
         self.calls.clear()
         with patch.object(self.setup, 'compatible', return_value=True), patch.object(self.setup, 'node') as node, patch.object(self.setup, 'stop_owned'), patch.object(self.setup, 'run', side_effect=self.run_stage):
             self.setup.install()
             node.assert_not_called()
         self.assertFalse(any('sync' in args or 'build' in args or 'ci' in args for args in self.calls))
-        self.assertTrue(any('model-prepare' in args for args in self.calls))
-        self.assertTrue(self.setup.model_ready())
+        self.assertFalse(any('model-prepare' in args for args in self.calls))
+        self.assertFalse(self.setup.model_ready())
 
     def test_web_update_skips_python_sync_and_model_prepare(self):
         self.install()
@@ -147,11 +147,11 @@ class InstallerTests(unittest.TestCase):
     def test_legacy_install_model_repair_reuses_verified_dependencies(self):
         self.install()
         (self.setup.state / 'python-install.json').unlink()
-        (self.setup.state / 'models/bge-m3/model.safetensors').unlink()
+        (self.setup.state / 'models/bge-m3/model.safetensors').unlink(missing_ok=True)
         self.calls.clear()
         with patch.object(self.setup, 'compatible', return_value=True): self.install()
         self.assertFalse(any('sync' in args for args in self.calls))
-        self.assertTrue(any('model-prepare' in args for args in self.calls))
+        self.assertFalse(any('model-prepare' in args for args in self.calls))
 
     def test_missing_packages_sync_without_replacing_compatible_environment(self):
         self.install()
@@ -192,13 +192,15 @@ class InstallerTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, '原文件已保留'): self.setup.prepare_environment()
         self.assertEqual((root / 'keep').read_bytes(), b'old')
 
-    def test_ready_checks_missing_dependencies_assets_model_and_relocated_repository(self):
+    def test_ready_checks_dependencies_assets_and_location_but_model_is_optional(self):
         self.install()
         with patch.object(self.setup, 'compatible', return_value=True), patch.object(self.setup, 'run'):
             self.assertTrue(self.setup.ready())
             (self.repo / 'vault_rag/static/assets/main.js').unlink(); self.assertFalse(self.setup.ready())
-            self.web(); (self.setup.state / 'models/bge-m3/model.safetensors').write_text('truncated')
-            self.assertFalse(self.setup.ready()); self.model()
+            self.web(); self.model()
+            (self.setup.state / 'models/bge-m3/model.safetensors').write_text('truncated')
+            self.assertTrue(self.setup.ready())
+            self.assertFalse(self.setup.model_ready())
             with patch.object(self.setup, 'run', side_effect=RuntimeError('dependency missing')): self.assertFalse(self.setup.ready())
             value = json.loads(self.setup.marker.read_text()); value['repository'] = 'old repository'
             installer.atomic_json(self.setup.marker, value); self.assertFalse(self.setup.ready())

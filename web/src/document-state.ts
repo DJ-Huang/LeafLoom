@@ -1,5 +1,5 @@
 import {api,Note} from './api';
-export type DocumentState={root:string,path:string,key:string,text:string,etag:string,note?:Note,dirty:boolean,manualSave:boolean,pending?:Promise<void>,timer?:ReturnType<typeof setTimeout>,state:string,error:string,version:number,externalEpoch:number,readGeneration:number,listeners:Set<()=>void>,touched:number};
+export type DocumentState={root:string,path:string,key:string,text:string,etag:string,note?:Note,dirty:boolean,manualSave:boolean,stale?:boolean,pending?:Promise<void>,timer?:ReturnType<typeof setTimeout>,state:string,error:string,version:number,externalEpoch:number,readGeneration:number,listeners:Set<()=>void>,touched:number};
 const sessions=new Map<string,DocumentState>();
 export const draftKey=(root:string,path:string)=>'draft:'+root+'\n'+path;
 function emit(session:DocumentState){session.version++;session.touched=Date.now();for(const listener of session.listeners)listener();}
@@ -23,7 +23,7 @@ export async function loadDocument(session:DocumentState,signal?:AbortSignal,for
  try{
   const note=await api<Note>('file?path='+encodeURIComponent(session.path),undefined,undefined,{signal,force});
   if(generation!==session.readGeneration||signal?.aborted)return;
-  session.note=note;session.error='';
+  session.note=note;session.error='';session.stale=false;
   if(session.dirty){if(!session.pending&&session.etag&&session.etag!==note.etag){session.state='保存冲突 · 外部修改，草稿仍保留';session.error='磁盘正文已变化，请核对后合并；当前草稿不会被覆盖';}}
   else{if(session.text!==note.text)session.externalEpoch++;session.text=note.text;session.etag=note.etag;session.state='已保存';}
   emit(session);
@@ -61,3 +61,13 @@ export async function discardAiDraft(session:DocumentState){
  session.note=note;session.text=note.text;session.etag=note.etag;session.dirty=false;session.manualSave=false;session.error='';session.state='已保存';session.externalEpoch++;persist(session);emit(session);
 }
 window.addEventListener('beforeunload',event=>{if([...sessions.values()].some(session=>session.dirty)){event.preventDefault();event.returnValue='';}});
+// Never auto-accept an AI draft. Dirty/conflicting content remains guarded by
+// beforeunload and persisted locally if the user explicitly exits anyway.
+window.leafloomPrepareQuit=async()=>{
+ await Promise.all([...sessions.values()].map(async session=>{
+  clearTimeout(session.timer);session.timer=undefined;
+  if(session.pending)await session.pending;
+  if(session.dirty&&!session.manualSave)await saveDocument(session,false);
+  persist(session);
+ }));
+};

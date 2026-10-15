@@ -147,6 +147,9 @@ class WindowsCompatibilityTests(unittest.TestCase):
             self.assertTrue(controller.stop.is_set()); controller.icon.stop.assert_called_once()
 
     def test_tray_stop_is_independent_of_blocked_refresh_and_exit_menu_exists(self):
+        # The menu is localized; make this Chinese-label assertion independent
+        # of the test machine's language.
+        (self.config.directory/'preferences.json').write_text(json.dumps({'locale':'zh-CN'}),encoding='utf-8')
         from vault_rag import windows_tray as tray
         import threading
         refreshing=threading.Event(); release=threading.Event(); signal=threading.Event(); closed=threading.Event()
@@ -163,7 +166,7 @@ class WindowsCompatibilityTests(unittest.TestCase):
             def run(self,setup):setup(self); closed.wait(5)
             def stop(self):release.set(); closed.set()
         def refresh():refreshing.set(); release.wait(5)
-        fake=SimpleNamespace(Menu=menu,MenuItem=lambda text,action,**kwargs:SimpleNamespace(text=text,action=action),Icon=FakeIcon)
+        fake=SimpleNamespace(Menu=menu,MenuItem=lambda text,action,**kwargs:SimpleNamespace(text=text(None) if callable(text) else text,action=action),Icon=FakeIcon)
         with patch.dict(sys.modules,{'pystray':fake}),patch.object(tray,'Instance',FakeInstance),patch.object(tray,'autostart_enabled',return_value=True),patch.object(tray,'tray_image'),patch.object(tray.TrayController,'refresh',side_effect=refresh):
             worker=threading.Thread(target=tray.run,args=(self.config,),daemon=True); worker.start()
             try:

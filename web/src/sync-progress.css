@@ -1,0 +1,9 @@
+.index-progress { margin-top: 12px; color: var(--muted); font-size: 12px; }
+.index-progress-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.index-progress-row progress { flex: 1; min-width: 120px; height: 8px; accent-color: var(--primary); }
+.index-progress-row span { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.index-progress p { margin: 8px 0 0; line-height: 1.6; }
+.index-progress-track { height: 6px; border-radius: 6px; overflow: hidden; background: var(--border, #e2e7dd); }
+.index-progress-track span { display: block; height: 100%; width: 35%; border-radius: inherit; background: var(--primary, #245c48); animation: index-warming 1.6s ease-in-out infinite; }
+@keyframes index-warming { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+@media (prefers-reduced-motion: reduce) { .index-progress-track span { animation: none; margin-left: 32%; } }

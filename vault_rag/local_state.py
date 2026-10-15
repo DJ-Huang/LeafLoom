@@ -108,9 +108,10 @@ class LocalConfig:
             if any(under(rel,r) for r in self.data[name+'_roots']):return name
         return 'notes'
     def eligible(self, rel: str, meta=None) -> bool:
-        if Path(rel).suffix.lower() not in ('.md','.txt') or not self.selected(rel):return False
+        if Path(rel).suffix.lower() not in ('.md','.txt'):return False
         if Path(rel).name.lower() in ('readme.md','_readme.md'):return False
         if any(x.lower() in ('attachments','_index','_archive','archive','archives','history','trash','_history','_trash') for x in PurePosixPath(rel).parts[:-1]):return False
+        if not self.selected(rel):return False
         if self.role(rel)=='wiki':return False
         rag=self.root/'.ragignore'
         stat=rag.stat() if rag.is_file() else None
@@ -127,20 +128,36 @@ class LocalConfig:
 class Files:
     def __init__(self,config:LocalConfig):self.config=config; self.lock=threading.RLock();self.changed=lambda *paths:None
     def tree(self,rel=''):
+        import copy
         with self.config.lock:
-            return self._tree(rel)
+            config=copy.copy(self.config);config.data=dict(self.config.data)
+        files=copy.copy(self);files.config=config
+        result=files._tree(rel)
+        if self.config.data.get('root')!=config.data.get('root'):raise ConflictError('关联目录已变化，请重新打开目录')
+        return result
     def _tree(self,rel=''):
         p=self.config.path_for(rel);root=self.config.root
         if not p.is_dir():raise ValueError('不是目录')
         out=[]
-        for x in p.iterdir():
-            if x.name.startswith('.') or path_key(x.name) in {path_key(x) for x in PROTECTED} or is_link(x):continue
-            rp=x.relative_to(root).as_posix();s=x.stat()
-            out.append({'path':rp,'name':x.name,'directory':x.is_dir(),'size':s.st_size,'mtime':s.st_mtime, 'selected':self.config.selected(rp,validated=True)})
+        protected={path_key(x) for x in PROTECTED}
+        with os.scandir(p) as items:
+            for item in items:
+                if item.name.startswith('.') or path_key(item.name) in protected:continue
+                try:s=item.stat(follow_symlinks=False)
+                except FileNotFoundError:continue
+                if statlib.S_ISLNK(s.st_mode) or getattr(s,'st_reparse_tag',0) in (0xA0000003,0xA000000C):continue
+                rp=(p/item.name).relative_to(root).as_posix()
+                out.append({'path':rp,'name':item.name,'directory':statlib.S_ISDIR(s.st_mode),'size':s.st_size,'mtime':s.st_mtime,'selected':self.config.selected(rp,validated=True)})
         return sorted(out,key=lambda x:(not x['directory'],x['name'].lower()))
     def read(self,rel):
+        # Snapshot policy briefly; disk IO must not hold the shared config lock.
+        import copy
         with self.config.lock:
-            return self._read(rel)
+            config=copy.copy(self.config);config.data=dict(self.config.data)
+        files=copy.copy(self);files.config=config
+        value=files._read(rel)
+        if self.config.data.get('root')!=value['root']:raise ConflictError('关联目录已变化，请重新打开文件')
+        return value
     def _read(self,rel):
         p=self.config.path_for(rel)
         if p.stat().st_size>10*1024*1024:raise ValueError('文本文件过大，请下载后打开')
@@ -269,11 +286,12 @@ class Files:
         bases={path_key(base),path_key(base+'.md')}
         if names is not None:return sorted({p for name,items in names.items() if path_key(name) in bases for p in items})
         return sorted(p for p in paths if path_key(p.rsplit('/',1)[-1]) in bases)
-    def walk(self,rel='',*,directories=None,stats=None):
+    def walk(self,rel='',*,directories=None,stats=None,exclude_roots=()):
         root=self.config.root
         pending=[self.config.path_for(rel)];protected={path_key(x) for x in PROTECTED}
         while pending:
             folder=pending.pop()
+            if any(under(folder.relative_to(root).as_posix(),p) for p in exclude_roots):continue
             try:
                 if self.config.path_for(folder.relative_to(root).as_posix())!=folder:continue
             except (ValueError,OSError):continue

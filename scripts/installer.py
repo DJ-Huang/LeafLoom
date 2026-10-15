@@ -234,7 +234,7 @@ class Installer:
                 return False
             if marker.get('desktop', True) != (os.environ.get('VAULT_RAG_INSTALL_TEST_SERVER') != '1'):
                 return False
-            if marker['python'] != str(self.python) or not self.compatible() or not self.model_ready():
+            if marker['python'] != str(self.python) or not self.compatible():
                 return False
             if not marker.get('web_files') or marker['web_files'] != self.web_files():
                 return False
@@ -396,13 +396,7 @@ class Installer:
         else:
             atomic_json(self.state / 'python-install.json', {'input_hash': self.dependency_hash(), 'python': str(self.python)})
             self.emit('Python 依赖完整且未变化，跳过安装。')
-        self.step('准备 BGE-M3 模型')
-        if not self.model_ready():
-            self.run([self.python, '-X', 'utf8', '-m', 'vault_rag.cli', 'model-prepare'], retry=True)
-        else:
-            self.emit('模型完整，跳过准备。')
-        if not self.model_ready():
-            raise RuntimeError('模型文件不完整，安装未完成')
+        self.emit('本地检索模型可在首次启用语义检索时准备；阅读和编辑无需下载模型。')
         self.step('配置并启动后台服务')
         self.run([self.python, '-X', 'utf8', self.repo / 'scripts/write_mcp_fragment.py'])
         self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'install'])
@@ -418,6 +412,9 @@ class Installer:
         self.emit('安装完成。日志：' + str(self.state / 'logs/setup.log'))
 
     def execute(self, action, *, no_open=False, no_install=False):
+        if action in ('install', 'open', 'stop'):
+            from vault_rag.desktop import forward
+            if forward('stop' if action == 'stop' else 'open', self.state):return 0
         if action == 'check':
             return 0 if self.ready() else 3
         self.state.mkdir(parents=True, exist_ok=True)

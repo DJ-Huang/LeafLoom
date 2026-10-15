@@ -4,7 +4,7 @@ import React,{forwardRef,useEffect,useImperativeHandle,useMemo,useRef,useState} 
 import cytoscape,{Core,CollectionReturnValue,NodeSingular} from 'cytoscape';
 import {ArrowUpRight,ChevronLeft,Focus,Network,Plus,Minus,Search,SlidersHorizontal,X,RotateCcw,FileText,ChevronRight} from 'lucide-react';
 import {OpenNote} from './api';
-import {useApi} from './hooks';
+import {useApi,useStatus} from './hooks';
 import {StatusNotice} from './settings-ui';
 import {Action} from './ui';
 import {GraphData,GraphIndex,graphIndex,graphSlice,groupOf} from './graph-model';
@@ -15,8 +15,8 @@ import {graphWebGLAvailable} from './graph-renderer';
 const empty:GraphData={nodes:[],links:[]};
 type Camera={fit:()=>void,zoom:(factor:number)=>void};
 export function GraphPage({path,onOpen,active}:{path:string,onOpen:OpenNote,active:boolean}){
- useLocale();
- const {data,error,refresh}=useApi('graph'),index=useMemo(()=>graphIndex(data||empty),[data]);
+ useLocale();const status=useStatus();
+ const {data,error,refresh}=useApi('graph',[],active),index=useMemo(()=>graphIndex(data||empty),[data]);
  const [center,setCenter]=useState(''),[depth,setDepth]=useState(1),[group,setGroup]=useState(''),[orphans,setOrphans]=useState(false);
  const [selected,setSelected]=useState(''),[query,setQuery]=useState(''),[searching,setSearching]=useState(false),[cursor,setCursor]=useState(0);
  const [filters,setFilters]=useState(false),[labels,setLabels]=useState(false),[arrows,setArrows]=useState(false),[revision,setRevision]=useState(0),[zoom,setZoom]=useState(1);

@@ -5,14 +5,27 @@ import copy, datetime as dt, json, logging, math, os, re, shutil, sqlite3, threa
 from collections import Counter, defaultdict
 from pathlib import Path
 import frontmatter
-from vault_rag.local_state import atomic_write,digest,under
-from vault_rag.catalog import tokens,list_value,LINK_RE
-from vault_rag.service import _effective_note_type,_metadata_match
+from vault_rag.local_state import atomic_write,digest,under,Files
+from vault_rag.catalog import tokens,list_value,LINK_RE,Catalog
+from vault_rag.search_metadata import _effective_note_type,_metadata_match
+from vault_rag.rag_process import RagCancelled,RemoteModel
 from vault_rag.verification_rank import verification_tier,trust_label,UNVERIFIED_EXCERPT_PREFIX
 
 log=logging.getLogger(__name__)
 
 def chunks(entries,model=None):
+    if model is None:
+        # Live keyword evidence must remain usable without importing RAG libraries.
+        out=[]
+        for entry in entries:
+            body=entry['body'];starts=[0]+[m.start() for m in re.finditer(r'^#{1,6} +',body,re.M) if m.start()>0]+[len(body)]
+            for a,b in zip(starts,starts[1:]):
+                section=body[a:b];heading=re.match(r'^(#{1,6}) +([^\n]+)',section)
+                meta={**entry['metadata'],'file_path':entry['path'],'file_name':Path(entry['path']).name,'header_path':heading.group(2) if heading else ''}
+                for i in range(0,max(1,len(section)),3600):
+                    piece=section[i:i+4000]
+                    if piece.strip():out.append({'id':digest(entry['path']+'\n'+str(a+i)+'\n'+piece),'text':piece,'metadata':meta})
+        return out
     from llama_index.core import Document
     from vault_rag.chunking import documents_to_nodes
     from vault_rag.metadata_sanitize import sanitize_metadata_for_vector_store
@@ -23,7 +36,8 @@ def chunks(entries,model=None):
         # Bound long sections without losing text. Short existing sections retain IDs.
         pieces=[text]
         if len(text)>=1500 and model is not None and hasattr(model,'load'):
-            model.load();offsets=model.model.tokenizer(text,add_special_tokens=False,return_offsets_mapping=True)['offset_mapping']
+            tokenizer=model.tokenizer() if callable(getattr(model,'tokenizer',None)) else (model.load() or model.model.tokenizer)
+            offsets=tokenizer(text,add_special_tokens=False,return_offsets_mapping=True)['offset_mapping']
             if len(offsets)>1536:
                 pieces=[text[0 if i==0 else offsets[i][0]:len(text) if i+1536>=len(offsets) else offsets[i+1535][1]] for i in range(0,len(offsets),1408)]
         elif len(text)>=5000:pieces=[text[i:i+4000] for i in range(0,len(text),3600)]
@@ -39,8 +53,8 @@ class Knowledge:
     def signature(self,entries,config=None,catalog_entries=None):
         config=config or self.config;catalog_entries=self.catalog.entries if catalog_entries is None else catalog_entries
         policy={k:config.data.get(k) for k in ('root','include_roots','exclude_roots','rules_roots','wiki_roots','estimation_roots')}
-        wikis=[(e['path'],e['sha256']) for e in catalog_entries.values() if config.role(e['path'])=='wiki' and e['metadata'].get('managed_by')!='vault-rag']
-        return digest(json.dumps([policy,[(e['path'],e['sha256']) for e in entries],wikis,self.model.fingerprint,3],sort_keys=True,default=str))
+        wikis=[(e['path'],e['sha256']) for e in catalog_entries.values() if config.role(e['path'])=='wiki' and config.selected(e['path'],validated=True) and e['metadata'].get('managed_by')!='vault-rag']
+        return digest(json.dumps([policy,sorted((e['path'],e['sha256']) for e in entries),sorted(wikis),self.model.fingerprint,3],sort_keys=True,default=str))
     def load(self):
         root=self.config.root;index=root/'.vault-rag';pointer=index/'current.json'
         if pointer.is_file():
@@ -56,18 +70,37 @@ class Knowledge:
         if not self.build_lock.acquire(blocking=False):return
         stage=None
         try:
+            if isinstance(self.model,RemoteModel):
+                expected=(self.config.data.get('root'),self.config.data.get('revision'))
+                entries=self.eligible_entries();signature=self.signature(entries)
+                if not force and signature==self.last_signature:return
+                if entries and not self.model.ready:
+                    self.progress={'state':'等待模型准备','completed':0,'total':len(entries)};return
+                result=self.model.process.request('build',force=force)
+                if expected!=(self.config.data.get('root'),self.config.data.get('revision')):
+                    self.progress={'state':'等待空闲更新'};return
+                self.load();self.progress=result['progress'];self.last_error=None
+                return
             # Capture policy and immutable catalog references quickly; disk checks and
             # chunking must not hold the lock shared with foreground reads/writes.
             with self.config.lock:
                 config=copy.copy(self.config);config.data=dict(self.config.data);root=config.root;policy_revision=config.data.get('revision')
-                catalog=self.catalog
-                with catalog.lock:
-                    catalog_entries=catalog.entries;catalog_links=catalog.links;resolver_indexes=catalog.resolver_indexes
+            catalog=self.catalog
+            with catalog.lock:
+                catalog_entries=catalog.entries;catalog_links=catalog.links;resolver_indexes=catalog.resolver_indexes
             entries=[e for e in catalog_entries.values() if config.eligible(e['path'],e['metadata'])]
             signature=self.signature(entries,config,catalog_entries)
             if not force and signature==self.last_signature:return
             self.progress={'state':'整理索引','completed':0,'total':0,'started_at':time.time()}
-            nodes=chunks(entries,self.model if self.model.ready else None);vectors={};fingerprint=self.model.fingerprint
+            fingerprint=self.model.fingerprint;vectors={};nodes=[]
+            previous={e['path']:e['sha256'] for e in self.snapshot.get('docs',[])}
+            groups=defaultdict(list)
+            if self.snapshot.get('status',{}).get('embedding_fingerprint')==fingerprint:
+                for node in self.snapshot.get('nodes',[]):groups[node['metadata']['file_path']].append(node)
+            for entry in entries:
+                if not getattr(self,'yield_work',lambda:True)():return
+                reused=groups.get(entry['path']) if previous.get(entry['path'])==entry['sha256'] else None
+                nodes.extend(reused or chunks([entry],self.model if self.model.ready else None))
             if self.stop_event.is_set():return
             if nodes and not self.model.ready:
                 self.progress={'state':'等待模型准备','total':len(nodes),'completed':0};return
@@ -84,7 +117,7 @@ class Knowledge:
                         else:missing.append(i)
                     self.progress.update(state='更新向量',total=len(missing),completed=0,reused=len(nodes)-len(missing))
                     for offset in range(0,len(missing),4):
-                        if self.stop_event.is_set():return
+                        if self.stop_event.is_set() or not getattr(self,'yield_work',lambda:True)():return
                         ids=missing[offset:offset+4];batch=self.model.encode([inputs[i] for i in ids])
                         for i,v in zip(ids,batch):
                             vectors[nodes[i]['id']]=v;db.execute('INSERT OR REPLACE INTO embeddings VALUES(?,?)',(keys[i],json.dumps(v)))
@@ -109,6 +142,7 @@ class Knowledge:
             docs=[{k:e[k] for k in ('path','title','metadata','body','text','sha256')} for e in entries]
             atomic_write(stage/'documents.json',json.dumps(docs,ensure_ascii=False,default=str).encode());atomic_write(stage/'status.json',json.dumps(status,ensure_ascii=False,indent=2).encode())
             if self.stop_event.is_set():return
+            if not getattr(self,'publish_allowed',lambda:True)():raise InterruptedError('Index policy changed or task cancelled')
             if self.config.data.get('revision')!=policy_revision or str(self.config.root)!=str(root):raise RuntimeError('索引范围已变化，本次构建未发布；将重新同步')
             with self.lock:
                 atomic_write(index/'current.json',json.dumps({'generation':generation}).encode())
@@ -121,6 +155,8 @@ class Knowledge:
                 for old in generations[2:]:
                     if old!=stage:shutil.rmtree(old,ignore_errors=True)
             self.last_error=None;self.progress={'state':'已同步','completed':len(nodes),'total':len(nodes),'finished_at':time.time(),'build_seconds':status['build_seconds']};self.write_catalog(entries)
+        except RagCancelled:
+            self.progress={'state':'等待空闲更新'}
         except Exception as e:
             self.last_error=str(e);self.progress['state']='同步失败';log.exception('Index sync failed')
             if stage and self.snapshot.get('directory')!=str(stage):shutil.rmtree(stage,ignore_errors=True)
@@ -185,8 +221,8 @@ class Knowledge:
         versions={e['path']:e['sha256'] for e in snap.get('docs',[])}
         nodes=[];live={};pending=set()
         for path in sorted(set(groups)|set(self.catalog.entries)):
-            if not self.config.selected(path) or Path(path).suffix.lower() not in ('.md','.txt'):continue
-            try:read=self.catalog.files.read(path)
+            if not self.config.eligible(path,{}):continue
+            try:read=self.catalog.read_cached(path)
             except (OSError,ValueError,UnicodeDecodeError):continue
             if not self.config.eligible(path,read['metadata']):continue
             live[path]=read
@@ -201,13 +237,13 @@ class Knowledge:
         return nodes,live,pending
 
     def search(self,query,top_k=3,type_=None,domain=None,mode='hybrid',rules=False,compact=True):
-        with self.lock:
-            return self._search(query,top_k,type_,domain,mode,rules,compact)
+        return self._search(query,top_k,type_,domain,mode,rules,compact)
     def _search(self,query,top_k=3,type_=None,domain=None,mode='hybrid',rules=False,compact=True):
         if mode not in ('hybrid','wiki','rag','keyword'):raise ValueError('检索模式无效')
         query=query.strip()
         if not query:return {'ok':True,'no_relevant_hit':True,'results':[],'navigation':[]}
         if len(query)>4096:raise ValueError('查询过长')
+        if isinstance(self.model,RemoteModel) and not self.catalog.scopes_verified:self.catalog.refresh_scopes()
         start=time.perf_counter();policy_revision=self.config.data.get('revision');snap=self.snapshot
         if snap.get('root')!=str(self.config.root):
             if getattr(self.catalog,'root',None)!=str(self.config.root):raise ValueError('该目录目录表尚未准备，请等待同步')
@@ -232,10 +268,15 @@ class Knowledge:
             if snap.get('status',{}).get('embedding_fingerprint')!=self.model.fingerprint or not self.model.ready:degraded='向量模型或索引尚未准备，使用关键词与 Wiki'
             else:
                 try:
-                    import lancedb
-                    vector=self.model.encode([query])[0];db=lancedb.connect(str(Path(snap['directory'])/'lancedb'));table=db.open_table('vault_chunks')
-                    paths=sorted({n['metadata']['file_path'] for n in nodes});where='file_path IN ('+','.join("'"+p.replace("'","''")+"'" for p in paths)+')'
-                    hits=table.search(vector).distance_type('cosine').where(where,prefilter=True).limit(min(80,len(nodes))).to_list();vkeys=[]
+                    paths=sorted({n['metadata']['file_path'] for n in nodes})
+                    if hasattr(self.model,'dense'):
+                        hits=self.model.dense(query,snap['directory'],paths,min(80,len(nodes)))
+                    else:
+                        import lancedb
+                        vector=self.model.encode([query])[0];db=lancedb.connect(str(Path(snap['directory'])/'lancedb'));table=db.open_table('vault_chunks')
+                        where='file_path IN ('+','.join("'"+p.replace("'","''")+"'" for p in paths)+')'
+                        hits=table.search(vector).distance_type('cosine').where(where,prefilter=True).limit(min(80,len(nodes))).to_list()
+                    vkeys=[]
                     for hit in hits:
                         key=hit['id'];sim=1-float(hit['_distance']);vector_scores[key]=sim
                         if key in lookup and sim>=0.45:vkeys.append(key);channels[key].append('vector')
@@ -275,6 +316,7 @@ class Knowledge:
             meta={**read['metadata'],'file_path':path,'file_name':Path(path).name,'header_path':node['metadata'].get('header_path','')}
             return {'ok':True,'chunk_id':key,'file_path':path,'metadata':meta,'text':node['text'],'revision':read['etag']}
     def get_note(self,path):
+        if isinstance(self.model,RemoteModel) and not self.catalog.scopes_verified:self.catalog.refresh_scopes()
         found=self.catalog.resolve(path)
         if len(found)!=1:return {'ok':False,'error':'笔记不存在或名称不唯一','candidates':found}
         path=found[0]
@@ -287,48 +329,94 @@ class Knowledge:
 
 class Runtime:
     def __init__(self,config):
-        from vault_rag.local_state import Files
-        from vault_rag.catalog import Catalog
-        from vault_rag.embedded_model import EmbeddedModel
+        from vault_rag.rag_process import RagProcess,RemoteModel
         from vault_rag.events import Changes
-        self.config=config;self.files=Files(config);self.catalog=Catalog(self.files);self.model=EmbeddedModel(config.directory)
-        self.knowledge=Knowledge(config,self.catalog,self.model);self.events=Changes()
+        self.config=config;self.files=Files(config);self.catalog=Catalog(self.files,lazy=True)
+        self.events=Changes();self.rag=RagProcess(config,self._worker_status);self.model=RemoteModel(config,self.rag)
+        self.knowledge=Knowledge(config,self.catalog,self.model)
         self.event=threading.Event();self.index_event=threading.Event();self.stop_event=threading.Event()
         self.files.changed=self.files_changed;self.thread=None;self.root=None;self.threads=[]
         self.pending=set();self.pending_lock=threading.Lock();self.watcher=None;self.watcher_stop=None
         self.watching=False;self.watch_error=None;self.policy_revision=None;self.index_root=None
+        self.activity_lock=threading.Lock();self.foreground=0;self.last_activity=time.monotonic();self.idle_seconds=5
+        self.force_index=False;self.metadata_thread=None;self.metadata_stop=threading.Event()
+        self.metadata={'state':'idle','ready':False,'error':None}
+        self.rag_policy=None
+
+    def _worker_status(self,value):
+        if value.get('type')=='exit':
+            if not self.stop_event.is_set():self.knowledge.last_error=value.get('error')
+        elif value.get('state')=='build' and value.get('progress'):
+            self.knowledge.progress=value['progress']
+        self.publish('status',status=self.status())
 
     def publish(self,kind,paths=None,**extra):
         return self.events.publish(kind,root=self.config.data.get('root'),config_revision=self.config.data.get('revision'),
                                    catalog_version=self.catalog.version,paths=paths or [],**extra)
+
+    def activity(self):
+        with self.activity_lock:self.last_activity=time.monotonic()
+        self.rag.pause(True)
+
+    def foreground_begin(self):
+        with self.activity_lock:self.foreground+=1;self.last_activity=time.monotonic()
+        self.rag.pause(True)
+
+    def foreground_end(self):
+        with self.activity_lock:self.foreground=max(0,self.foreground-1)
+
+    def idle(self):
+        with self.activity_lock:return self.foreground==0 and time.monotonic()-self.last_activity>=self.idle_seconds
 
     def files_changed(self,*paths):
         with self.pending_lock:self.pending.update(paths)
         self.event.set()
 
     def configuration_changed(self):
+        self.rag.cancel();self.metadata_stop.set()
         if self.catalog.root!=self.config.data.get('root'):
             if self.watcher_stop:self.watcher_stop.set()
             with self.pending_lock:self.pending.clear()
-            from vault_rag.catalog import Catalog
-            self.catalog=Catalog(self.files);self.knowledge.catalog=self.catalog
+            self.catalog=Catalog(self.files,lazy=True);self.knowledge.catalog=self.catalog
             self.knowledge.snapshot={'nodes':[],'docs':[]};self.knowledge.last_signature=None
+            self.root=None
+        self.metadata={'state':'idle','ready':False,'error':None}
         self.publish('config');self.event.set()
 
     def request_index(self,force=False):
-        if force:self.knowledge.last_signature=None
+        self.force_index=self.force_index or force
+        self.knowledge.progress={'state':'等待空闲更新'}
         self.index_event.set()
 
     def status(self):
         from vault_rag.i18n import error_code
         status=self.knowledge.status()
         status['sync']['state_code']=error_code(status['sync'].get('state',''))
-        return {**status,'watch':{'state':'监听中' if self.watching else '定期检查','error':self.watch_error}}
+        return {**status,'watch':{'state':'监听中' if self.watching else '定期检查','error':self.watch_error},
+                'browse_ready':bool(self.config.data.get('root')),'metadata':{**self.metadata,'ready':self.catalog.metadata_ready},'rag':dict(self.rag.state)}
 
     def _needs_index(self,paths):
         return any(path=='.ragignore' or
                    (Path(path).suffix.lower() in ('.md','.txt') and self.config.selected(path) and
-                    self.catalog.entries.get(path,{}).get('metadata',{}).get('managed_by')!='vault-rag') for path in paths)
+                    self.catalog.entries.get(path,{}).get('metadata',{}).get('managed_by')!='vault-rag') or
+                   (self.config.selected(path,validated=True) and not Path(path).suffix) for path in paths)
+
+    def ensure_metadata(self):
+        if self.catalog.metadata_ready:return True
+        if self.metadata_thread and self.metadata_thread.is_alive():return False
+        catalog=self.catalog;stop=threading.Event();self.metadata_stop=stop
+        self.metadata={'state':'preparing','ready':False,'error':None}
+        def prepare():
+            try:
+                ready=catalog.prepare_metadata(stop)
+                if catalog is not self.catalog or stop.is_set():return
+                self.metadata={'state':'ready' if ready else 'idle','ready':ready,'error':None}
+                if ready:self.publish('files',[],reset=True)
+            except Exception as error:
+                if catalog is self.catalog:self.metadata={'state':'failed','ready':False,'error':str(error)}
+            finally:self.publish('status',status=self.status())
+        self.metadata_thread=threading.Thread(target=prepare,name='vault-metadata',daemon=True)
+        self.metadata_thread.start();return False
 
     def _watch(self,root,stop):
         from vault_rag.local_state import PROTECTED
@@ -365,58 +453,85 @@ class Runtime:
         for thread in self.threads:thread.start()
 
     def loop(self):
-        next_scan=0
+        next_check=time.monotonic()+10
         while not self.stop_event.is_set():
             try:
                 root=str(self.config.root)
-                settings_changed=root!=self.root or self.policy_revision!=self.config.data.get('revision')
-                if root!=self.root:self.root=root;self._start_watcher(Path(root))
+                policy=tuple(json.dumps(self.config.data.get(k),sort_keys=True) for k in ('root','include_roots','exclude_roots','rules_roots','wiki_roots','estimation_roots'))
+                changed_policy=policy!=self.rag_policy;self.rag_policy=policy
+                if root!=self.root:
+                    catalog=self.catalog
+                    try:catalog.restore()
+                    except Exception:log.exception('Catalog cache unavailable; using on-demand folders');catalog.root=root
+                    if catalog is not self.catalog:continue
+                    self.root=root;self._start_watcher(Path(root))
+                    self.knowledge.load();self.index_root=root;self.index_event.set()
+                elif changed_policy:self.request_index()
                 self.policy_revision=self.config.data.get('revision')
-                signalled=self.event.is_set();self.event.clear()
+                self.event.clear()
                 with self.pending_lock:paths=self.pending;self.pending=set()
                 rag_changed='.ragignore' in paths;paths.discard('.ragignore')
-                catalog=self.catalog;full=settings_changed or time.monotonic()>=next_scan or len(paths)>1000 or (signalled and not paths and not rag_changed)
-                if full:
-                    catalog.scan();next_scan=time.monotonic()+(60 if self.watching else 10)
-                elif paths:catalog.apply(paths)
-                elif rag_changed:
-                    self.request_index(force=True);self.publish('files',['.ragignore']);continue
-                else:
-                    self.event.wait(.2);continue
-                if catalog is not self.catalog:continue
-                changed=catalog.changed_paths
-                if changed:self.publish('files',changed if len(changed)<=1000 else [],reset=len(changed)>1000)
-                if settings_changed or rag_changed or self._needs_index(changed):self.request_index(force=settings_changed or rag_changed)
-            except ValueError as e:self.knowledge.progress={'state':str(e)}
-            except Exception as e:self.knowledge.last_error=str(e);log.exception('File scan failed')
+                if paths:
+                    catalog=self.catalog;catalog.apply(paths)
+                    if catalog is not self.catalog:continue
+                    if catalog.changed_paths:self.publish('files',catalog.changed_paths)
+                    self.metadata['ready']=False
+                    if self._needs_index(paths):self.request_index()
+                if rag_changed:self.request_index(force=True);self.publish('files',['.ragignore'])
+                if not self.watching and time.monotonic()>=next_check:
+                    # Fallback is limited to folders the user opened plus RAG scopes.
+                    visible_changes=set()
+                    for folder in list(self.catalog.opened_folders):
+                        before={r['path']:(r['size'],r['mtime'],r['directory']) for r in self.catalog.directory_table.get(folder,[])}
+                        rows=self.catalog.tree(folder,force=True)
+                        after={r['path']:(r['size'],r['mtime'],r['directory']) for r in rows}
+                        visible_changes.update(p for p in set(before)|set(after) if before.get(p)!=after.get(p))
+                    if visible_changes:
+                        self.catalog.apply(visible_changes);self.publish('files',sorted(visible_changes))
+                    self.request_index();next_check=time.monotonic()+10
+            except ValueError as error:self.knowledge.progress={'state':str(error)}
+            except Exception as error:self.knowledge.last_error=str(error);log.exception('File update failed')
             self.event.wait(.2)
 
     def _index_loop(self):
         while not self.stop_event.is_set():
-            if not self.index_event.wait(.5):continue
-            self.index_event.clear()
-            if self.stop_event.is_set():break
+            if not self.index_event.wait(.2):continue
+            if not self.idle():
+                # An already-set event returns immediately. Waiting for idle must
+                # sleep, otherwise this loop monopolizes the service's Python GIL.
+                self.stop_event.wait(.1);continue
+            self.rag.pause(False);self.index_event.clear()
             try:
-                root=str(self.config.root)
-                if self.catalog.root!=root:continue
-                if self.index_root!=root:
-                    self.knowledge.load();self.index_root=root
+                if not self.config.data['include_roots']:
+                    self.knowledge.progress={'state':'未选择检索目录'};continue
+                catalog=self.catalog
+                if not catalog.refresh_scopes() or catalog is not self.catalog:continue
+                entries=self.knowledge.eligible_entries();snap=self.knowledge.snapshot
+                # Legacy signatures depended on directory enumeration order. Reuse a
+                # verified same-policy/source/model inventory without rebuilding it.
+                old={e['path']:e['sha256'] for e in snap.get('docs',[])}
+                current={e['path']:e['sha256'] for e in entries}
+                status=snap.get('status',{})
+                if old==current and status.get('policy_revision')==self.config.data.get('revision') and status.get('embedding_fingerprint')==self.model.fingerprint:
+                    self.knowledge.last_signature=self.knowledge.signature(entries)
+                force=self.force_index;self.force_index=False
+                if force:self.knowledge.last_signature=None
                 self.knowledge.build()
-                if not self.stop_event.is_set() and self.model.ready and not getattr(self.model,'warmed',True):
-                    previous=dict(self.knowledge.progress);self.knowledge.progress={'state':'正在预热检索'}
-                    self.model.warmup();self.knowledge.progress=previous
+                if self.knowledge.progress.get('state')=='等待空闲更新':self.index_event.set()
+                elif self.knowledge.last_signature==self.knowledge.signature(entries):
+                    self.knowledge.progress={'state':'已同步','completed':len(self.knowledge.snapshot.get('nodes',[])),'total':len(self.knowledge.snapshot.get('nodes',[]))}
             except Exception as error:self.knowledge.last_error=str(error);log.exception('Index worker failed')
 
     def _status_loop(self):
-        next_check=0;previous=None;was_prepared=False
+        next_check=0;previous=None;was_prepared=self.model.status().get('prepared',False)
         while not self.stop_event.is_set():
             try:
+                idle=self.idle();self.rag.pause(not idle)
                 if time.monotonic()>=next_check:
                     refresh=getattr(self.model,'refresh_status',None)
                     if refresh:refresh()
                     next_check=time.monotonic()+30
-                status=self.status()
-                prepared=bool(status['model'].get('prepared'))
+                status=self.status();prepared=bool(status['model'].get('prepared'))
                 if prepared and not was_prepared:self.request_index()
                 was_prepared=prepared
                 if status!=previous:self.publish('status',status=status);previous=status
@@ -424,9 +539,11 @@ class Runtime:
             self.stop_event.wait(1)
 
     def request_stop(self):
-        self.stop_event.set();self.knowledge.stop_event.set();self.event.set();self.index_event.set();self.events.close()
+        self.stop_event.set();self.knowledge.stop_event.set();self.metadata_stop.set()
+        self.event.set();self.index_event.set();self.events.close()
         if self.watcher_stop:self.watcher_stop.set()
+        self.rag.begin_stop()
     def stop(self):
-        self.request_stop()
-        for thread in [*self.threads,*([self.watcher] if self.watcher else [])]:
-            if thread is not threading.current_thread():thread.join()
+        self.request_stop();self.rag.stop()
+        for thread in [*self.threads,*([self.watcher] if self.watcher else []),*([self.metadata_thread] if self.metadata_thread else [])]:
+            if thread is not threading.current_thread():thread.join(timeout=10)

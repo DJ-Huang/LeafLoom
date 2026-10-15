@@ -9,6 +9,20 @@ $env:VAULT_RAG_HOME=$VaultRagState
 $LaunchMutex=$null
 $OwnsLaunch=$false
 try {
+    $DesktopMarker=Join-Path $VaultRagState 'desktop-install.json'
+    if (Test-Path -LiteralPath $DesktopMarker) {
+        try { $Desktop=Get-Content -LiteralPath $DesktopMarker -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $Desktop=$null }
+        if ($null -ne $Desktop -and $Desktop.schema -eq 1 -and (Test-Path -LiteralPath $Desktop.executable -PathType Leaf)) {
+            if ($Action -eq 'stop') {
+                $ControlDir=Join-Path $VaultRagState 'desktop-control'
+                [IO.Directory]::CreateDirectory($ControlDir) | Out-Null
+                [IO.File]::WriteAllText((Join-Path $ControlDir 'quit'), '1')
+            } else {
+                Start-Process -FilePath $Desktop.executable -WindowStyle Hidden
+            }
+            exit 0
+        }
+    }
     if ($Action -ne 'stop') {
         $LaunchMutex=[Threading.Mutex]::new($false, ('Local\VaultRagLaunch-' + (Get-TextHash $VaultRagState.ToLowerInvariant())))
         # Repeated clicks queue invisibly; only one controller can open setup.

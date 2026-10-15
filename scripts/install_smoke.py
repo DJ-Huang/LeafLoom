@@ -57,6 +57,7 @@ def main():
         subprocess.run(bootstrap, cwd=repo, env=env, check=True)
         subprocess.run([python, '-X','utf8', repo/'scripts/installer.py','--state',state,'--action','check'],cwd=repo,env=env,check=True)
         # The fixture has no linked root, so its server won't load a competing model.
+        subprocess.run([python, '-X', 'utf8', '-m', 'vault_rag.cli', 'model-prepare'], cwd=repo, env=env, check=True)
         code = "from vault_rag.embedded_model import EmbeddedModel; from vault_rag.local_state import LocalConfig; import math; m=EmbeddedModel(LocalConfig().directory); rows=m.encode(['一键安装验证']); assert len(rows)==1 and len(rows[0])==1024 and all(math.isfinite(x) for x in rows[0]); print('BGE-M3 inference passed:',m.device)"
         subprocess.run([python,'-X','utf8','-c',code],cwd=repo,env=env,check=True)
         acceptance = repo / 'scripts/install_acceptance.py'

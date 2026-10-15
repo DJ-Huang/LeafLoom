@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from llama_index.core.schema import NodeWithScore
+if TYPE_CHECKING:
+    from llama_index.core.schema import NodeWithScore
 
 # Higher tier = preferred in vault_search before backfill pool.
 TIER_VERIFIED_TRUE = 3

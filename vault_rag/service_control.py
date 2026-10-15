@@ -10,6 +10,9 @@ LABEL='com.djhuang.vault-rag'
 def agent_path():return Path.home()/'Library/LaunchAgents'/f'{LABEL}.plist'
 def control(action, config=None):
     config = config or LocalConfig()
+    if action in ('open', 'start', 'stop', 'install'):
+        from vault_rag.desktop import forward
+        if forward('stop' if action == 'stop' else 'open', config.directory):return
     if action == 'open':
         if health(config) != 'ready':control('start', config)
         ensure_ready(config)
