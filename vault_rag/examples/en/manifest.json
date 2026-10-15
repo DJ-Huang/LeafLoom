@@ -1,6 +1,11 @@
 {
   "homepage": "00-Home.md",
   "query": "ideas",
-  "question": "How can I turn scattered notes into useful knowledge?",
-  "answer": "Start with a small habit: capture one useful idea, find it again, then connect it to another note. [[Notes/01-Capture.md]] explains how to write a clear note, while [[Notes/03-Connect.md]] shows how links preserve context. This is a fictional demonstration, not a live AI response."
+  "question": "How can I turn this reading plan into a habit that lasts?",
+  "answer": "**Start with a small loop, not a long reading list.**\n\n1. **Make time visible.** Keep the twenty-minute sessions in [[Notes/04-Project.md|Build a reading ritual]].\n2. **Write one idea in your own words.** Use [[Concepts/Source-notes.md|Source notes]] to keep the source beside your interpretation.\n3. **Connect before collecting more.** Link the idea to [[Concepts/Atomic-notes.md|Atomic notes]] or a current project.\n4. **Return on Sunday.** [[Concepts/Weekly-review.md|Weekly review]] helps you choose what to revisit.\n\n**Next step:** choose one book and write a question for the first session.\n\n*Fictional demo response · No external AI service was called.*",
+  "topic_title": "DEMO · A reading habit",
+  "showcase": {
+    "markdown": "Notes/04-Project.md",
+    "html": "Web/index.html"
+  }
 }

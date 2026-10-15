@@ -18,6 +18,34 @@ https://github.com/user-attachments/assets/56f37418-23cc-4763-af3c-3253fb06f517
 
 **Optional AI.** Connect a signed-in CLI or an HTTP MCP client. Review AI suggestions before saving. External AI services may receive the content you send.
 
+## A workspace for connected thinking
+
+Try the built-in [learning studio](vault_rag/examples/en) from **Try the demo** on first launch. It includes connected notes, a local HTML reading room, and reusable project, reading and decision templates. You can edit the examples; reopening the demo keeps your changes.
+
+### Markdown, ready to read and write
+
+Keep project briefs, tables, checklists and linked notes in ordinary local Markdown files.
+
+![Markdown project brief with a table, tasks, linked notes and document outline](assets/screenshots/en/showcase-markdown.png)
+
+### See how your ideas connect
+
+Explore the starter vault's real links across concepts, projects, reading notes and journals.
+
+![Knowledge graph of the connected learning studio](assets/screenshots/en/showcase-graph.png)
+
+### Think alongside your notes with AI Chat
+
+Keep the current note beside a conversation and follow references back to the source. This screenshot uses an explicitly labeled fictional conversation; no external AI was called.
+
+![AI Chat beside a reading project, with references to related notes](assets/screenshots/en/showcase-ai.png)
+
+### Open local HTML inside your workspace
+
+Read a complete HTML guide with its local stylesheet and illustrations, without leaving LeafLoom.
+
+![Local HTML reading room previewed inside LeafLoom](assets/screenshots/en/showcase-html.png)
+
 ## Get started
 
 **Desktop app:** LeafLoom now has an Electron desktop build for Windows x64 and

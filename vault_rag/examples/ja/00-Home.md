@@ -1,24 +1,57 @@
 ---
-title: アイデアの居場所
+title: 読書と思考のスタジオ
 verified_status: limited
-tags: [leafloom, demo]
+tags: [leafloom, demo, demo]
 ---
-# アイデアの居場所
+# 読書と思考のスタジオ
 
-> 自分のファイルで、思考をつなぐ。
+読む、考える、つくるための小さな知識空間。このサンプルの人物、プロジェクト、資料はすべて架空です。
 
-これは架空のデモ知識庫です。自由に試してください。ファイルはこのサンプル専用です。
+> 問いを持って読み、自分の言葉で残し、すでに知っていることにつなげる。
 
-## サンプルを探索
+## ここから始める
 
-- [[Notes/01-Capture|アイデアを残す]]
-- [[Notes/02-Retrieve|もう一度見つける]]
-- [[Notes/03-Connect|知識をつなぐ]]
-- [[Notes/04-Project|小さな創作プロジェクト]]
-- [[Notes/05-AI|AI と考える]]
+- [[Notes/04-Project|読書の習慣をつくる]]
+- [[Web/index.html|つながる思考のフィールドガイド]]
 
-## 小さな習慣が、長く役立つ知識に
+## スタジオを探索
 
-- [ ] 役立つアイデアを記録する
-- [ ] 原文の根拠を見つける
-- [ ] 関連するメモをつなぐ
+### 知識カード
+
+- [[Concepts/Atomic-notes|アトミックノート]]
+- [[Concepts/Source-notes|出典メモ]]
+- [[Concepts/Active-recall|思い出す練習]]
+- [[Concepts/Spaced-review|間隔をあけた復習]]
+- [[Concepts/Concept-maps|概念マップ]]
+- [[Concepts/Weekly-review|週の振り返り]]
+- [[Concepts/Deep-reading|集中して読む]]
+- [[Concepts/Decision-log|意思決定ログ]]
+
+### プロジェクト
+
+- [[Projects/Reading-corner|静かな読書コーナー]]
+- [[Projects/Essay|五つのメモから文章へ]]
+- [[Projects/Learning-path|四週間の学習プラン]]
+
+### 読書資料
+
+- [[Library/Slow-pages|「ゆっくり読む」読書メモ]]
+- [[Library/Small-systems|「小さな仕組み」出典メモ]]
+- [[Library/Thinking-in-links|「リンクで考える」ハイライト]]
+- [[Library/Questions|残しておきたい問い]]
+
+### 学習ログ
+
+- [[Journal/First-session|読書 01 · はじめの一歩]]
+- [[Journal/New-connection|読書 02 · 新しいつながり]]
+- [[Journal/Sunday-review|日曜日 · 振り返って次へ]]
+
+### 使い方
+
+- [[Guides/Markdown|Markdown で書く]]
+- [[Guides/HTML|ローカル HTML の読書室]]
+- [[Guides/AI|メモを AI と話し合う]]
+
+## 自分の知識庫に育てる
+
+サンプルを編集したり、テンプレートを使ったり、自分のフォルダーを接続したりできます。デモを開き直しても変更は残ります。明示的に選んだフォルダーだけを検索します。

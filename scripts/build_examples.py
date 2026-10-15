@@ -56,4 +56,6 @@ def build():
    put(f'Notes/{file}.md',d['names'][i],d[key]+f'\n\n## {d["sections"][0]}\n\n> {d["tagline"]}\n\n## {d["sections"][1]}\n\n'+ '\n'.join('- [ ] '+x for x in d['tasks'])+f'\n\n## {d["sections"][2]}\n\n{related}')
   p=root/'Templates/Note.md';p.parent.mkdir(exist_ok=True);p.write_text('# {{date}}\n\n{{cursor}}\n',encoding='utf-8')
   (root/'manifest.json').write_text(json.dumps({'homepage':'00-Home.md','query':d['query'],'question':d['question'],'answer':d['answer']},ensure_ascii=False,indent=2),encoding='utf-8')
+ from example_studio import extend_examples
+ extend_examples(ROOT)
 if __name__=='__main__':build()
