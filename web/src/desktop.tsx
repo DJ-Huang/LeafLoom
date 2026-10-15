@@ -4,11 +4,17 @@ import {t,useLocale} from './i18n';
 import {SettingGroup,SettingRow,StatusNotice} from './settings-ui';
 
 export type DesktopInfo={version:string,platform:string,openAtLogin:boolean,error?:string};
+export type TunnelInfo={tunnelId:string,enabled:boolean,keySaved:boolean,state:string,error:string};
 declare global {
  interface Window {
   leafloomPrepareQuit?:()=>Promise<void>;
   leafloomDesktop?:{
    appInfo:()=>Promise<DesktopInfo>;
+   tunnelStatus:()=>Promise<TunnelInfo>;
+   saveTunnel:(value:{tunnelId:string,appKey?:string,enabled:boolean})=>Promise<TunnelInfo>;
+   reconnectTunnel:()=>Promise<TunnelInfo>;
+   disconnectTunnel:()=>Promise<TunnelInfo>;
+   clearTunnel:()=>Promise<TunnelInfo>;
    chooseDirectory:()=>Promise<{path?:string,cancelled?:boolean}>;
    revealFile:(path:string)=>Promise<void>;
    openExternal:(url:string)=>Promise<void>;

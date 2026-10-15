@@ -39,6 +39,7 @@ class Backend extends EventEmitter {
         this.ready = value; this.emit('ready', value);
       } else if (value.type === 'error') this.emit('failure', new Error(value.message));
       else if (value.type === 'committed') this.emit('committed');
+      else if (value.type === 'tunnel-state') this.emit('tunnel-state', value);
     });
     child.once('error', error => this.emit('failure', error));
     child.once('close', (code, signal) => {
@@ -46,9 +47,9 @@ class Backend extends EventEmitter {
       this.emit('exit', {code, signal, expected: this.stopping});
     });
   }
-  send(type) {
+  send(type, values = {}) {
     if (!this.child || this.child.stdin.destroyed) throw new Error('Backend unavailable');
-    this.child.stdin.write(JSON.stringify({type}) + '\n');
+    this.child.stdin.write(JSON.stringify({...values, type}) + '\n');
   }
   async stop() {
     const child = this.child; if (!child) return;

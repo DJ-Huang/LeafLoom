@@ -6,6 +6,36 @@ users do not need a browser, Python, Node, uv, a cloned repository or Ollama.
 
 ## Install and use
 
+### ChatGPT connection
+
+Open **Settings → ChatGPT connection** in the desktop app. Enter your existing
+Tunnel ID and OpenAI Tunnel runtime App Key (Tunnels Read + Use), then choose
+**Save and connect**. Windows x64 and Apple Silicon packages include the verified
+official runtime; no separate download, YAML file or terminal is needed.
+
+The system encrypts the saved key. Leaving the key input empty preserves it;
+Clear settings removes it. Enabled connections resume at startup, remain active
+when the window closes to the tray, and stop on Quit. Disconnect also disables
+automatic connection. A Tunnel failure does not prevent local file use.
+
+When the channel is ready, add a custom MCP server in ChatGPT, choose **Tunnel**,
+use the same Tunnel ID, select **No authentication**, install it, and select it
+in a conversation. Tunnel/workspace associations and account permissions still
+apply. Stop an existing manually started client yourself to avoid duplicate
+runtimes. Channel readiness is not proof of a successful ChatGPT tool call.
+Tool responses contain local knowledge and are sent to ChatGPT when invoked.
+
+The knowledge `/mcp` allows actual loopback peers without a token. Browser APIs
+and the assistant's `/ai-mcp` keep their existing authentication. Existing MCP
+clients with bearer tokens continue to work.
+
+Build machines prepare the runtime with `python scripts/build_tunnel.py` before
+packaging (or `--platform all` to verify both payloads). Version and SHA256 values
+are pinned in `scripts/tunnel-runtime.json`. The Mac runtime is included in nested
+signing and application notarization; test Gatekeeper on a native Mac release.
+
+### Local workspace
+
 - Windows 10/11 x64: run the `LeafLoom-*-windows-x64-setup.exe` installer for your
   user account, then open LeafLoom from Start or the desktop shortcut.
 - macOS 14+ Apple Silicon: open the `LeafLoom-*-macos-arm64.dmg`, drag LeafLoom to

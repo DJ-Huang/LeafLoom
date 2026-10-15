@@ -3,6 +3,7 @@ import {Config} from './api';
 
 export const settingsSections = [
  {id:'general',get title(){return t("常规");},get description(){return t("管理关联目录与知识库首页。");}},
+ {id:'connection',get title(){return t('tunnel.title');},get description(){return t('tunnel.description');}},
  {id:'files',get title(){return t("文件与导入");},get description(){return t("在指定目录创建内容，或导入本地文件。");}},
  {id:'templates',get title(){return t("模板与写入");},get description(){return t("设置模板、日记与各类资料的默认位置。");}},
  {id:'index',get title(){return t("检索与索引");},get description(){return t("选择检索资料，查看模型与同步状态。");}},
@@ -14,6 +15,7 @@ export type SettingsSection=typeof settingsSections[number]['id'];
 export type SettingsLocation={section:SettingsSection,path?:string,targetId?:string};
 export type SettingsResult={path:string,directory?:boolean,edit?:boolean,cursor?:number};
 export const settingsEntries:{section:SettingsSection,id:string,title:string,description:string}[]=[
+ {section:'connection',id:'tunnel',get title(){return t('tunnel.title');},get description(){return t('tunnel.search');}},
  {section:'general',id:'root',get title(){return t("关联目录");},get description(){return t("选择或切换本地知识库文件夹");}},
  {section:'general',id:'homepage',get title(){return t("知识库首页");},get description(){return t("默认首页文件路径");}},
  {section:'files',id:'create',get title(){return t("新建笔记与目录");},get description(){return t("创建文件、新建目录、文件夹、目标位置");}},

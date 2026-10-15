@@ -4,6 +4,11 @@ if (process.isMainFrame) {
   const invoke = (name, ...args) => ipcRenderer.invoke('leafloom:' + name, ...args);
   contextBridge.exposeInMainWorld('leafloomDesktop', Object.freeze({
     appInfo: () => invoke('info'),
+    tunnelStatus: () => invoke('tunnel-status'),
+    saveTunnel: input => invoke('tunnel-save', input),
+    reconnectTunnel: () => invoke('tunnel-reconnect'),
+    disconnectTunnel: () => invoke('tunnel-disconnect'),
+    clearTunnel: () => invoke('tunnel-clear'),
     chooseDirectory: () => invoke('choose-directory'),
     revealFile: relative => invoke('reveal-file', relative),
     openExternal: url => invoke('open-external', url),

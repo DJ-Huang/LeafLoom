@@ -12,8 +12,10 @@ import threading
 import time
 
 
+_emit_lock = threading.Lock()
 def emit(kind, **values):
-    print(json.dumps({'type': kind, **values}, ensure_ascii=False), flush=True)
+    with _emit_lock:
+        print(json.dumps({'type': kind, **values}, ensure_ascii=False), flush=True)
 
 
 @contextlib.contextmanager
@@ -44,6 +46,7 @@ def run():
     startup = time.monotonic()
     logging.basicConfig(level=logging.INFO, stream=sys.stderr, force=True)
     server = None
+    tunnel = None
     with instance_lock(config, 'desktop-controller'):
         try:
             autostart = migration.begin()
@@ -53,9 +56,12 @@ def run():
                 if sys.platform == 'win32':
                     options['loop'] = 'asyncio:SelectorEventLoop'
                 server = create_server(app, **options)
+                from vault_rag.tunnel import TunnelManager
+                tunnel = TunnelManager(config.directory, options['port'], emit)
                 from vault_rag.control_pipe import ControlPipe
                 control = ControlPipe(sys.stdin)
                 def stop():
+                    tunnel.close()
                     app.state.runtime.request_stop()
                     server.should_exit = True
                 def commands():
@@ -69,6 +75,8 @@ def run():
                             elif command.get('type') == 'shutdown':
                                 stop()
                                 return
+                            elif command.get('type') == 'tunnel-configure' and committed.is_set():
+                                tunnel.configure(command)
                     except Exception:
                         logging.exception('Desktop control pipe failed')
                     finally:
@@ -99,6 +107,7 @@ def run():
                 server.run()
         finally:
             finished.set()
+            if tunnel: tunnel.close()
             # Release the service lock and close HTTP before restoring legacy agents.
             if not migration.committed:
                 migration.rollback()

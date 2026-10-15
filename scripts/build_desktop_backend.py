@@ -31,6 +31,12 @@ def checksum(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def lock_checksum():
+    # Git may check this text file out with CRLF on Windows. Line endings do not
+    # change the locked dependencies or invalidate an otherwise matching payload.
+    return hashlib.sha256((ROOT / 'uv.lock').read_bytes().replace(b'\r\n', b'\n')).hexdigest()
+
+
 def download(spec, cache):
     archive = cache / ('python-' + spec['sha256'] + '.tar.gz')
     if archive.exists() and checksum(archive).lower() == spec['sha256'].lower():
@@ -82,14 +88,14 @@ def main():
     cache.mkdir(parents=True, exist_ok=True)
     if args.refresh_app:
         receipt = json.loads((output / 'bundle.json').read_text(encoding='utf-8'))
-        if receipt['platform'] != key or receipt['python'] != manifest['python'] or receipt['lock_sha256'] != checksum(ROOT / 'uv.lock'):
+        if receipt['platform'] != key or receipt['python'] != manifest['python'] or receipt['lock_sha256'] not in (lock_checksum(), checksum(ROOT / 'uv.lock')):
             raise RuntimeError('Private runtime/lock changed; run a full backend build')
         wheels = cache / 'app-wheels'
         run(uv, 'build', '--wheel', '--out-dir', wheels)
         app_wheel = wheels / f'vault_rag-{version}-py3-none-any.whl'
         python = output / 'python' / ('python.exe' if key == 'windows-x64' else 'bin/python3')
         run(uv, 'pip', 'install', '--python', python, '--system', '--break-system-packages', '--no-deps', '--reinstall', '--link-mode', 'copy', app_wheel)
-        receipt.update(version=version, wheel_sha256=checksum(app_wheel))
+        receipt.update(version=version, wheel_sha256=checksum(app_wheel), lock_sha256=lock_checksum())
         (output / 'bundle.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
         print('Application wheel refreshed; locked native dependencies retained.')
         return
@@ -155,7 +161,7 @@ def main():
         env = dict(os.environ, VAULT_RAG_HOME=str(work / 'check-state'), PYTHONDONTWRITEBYTECODE='1')
         run(python, '-I', '-B', '-X', 'utf8', '-m', 'vault_rag.desktop_entry', '--check', cwd=work, env=env)
         (payload / 'bundle.json').write_text(json.dumps({'schema': 1, 'platform': key, 'version': version,
-            'python': manifest['python'], 'lock_sha256': checksum(ROOT / 'uv.lock'),
+            'python': manifest['python'], 'lock_sha256': lock_checksum(),
             'wheel_sha256': checksum(app_wheel), 'runtime_source': 'checksum-locked-archive' if archive else 'verified-standalone-prefix',
             'mac_binaries': mac_binaries(payload / 'python') if key == 'macos-arm64' else []}, indent=2), encoding='utf-8')
         output.parent.mkdir(parents=True, exist_ok=True)

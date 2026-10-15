@@ -1,0 +1,19 @@
+{
+  "version": "0.0.16",
+  "platforms": {
+    "windows-x64": {
+      "asset": "tunnel-client-runtime-v0.0.16-windows-amd64.zip",
+      "sha256": "639fdfe10d91c672d8f8a49386ebf39acaac4e560a88134735b1739a02ddb82d",
+      "licenses": "tunnel-client-runtime-v0.0.16-windows-amd64-licenses.txt",
+      "licenses_sha256": "65f2c97d95abfe805ce18fd63757186295e1bbf8e20ecedcb7cc173d3cade73f",
+      "binary": "tunnel-client-runtime.exe"
+    },
+    "macos-arm64": {
+      "asset": "tunnel-client-runtime-v0.0.16-darwin-arm64.zip",
+      "sha256": "81d230a289ae1b1416738d8150bc879d88a29e8749bb659047a7ef90dfc4acbe",
+      "licenses": "tunnel-client-runtime-v0.0.16-darwin-arm64-licenses.txt",
+      "licenses_sha256": "5acdab335f96235bb6f04d06e6327648a3ea7ba431d50772bca674f8e5a948e2",
+      "binary": "tunnel-client-runtime"
+    }
+  }
+}
