@@ -4,4 +4,4 @@ from vault_rag.platform_support import prepare_windows_runtime
 
 prepare_windows_runtime()
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

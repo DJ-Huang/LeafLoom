@@ -10,6 +10,7 @@ import threading
 import platform
 from pathlib import Path
 
+from vault_rag import __version__
 from vault_rag.platform_support import hidden_process_options
 from vault_rag.ai_process import ProcessTree
 from vault_rag.local_state import atomic_write
@@ -254,11 +255,11 @@ class CliAdapter:
         self.peer = self.process_factory(command, cwd, self.notify, self.server_request, self.exited, env=child_env)
         try:
             if self.provider == 'codex':
-                await self.peer.request('initialize', {'clientInfo': {'name': 'vault_rag', 'title': '本地知识库', 'version': '0.1.0'}})
+                await self.peer.request('initialize', {'clientInfo': {'name': 'vault_rag', 'title': '本地知识库', 'version': __version__}})
                 self.peer.notification('initialized')
             else:
                 reply = await self.peer.request('initialize', {'protocolVersion': 1,
-                    'clientInfo': {'name': 'vault-rag', 'version': '0.1.0'},
+                    'clientInfo': {'name': 'vault-rag', 'version': __version__},
                     'clientCapabilities': {'fs': {'readTextFile': False, 'writeTextFile': False}, 'terminal': False}})
                 self.capabilities = reply.get('agentCapabilities') or {}
                 self.version = (reply.get('agentInfo') or {}).get('version', '')
