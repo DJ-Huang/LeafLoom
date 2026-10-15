@@ -14,7 +14,7 @@ is disabled. `index.html` is the default directory entry. Optional SPA routing
 falls back to the recorded entry only for extensionless HTML navigations, never
 for missing JS, images or JSON requests.
 
-Use **Web → Open website** for an existing HTTP/HTTPS site or development server.
+Use **Preview → Open website** for an existing HTTP/HTTPS site or development server.
 LeafLoom does not install dependencies or start website backends. External sites
 retain their CSP, login and browser restrictions. An iframe load event alone does
 not prove that an external site's content was displayed. No automatic external
@@ -165,7 +165,23 @@ workspace displayed the board and layer tree, canvas selection updated the
 selected layer and its properties, teaching-state switching worked, the PNG
 appeared completed in Safari's download list, and prototype navigation opened
 the settings modal. Windows and macOS 14 checks were not executed locally. The
-CI matrix is configured but has not been run as part of this local change.
+CI results are recorded separately below.
+
+### CI after PR #2 and PR #3 (2026-10-15)
+
+[Run 38733744309](https://github.com/DJ-Huang/LeafLoom/actions/runs/38733744309)
+passed on commit `ec179c9`, included in PR #3: Windows 2025/Chrome,
+macOS 15/Edge, Ubuntu 24.04/WebKit, macOS 15/WebKit with the scoped resolver,
+and Ubuntu 24.04/Firefox. Each job built the frontend, ran the project boundary
+and migration tests, and completed the shared-UI browser harness. These browser
+jobs do not establish desktop-installer support on Linux or certify release
+packages.
+
+The harness waits for tree, status and preference bootstrap requests to finish
+before navigating away. This avoids WebKit treating interrupted initialization
+requests as page errors; the assertion rejecting page script errors remains in
+place. Native Safari and installed-App evidence above comes from separate local
+acceptance, not from these CI jobs.
 
 `HTML_TEST_DNS_ID` can explicitly reuse an already configured installation's DNS
 namespace for a temporary test service on a separate port. It neither reads that

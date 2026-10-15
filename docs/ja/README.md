@@ -12,7 +12,7 @@
 
 **[Windows 版をダウンロード](https://github.com/DJ-Huang/LeafLoom/releases/latest) · [Mac 版をダウンロード](https://github.com/DJ-Huang/LeafLoom/releases/latest)**
 
-[使い始める](#使い始める) · [ChatGPT と接続](#chatgpt-でローカルの知識を活用) · [MCP・Skill・AI Chat](#ai-connections) · [利用ガイド](GUIDE.md)
+[使い始める](#使い始める) · [ChatGPT と接続](#chatgpt-でローカルの知識を活用) · [MCP・Skill・AI Chat](#ai-connections) · [利用ガイド](GUIDE.md) · [ドキュメント一覧](../README.md)
 
 **LeafLoom の使い心地を動画で（英語）：**
 
@@ -81,7 +81,7 @@ App Key は OS によって暗号化して保存されます。接続はアプ�
 
 ### Markdown を読み、書く
 
-プロジェクト Wiki、意思決定の記録、読書メモに。表、タスクリスト、プロパティ、テンプレート、復元可能な履歴で、日々の記録を再利用できる知識へ育てます。本文はローカルの Markdown ファイルです。
+整形された本文を直接編集し、`/` コマンド、ブロックのドラッグ、表の編集、画像の貼り付けや添付のドロップを使えます。本文と Markdown ソースで元に戻す履歴を共有し、未変更の原文とプロパティを保持します。通常は自動保存し、AI の下書きは手動で保存します。[Markdown 編集ガイド](GUIDE.md#コマンドで編集)。
 
 ![表、タスク、リンク、文書の目次を備えた Markdown プロジェクトメモ](../../assets/screenshots/ja/showcase-markdown.png)
 
@@ -99,7 +99,7 @@ App Key は OS によって暗号化して保存されます。接続はアプ�
 
 ### ローカル HTML をそのまま読む
 
-保存したウェブページ、豊かなレイアウトのガイド、小さな対話型文書もメモと一緒に。ローカルの `.html`・`.htm` を、スタイル、画像、対応するローカルスクリプトとともに分離されたビューアーで表示できます。下の HTML 読書室はデモに含まれています。
+ローカルの `.html`・`.htm` を開き、一度プロジェクトフォルダーを確認すると、関連するスタイル、スクリプト、リソースとともにサイトを実行できます。移動、ダウンロード、任意の SPA ルーティングに対応し、サイドバーの「プレビュー」から既存の HTTP/HTTPS サイトや開発サーバーも開けます。[HTML プロジェクトガイド](GUIDE.md#html-プロジェクトとウェブサイトを開く)。下の HTML 読書室はデモに含まれています。
 
 ![LeafLoom 内で表示したローカル HTML の読書室](../../assets/screenshots/ja/showcase-html.png)
 
