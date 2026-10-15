@@ -42,7 +42,7 @@ async function main() {
     await page.waitForURL(url => /^app\.[a-f0-9]{32}\.localhost$/.test(url.hostname) && url.port === String(p) && url.pathname === '/', {timeout: 110000});
     await page.getByRole('button', {name: 'Settings', exact: true}).waitFor({timeout: 60000});
     assert.equal(await application.evaluate(({BrowserWindow}) => {const p=BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences(); return p.nodeIntegration === false && p.contextIsolation === true && p.sandbox === true && p.webSecurity === true;}), true);
-    const info = await page.evaluate(() => window.leafloomDesktop.appInfo()); assert.equal(info.version, '0.1.0');
+    const info = await page.evaluate(() => window.leafloomDesktop.appInfo()); assert.equal(info.version, require('../package.json').version);
     const status = await page.evaluate(async () => (await fetch('/api/status')).json()); assert.equal(status.model.prepared, false); assert.equal(status.model.load_count, 0);
     checks.push('private-runtime-no-model');
     await page.screenshot({path: path.join(out, 'desktop-home.png')});

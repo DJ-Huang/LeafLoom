@@ -1,16 +1,16 @@
-# Agent 工作约定
+# Agent Working Agreements
 
-## 核心架构
+## Core Architecture
 
-- `vault_rag/`：Python 本地服务，提供文件 API、HTTP MCP、目录与检索；模型和向量任务由 `rag_process` 独立进程处理。
-- `web/`：共享 React 前端；Markdown 正文使用 Tiptap/ProseMirror，源码使用 CodeMirror，共用文档状态与撤销历史。
-- `desktop/`：Electron 加载同一前端，只负责窗口、托盘和系统集成。HTML 项目以独立来源运行，与管理界面隔离。
-- 笔记保存在用户目录，索引、历史和回收区在其 `.vault-rag/`。浏览范围与检索范围独立，检索只使用明确选择的内容。
+- `vault_rag/`: local Python service providing file APIs, HTTP MCP, cataloging and retrieval; model and vector tasks run in the separate `rag_process` process.
+- `web/`: shared React frontend; Markdown content uses Tiptap/ProseMirror, while source editing uses CodeMirror, with shared document state and undo history.
+- `desktop/`: Electron loads the same frontend and handles only windows, the tray and system integration. HTML projects run on separate origins, isolated from the management interface.
+- Notes live in user directories; indexes, history and trash live in their `.vault-rag/` directory. Browsing and retrieval scopes are independent; retrieval uses only explicitly selected content.
 
-## 修改与交付
+## Changes and Delivery
 
-- 以当前源码和局部指令为准，保持改动聚焦，保留无关修改；保护用户原文件、草稿、版本校验和访问边界。
-- **功能完成时同步补齐文档**：操作变化更新三语使用指南，用户可见变化更新三语更新记录；入口、架构或配置变化更新对应说明，必要时调整三语首页。
-- 文档入口为 `docs/README.md`，指南为 `docs/{en,zh-CN,ja}/GUIDE.md`；新增文档要加入目录。架构细节见 `docs/ARCHITECTURE.md`，开发约定见 `CONTRIBUTING.md`。
-- 界面文案维护 `vault_rag/locales/messages.tsv`，用 `scripts/compile_locales.py` 生成语言文件；构建产物不作为源码维护。
-- 按改动运行最小必要检查；纯文档检查链接与差异即可。交付说明改了什么、验证了什么，未执行的验证不声称通过。
+- Follow current source code and local instructions, keep changes focused and preserve unrelated changes; protect original user files, drafts, version checks and access boundaries.
+- **Update documentation when completing a feature**: update the usage guides in all three languages for operational changes and the changelogs in all three languages for user-visible changes; update the relevant documentation for entry point, architecture or configuration changes, and adjust the homepages in all three languages when needed.
+- The documentation entry point is `docs/README.md`, and the guides are `docs/{en,zh-CN,ja}/GUIDE.md`; add new documents to the index. See `docs/ARCHITECTURE.md` for architecture details and `CONTRIBUTING.md` for development conventions.
+- Maintain UI text in `vault_rag/locales/messages.tsv` and generate language files with `scripts/compile_locales.py`; do not maintain build artifacts as source.
+- Run the minimum necessary checks for the changes; for documentation-only changes, checking links and diffs is sufficient. Report what changed and what was verified, and never claim that unperformed checks passed.

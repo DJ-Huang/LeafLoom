@@ -2,12 +2,17 @@
 
 [English](CHANGELOG.md) · [中文](docs/zh-CN/CHANGELOG.md) · [日本語](docs/ja/CHANGELOG.md)
 
-## Unreleased
+## 0.1.1 — 2026-10-15
 
+- Add built-in Secure MCP Tunnel settings, encrypted saved credentials and connection lifecycle handling.
+- Improve note editing and add multilingual starter examples.
+- Publish the macOS Apple Silicon installer; unsigned and not notarized, matching 0.1.0.
 - Run local HTML projects with a chosen resource root, SPA routes, isolated persistent origins, navigation and downloads; open existing HTTP/HTTPS websites or development servers.
 - Migrate browser drafts and view state from legacy loopback addresses, preserving conflicting values with recovery backups; add scoped Safari compatibility setup for macOS 14/15.
 - Edit Markdown directly on the formatted page with slash commands, block dragging, tables, links, equations, diagrams and pasted or dropped attachments.
 - Share undo history between formatted and source editing, retain unchanged source and properties, and preserve drafts on save conflicts.
+
+## 0.1.0
 
 - Introduce LeafLoom, a shared book-and-connections logo, website icon and desktop assets.
 - Add Chinese, English and Japanese user interfaces, shared desktop catalogs and saved language preferences.
