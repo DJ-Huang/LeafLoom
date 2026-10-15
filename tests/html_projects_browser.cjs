@@ -8,6 +8,16 @@ const root=path.resolve(__dirname,'..');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function freePort(){const s=net.createServer();await new Promise(r=>s.listen(0,'127.0.0.1',r));const p=s.address().port;await new Promise(r=>s.close(r));return p;}
 async function ready(url){for(let i=0;i<150;i++){try{if((await fetch(url+'/healthz')).ok)return;}catch{}await sleep(100);}throw new Error('Fixture server failed to start');}
+async function loadUi(page,navigate){
+ // A mounted React root precedes bootstrap completion. Finish these requests
+ // before the next top-level navigation so WebKit does not report teardown
+ // cancellations as page errors. Keep the pageerror assertion strict.
+ const bootstrap=Promise.all(['tree','status','preferences'].map(async endpoint=>{
+  const response=await page.waitForResponse(r=>new URL(r.url()).pathname==='/api/'+endpoint&&r.ok());
+  const failure=await response.finished();assert.equal(failure,null);
+ }));
+ await Promise.all([bootstrap,navigate()]);await page.locator('#root main').waitFor();
+}
 async function checkDesign(page,url,downloadFile){
  await page.evaluate(url=>{const frame=document.createElement('iframe');frame.id='website-test';frame.src=url;frame.style='width:1500px;height:1100px';document.body.replaceChildren(frame);},url);
  const website=page.frameLocator('#website-test').frameLocator('iframe');
@@ -54,15 +64,15 @@ async function main(){
   // Seed the old origin without executing its migration page, then perform a real top-level handoff.
   await page.goto(info.url+'/healthz');
   await page.evaluate(()=>{localStorage.setItem('draft:fixture','unsaved original');sessionStorage.setItem('view:fixture','99');});
-  await page.goto(info.url+'/');await page.waitForURL(url=>url.origin===info.ui&&url.pathname==='/',{timeout:20000});
-  if(!realVault)await page.locator('#root main').waitFor();
+  if(realVault)await page.goto(info.url+'/');else await loadUi(page,()=>page.goto(info.url+'/'));
+  await page.waitForURL(url=>url.origin===info.ui&&url.pathname==='/',{timeout:20000});
   assert.equal(await page.evaluate(()=>localStorage.getItem('draft:fixture')),'unsaved original');
   assert.equal(await page.evaluate(()=>sessionStorage.getItem('view:fixture')),'99');checks.push('top-level-storage-migration');
   if(!realVault){
    await page.evaluate(()=>localStorage.setItem('draft:fixture','newer destination'));
    await page.goto(info.url+'/healthz');await page.evaluate(()=>localStorage.setItem('draft:fixture','updated legacy draft'));
-   await page.goto(info.url+'/');await page.waitForURL(url=>url.origin===info.ui&&url.pathname==='/');
-   await page.locator('#root main').waitFor();
+   await loadUi(page,()=>page.goto(info.url+'/'));
+   await page.waitForURL(url=>url.origin===info.ui&&url.pathname==='/');
    assert.equal(await page.evaluate(()=>localStorage.getItem('draft:fixture')),'newer destination');
    assert.equal(await page.evaluate(()=>localStorage.getItem('leafloom:migration-conflicts')),'true');
    checks.push('migration-conflicts-retain-both');
@@ -85,7 +95,7 @@ async function main(){
    }
   }else{
    // The actual shared React UI registers a project and opens the same runtime in both hosts.
-   await page.goto(info.ui+'/?note='+encodeURIComponent('site/index.html'));
+   await loadUi(page,()=>page.goto(info.ui+'/?note='+encodeURIComponent('site/index.html')));
    await page.getByRole('button',{name:/^(保存并打开|Save and open)$/}).click();
    const content=page.frameLocator('.html-preview-frame').frameLocator('iframe');
    await content.locator('#result').filter({hasText:'ready'}).waitFor({timeout:20000});
@@ -103,7 +113,7 @@ async function main(){
    assert.equal(await standalone.frameLocator('iframe').locator('body').evaluate(()=>location.origin),before);await standalone.close();checks.push('standalone-tab-with-cookie-blocking');
    const disk=await (await fetch(info.url+'/api/file?path=site%2Findex.html',{headers:{Authorization:'Bearer '+token}})).json();
    await page.evaluate(({root,etag})=>localStorage.setItem('draft:'+root+'\nsite/index.html',JSON.stringify({text:'<h1 id="draft-content">Unsaved HTML</h1>',etag,manualSave:true})),{root:info.root,etag:disk.etag});
-   await page.reload();const draftContent=page.frameLocator('.html-preview-frame').frameLocator('iframe');
+   await loadUi(page,()=>page.reload());const draftContent=page.frameLocator('.html-preview-frame').frameLocator('iframe');
    await draftContent.locator('#draft-content').waitFor();
    assert.notEqual(await draftContent.locator('body').evaluate(()=>location.origin),before);
    assert.equal(fs.readFileSync(path.join(info.root,'site/index.html'),'utf8'),disk.text);
