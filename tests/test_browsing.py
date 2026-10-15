@@ -89,7 +89,7 @@ class BrowsingTests(unittest.TestCase):
         static=self.home/'static';(static/'assets').mkdir(parents=True);(static/'index.html').write_text('<h1>Test</h1>')
         (static/'assets/test-123.js').write_text('const text="'+('bundle'*2000)+'";')
         self.runtime.catalog.scan();app=create_app(self.config,self.runtime,start_background=False,static_dir=static)
-        with TestClient(app,base_url='http://127.0.0.1:18080') as client:
+        with TestClient(app,base_url=app.state.websites.ui_origin) as client:
             client.get('/');session=client.get('/api/session');self.assertEqual(session.status_code,200)
             asset=client.get('/assets/test-123.js',headers={'Accept-Encoding':'gzip'})
             self.assertEqual(asset.headers['content-encoding'],'gzip');self.assertIn('immutable',asset.headers['cache-control'])

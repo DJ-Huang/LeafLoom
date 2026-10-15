@@ -10,6 +10,17 @@ function localUrl(value) {
 function trustedPage(value, origin) {
   try { const url = new URL(value); return url.origin === origin && url.pathname === '/'; } catch { return false; }
 }
+function workspaceOrigin(value, controlUrl) {
+  const url = new URL(value), control = new URL(controlUrl);
+  if (url.protocol !== 'http:' || url.port !== control.port || url.username || url.password || url.pathname !== '/' || url.search || url.hash || !/^app\.[a-f0-9]{32}\.localhost$/.test(url.hostname)) throw new Error('Invalid workspace address');
+  return url.origin;
+}
+function projectUrl(value, origin) {
+  try {
+    const url = new URL(value), app = new URL(origin);
+    return url.protocol === 'http:' && url.port === app.port && !url.username && !url.password && /^[pd]-[a-f0-9]{32}$/.test(url.hostname.split('.')[0]) && url.hostname.slice(url.hostname.indexOf('.')) === app.hostname.slice(app.hostname.indexOf('.'));
+  } catch { return false; }
+}
 function externalUrl(value) {
   if (typeof value !== 'string' || value.length > 8192) throw new Error('Invalid link');
   const url = new URL(value);
@@ -28,4 +39,4 @@ function validBounds(value, displays) {
   if (Number.isFinite(value?.x) && Number.isFinite(value?.y) && displays.some(({workArea: d}) => value.x + 100 > d.x && value.y + 100 > d.y && value.x < d.x + d.width && value.y < d.y + d.height)) Object.assign(bounds, {x: value.x, y: value.y});
   return bounds;
 }
-module.exports = {localUrl, trustedPage, externalUrl, inside, validBounds};
+module.exports = {localUrl, trustedPage, externalUrl, workspaceOrigin, projectUrl, inside, validBounds};
