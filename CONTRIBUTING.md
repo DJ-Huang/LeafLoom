@@ -16,6 +16,8 @@ Editor source/history checks are `node tests/frontend_rich_markdown.cjs`, `node 
 
 For public media, see [media production](docs/MEDIA.md). Keep user data out of all screenshots. Contributions are distributed under the repository's MIT license; third-party material keeps its own license.
 
+Browse the [documentation index](docs/README.md) for user guides, feature references and validation records.
+
 ## Repository layout
 
 Keep the root limited to product entry points, dependency manifests and project documentation.

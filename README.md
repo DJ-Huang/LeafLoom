@@ -12,7 +12,7 @@ Your files and search indexes live on your computer. Browse, write and search lo
 
 **[Download for Windows](https://github.com/DJ-Huang/LeafLoom/releases/latest) · [Download for Mac](https://github.com/DJ-Huang/LeafLoom/releases/latest)**
 
-[Get started](#get-started) · [Connect ChatGPT](#your-local-knowledge-in-chatgpt) · [MCP, Skills & AI Chat](#ai-connections) · [User guide](docs/en/GUIDE.md)
+[Get started](#get-started) · [Connect ChatGPT](#your-local-knowledge-in-chatgpt) · [MCP, Skills & AI Chat](#ai-connections) · [User guide](docs/en/GUIDE.md) · [Documentation](docs/README.md)
 
 **See LeafLoom in action:**
 
@@ -81,7 +81,7 @@ Try the built-in [learning studio](vault_rag/examples/en) from **Try the demo** 
 
 ### Markdown, ready to read and write
 
-Build a project wiki, capture a decision or keep reading notes. Tables, checklists, properties, templates and recoverable history help turn everyday writing into reusable knowledge; the content stays in ordinary local Markdown files.
+Edit directly on the formatted page: use `/` commands, drag blocks, edit tables, and paste screenshots or drop attachments. Switch to Markdown source with shared undo history; unchanged source and properties are preserved. Ordinary edits autosave, while AI drafts require manual saving. [Markdown editing guide](docs/en/GUIDE.md#write-with-commands).
 
 ![Markdown project brief with a table, tasks, linked notes and document outline](assets/screenshots/en/showcase-markdown.png)
 
@@ -99,7 +99,7 @@ Keep the current note beside a conversation and follow references back to the so
 
 ### Open local HTML inside your workspace
 
-Keep saved webpages, rich guides and small interactive documents beside your notes. Preview local `.html` and `.htm` files with companion stylesheets, illustrations and supported local scripts in an isolated viewer. The HTML reading room below is included in the demo.
+Open a local `.html` or `.htm` file, confirm its project folder once, and run the website with its companion styles, scripts and resources. Use project navigation, downloads, optional SPA routing, or open an existing HTTP/HTTPS site or development server from **Preview**. [HTML project guide](docs/en/GUIDE.md#open-html-projects-and-websites). The HTML reading room below is included in the demo.
 
 ![Local HTML reading room previewed inside LeafLoom](assets/screenshots/en/showcase-html.png)
 
