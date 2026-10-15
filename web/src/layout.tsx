@@ -50,7 +50,7 @@ export function PathNavigation({path,view,onFolder}:{path:string,view:string,onF
   {browsing?<><li><button onClick={()=>onFolder('')} title={t("打开知识库根目录")}><BookOpen size={15}/><span>{t("知识库")}</span></button></li>{parts.map((part,index)=>{
    const current=index===parts.length-1,target=parts.slice(0,index+1).join('/');
    return <li key={target}><ChevronRight size={13} aria-hidden="true"/>{current?<span className="path-current" aria-current="page" title={path}>{view==='document'?<FileText size={15}/>:<Folder size={15}/>}<span>{part}</span></span>:<button title={t("打开 ")+target} onClick={()=>onFolder(target)}>{part}</button>}</li>;
-  })}</>:<li><span className="path-current" aria-current="page">{view==='knowledge'?<Search size={15}/>:view==='graph'?<Network size={15}/>:<Home size={15}/>}<span>{view==='knowledge'?t("知识检索"):view==='graph'?t("关系图谱"):t("首页")}</span></span></li>}
+  })}</>:<li><span className="path-current" aria-current="page">{view==='knowledge'?<Search size={15}/>:view==='graph'?<Network size={15}/>:<Home size={15}/>}<span>{view==='knowledge'?t("知识检索"):view==='graph'?t("关系图谱"):view==='web'?t("网页"):t("首页")}</span></span></li>}
  </ol></nav>;
 }
 export function IndexStatus({onOpen}:{onOpen:()=>void}){

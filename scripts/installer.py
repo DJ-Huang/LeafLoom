@@ -439,6 +439,9 @@ class Installer:
                 elif action == 'install':
                     atomic_json(self.state / 'python-install.json', {'input_hash': self.dependency_hash(), 'python': str(self.python)})
                     self.emit('当前环境完整且已是最新，跳过安装。')
+                if action == 'install' and self.key == 'macos-arm64':
+                    self.step('配置 Safari 本机网页兼容')
+                    self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'configure-resolver'])
                 if not no_open:
                     self.step('打开本地知识库')
                     self.run([self.python, '-X', 'utf8', self.repo / 'scripts/install_actions.py', 'open'])

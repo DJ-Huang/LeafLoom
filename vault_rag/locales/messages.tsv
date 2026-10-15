@@ -680,3 +680,33 @@ Wiki 导航目录|Wiki navigation folders|Wiki ナビゲーションのフォル
 关闭窗口后留在托盘；退出会停止本地服务。|Closing the window keeps LeafLoom in the tray. Quit stops the local service.|ウィンドウを閉じるとトレイに残ります。終了するとローカルサービスも停止します。
 打开日志文件夹|Open logs folder|ログフォルダーを開く
 在文件管理器中显示|Show in file manager|ファイルマネージャーで表示
+网页会话已失效，请重新打开。|The website session has expired. Open it again.|ウェブセッションの有効期限が切れました。開き直してください。
+尚未确认网页加载完成，请重试或检查项目目录。|Page loading could not be confirmed. Retry or check the project folder.|ページの読み込みを確認できません。再試行するかプロジェクトフォルダーを確認してください。
+请选择知识库内的项目文件夹|Choose a project folder inside the connected knowledge folder.|ナレッジフォルダー内のプロジェクトフォルダーを選択してください。
+未保存草稿|Unsaved draft|未保存の下書き
+后退|Back|戻る
+前进|Forward|進む
+项目设置|Project settings|プロジェクト設定
+打开网址|Open website|ウェブサイトを開く
+返回项目|Return to project|プロジェクトに戻る
+外部网站可能限制嵌入或要求登录；未显示内容不代表加载成功。|External websites may restrict embedding or require sign-in. An empty frame does not confirm successful loading.|外部サイトは埋め込みを制限したりログインを要求する場合があります。空白の表示は読み込み成功を意味しません。
+HTML 项目设置|HTML project settings|HTML プロジェクト設定
+确认一次项目文件夹，之后自动复用。网页的 / 对应该文件夹，配套资源必须位于其中。|Confirm the project folder once. The website root / maps to this folder, which must contain its companion resources.|プロジェクトフォルダーは一度確認すれば再利用されます。ウェブの / はこのフォルダーに対応し、関連リソースもその中に置きます。
+项目文件夹（相对知识库，留空为知识库根目录）|Project folder (relative to the knowledge folder; empty means its root)|プロジェクトフォルダー（ナレッジフォルダーからの相対パス。空欄はルート）
+选择文件夹|Choose folder|フォルダーを選択
+SPA 路由：页面路径不存在时打开项目入口|SPA routing: open the project entry for missing page routes|SPA ルーティング：ページパスが存在しない場合は入口を開く
+保存并打开|Save and open|保存して開く
+打开网站或开发服务|Open website or development server|ウェブサイトまたは開発サーバーを開く
+使用现有 HTTP/HTTPS 地址，不安装或启动网站后台。|Use an existing HTTP/HTTPS address. Website backends are not installed or started.|既存の HTTP/HTTPS アドレスを使用します。バックエンドのインストールや起動は行いません。
+网站地址|Website address|ウェブサイトのアドレス
+请输入 HTTP 或 HTTPS 网站地址|Enter an HTTP or HTTPS website address.|HTTP または HTTPS のアドレスを入力してください。
+迁移发现已有状态，已保留当前版本和原入口备份。|Existing state was found during migration. The current version and an original-entry backup were kept.|移行先に既存の状態がありました。現在の状態と元の入口のバックアップを保持しています。
+下载迁移备份|Download migration backup|移行バックアップをダウンロード
+输入网站地址，或从目录打开 HTML 项目。|Enter a website address, or open an HTML project from the directory.|ウェブサイトのアドレスを入力するか、ディレクトリから HTML プロジェクトを開いてください。
+Safari 本机网页兼容|Safari local website compatibility|Safari のローカルサイト互換性
+macOS 14/15 的 Safari 需要本机解析配置。仅配置本应用的专属域名，系统会请求管理员授权。|Safari on macOS 14/15 requires local resolver setup. Only this app’s domain is configured; macOS requests administrator authorization.|macOS 14/15 の Safari にはローカル名前解決の設定が必要です。このアプリ専用のドメインのみ設定し、管理者の許可を求めます。
+不改变默认 DNS；移除后仍可使用 App 和其他兼容浏览器。|Default DNS stays unchanged. The app and other compatible browsers remain available after removal.|既定の DNS は変更しません。削除後もアプリと他の対応ブラウザーを利用できます。
+移除兼容配置|Remove compatibility setup|互換性の設定を削除
+启用 Safari 兼容|Enable Safari compatibility|Safari 互換性を有効化
+本机解析服务尚未运行，请重新启动本地服务后重试|The local resolver is not running. Restart the local service and retry.|名前解決サービスが未起動です。ローカルサービスを再起動して再試行してください。
+配置 Safari 本机网页兼容|Setting up Safari local website compatibility|Safari のローカルサイト互換性を設定
