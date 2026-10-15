@@ -79,3 +79,5 @@ web/tsconfig.tsbuildinfo
 vault_rag/static/
 desktop/node_modules/
 desktop/resources/
+# Local desktop installer outputs, including the older output directory.
+/desktop/release/

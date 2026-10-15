@@ -1,6 +1,11 @@
 {
   "homepage": "00-Home.md",
   "query": "想法",
-  "question": "如何把零散笔记变成有用的知识？",
-  "answer": "从一个小习惯开始：记下一个有用的想法，再次找到它，然后连接相关笔记。[[Notes/01-Capture.md]] 介绍怎样清晰记录，[[Notes/03-Connect.md]] 展示如何用链接保留上下文。这是虚构演示，不是真实 AI 回答。"
+  "question": "怎样把这份阅读计划，变成真正坚持下来的习惯？",
+  "answer": "**从一个小循环开始，不必先列很长的书单。**\n\n1. **让时间看得见。** 保留 [[Notes/04-Project.md|阅读习惯项目]] 中每次二十分钟的安排。\n2. **用自己的话写一个想法。** 参考 [[Concepts/Source-notes.md|来源笔记]]，把出处和自己的理解放在一起。\n3. **先连接，再继续收集。** 把想法连接到 [[Concepts/Atomic-notes.md|原子笔记]] 或正在推进的项目。\n4. **周日再回来看看。** 用 [[Concepts/Weekly-review.md|每周回顾]] 决定哪些内容值得重读。\n\n**下一步：** 选一本书，为第一次阅读写下一个问题。\n\n*虚构演示回答 · 未调用外部 AI 服务。*",
+  "topic_title": "演示 · 让阅读成为习惯",
+  "showcase": {
+    "markdown": "Notes/04-Project.md",
+    "html": "Web/index.html"
+  }
 }

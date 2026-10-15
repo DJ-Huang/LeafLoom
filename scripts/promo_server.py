@@ -2,6 +2,7 @@
 import argparse
 import json
 import secrets
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -33,6 +34,11 @@ def main():
         async def seed(request:Request):
             options=await request.json();language=options['locale']
             sample=create_demo(config.directory,language)
+            if options.get('showcase'):
+                # Same packaged content, copied to a clearly named disposable vault.
+                studio=config.directory/'showcase'/language/'LeafLoom Studio'
+                shutil.copytree(sample['root'],studio,dirs_exist_ok=True)
+                sample={**sample,'root':str(studio.resolve())}
             if options.get('reset_recording'):
                 source=Path(__file__).resolve().parents[1]/'vault_rag/examples'/language/'Notes/01-Capture.md'
                 (Path(sample['root'])/'Notes/01-Capture.md').write_bytes(source.read_bytes())
@@ -40,10 +46,10 @@ def main():
             runtime.configuration_changed();runtime.catalog.scan()
             manifest=json.loads((Path(__file__).resolve().parents[1]/'vault_rag/examples'/language/'manifest.json').read_text(encoding='utf-8'))
             Preferences(config.directory).save({'locale':language,'guide':{'step':'done','checked':[],'dismissed':False}},sample['root'])
-            ai=app.state.ai;topic=ai.create('codex','DEMO · LeafLoom')
+            ai=app.state.ai;topic=ai.create('codex',manifest.get('topic_title','DEMO · LeafLoom'))
             ai.execute('INSERT INTO turns(id,conversation_id,request_id,payload_hash,question,references_json,contexts_json,answer,state,created) VALUES(?,?,?,?,?,?,?,?,?,?)',
                 (secrets.token_hex(16),topic['id'],secrets.token_hex(16),'demo',manifest['question'],'[]','[]',manifest['answer'],'complete',time.time()))
-            return {'topic':topic['id'],'root':sample['root'],'query':manifest['query'],'homepage':sample['homepage']}
+            return {'topic':topic['id'],'root':sample['root'],'query':manifest['query'],'homepage':sample['homepage'],'showcase':manifest.get('showcase',{})}
         @app.post('/api/promo/proposal')
         async def proposal(request:Request):
             # A clearly fictional suggestion; accepting it exercises the real draft flow.

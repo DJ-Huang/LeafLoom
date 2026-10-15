@@ -1,25 +1,29 @@
 ---
-title: A small creative project
+title: Build a reading ritual
 verified_status: limited
-tags: [leafloom, demo]
+tags: [leafloom, demo, project]
 ---
-# A small creative project
+# Build a reading ritual
 
-A fictional weekend project: design a reading corner. Capture inspiration, collect materials, compare options, and keep decisions linked to their sources.
+Turn a quiet corner into a place where good ideas become part of everyday life.
 
-## A thought worth keeping
+> Read with a question. Keep one useful idea. Connect it to something you already know.
 
-> Your files. Your ideas. Connected.
+## Project at a glance
 
-## Next steps
+| Focus | Decision | Linked notes |
+| --- | --- | --- |
+| Space | A warm light, one chair, fewer distractions | [A quiet reading corner](../Projects/Reading-corner.md) |
+| Practice | Twenty minutes, four evenings a week | [Deep reading](../Concepts/Deep-reading.md) |
+| Output | One connected note after every session | [Source notes](../Concepts/Source-notes.md) |
 
-- [ ] Capture a useful idea
-- [ ] Find the source
-- [ ] Connect a related note
+## This week
 
-## Related ideas
+- [x] Choose a book and write down one question
+- [ ] Set up the reading corner
+- [ ] Write a source note in your own words
+- [ ] Review the connections on Sunday
 
-- [[01-Capture|Capture an idea]]
-- [[02-Retrieve|Find it again]]
-- [[03-Connect|Connect the dots]]
-- [[05-AI|Think with AI]]
+## Follow the idea
+
+[[Concepts/Atomic-notes|Atomic notes]] · [[Concepts/Active-recall|Active recall]] · [[Concepts/Weekly-review|Weekly review]]

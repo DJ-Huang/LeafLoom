@@ -1,8 +1,16 @@
-# Public screenshots and English video
+# Public screenshots and promotional video
 
 [Screenshot gallery](../assets/screenshots/index.html) · [English video](../assets/promo/leafloom-en.mp4) · [Captions](../assets/promo/leafloom-en.srt)
 
 The media uses fictional, multilingual demo notes. No user's vault, conversation or token is included. AI responses are clearly marked fictional, and the fixture disables external CLI execution. Search and graphs come from actual demo files; search uses the real keyword fallback when the semantic model is not installed.
+
+## README feature screenshots
+
+The English, Chinese and Japanese READMEs each show four new 1800×1125 screenshots: a Markdown project brief, the knowledge graph, AI Chat alongside a note, and local HTML preview. These 12 images use the same learning-studio starter vault shipped under `vault_rag/examples/{en,zh-CN,ja}/`. Each language includes 27 connected notes, four editable templates, and an offline HTML guide with a companion stylesheet. The graph links and Markdown content come from those files; the AI conversation is seeded and explicitly labeled as fictional.
+
+Install the locked desktop capture dependency with `npm ci --prefix desktop`, generate the examples with `python scripts/build_examples.py`, build the frontend, and start a fresh `python scripts/promo_server.py`. Then run `node scripts/capture_showcase.cjs`. It uses an isolated Chrome profile by default (`LEAFLOOM_BROWSER_CHANNEL` can select another installed channel), verifies the temporary demo service, and saves `showcase-{markdown,graph,ai,html}.png` in each language directory. It also checks table links, tasks, graph content, AI references and local HTML styles, and records renderer errors in `.cache/leafloom/showcase-validation.json`.
+
+Review the screenshots before use. Stop and restart the temporary fixture after changing example content: like the real demo, it preserves existing example edits. The previous 24 screenshots and all video sources remain available. All three READMEs retain their promotional-video links; the existing English video is unchanged.
 
 ## Reproduce
 
