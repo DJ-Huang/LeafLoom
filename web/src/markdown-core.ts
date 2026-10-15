@@ -8,7 +8,7 @@ export function createMarkdown(){
  md.renderer.rules.fence=(tokens,index,options,env,self)=>tokens[index].info.trim()==='mermaid'?'<pre class="mermaid" data-diagram="'+md.utils.escapeHtml(tokens[index].content)+'">'+md.utils.escapeHtml(tokens[index].content)+'</pre>':fence(tokens,index,options,env,self);
  md.inline.ruler.before('link','wikilink',(state,silent)=>{
   const match=/^(!?)\[\[([^\]\n]+)\]\]/.exec(state.src.slice(state.pos));if(!match)return false;
-  if(!silent){const token=state.push('html_inline','',0);const [target,...alias]=match[2].split('|');token.content=match[1]?`<span class="embed-placeholder" data-embed="${md.utils.escapeHtml(target)}"></span>`:`<a class="wikilink" href="#" data-note="${md.utils.escapeHtml(target)}">${md.utils.escapeHtml(alias.join('|')||target.split('/').pop()||target)}</a>`;}
+  if(!silent){const token=state.push('html_inline','',0);const [target,...alias]=match[2].replace(/\\\|/g,'|').split('|');token.content=match[1]?`<span class="embed-placeholder" data-embed="${md.utils.escapeHtml(target)}"></span>`:`<a class="wikilink" href="#" data-note="${md.utils.escapeHtml(target)}">${md.utils.escapeHtml(alias.join('|')||target.split('/').pop()||target)}</a>`;}
   state.pos+=match[0].length;return true;
  });
  const image=md.renderer.rules.image!;

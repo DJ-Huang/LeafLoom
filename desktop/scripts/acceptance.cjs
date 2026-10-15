@@ -48,15 +48,15 @@ async function main() {
     await page.screenshot({path: path.join(out, 'desktop-home.png')});
     await page.locator('.tree-label').filter({hasText: 'Welcome.md'}).click();
     await page.locator('.document-pane,.document-workspace,.reader').first().waitFor({timeout: 15000}).catch(async () => {await page.getByRole('heading', {name: 'Welcome', exact: true}).first().waitFor();});
-    await page.getByRole('button', {name: 'Edit', exact: true}).click();
-    const editor=page.locator('.cm-content').first(); await editor.waitFor();
-    await editor.fill('# Welcome\n\nSaved from the desktop editor. [[Second]]\n');
+    const editor=page.locator('.rich-prose').first(); await editor.waitFor();
+    await editor.locator('p').first().click();await page.keyboard.press('Home');
+    await page.keyboard.insertText('Saved from the desktop editor. ');
     const savedUntil=Date.now()+15000;
     while(!fs.readFileSync(path.join(vault,'Welcome.md'),'utf8').includes('Saved from the desktop editor.')) {
       if(Date.now()>savedUntil)throw new Error('Desktop editor did not save the original file');
       await page.waitForTimeout(100);
     }
-    await page.getByRole('button', {name: 'Read', exact: true}).click();
+    assert.equal(await page.getByRole('button', {name:'View source',exact:true}).count(),1);
     checks.push('editor-saves-original-file');
     await page.screenshot({path: path.join(out, 'desktop-note.png')});
     await page.getByRole('button', {name: 'Knowledge graph', exact: true}).click();
