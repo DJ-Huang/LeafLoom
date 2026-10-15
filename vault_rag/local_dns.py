@@ -105,7 +105,8 @@ class LocalDns:
 
     def install_command(self, enabled):
         # Elevate fixed shell operations only, never a user-writable Python file.
-        path = shlex.quote(str(self.resolver_path))
+        # The command targets macOS even when generated on another platform.
+        path = shlex.quote(self.resolver_path.as_posix())
         marker = shlex.quote('# LeafLoom scoped resolver v1 ' + self.zone)
         guard = f'test ! -L /etc/resolver; test ! -L {path}; if test -e {path}; then /usr/bin/grep -Fxq -- {marker} {path}; fi'
         if not enabled:
