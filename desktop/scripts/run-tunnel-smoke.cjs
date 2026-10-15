@@ -1,0 +1,13 @@
+'use strict';
+const path = require('node:path');
+const fs = require('node:fs');
+const os = require('node:os');
+const {spawnSync} = require('node:child_process');
+const root = path.resolve(__dirname, '../..');
+const python = path.join(root, 'desktop/resources/backend/python', process.platform === 'win32' ? 'python.exe' : 'bin/python3');
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'LeafLoom-native-tunnel-'));
+const env = {...process.env, LEAFLOOM_TEST_PYTHON: python, LEAFLOOM_TEST_HOME: home};
+delete env.ELECTRON_RUN_AS_NODE;
+const result = spawnSync(process.env.LEAFLOOM_TEST_ELECTRON || require('electron'), [path.join(__dirname, 'tunnel-smoke.cjs')], {env, stdio: 'inherit', windowsHide: true});
+fs.rmSync(home, {recursive: true, force: true, maxRetries: 3});
+process.exit(result.status ?? 1);

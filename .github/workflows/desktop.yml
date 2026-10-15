@@ -56,10 +56,16 @@ jobs:
         run: npm test --prefix desktop
       - name: Build private backend
         run: python -X utf8 scripts/build_desktop_backend.py
+      - name: Build verified Tunnel runtime
+        run: python -X utf8 scripts/build_tunnel.py
+      - name: Native Tunnel credential and sidecar smoke
+        run: node desktop/scripts/run-tunnel-smoke.cjs
       - name: Install smoke-test harness
         run: uv sync --locked --no-dev
       - name: Migration regressions
         run: uv run --no-sync python -X utf8 -m unittest discover -s tests -p test_desktop.py
+      - name: MCP authentication and Tunnel lifecycle
+        run: uv run --no-sync python -X utf8 -m unittest discover -s tests -p test_tunnel.py
       - name: Require release signing
         if: inputs.signed
         shell: bash
@@ -89,6 +95,10 @@ jobs:
         env:
           LEAFLOOM_DESKTOP_EXECUTABLE: ${{ runner.os == 'Windows' && 'dist/desktop/win-unpacked/LeafLoom.exe' || 'dist/desktop/mac-arm64/LeafLoom.app/Contents/MacOS/LeafLoom' }}
         run: node desktop/scripts/acceptance.cjs
+      - name: Packaged Tunnel settings acceptance
+        env:
+          LEAFLOOM_DESKTOP_EXECUTABLE: ${{ runner.os == 'Windows' && 'dist/desktop/win-unpacked/LeafLoom.exe' || 'dist/desktop/mac-arm64/LeafLoom.app/Contents/MacOS/LeafLoom' }}
+        run: node desktop/scripts/tunnel-ui-smoke.cjs
       - uses: actions/upload-artifact@v4
         with:
           name: leafloom-${{ runner.os }}-${{ inputs.signed && 'signed' || 'unsigned-test' }}

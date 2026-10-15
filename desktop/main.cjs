@@ -1,10 +1,11 @@
 'use strict';
-const {app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, nativeImage, screen, session} = require('electron');
+const {app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, nativeImage, screen, session, safeStorage} = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const {pathToFileURL} = require('node:url');
 const {Backend} = require('./backend.cjs');
+const {TunnelSettings} = require('./tunnel.cjs');
 const policy = require('./policy.cjs');
 const {strings, resolve} = require('./strings.cjs');
 
@@ -26,6 +27,20 @@ const statusUrl = pathToFileURL(statusFile).href;
 const control = path.join(home, 'desktop-control');
 let window, tray, backend, origin = '', lastOrigin = '', workspaceLoaded = false, quitting = false, quitPending = false, failure = '', retrying = false;
 let startupTimer, closeTimer;
+const tunnel = new TunnelSettings(home, safeStorage);
+let tunnelBackendReady = false;
+function configureTunnel() {
+  if (!tunnelBackendReady) {
+    tunnel.state = {state: tunnel.value.enabled ? 'waiting' : 'disabled', error: ''};
+    return tunnel.status();
+  }
+  const root = app.isPackaged ? path.join(process.resourcesPath, 'tunnel') : path.join(__dirname, 'resources', 'tunnel', process.platform === 'win32' ? 'windows-x64' : 'macos-arm64');
+  const binary = path.join(root, process.platform === 'win32' ? 'tunnel-client-runtime.exe' : 'tunnel-client-runtime');
+  const command = tunnel.command(binary);
+  tunnel.state = {state: command.enabled ? 'starting' : 'disabled', error: ''};
+  backend.send('tunnel-configure', command);
+  return tunnel.status();
+}
 let background = process.argv.includes('--background');
 const loginOptions = () => process.platform === 'win32' ? {path: process.execPath, args: ['--background', '--home', home]} : {};
 const loginSettings = () => app.getLoginItemSettings(loginOptions());
@@ -137,6 +152,7 @@ function fail(error) {
 async function startBackend() {
   if (retrying || quitting) return; retrying = true;
   try {
+    tunnelBackendReady = false;
     await backend?.stop();
     failure = ''; origin = '';
     const python = app.isPackaged
@@ -145,7 +161,12 @@ async function startBackend() {
     if (!python || !fs.existsSync(python)) throw new Error('Private Python is missing. Build the backend, or set LEAFLOOM_PYTHON to its interpreter.');
     backend = new Backend({python, home});
     backend.on('failure', fail);
-    backend.on('exit', result => {if (!result.expected && !quitting) fail(new Error('Local service exited (' + result.code + ').'));});
+    backend.on('exit', result => {
+      tunnelBackendReady = false;
+      tunnel.state = {state: tunnel.value.enabled ? 'waiting' : 'disabled', error: ''};
+      if (!result.expected && !quitting) fail(new Error('Local service exited (' + result.code + ').'));
+    });
+    backend.on('tunnel-state', value => {tunnel.state = {state: value.state, error: value.error};});
     backend.on('ready', async ready => {
       const preferencesPath = path.join(home, 'desktop-preferences.json');
       const previousPreferences = readJson(preferencesPath);
@@ -185,6 +206,9 @@ async function startBackend() {
           backend.send('commit');
         });
         clearTimeout(startupTimer); updateMenu();
+        tunnelBackendReady = true;
+        // Tunnel failure must not roll back an otherwise healthy workspace.
+        try { configureTunnel(); } catch { tunnel.state = {state: 'failed', error: 'tunnel.error.process'}; }
         if (!background) showWindow();
       } catch (error) {
         fail(error); await backend.stop();
@@ -233,6 +257,11 @@ else {
       {role: 'editMenu'}, {role: 'viewMenu'}, {role: 'windowMenu'},
     ]));
     const methods = {
+      'tunnel-status': () => tunnel.status(),
+      'tunnel-save': input => {tunnel.save(input); return configureTunnel();},
+      'tunnel-reconnect': () => {if (!tunnel.value.encryptedKey) throw new Error('tunnel.error.key'); tunnel.save({tunnelId: tunnel.value.tunnelId, enabled: true}); return configureTunnel();},
+      'tunnel-disconnect': () => {tunnel.disable(); return configureTunnel();},
+      'tunnel-clear': () => {tunnel.clear(); return configureTunnel();},
       info: () => ({version: app.getVersion(), platform: process.platform, openAtLogin: loginSettings().openAtLogin, error: failure, text: text()}),
       'choose-directory': async () => {const result = await dialog.showOpenDialog(window, {properties: ['openDirectory']}); return result.canceled ? {cancelled: true} : {path: result.filePaths[0]};},
       'open-external': async url => {await shell.openExternal(policy.externalUrl(url));},

@@ -1,6 +1,6 @@
 """One ASGI application serving the local UI, file API and shared HTTP MCP."""
 from __future__ import annotations
-import asyncio, contextlib, hashlib, hmac, json, logging, mimetypes, os, secrets, subprocess, threading, time
+import asyncio, contextlib, hashlib, hmac, ipaddress, json, logging, mimetypes, os, secrets, subprocess, threading, time
 from pathlib import Path
 from fastapi import FastAPI, Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
@@ -98,10 +98,14 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         preview_read=path.startswith('/html-preview/') and request.method in ('GET','HEAD')
         origin=request.headers.get('origin')
         if origin and origin not in {f'http://{h}' for h in allowed} and not (preview_read and origin=='null'):return json_response({'error':'来源不允许'},403)
-        is_api=path.startswith('/api/') or path=='/mcp'
+        is_mcp=path.rstrip('/')=='/mcp'
+        is_api=path.startswith('/api/') or is_mcp
+        # Only the transport peer is authoritative; never trust forwarded IPs.
+        try:local_mcp=is_mcp and request.client is not None and ipaddress.ip_address(request.client.host).is_loopback
+        except ValueError:local_mcp=False
         bearer=hmac.compare_digest(request.headers.get('authorization',''),'Bearer '+token)
         session=hmac.compare_digest(request.cookies.get('vault_session',''),token)
-        if is_api and not (bearer or (session and path!='/mcp')):return json_response({'error':'请从本机网页入口打开，或配置 MCP 本机令牌'},401)
+        if is_api and not (local_mcp or bearer or (session and not is_mcp)):return json_response({'error':'请从本机网页入口打开，或配置 MCP 本机令牌'},401)
         if path.startswith('/api/') and request.method not in ('GET','HEAD') and not bearer:
             if not hmac.compare_digest(request.headers.get('x-vault-csrf',''),csrf):return json_response({'error':'写入请求校验失败'},403)
         if path in ('/api/search-files','/api/graph','/api/related','/api/query','/api/base','/api/templates') and runtime.catalog.root!=config.data.get('root'):
@@ -347,6 +351,7 @@ def create_server(app, **options):
             if hasattr(runtime,'request_stop'):runtime.request_stop()
             await app.state.ai.close()
             await super().shutdown(sockets)
+    options['proxy_headers']=False
     return LocalServer(uvicorn.Config(app,host='127.0.0.1',workers=1,access_log=False,
                                     timeout_graceful_shutdown=20,**options))
 
