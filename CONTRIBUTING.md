@@ -12,6 +12,8 @@ UI text belongs in `vault_rag/locales/messages.tsv` (source, English, Japanese; 
 
 Use Python 3.12 and the locked project environment. Build the frontend with `npm ci` and `npm run build` in `web/`. Run checks relevant to the change; productization regressions are in `tests/test_productization.py`. Validate UI changes against a fictional, isolated folder. State clearly which checks were run and which platforms were not tested.
 
+Editor source/history checks are `node tests/frontend_rich_markdown.cjs`, `node tests/frontend_browsing.cjs` and `node tests/test_ai_drafts.cjs`. The browser suite is `node tests/frontend_rich_editor.cjs` (also available through the previous `frontend_editor_ui.cjs` entry point). Install desktop development dependencies for Playwright Core and use an installed Edge/Chrome channel. Start `tests/editor_ui_server.py` with the built static directory; it creates a disposable vault and refuses the user's service port. Browser evidence is written to `.cache/rich-editor-qa/`.
+
 For public media, see [media production](docs/MEDIA.md). Keep user data out of all screenshots. Contributions are distributed under the repository's MIT license; third-party material keeps its own license.
 
 ## Repository layout

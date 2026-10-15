@@ -11,7 +11,7 @@ from vault_rag.web_server import create_app
 import uvicorn
 
 temporary = tempfile.TemporaryDirectory(prefix='leafloom-editor-')
-home = Path(temporary.name)
+home = Path(temporary.name).resolve()
 root = home / 'vault'
 (root / 'Notes').mkdir(parents=True)
 (root / 'Other').mkdir()
@@ -35,7 +35,7 @@ def changed(*paths):
 
 runtime.files.changed = changed
 runtime.files_changed = changed
-app = create_app(config, runtime, start_background=False, static_dir=Path(sys.argv[1]))
+app = create_app(config, runtime, start_background=False, static_dir=Path(sys.argv[1]).resolve())
 
 @app.get('/api/editor-fixture')
 async def fixture():

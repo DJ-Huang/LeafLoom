@@ -1,18 +1,11 @@
 import {EditorView,ViewPlugin} from '@codemirror/view';
-import {csrf,invalidate} from './api';
 import {t} from './i18n';
 import {editAnnotations,InsertRange,linkMarkdown,insertLink,safeLink} from './editor-commands';
 import {removeAnchor,trackedRange,trackRange} from './editor-anchors';
 import {prosePosition} from './editor-syntax';
 
-export const imageFile=(name:string)=>/\.(png|jpe?g|gif|webp|avif|svg)$/i.test(name);
-export function attachmentName(file:File){
- const mimeExtension:Record<string,string>={'image/png':'.png','image/jpeg':'.jpg','image/gif':'.gif','image/webp':'.webp','image/avif':'.avif'};
- let name=file.name.replace(/[<>:"/\\|?*\x00-\x1f]/g,'-').replace(/^[. ]+|[. ]+$/g,'')||'image';
- const extension=/\.[a-z0-9]{1,12}$/i.exec(name)?.[0]||mimeExtension[file.type]||'';
- if(name.endsWith(extension)&&extension)name=name.slice(0,-extension.length);
- return name.slice(0,100)+'-'+crypto.randomUUID().slice(0,12)+extension;
-}
+import {uploadEditorAssets} from './editor-assets';
+export {attachmentName,imageFile} from './editor-assets';
 export type AttachmentOptions={root:string,path:string,active:()=>boolean,status:(message:string,error?:boolean)=>void};
 export function attachmentController(view:EditorView,options:AttachmentOptions){
  let destroyed=false;const pending=new Map<string,AbortController>();
@@ -24,22 +17,9 @@ export function attachmentController(view:EditorView,options:AttachmentOptions){
  const upload=async(files:File[],range:InsertRange,id=trackRange(view,range))=>{
   if(!files.length||!alive(id)){view.dispatch({effects:removeAnchor.of(id)});return;}
   const controller=new AbortController();pending.set(id,controller);
-  const parent=options.path.includes('/')?options.path.slice(0,options.path.lastIndexOf('/')):'';
-  const folder=(parent?parent+'/':'')+'attachments';
-  const links:string[]=[];
   try{
-   for(let i=0;i<files.length;i++){
-    if(!alive(id))throw new DOMException('cancelled','AbortError');
-    options.status(t('正在上传附件 {current}/{total}…',{current:i+1,total:files.length}));
-    const file=files[i],name=attachmentName(file);
-    const query=new URLSearchParams({folder,name,root:options.root,create_folder:'true'});
-    const response=await fetch('/api/upload?'+query,{method:'POST',credentials:'same-origin',headers:{'X-Vault-CSRF':csrf,'Content-Type':file.type||'application/octet-stream'},body:file,signal:controller.signal});
-    const result=await response.json();if(!response.ok)throw new Error(result.error||t('附件上传失败'));
-    invalidate({paths:[result.path]});
-    if(!alive(id))throw new DOMException('cancelled','AbortError');
-    const relative='attachments/'+encodeURIComponent(name).replace(/\(/g,'%28').replace(/\)/g,'%29');
-    links.push((imageFile(name)?'!':'')+linkMarkdown(file.name||name,relative));
-   }
+   const assets=await uploadEditorAssets(files,{...options,signal:controller.signal,alive:()=>alive(id)});
+   const links=assets.map(asset=>(asset.image?'!':'')+linkMarkdown(asset.label,asset.relative));
    const target=trackedRange(view,id);if(!target||!alive(id))throw new DOMException('cancelled','AbortError');
    const before=view.state.doc.sliceString(view.state.doc.lineAt(target.from).from,target.from),after=view.state.doc.sliceString(target.to,view.state.doc.lineAt(target.to).to);
    const insert=(before.trim()?'\n\n':'')+links.join('\n\n')+(after.trim()?'\n\n':'');

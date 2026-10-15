@@ -773,3 +773,56 @@ tunnel.error.storage|无法保存或读取连接配置，请检查应用状态�
 tunnel.error.process|Tunnel 客户端未正常运行，请重新连接或查看日志。|The Tunnel runtime is not running correctly. Reconnect or open the logs.|Tunnel が正常に動作していません。再接続するかログを確認してください。
 tunnel.error.network|暂时无法连接 OpenAI Tunnel，将自动重试；请检查网络或代理设置。|OpenAI Tunnel is temporarily unreachable. Retrying automatically; check your network or proxy.|OpenAI Tunnel に接続できません。自動で再試行します。ネットワークやプロキシを確認してください。
 tunnel.error.link|无法打开外部页面或日志目录。|Unable to open the external page or log folder.|外部ページまたはログフォルダーを開けません。
+查看源码|View source|ソースを表示
+返回正文|Back to page|本文に戻る
+最近使用|Recently used|最近使った項目
+列表|Lists|リスト
+媒体|Media|メディア
+高级内容|Advanced|高度なコンテンツ
+添加内容|Add content|コンテンツを追加
+块类型|Block type|ブロックの種類
+在下方插入|Insert below|下に挿入
+拖动或打开块操作|Drag or open block actions|ドラッグまたはブロック操作を開く
+笔记正文|Note content|ノート本文
+笔记路径|Note path|ノートのパス
+请输入有效的笔记路径|Enter a valid note path|有効なノートのパスを入力してください
+保留的原文内容|Preserved content|保持された元のコンテンツ
+嵌入笔记|Embedded note|埋め込みノート
+查询|Query|クエリ
+正在搜索…|Searching…|検索中…
+没有匹配的笔记|No matching notes|一致するノートはありません
+笔记搜索失败，请重试|Note search failed. Please try again.|ノートの検索に失敗しました。もう一度お試しください。
+无法保存此编辑，请保留页面并查看源码|Unable to save this edit. Keep this page open and inspect the source.|編集を保存できません。このページを開いたままソースを確認してください。
+图表内容|Diagram content|図の内容
+查询内容|Query content|クエリの内容
+公式内容|Equation content|数式の内容
+移除链接|Remove link|リンクを解除
+在下方添加行|Add row below|下に行を追加
+在右侧添加列|Add column to the right|右に列を追加
+删除行|Delete row|行を削除
+删除列|Delete column|列を削除
+此行作为表头|Use this row as header|この行を見出しにする
+行|Row|行
+列|Column|列
+左对齐|Align left|左揃え
+居中对齐|Align center|中央揃え
+右对齐|Align right|右揃え
+开始写下你的想法|Start writing your thoughts|思いついたことを書き始める
+醒目的大标题|A prominent heading|目立つ大きな見出し
+划分章节与主题|Organize sections and topics|章やテーマを分ける
+为内容添加小标题|Add a smaller heading|小さな見出しを追加
+用项目符号整理要点|Organize points with bullets|箇条書きで要点を整理
+按顺序记录步骤|Write steps in order|手順を順番に記録
+可勾选的任务清单|A checklist for your tasks|チェックできるタスクリスト
+突出一段引用或想法|Highlight a quote or thought|引用や考えを目立たせる
+用细线分隔内容|Separate content with a line|細い線でコンテンツを区切る
+保留缩进的代码片段|A code snippet with indentation|インデントを保ったコード
+用行与列组织信息|Organize information in rows and columns|行と列で情報を整理
+上传图片或粘贴截图|Upload an image or paste a screenshot|画像を追加、スクリーンショットを貼り付け
+添加本地文件|Attach a local file|ローカルファイルを添付
+链接到网页或邮件地址|Link to a website or email address|ウェブページやメールアドレスへのリンク
+关联知识库中的另一篇笔记|Connect to another note in your knowledge base|ナレッジベース内の別のノートにリンク
+用 LaTeX 表达公式|Write an equation with LaTeX|LaTeX で数式を書く
+绘制流程图与关系图|Draw flowcharts and relationship diagrams|フローチャートや関係図を描く
+修改|Edit|変更
+表格操作|Table actions|テーブル操作

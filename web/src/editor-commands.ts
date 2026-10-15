@@ -5,27 +5,9 @@ import {syntaxTree} from '@codemirror/language';
 import {t} from './i18n';
 import {blockAt,MarkdownBlock,prosePosition,simpleBlockText,topBlocks} from './editor-syntax';
 
-export type InsertId='text'|'h1'|'h2'|'h3'|'bullet'|'ordered'|'todo'|'quote'|'divider'|'code'|'table'|'image'|'file'|'link'|'wiki'|'math'|'mermaid';
-export type InsertCommand={id:InsertId,label:string,aliases:string,icon:string,group:'basic'|'insert'|'technical'};
-export const insertCommands:readonly InsertCommand[]=[
- {id:'text',label:'正文',aliases:'text paragraph 正文 段落',icon:'T',group:'basic'},
- {id:'h1',label:'一级标题',aliases:'h1 heading title 标题',icon:'H1',group:'basic'},
- {id:'h2',label:'二级标题',aliases:'h2 heading title 标题',icon:'H2',group:'basic'},
- {id:'h3',label:'三级标题',aliases:'h3 heading title 标题',icon:'H3',group:'basic'},
- {id:'bullet',label:'无序列表',aliases:'bullet list ul 列表',icon:'•',group:'basic'},
- {id:'ordered',label:'有序列表',aliases:'number ordered list ol 列表',icon:'1.',group:'basic'},
- {id:'todo',label:'待办事项',aliases:'todo task checkbox 待办 任务',icon:'☑',group:'basic'},
- {id:'quote',label:'引用',aliases:'quote blockquote 引用',icon:'❝',group:'basic'},
- {id:'divider',label:'分割线',aliases:'divider hr separator 分割线',icon:'―',group:'basic'},
- {id:'code',label:'代码块',aliases:'code 代码',icon:'<>',group:'technical'},
- {id:'table',label:'表格',aliases:'table 表格',icon:'▦',group:'basic'},
- {id:'image',label:'图片',aliases:'image picture 图片 截图',icon:'▧',group:'insert'},
- {id:'file',label:'附件',aliases:'file attachment 附件 文件',icon:'↥',group:'insert'},
- {id:'link',label:'网页链接',aliases:'link url 网页 链接',icon:'↗',group:'insert'},
- {id:'wiki',label:'笔记链接',aliases:'wiki note link 笔记 双链',icon:'[[',group:'insert'},
- {id:'math',label:'公式',aliases:'math equation latex 公式',icon:'∑',group:'technical'},
- {id:'mermaid',label:'Mermaid 图表',aliases:'mermaid diagram flowchart 图表 流程图',icon:'◇',group:'technical'}
-];
+import {formatCommands,FormatId,insertCommands,InsertId,linkMarkdown,safeLink} from './editor-catalog';
+export {formatCommands,insertCommands,linkMarkdown,safeLink} from './editor-catalog';
+export type {FormatId,InsertId,InsertCommand} from './editor-catalog';
 export type InsertRange={from:number,to:number};
 export const editAnnotations=[Transaction.userEvent.of('input.editor-command'),isolateHistory.of('full')];
 export function snippet(id:InsertId):{text:string,offset:number}{
@@ -47,13 +29,6 @@ export function insertSnippet(view:EditorView,id:InsertId,range:InsertRange=view
  }
  view.focus();
 }
-export type FormatId='bold'|'italic'|'strike'|'inlineCode';
-export const formatCommands:{id:FormatId,label:string,marker:string,key:string}[]=[
- {id:'bold',label:'加粗',marker:'**',key:'Mod-b'},
- {id:'italic',label:'斜体',marker:'*',key:'Mod-i'},
- {id:'strike',label:'删除线',marker:'~~',key:'Mod-Shift-x'},
- {id:'inlineCode',label:'行内代码',marker:'`',key:'Mod-e'}
-];
 export function toggleFormat(view:EditorView,id:FormatId){
  const {state}=view,s=state.selection.main;
  const kind={bold:'StrongEmphasis',italic:'Emphasis',strike:'Strikethrough',inlineCode:'InlineCode'}[id];
@@ -84,8 +59,6 @@ export function toggleFormat(view:EditorView,id:FormatId){
  else{insert=mark+text+mark;anchor=from+mark.length;head=anchor+text.length;}
  view.dispatch({changes:{from,to,insert},selection:EditorSelection.single(anchor,head),annotations:editAnnotations});view.focus();return true;
 }
-export function safeLink(value:string){try{const url=new URL(value);return /^(https?:|mailto:)$/.test(url.protocol)?url.href:null;}catch{return null;}}
-export function linkMarkdown(label:string,url:string){return '['+label.replace(/[\\[\]]/g,'\\$&')+']('+url.replace(/[()\s]/g,char=>encodeURIComponent(char).replace(/\(/g,'%28').replace(/\)/g,'%29'))+')';}
 export function insertLink(view:EditorView,range:InsertRange,url:string,label?:string){
  const safe=safeLink(url);if(!safe)return false;
  const text=label??(view.state.doc.sliceString(range.from,range.to)||safe);

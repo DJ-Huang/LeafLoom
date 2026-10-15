@@ -34,7 +34,7 @@ Only `.md` and `.txt` are indexed. Images, videos and other attachments remain b
 
 ## Read, write, find and connect
 
-1. Open a note from the sidebar. Reading is the default. Switch to **Edit** or **Source** to change it. Ordinary edits autosave; save conflicts keep your draft so you can review and merge.
+1. Open a Markdown note from the sidebar and edit directly on the formatted page. **View source** opens its Markdown text. Ordinary edits autosave; save conflicts keep your draft so you can review and merge.
 2. Use **New note** to write an idea. Add `[[other note]]` to connect it to another note.
 3. Use `Ctrl/⌘+K` to find a file by name. Use **Knowledge search** for questions and keywords in your notes.
 4. Open a search result to read the original evidence. Check its context and verification status before relying on it.
@@ -47,13 +47,13 @@ Only `.md` and `.txt` are indexed. Images, videos and other attachments remain b
 
 ## Write with commands
 
-In **Edit** mode, type `/` at the start of a line or after a space to insert headings, lists, tasks, quotes, tables, code, images, links, equations or Mermaid diagrams. Search by name or aliases such as `/h2` and `/todo`; use the arrow keys and Enter, or Esc to keep the literal text. Code, formulas, properties and URLs do not open the menu.
+Type `/` at the start of a line or after a space to insert headings, lists, tasks, quotes, tables, code, images, links, equations or Mermaid diagrams. The menu includes icons, descriptions, categories and recently used items. Search by name or aliases such as `/h2` and `/todo`; use the arrow keys and Enter, or Esc to keep the literal text. Code, formulas, properties and URLs do not open the menu.
 
 Select text for the formatting toolbar. `Ctrl/⌘+B`, `Ctrl/⌘+I` and `Ctrl/⌘+E` toggle bold, italic and inline code. Paste a URL over selected text to make a link, or use `Ctrl/⌘+Shift+K` to enter one. Type `[[` and a note name to choose a note by its full path.
 
-Use **+** beside the current block to insert content and **⋮⋮** to convert, duplicate, move or delete it. Nested lists, code and tables move as whole blocks. Paste screenshots or drop files into the editor: attachments go in the note's neighboring `attachments` folder with unique names. Uploading does not replace existing files; undoing the inserted link keeps the uploaded file. Failed or cancelled uploads may leave completed files in that folder.
+Hover beside a block to insert with **+**, or use its handle to convert, duplicate, move or delete it. Drag the handle to reorder paragraphs, list items or whole blocks. Select text across paragraphs and type directly in table cells. Tab moves between cells and adds a row from the last cell; the table toolbar manages rows, columns, the header and alignment. Paste screenshots or drop files into the editor: attachments go in the note's neighboring `attachments` folder with unique names. Uploading does not replace existing files; undoing the inserted link keeps the uploaded file. Failed or cancelled uploads may leave completed files in that folder.
 
-All changes remain ordinary Markdown. **Source** mode edits the text directly. Switching the interface language keeps the current editor and its undo history. Block dragging, multi-block selection and direct table-cell editing are not included.
+Files remain ordinary Markdown; unchanged blocks and document properties retain their original source. The page and source views share undo history. Equations and Mermaid stay rendered and have dedicated editing panels. Complex or unsupported content is preserved for display and can be located in source. Changing the interface language keeps the editor and its history. Tables use simple Markdown structures, without merged cells or nested blocks inside cells.
 
 ## Recovery and everyday use
 
