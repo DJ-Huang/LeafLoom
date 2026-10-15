@@ -34,6 +34,13 @@ type FileOperation={kind:'file'|'rename'|'move'|'delete',path?:string};
 const folderOf=(path:string)=>path.includes('/')?path.slice(0,path.lastIndexOf('/')):'';
 const within=(path:string,parent:string)=>path===parent||path.startsWith(parent+'/');
 function App(){
+ useEffect(()=>{
+  let last=0;
+  const activity=()=>{if(document.hidden||Date.now()-last<1000)return;last=Date.now();void api('activity',{}).catch(()=>{});};
+  const events=['pointerdown','pointermove','wheel','touchmove','keydown','focus'];
+  for(const event of events)window.addEventListener(event,activity,{passive:true});
+  return()=>{for(const event of events)window.removeEventListener(event,activity);};
+ },[]);
  useLocale();
  const [guide,setGuide]=useState<Guide|null>(null),[demoMode,setDemoMode]=useState(false);
  const saveGuide=useCallback(async(values:Partial<Guide>)=>{const next=await api<UserPreferences>('preferences',{guide:values},'PUT');setGuide(next.guide);},[]);
@@ -144,7 +151,7 @@ function App(){
   {aiVisited&&<LazyBoundary><Suspense fallback={aiOpen?<aside className="ai-panel"><p className="pad subtle">{t("正在打开 AI 对话…")}</p></aside>:null}><AiPanel key={config.root} config={config} path={view==='document'?active:''} visible={aiOpen} onClose={()=>setAiOpen(false)} onOpen={openFile} notify={notify} selection={aiSelection} demo={demoMode}/></Suspense></LazyBoundary>}
   {quickSearch&&<LazyBoundary><Suspense fallback={<Modal title={t("搜索文件")} onClose={()=>setQuickSearch(false)}><p className="pad subtle">{t("正在打开搜索…")}</p></Modal>}><FileSearch key={config.root+'\n'+config.revision} recent={preferences.recent} onOpen={openFile} onClose={()=>setQuickSearch(false)}/></Suspense></LazyBoundary>}
   {settings&&<ConnectedSettings config={config} location={settings} folder={view==='document'?parentFolder(active):currentFolder} onSaved={saved} onClose={()=>setSettings(undefined)} notify={notify} onChanged={changed} onOpen={(result:SettingsResult)=>{if(result.directory){showFolder(result.path);return;}if(result.edit)sessionStorage.setItem('edit:'+result.path,'1');if(result.cursor!=null)sessionStorage.setItem('cursor:'+result.path,String(result.cursor));setBackToKnowledge(false);setBackToGraph(false);selectDocument(result.path);}}/>}
-  {menu!==undefined&&menuAnchor.current&&<ActionMenu title={fileName(menu)||t("目录管理")} anchor={menuAnchor.current} onClose={()=>setMenu(undefined)}><button onClick={()=>manage('rename',menu)}>{t("重命名")}</button><button onClick={()=>manage('move',menu)}>{t("移动")}</button><button onClick={()=>record('history',menu)}>{t("编辑历史")}</button><a href={media(menu,true)}>{t("下载原文件")}</a><button className="danger" onClick={()=>manage('delete',menu)}>{t("移入回收区")}</button></ActionMenu>}
+  {menu!==undefined&&menuAnchor.current&&<ActionMenu title={fileName(menu)||t("目录管理")} anchor={menuAnchor.current} onClose={()=>setMenu(undefined)}><button onClick={()=>manage('rename',menu)}>{t("重命名")}</button><button onClick={()=>manage('move',menu)}>{t("移动")}</button><button onClick={()=>record('history',menu)}>{t("编辑历史")}</button>{window.leafloomDesktop&&<button onClick={()=>{void window.leafloomDesktop!.revealFile(menu).catch(error=>notify(error.message));setMenu(undefined);}}>{t("在文件管理器中显示")}</button>}<a href={media(menu,true)}>{t("下载原文件")}</a><button className="danger" onClick={()=>manage('delete',menu)}>{t("移入回收区")}</button></ActionMenu>}
   {operation&&<FormDialog key={operation.kind+operation.path} title={{file:t("新建笔记"),rename:t("重命名"),move:t("移动文件或目录"),delete:t("移入回收区")}[operation.kind]} description={operation.kind==='delete'?t("将「")+operation.path+t("」移入回收区？之后可以恢复。"):operation.path||t("位置：")+(currentFolder||t("知识库根目录"))} fields={fields} submitLabel={operation.kind==='delete'?t("移入回收区"):operation.kind==='move'?t("移动"):operation.kind==='rename'?t("重命名"):t("创建")} danger={operation.kind==='delete'} onSubmit={submitOperation} onClose={()=>setOperation(undefined)}/>}
   {candidates&&candidates.length>1&&<Modal title={t("请选择同名文档")} onClose={()=>setCandidates(undefined)}><div className="action-list">{candidates.map(path=><button key={path} onClick={()=>{setCandidates(undefined);selectDocument(path);}}>{path}</button>)}</div></Modal>}
   {guide&&guide.step!=='done'&&<SetupGuide config={config} guide={guide} onSaved={saved} onGuide={saveGuide}/>}

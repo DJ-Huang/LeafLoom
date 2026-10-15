@@ -77,3 +77,5 @@ $RECYCLE.BIN/
 web/node_modules/
 web/tsconfig.tsbuildinfo
 vault_rag/static/
+desktop/node_modules/
+desktop/resources/

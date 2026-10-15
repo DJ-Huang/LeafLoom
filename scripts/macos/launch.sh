@@ -8,6 +8,18 @@ NO_OPEN=${2:-}
 STATE=${VAULT_RAG_HOME:-"$HOME/Library/Application Support/VaultRag"}
 leafloom_text() { /usr/bin/osascript -l JavaScript "$REPOSITORY/scripts/macos/localize.js" "$REPOSITORY" "$STATE" "$1"; }
 export VAULT_RAG_HOME="$STATE" PYTHONUTF8=1 PYTHONUNBUFFERED=1
+if [[ -f "$STATE/desktop-install.json" ]]; then
+    DESKTOP=$(/usr/bin/plutil -extract executable raw -o - "$STATE/desktop-install.json" 2>/dev/null || true)
+    if [[ -n "$DESKTOP" && -x "$DESKTOP" ]]; then
+        if [[ $ACTION == stop ]]; then
+            mkdir -p "$STATE/desktop-control"
+            printf '1' > "$STATE/desktop-control/quit"
+        else
+            "$DESKTOP" >/dev/null 2>&1 &
+        fi
+        exit 0
+    fi
+fi
 MANIFEST="$REPOSITORY/scripts/runtimes.json"
 if [[ $(/usr/bin/uname -m) != arm64 || $(/usr/bin/sw_vers -productVersion | /usr/bin/cut -d. -f1) -lt 14 ]]; then
     leafloom_text '支持 macOS 14+ Apple 芯片。' >&2

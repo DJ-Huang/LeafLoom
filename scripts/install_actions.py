@@ -40,7 +40,7 @@ def verify():
     config = LocalConfig()
     ensure_ready(config)
     status = request('/api/status', config=config)
-    assert status['model']['prepared'], 'Model is not prepared'
+    assert 'model' in status, 'Model status is missing'
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(base_url(config) + '/', timeout=10) as response:
         html = response.read().decode('utf-8')

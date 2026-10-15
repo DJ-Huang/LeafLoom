@@ -10,6 +10,11 @@
   "Python 版本符合要求，跳过下载安装。": "Python is ready; skipping download and installation.",
   "向量模型或索引尚未准备，使用关键词与 Wiki": "The semantic model or index is not ready. Using keywords and Wiki links.",
   "正在预热检索": "Warming up search",
+  "等待空闲更新": "Waiting to update while idle",
+  "正在加载检索模型": "Loading the search model",
+  "首次语义检索正在加载模型，阅读与编辑不受影响。": "Loading the model for the first semantic search. You can continue reading and editing.",
+  "正在准备目录元数据，阅读与编辑不受影响": "Preparing catalog metadata. You can continue reading and editing",
+  "正在准备首次检索，可能需要一些时间。阅读与编辑不受影响。": "Preparing the first search may take some time. You can continue reading and editing.",
   "监听中": "Watching for changes",
   "定期检查": "Periodic checks",
   "同步错误：": "Sync error: ",
@@ -668,5 +673,10 @@
   "默认写入位置": "Default write locations",
   "默认首页文件路径": "Default start-note path",
   "（未打开）": " (none open)",
-  "＋ 添加属性": "＋ Add property"
+  "＋ 添加属性": "＋ Add property",
+  "桌面 App": "Desktop app",
+  "登录时启动": "Open at login",
+  "关闭窗口后留在托盘；退出会停止本地服务。": "Closing the window keeps LeafLoom in the tray. Quit stops the local service.",
+  "打开日志文件夹": "Open logs folder",
+  "在文件管理器中显示": "Show in file manager"
 }

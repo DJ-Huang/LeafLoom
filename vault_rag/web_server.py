@@ -1,6 +1,6 @@
 """One ASGI application serving the local UI, file API and shared HTTP MCP."""
 from __future__ import annotations
-import asyncio, contextlib, hashlib, hmac, json, logging, mimetypes, os, secrets, subprocess, threading
+import asyncio, contextlib, hashlib, hmac, json, logging, mimetypes, os, secrets, subprocess, threading, time
 from pathlib import Path
 from fastapi import FastAPI, Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
@@ -20,7 +20,7 @@ from vault_rag.i18n import error_code
 def json_response(value,status=200):
     if isinstance(value,dict) and isinstance(value.get('error'),str):
         value={**value,'error_code':value.get('error_code',error_code(value['error']))}
-    return JSONResponse(json.loads(json.dumps(value,ensure_ascii=False,default=str)),status_code=status)
+    return Response(json.dumps(value,ensure_ascii=False,default=str,allow_nan=False,separators=(',',':')).encode('utf-8'),status_code=status,media_type='application/json')
 
 class StaticCompression:
     """Compress app bundles without buffering SSE or changing media Range bodies."""
@@ -106,11 +106,15 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
             if not hmac.compare_digest(request.headers.get('x-vault-csrf',''),csrf):return json_response({'error':'写入请求校验失败'},403)
         if path in ('/api/search-files','/api/graph','/api/related','/api/query','/api/base','/api/templates') and runtime.catalog.root!=config.data.get('root'):
             return json_response({'error':'目录信息正在更新，请稍后重试'},503)
+        foreground=path.startswith('/api/') and path not in ('/api/events','/api/status','/api/activity')
+        if foreground:runtime.foreground_begin()
         try:response=await call_next(request)
         except ConflictError as e:return json_response({'error':str(e),'error_code':'write_conflict','conflict':True},409)
         except FileNotFoundError as e:return json_response({'error':str(e),'error_code':'not_found'},400)
         except UnicodeDecodeError as e:return json_response({'error':str(e),'error_code':'invalid_text_encoding'},400)
         except ValueError as e:return json_response({'error':str(e),'error_code':'invalid_request'},400)
+        finally:
+            if foreground:runtime.foreground_end()
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['Referrer-Policy']='no-referrer'
         if path.startswith('/api/') and path!='/api/media':response.headers.setdefault('Cache-Control','no-store')
@@ -154,6 +158,16 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     async def bootstrap():return json_response({'config':config.data,'status':runtime.status(),'csrf':csrf,'suggested_root':''})
     @app.get('/api/status')
     async def status():return json_response(runtime.status())
+    @app.post('/api/activity')
+    async def activity():runtime.activity();return {'ok':True}
+
+    def metadata_pending():
+        if runtime.catalog.metadata_ready:return None
+        if runtime.metadata.get('state')=='failed':
+            error=runtime.metadata['error'];runtime.metadata['state']='idle'
+            return json_response({'error':error},503)
+        if runtime.ensure_metadata():return None
+        return json_response({'error':'正在准备目录元数据，阅读与编辑不受影响','pending':True,'retry_after_ms':600},503)
     @app.post('/api/config')
     async def configure(request:Request):
         body=await request.json()
@@ -176,11 +190,14 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     async def tree(path:str=''):return await asyncio.to_thread(runtime.catalog.tree,path)
     @app.get('/api/file')
     async def read_file(request:Request,path:str):
+        started=time.perf_counter()
         value=await asyncio.to_thread(runtime.files.read,path)
         etag='"'+hashlib.sha256((str(value['root'])+str(config.data.get('revision'))+str(value['mtime'])+value['etag']).encode()).hexdigest()+'"'
         if any(tag.strip().removeprefix('W/') in ('*',etag) for tag in request.headers.get('if-none-match','').split(',')):
             return Response(status_code=304,headers={'ETag':etag,'Cache-Control':'private, no-cache'})
-        response=json_response(value);response.headers['ETag']=etag;response.headers['Cache-Control']='private, no-cache';return response
+        response=json_response(value);response.headers['ETag']=etag;response.headers['Cache-Control']='private, no-cache'
+        response.headers['Server-Timing']='file;dur='+str(round((time.perf_counter()-started)*1000,2))
+        return response
     @app.post('/api/html-preview')
     async def html_preview(request:Request):
         body=await request.json()
@@ -243,22 +260,35 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
                 return conditional_file(p,request,headers=headers,identity=str(config.root)+str(config.data.get('revision')),filename=p.name if download else None,content_disposition_type='attachment' if download else 'inline')
         return await asyncio.to_thread(response)
     @app.get('/api/search-files')
-    async def search_files(query:str):return await asyncio.to_thread(runtime.catalog.search,query)
+    async def search_files(query:str):
+        pending=metadata_pending()
+        return pending if pending is not None else await asyncio.to_thread(runtime.catalog.search,query)
     @app.get('/api/resolve')
     async def resolve(target:str,source:str=''):return {'candidates':await asyncio.to_thread(runtime.catalog.resolve,target,source)}
     @app.get('/api/graph')
-    async def graph(path:str|None=None):return await asyncio.to_thread(runtime.catalog.graph,path)
+    async def graph(path:str|None=None):
+        pending=metadata_pending()
+        return pending if pending is not None else await asyncio.to_thread(runtime.catalog.graph,path)
     @app.get('/api/related')
     async def related(path:str):
+        pending=metadata_pending()
+        if pending is not None:return pending
         entry=runtime.catalog.entries.get(path,{})
         links=runtime.catalog.links
         return {'incoming':sorted(set(x['source'] for x in links if x['target']==path)),'outgoing':sorted(set(x['target'] for x in links if x['source']==path)),'metadata':entry.get('metadata',{})}
     @app.post('/api/query')
-    async def query(request:Request):return json_response(await asyncio.to_thread(runtime.catalog.query,(await request.json())['query']))
+    async def query(request:Request):
+        pending=metadata_pending()
+        return pending if pending is not None else json_response(await asyncio.to_thread(runtime.catalog.query,(await request.json())['query']))
     @app.get('/api/base')
-    async def base(path:str,view:int|None=None):return json_response(await asyncio.to_thread(runtime.catalog.base,path,view))
+    async def base(path:str,view:int|None=None):
+        pending=metadata_pending()
+        return pending if pending is not None else json_response(await asyncio.to_thread(runtime.catalog.base,path,view))
     @app.get('/api/templates')
-    async def templates():return [{'path':p,'title':e['title']} for p,e in runtime.catalog.entries.items() if p.startswith(config.data['templates']+'/') and p.endswith('.md')]
+    async def templates():
+        folder=config.data['templates']
+        if not config.path_for(folder).is_dir():return []
+        return [{'path':row['path'],'title':runtime.catalog.entries.get(row['path'],{}).get('title') or Path(row['name']).stem} for row in await asyncio.to_thread(runtime.catalog.tree,folder) if not row['directory'] and row['path'].endswith('.md')]
     @app.post('/api/template')
     async def template(request:Request):
         from vault_rag.catalog import render_template

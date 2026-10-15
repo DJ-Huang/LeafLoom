@@ -80,19 +80,27 @@ def columns(source):
     return [x.strip() for x in re.split(r',(?=(?:[^"\']*["\'][^"\']*["\'])*[^"\']*$)',source) if x.strip()]
 
 class Catalog:
-    def __init__(self,files:Files):
+    def __init__(self,files:Files,*,lazy=False):
         self.files=files;self.entries={};self.lock=threading.RLock();self.links=[]
         self.version=0;self.root=None;self.resolver_indexes=None
         self.references={};self.reference_keys={};self.edges={};self.changed_paths=[]
         self.persist=True
         self.directories={''};self.directory_table={}
+        self.lazy=lazy;self.metadata_ready=False;self.scanned_folders={};self.opened_folders=set()
+        self.update_lock=threading.RLock()
+        self.complete_namespace=False
+        self.scopes_verified=False
 
-    def _entry(self,root,p,old=None,force=False,stat_value=None):
+    def _entry(self,root,p,old=None,force=False,stat_value=None,parse=True):
         rel=p.relative_to(root).as_posix();stat=stat_value or p.stat();stamp=(stat.st_mtime_ns,stat.st_size)
-        if old and old['_stat']==stamp and not force:return old
+        if old and old['_stat']==stamp and not force:
+            if not parse or old.get('_hydrated',True):return old
+            from vault_rag.catalog_cache import content
+            cached=content(root,rel,stamp)
+            if cached is not None:return {**old,**cached,'_hydrated':True,'_parsed':True}
         meta={};text='';body='';sha=''
         # Assets stay in the filename registry without being read/hashed/parsed.
-        if p.suffix.lower() in ('.md','.txt','.base') and stat.st_size<=10*1024*1024:
+        if parse and p.suffix.lower() in ('.md','.txt','.base') and stat.st_size<=10*1024*1024:
             raw=p.read_bytes();sha=digest(raw);text=raw.decode('utf-8-sig',errors='replace')
             try:
                 post=frontmatter.loads(text) if p.suffix.lower()=='.md' else None
@@ -104,7 +112,81 @@ class Catalog:
               'ext':p.suffix.lstrip('.'),'tags':tags,'size':stat.st_size,'mtime':stat.st_mtime,
               'ctime':getattr(stat,'st_birthtime',stat.st_ctime),'basename':p.stem,'modified':stat.st_mtime,
               'link':{'path':rel,'label':title},'inlinks':[],'outlinks':[]}
-        return {'path':rel,'title':title,'metadata':meta,'text':text,'body':body,'sha256':sha,'file':file,'_stat':stamp}
+        return {'path':rel,'title':title,'metadata':meta,'text':text,'body':body,'sha256':sha,'file':file,'_stat':stamp,'_parsed':parse,'_hydrated':parse}
+
+    def restore(self):
+        from vault_rag.catalog_cache import restore
+        root=self.files.config.root
+        entries,dirs=restore(root)
+        self.directories=dirs
+        persist=self.persist;self.persist=False
+        try:self._publish(root,entries,set(entries),reset=True)
+        finally:self.persist=persist
+        self.metadata_ready=False
+
+    def scan_selected(self):
+        """Only read selected text notes; never traverse an excluded subtree."""
+        config=self.files.config;root=config.root;entries={};dirs={''}
+        scopes=config.data['include_roots']
+        for scope in scopes:
+            if not config.selected(scope,validated=True):continue
+            exclusions=[p for p in config.data['exclude_roots'] if not under(scope,p)]
+            for p in self.files.walk(scope,directories=dirs,exclude_roots=exclusions):
+                rel=p.relative_to(root).as_posix()
+                if p.suffix.lower() not in ('.md','.txt') or not config.selected(rel,validated=True):continue
+                if config.role(rel)!='wiki' and not config.eligible(rel,{}):continue
+                try:entries[rel]=self._entry(root,p,self.entries.get(rel))
+                except FileNotFoundError:continue
+        self.directories=dirs
+        changed={p for p in set(entries)|set(self.entries) if entries.get(p) is not self.entries.get(p)}
+        return self._publish(root,entries,changed,self.root!=str(root))
+
+    def prepare_metadata(self,stop=None):
+        """Explicit global feature preparation, outside locks used by readers."""
+        with self.update_lock:
+            root=self.files.config.root;revision=self.files.config.data.get('revision')
+            entries={};dirs={''};changed=set()
+            for p in self.files.walk(directories=dirs):
+                if stop and stop.is_set():return False
+                rel=p.relative_to(root).as_posix()
+                try:entry=self._entry(root,p,self.entries.get(rel))
+                except FileNotFoundError:continue
+                entries[rel]=entry
+                if entry is not self.entries.get(rel):changed.add(rel)
+                if len(entries)%32==0:
+                    import time
+                    time.sleep(.001)
+            if self.files.config.data.get('root')!=str(root) or self.files.config.data.get('revision')!=revision:return False
+            self.directories=dirs;self._publish(root,entries,changed|set(self.entries).difference(entries),True)
+            self.metadata_ready=True;self.complete_namespace=True;return True
+
+    def refresh_scopes(self):
+        """Refresh RAG text without discarding the lazy browsing registry."""
+        with self.update_lock:
+            config=self.files.config;root=config.root;revision=config.data.get('revision')
+            scoped=Catalog(self.files);scoped.persist=False
+            scoped.entries={p:e for p,e in self.entries.items() if Path(p).suffix.lower() in ('.md','.txt') and config.selected(p,validated=True)}
+            scoped.root=str(root);scoped.scan_selected()
+            entries=dict(self.entries);changed=set()
+            for path in set(scoped.entries)|set(scoped.changed_paths):
+                entry=scoped.entries.get(path)
+                if entry is None:
+                    if path in entries and not (root/path).is_file():entries.pop(path);changed.add(path)
+                elif entry is not entries.get(path):entries[path]=entry;changed.add(path)
+            if config.data.get('root')!=str(root) or config.data.get('revision')!=revision:return False
+            self.directories.update(scoped.directories)
+            self._publish(root,entries,changed,self.root!=str(root));self.scopes_verified=True;return True
+
+    def read_cached(self,rel):
+        root=self.files.config.root;p=self.files.config.path_for(rel)
+        stat=p.stat();entry=self.entries.get(rel)
+        if entry and entry['_stat']==(stat.st_mtime_ns,stat.st_size):
+            entry=self._entry(root,p,entry,stat_value=stat)
+            if entry.get('_hydrated'):
+                if self.files.config.data.get('root')!=str(root):return self.files.read(rel)
+                with self.lock:self.entries={**self.entries,rel:entry}
+                return {'path':rel,'root':str(root),'text':entry['text'],'etag':entry['sha256'],'metadata':entry['metadata'],'mtime':stat.st_mtime}
+        return self.files.read(rel)
 
     @staticmethod
     def _keys(target,source=''):
@@ -155,26 +237,18 @@ class Catalog:
             parent,_,name=path.rpartition('/')
             table[parent].append({'path':path,'name':name,'directory':False,'size':entry['file']['size'],'mtime':entry['file']['mtime']})
         self.directory_table={path:sorted(rows,key=lambda row:(not row['directory'],row['name'].lower())) for path,rows in table.items()}
+        if not self.complete_namespace:self.scanned_folders.clear()
         self.entries=entries;self.links=links;self.resolver_indexes=indexes;self.root=str(root)
         self.references=references;self.reference_keys=reference_keys;self.edges=edges
         self.version+=1;self.changed_paths=sorted(changed)
         return len(entries)
 
     def _persist(self,root,entries,changed,reset,old):
-        cache=root/'.vault-rag/catalog.sqlite';cache.parent.mkdir(exist_ok=True)
-        with closing(sqlite3.connect(cache)) as db:
-            db.execute('CREATE TABLE IF NOT EXISTS files(path TEXT PRIMARY KEY, title TEXT, metadata TEXT, sha256 TEXT, mtime REAL)')
-            if reset:
-                stale={row[0] for row in db.execute('SELECT path FROM files')}-set(entries)
-            else:stale=set(old)-set(entries)
-            db.executemany('DELETE FROM files WHERE path=?',[(path,) for path in stale])
-            db.executemany('INSERT OR REPLACE INTO files VALUES(?,?,?,?,?)',
-                [(x['path'],x['title'],json.dumps(x['metadata'],ensure_ascii=False,default=str),x['sha256'],x['file']['mtime'])
-                 for path in (set(entries) if reset else changed) if (x:=entries.get(path)) is not None])
-            db.commit()
+        from vault_rag.catalog_cache import persist
+        persist(root,entries,changed,reset,old,self.directories)
 
     def scan(self):
-        with self.lock:
+        with self.update_lock:
             root=self.files.config.root;reset=self.root!=str(root);entries={};changed=set();directories={''};stats={}
             for p in self.files.walk(directories=directories,stats=stats):
                 rel=p.relative_to(root).as_posix();old=None if reset else self.entries.get(rel)
@@ -184,12 +258,13 @@ class Catalog:
                 if entry is not old:changed.add(rel)
             changed.update(set(self.entries)-set(entries));changed.update(self.directories.symmetric_difference(directories))
             self.directories=directories
-            return self._publish(root,entries,changed,reset)
+            result=self._publish(root,entries,changed,reset);self.metadata_ready=True;self.complete_namespace=True
+            return result
 
     def apply(self,paths):
-        with self.lock:
+        with self.update_lock:
             root=self.files.config.root
-            if self.root!=str(root):return self.scan()
+            if self.root!=str(root):self.restore()
             entries=dict(self.entries);changed=set()
             for rel in set(paths):
                 try:p=self.files.config.path_for(rel)
@@ -198,11 +273,11 @@ class Catalog:
                 present=set()
                 if p.is_file():items=[p]
                 elif p.is_dir():
-                    self.directories.add(rel);items=self.files.walk(rel,directories=self.directories);changed.add(rel)
+                    self.directories.add(rel);items=self.files.walk(rel,directories=self.directories) if (not self.lazy or self.complete_namespace) else (x for x in p.iterdir() if x.is_file());changed.add(rel)
                 else:items=[]
                 for item in items:
                     path=item.relative_to(root).as_posix()
-                    try:entry=self._entry(root,item,entries.get(path),force=True)
+                    try:entry=self._entry(root,item,entries.get(path),parse=(not self.lazy or self.metadata_ready or self.files.config.selected(path,validated=True)))
                     except FileNotFoundError:continue
                     entries[path]=entry;present.add(path);changed.add(path)
                     parent=path.rpartition('/')[0]
@@ -211,14 +286,20 @@ class Catalog:
                 if not p.exists():
                     removed={path for path in self.directories if path==rel or path.startswith(rel+'/')}
                     self.directories.difference_update(removed);changed.update(removed)
+            if any(Path(p).suffix.lower() in ('.md','.txt','.base') for p in changed):self.metadata_ready=False
             return self._publish(root,entries,changed)
-    def tree(self,rel=''):
-        # Every request still validates the directory before returning cached names.
-        with self.files.config.lock:
-            path=self.files.config.path_for(rel)
-            if not path.is_dir():raise ValueError('不是目录')
-            if self.root!=self.files.config.data.get('root'):return self.files.tree(rel)
-            return [{**row,'selected':self.files.config.selected(row['path'],validated=True)} for row in self.directory_table.get(rel,[])]
+    def tree(self,rel='',*,force=False):
+        # One visible folder only. Never wait for the catalog/metadata worker.
+        config=self.files.config;path=config.path_for(rel)
+        if not path.is_dir():raise ValueError('不是目录')
+        self.opened_folders.add(rel)
+        stamp=path.stat().st_mtime_ns
+        if not force and self.root==config.data.get('root') and (self.complete_namespace or self.scanned_folders.get(rel)==stamp):
+            return [{**row,'selected':config.selected(row['path'],validated=True)} for row in self.directory_table.get(rel,[])]
+        rows=self.files.tree(rel)
+        self.directory_table={**self.directory_table,rel:[{k:v for k,v in row.items() if k!='selected'} for row in rows]}
+        self.scanned_folders[rel]=stamp
+        return rows
     @staticmethod
     def indexes(entries):
         names=defaultdict(list);identities=defaultdict(list)

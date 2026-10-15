@@ -45,8 +45,9 @@ def hidden_process_options() -> dict:
 def powershell(script: str, *, timeout: float = 120) -> subprocess.CompletedProcess:
     import base64
     encoded = base64.b64encode(script.encode('utf-16-le')).decode('ascii')
+    executable = str(Path(os.environ.get('SystemRoot', 'C:/Windows')) / 'System32/WindowsPowerShell/v1.0/powershell.exe')
     return subprocess.run(
-        ['powershell.exe', '-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', encoded],
+        [executable, '-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', encoded],
         capture_output=True, text=True, encoding='utf-8', timeout=timeout,
         **hidden_process_options(),
     )

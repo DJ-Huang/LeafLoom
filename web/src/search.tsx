@@ -3,6 +3,7 @@ import {t,useLocale} from './i18n';
 import React,{useCallback,useEffect,useId,useRef,useState} from 'react';
 import {ArrowUpRight,BookOpen,Clock,FileText,Search} from 'lucide-react';
 import {api,OpenNote} from './api';
+import {useStatus} from './hooks';
 import {Modal} from './ui';
 import {VirtualList} from './virtual';
 import {fileName} from './layout';
@@ -33,7 +34,7 @@ type Evidence={chunk_id:string,file_path:string,excerpt:string,channels:string[]
 type SearchData={results:Evidence[],navigation:{file_path:string,title:string,stale:boolean}[],degraded?:string,query_ms?:number};
 type Snapshot={query:string,mode:string,data:SearchData};
 export function KnowledgeSearch({active,revision,onOpen,onSettings}:{active:boolean,revision?:string,onOpen:OpenNote,onSettings:()=>void}){
- useLocale();
+ useLocale();const status=useStatus();
  const [mode,setMode]=useState('knowledge'),[query,setQuery]=useState(''),[snapshot,setSnapshot]=useState<Snapshot>(),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const generation=useRef(0),request=useRef<AbortController|undefined>(undefined),last=useRef<Snapshot|undefined>(undefined),visible=useRef(active);visible.current=active;
  const execute=useCallback(async(term:string,scope:string)=>{
@@ -48,6 +49,7 @@ export function KnowledgeSearch({active,revision,onOpen,onSettings}:{active:bool
  return <div className="search-page" hidden={!active}><div className="page-icon"><Search size={38} strokeWidth={1.4}/></div><h1>{t("知识检索")}</h1><p className="dashboard-intro">{t("在自己的资料中，找到可追溯的依据。")}</p>
   <div className="knowledge-modes" aria-label={t("检索范围")}><button className={mode==='knowledge'?'active':''} aria-pressed={mode==='knowledge'} onClick={()=>changeMode('knowledge')}><BookOpen size={15}/>{t("知识资料")}</button><button className={mode==='estimation'?'active':''} aria-pressed={mode==='estimation'} onClick={()=>changeMode('estimation')}><Clock size={15}/>{t("工时评估")}</button></div>
   <form className="knowledge-search-form" onSubmit={event=>{event.preventDefault();void execute(query,mode);}}><Search size={18}/><input aria-label={t("检索知识")} placeholder={mode==='estimation'?t("查找工时经验、基准与公式…"):t("输入问题或关键词…")} value={query} onChange={event=>setQuery(event.target.value)}/><button className="primary" disabled={!query.trim()||busy}>{busy?t("检索中…"):t("检索")}</button></form>
+  {busy&&status?.model?.loading&&<p className="notice" role="status">{t('首次语义检索正在加载模型，阅读与编辑不受影响。')}</p>}
   {error&&<div className="notice error" role="alert">{<Diagnostic message={error}/>}<button onClick={()=>void execute(query,mode)}>{t("重试")}</button></div>}
   {snapshot&&<section className="knowledge-results" aria-busy={busy}><div className="results-heading"><h2>{t('“{query}” 的检索依据',{query:snapshot.query})}</h2><span>{snapshot.data.results.length} {" "}{t("条资料")}{snapshot.data.query_ms!==undefined?' · '+Math.round(snapshot.data.query_ms)+' ms':''}</span></div>
    {snapshot.data.degraded&&<div className="notice" role="status">{t(snapshot.data.degraded)}</div>}

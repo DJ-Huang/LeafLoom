@@ -129,6 +129,12 @@ class EmbeddedModel:
             self.encode(['知识库检索 工时评估 Markdown Unity Blender 模型预热'])
             self.warmed=True;self.warmup_seconds=time.perf_counter()-start
         finally:self.warming=False
+    def tokenizer(self):
+        # Chunking needs token boundaries, not a loaded multi-gigabyte model.
+        if not hasattr(self,'_tokenizer'):
+            from transformers import AutoTokenizer
+            self._tokenizer=AutoTokenizer.from_pretrained(str(self.path),local_files_only=True,trust_remote_code=False)
+        return self._tokenizer
     def encode(self,texts):
         with self.lock:
             self.load()

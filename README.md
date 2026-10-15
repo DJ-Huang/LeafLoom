@@ -20,6 +20,11 @@ https://github.com/user-attachments/assets/56f37418-23cc-4763-af3c-3253fb06f517
 
 ## Get started
 
+**Desktop app:** LeafLoom now has an Electron desktop build for Windows x64 and
+Apple Silicon Mac, with a private Python backend and independent application
+window. See [desktop installation, build and validation](docs/DESKTOP.md).
+The repository launchers below remain available for source installation.
+
 ```sh
 git clone https://github.com/DJ-Huang/LeafLoom.git
 cd LeafLoom
@@ -27,7 +32,7 @@ cd LeafLoom
 
 1. Download or clone this repository into a writable local folder.
 2. Windows 10/11 x64: double-click `Start.cmd`. macOS 14+ Apple Silicon: run `sh Start.sh` in the repository.
-3. First launch downloads private runtimes, dependencies and the search model, then opens the app. No preinstalled Python, Node or Ollama is required.
+3. First launch prepares private runtimes and dependencies, then opens the workspace. The local search model is downloaded when explicitly prepared in settings. No preinstalled Python, Node or Ollama is required.
 4. Choose a language, try the fictional demo or connect your folder, then explicitly select what to search.
 
 No folders are indexed by default. You can start by browsing and enable search later.

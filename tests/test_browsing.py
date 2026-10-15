@@ -65,6 +65,7 @@ class BrowsingTests(unittest.TestCase):
         (self.root/'empty').mkdir();catalog.apply(['empty']);self.assertIn('empty',[row['name'] for row in catalog.tree()])
 
     def test_watch_publishes_during_blocked_index_and_switches_root(self):
+        self.runtime.idle_seconds=0  # This test exercises concurrency, not the idle delay.
         self.put('a.md','# A');entered=threading.Event();release=threading.Event()
         def blocked():entered.set();release.wait(5)
         self.runtime.knowledge.load=lambda:None;self.runtime.knowledge.build=blocked

@@ -43,9 +43,9 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
  const matches=useMemo(()=>{if(!search)return [];const lower=text.toLocaleLowerCase(),needle=search.toLocaleLowerCase(),out:number[]=[];let at=0;while((at=lower.indexOf(needle,at))>=0&&out.length<10000){out.push(at);at+=Math.max(1,needle.length);}return out;},[text,search]);
  useEffect(()=>{if(textFile||!active)return;const changed=(event:Event)=>{if(affected('file?path='+encodeURIComponent(path),(event as CustomEvent<Change>).detail))setResourceVersion(value=>value+1);};window.addEventListener('vault-data-changed',changed);return()=>window.removeEventListener('vault-data-changed',changed);},[path,textFile,active]);
  useEffect(()=>{
-  if(!textFile||ext==='base')return;const controller=new AbortController();void loadDocument(session,controller.signal);
-  const changed=(event:Event)=>{const change=(event as CustomEvent<Change>).detail;if(active&&affected('file?path='+encodeURIComponent(path),change))void loadDocument(session,controller.signal,true);};
-  const restored=(event:Event)=>{if((event as CustomEvent).detail===path)void loadDocument(session,controller.signal,true);};
+  if(!textFile||ext==='base')return;const controller=new AbortController();if(active)void loadDocument(session,controller.signal,!!session.stale);
+  const changed=(event:Event)=>{const change=(event as CustomEvent<Change>).detail;if(!affected('file?path='+encodeURIComponent(path),change))return;session.stale=true;if(active)void loadDocument(session,controller.signal,true);};
+  const restored=(event:Event)=>{if((event as CustomEvent).detail!==path)return;session.stale=true;if(active)void loadDocument(session,controller.signal,true);};
   window.addEventListener('vault-data-changed',changed);window.addEventListener('vault-restored',restored);
   return()=>{controller.abort();window.removeEventListener('vault-data-changed',changed);window.removeEventListener('vault-restored',restored);};
  },[session,active,textFile,ext,path]);

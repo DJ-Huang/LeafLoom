@@ -10,6 +10,11 @@ Python 准备失败。|Python preparation failed.|Python の準備に失敗し�
 Python 版本符合要求，跳过下载安装。|Python is ready; skipping download and installation.|Python は準備済みです。ダウンロードとインストールを省略します。
 向量模型或索引尚未准备，使用关键词与 Wiki|The semantic model or index is not ready. Using keywords and Wiki links.|意味検索のモデルまたは索引が未準備です。キーワードと Wiki リンクを使います。
 正在预热检索|Warming up search|検索を準備中
+等待空闲更新|Waiting to update while idle|アイドル時の更新を待機中
+正在加载检索模型|Loading the search model|検索モデルを読み込み中
+首次语义检索正在加载模型，阅读与编辑不受影响。|Loading the model for the first semantic search. You can continue reading and editing.|初回の意味検索のためモデルを読み込み中です。閲覧と編集は引き続き利用できます。
+正在准备目录元数据，阅读与编辑不受影响|Preparing catalog metadata. You can continue reading and editing|ディレクトリ情報を準備中です。閲覧と編集は引き続き利用できます
+正在准备首次检索，可能需要一些时间。阅读与编辑不受影响。|Preparing the first search may take some time. You can continue reading and editing.|初回検索の準備には時間がかかる場合があります。閲覧と編集は引き続き利用できます。
 监听中|Watching for changes|変更を監視中
 定期检查|Periodic checks|定期的に確認
 同步错误：|Sync error: |同期エラー：
@@ -669,3 +674,9 @@ Wiki 导航目录|Wiki navigation folders|Wiki ナビゲーションのフォル
 默认首页文件路径|Default start-note path|開始メモの既定パス
 （未打开）| (none open)|（未選択）
 ＋ 添加属性|＋ Add property|＋ プロパティを追加
+
+桌面 App|Desktop app|デスクトップアプリ
+登录时启动|Open at login|ログイン時に起動
+关闭窗口后留在托盘；退出会停止本地服务。|Closing the window keeps LeafLoom in the tray. Quit stops the local service.|ウィンドウを閉じるとトレイに残ります。終了するとローカルサービスも停止します。
+打开日志文件夹|Open logs folder|ログフォルダーを開く
+在文件管理器中显示|Show in file manager|ファイルマネージャーで表示

@@ -65,10 +65,19 @@ export async function api<T=any>(path:string,body?:any,method?:string,options:{s
   try{response=await fetchRead();}catch(error){if(verb!=='GET'||controller.signal.aborted)throw error;response=await fetchRead();}
   if(verb==='GET'&&response.status===503){await new Promise(resolve=>setTimeout(resolve,150));response=await fetchRead();}
   if(response.status===304&&!previous){delete headers['If-None-Match'];response=await fetch('/api/'+path,{headers,signal:controller.signal});}
-  const data=response.status===304?previous!.value:await response.json();
+  let data=response.status===304?previous!.value:await response.json();
+  const pendingUntil=Date.now()+60000;
+  while(response.status===503&&data.pending&&Date.now()<pendingUntil){
+   await new Promise<void>((resolve,reject)=>{
+    const cancel=()=>{clearTimeout(timer);reject(aborted());};
+    const timer=setTimeout(()=>{controller.signal.removeEventListener('abort',cancel);resolve();},600);
+    if(controller.signal.aborted){cancel();return;}controller.signal.addEventListener('abort',cancel,{once:true});
+   });
+   response=await fetchRead();data=await response.json();
+  }
   if(!response.ok&&response.status!==304)throw Object.assign(new Error(data.error||(response.status===404&&path==='trash/clear'?"当前后台服务尚未加载清空功能，请重启服务后重试":typeof data.detail==='string'?data.detail:"操作未完成")),{conflict:response.status===409,status:response.status});
   if(readable&&scope+'\n'+resource===key&&(versions.get(key)||0)===generation)remember(key,{value:data,etag:response.headers.get('ETag')||previous?.etag,bytes:typeof data.text==='string'?data.text.length*2+512:JSON.stringify(data).length*2,valid:true});
-  if(verb!=='GET'&&verb!=='HEAD'&&!path.startsWith('ai/')&&!['preferences','demo','query','knowledge-search','html-preview','choose-directory','model-prepare','reindex','skills/wiki-search/install'].includes(path))invalidate({type:'write',paths:[body?.path,body?.source,body?.destination,data.path].filter(Boolean)});
+  if(verb!=='GET'&&verb!=='HEAD'&&!path.startsWith('ai/')&&!['activity','preferences','demo','query','knowledge-search','html-preview','choose-directory','model-prepare','reindex','skills/wiki-search/install'].includes(path))invalidate({type:'write',paths:[body?.path,body?.source,body?.destination,data.path].filter(Boolean)});
   return data;
  };
  const entry:Pending={controller,users:0,settled:false,promise:Promise.resolve()};
