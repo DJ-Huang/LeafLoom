@@ -6,12 +6,15 @@
 
 Supported: Windows 10/11 x64 and macOS 14+ on Apple Silicon. Linux, Intel Mac and Windows ARM are not supported by the desktop installer.
 
-1. Download or clone the repository into a writable local folder, then extract the archive completely.
-2. On Windows, double-click `Start.cmd`. On macOS, open Terminal in the repository and run `sh Start.sh`. The included `.app` is also an entry point; rebuild its menu artifact when distributing updated native sources.
-3. Wait for the first installation. It prepares private Python/Node runtimes, dependencies, the web interface and BGE-M3. Internet access is needed for these downloads. No administrator account, Homebrew, Xcode or Ollama is required.
-4. The local web app opens after installation. Later launches reuse the environment and model. To update or repair, use `Install.cmd` or `sh Install.sh` after updating the repository, then restart the service.
+**Recommended: download the desktop installer from the [latest Release](https://github.com/DJ-Huang/LeafLoom/releases/latest).** You do not need to clone the repository or install Python, Node or Ollama.
 
-The service binds to `127.0.0.1`, normally on port `18080`. The installer enables current-user login startup. Use the Windows tray to change that setting; on macOS use `vault-rag service disable-autostart` or `enable-autostart`. Stop with `Stop.cmd` or `sh Stop.sh`. Stopping does not uninstall the login service.
+1. **Windows:** Download the Windows x64 `.exe`, run the installer, then open LeafLoom from Start or the desktop shortcut.
+2. **Mac:** Download the macOS Apple Silicon `.dmg`, open it, drag LeafLoom to Applications, then launch it.
+3. Choose a language and try the included demo or connect your own folder. Reading, editing, graphs and keyword search work without downloading the semantic-search model. Prepare BGE-M3 in search settings when needed.
+
+Closing the window keeps LeafLoom in the tray/menu bar; use **Quit** to stop the application and its local service. Login startup is off for new installations and can be changed in desktop settings or the tray. To update, quit LeafLoom, install the new Release package for your platform, then reopen it.
+
+The service binds to `127.0.0.1`, normally on port `18080`. See [desktop installation details](../DESKTOP.md) for requirements and validation limits. Developers can use the [source installation instructions](../../README.md#get-started).
 
 ## Choose a language and folder
 
@@ -56,14 +59,14 @@ See [AI connections](AI.md). Browsing and local retrieval work without an AI sub
 
 **Why are there no search results?** Check the selected folders, file extensions and exclusions. Check indexing in Settings. If the semantic model/index is not ready, the app reports a keyword/Wiki fallback. Do not treat that as completed semantic indexing.
 
-**Why is first launch slow?** It downloads dependencies and model files. Keep the installation window open. On failure, review the stage and logs, then run the same launcher again to reuse completed downloads.
+**Do I need to download a model before starting?** No. The desktop package includes its private runtime; reading, editing, graphs and keyword search work without BGE-M3. Download the model from search settings only when you want semantic retrieval. Source installations prepare their dependencies separately.
 
 **Where is my data?** Notes remain in the connected folder. Indexes, history and Trash are in its `.vault-rag/`. Private configuration, models, tokens and AI history are in `%LOCALAPPDATA%\VaultRag` on Windows or `~/Library/Application Support/VaultRag` on macOS. `VAULT_RAG_HOME` can override the private location.
 
-**Does it work offline?** Local browsing and retrieval can work after dependencies and model are prepared. External AI depends on the chosen provider's network requirements.
+**Does it work offline?** The installed desktop app supports local reading, editing, graphs and keyword search offline. Semantic retrieval also needs the local model prepared first. External AI depends on the chosen provider's network requirements.
 
 **The page is blank or changes do not appear.** Complete the frontend build/install, restart the service, then reload the page. Check the service logs and port conflicts. Restarting a browser alone does not load new server code.
 
 **Can I use a network folder?** The desktop app expects a local folder. UNC shares and symbolic-link/junction access are rejected to keep file operations inside the connected folder.
 
-**How do I uninstall?** Run `vault-rag service uninstall` using the installed environment. This removes the user service, retaining notes, configuration and models. Remove retained files separately only when you no longer need them.
+**How do I uninstall?** Quit LeafLoom, then uninstall it through Windows Settings or remove it from Applications on Mac. Notes, configuration, indexes and models are retained. For a legacy source-installed service, use `vault-rag service uninstall` from that environment. Remove retained data separately only when you no longer need it.

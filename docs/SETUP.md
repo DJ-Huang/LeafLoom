@@ -2,7 +2,18 @@
 
 # 安装与配置
 
-## 首次启动即可安装
+## 推荐：使用 Windows / Mac Release 安装包
+
+普通用户请从 [最新 Release](https://github.com/DJ-Huang/LeafLoom/releases/latest) 下载桌面应用，无需克隆仓库或安装 Python、Node、Ollama。
+
+- **Windows 10/11 x64：** 下载并运行 `.exe` 安装程序，再从开始菜单或桌面快捷方式打开 LeafLoom。
+- **macOS 14+ Apple 芯片：** 下载并打开 `.dmg`，将 LeafLoom 拖入「应用程序」后启动。
+
+首次打开可体验演示库或关联自己的目录，再选择检索范围。阅读、编辑、图谱和关键词检索无需模型；需要语义检索时再从设置准备 BGE-M3。更新时先退出应用，再安装新版 Release 安装包。
+
+[桌面安装、运行方式与平台验证](DESKTOP.md)。以下内容面向源码开发和旧版服务维护。
+
+## 从源码启动与安装
 
 支持 Windows 10/11 x64（内置 Windows PowerShell 5.1）和 macOS 14+ Apple 芯片。将仓库放到可写的本机目录，允许中文和空格路径。Windows 双击 `Start.cmd`，macOS 在仓库目录的终端运行 `sh Start.sh` 或双击仓库内 `.app`；首次或需要修复时显示安装进度。Windows 用 `Install.cmd`，macOS 在仓库目录的终端运行 `sh Install.sh`，可主动安装或更新。
 
