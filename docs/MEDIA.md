@@ -6,6 +6,14 @@ The media uses fictional, multilingual demo notes. No user's vault, conversation
 
 ## README feature screenshots
 
+### ChatGPT connection
+
+All three READMEs share the English illustration at `assets/promo/leafloom-chatgpt.png`. It follows the supplied Chat/Work layout and uses the LeafLoom icon from `assets/brand/icon-256.png`. The illustration was generated with imagegen and is labeled as an illustration in each README; it does not show a verified live ChatGPT connection. Its copy describes the current search/read capabilities, not remote note editing.
+
+The actual desktop settings screenshots are `assets/screenshots/{en,zh-CN,ja}/showcase-chatgpt-settings.png`. To reproduce them, install the locked desktop dependencies, build a Tunnel-enabled desktop application, set `LEAFLOOM_DESKTOP_EXECUTABLE` to that executable, and run `node scripts/capture_chatgpt_settings.cjs` from the repository root. The capture uses a disposable vault and application state, leaves credentials blank, never starts a Tunnel connection, and crops the actual settings panel. Its height is expanded for capture so the first-use instructions fit without scrolling; no text or connection status is replaced. The application windows appear briefly during capture so Windows can render them. No user's vault, key or operating-system login preference is changed.
+
+### Knowledge workspace
+
 The English, Chinese and Japanese READMEs each show four new 1800×1125 screenshots: a Markdown project brief, the knowledge graph, AI Chat alongside a note, and local HTML preview. These 12 images use the same learning-studio starter vault shipped under `vault_rag/examples/{en,zh-CN,ja}/`. Each language includes 27 connected notes, four editable templates, and an offline HTML guide with a companion stylesheet. The graph links and Markdown content come from those files; the AI conversation is seeded and explicitly labeled as fictional.
 
 Install the locked desktop capture dependency with `npm ci --prefix desktop`, generate the examples with `python scripts/build_examples.py`, build the frontend, and start a fresh `python scripts/promo_server.py`. Then run `node scripts/capture_showcase.cjs`. It uses an isolated Chrome profile by default (`LEAFLOOM_BROWSER_CHANNEL` can select another installed channel), verifies the temporary demo service, and saves `showcase-{markdown,graph,ai,html}.png` in each language directory. It also checks table links, tasks, graph content, AI references and local HTML styles, and records renderer errors in `.cache/leafloom/showcase-validation.json`.

@@ -18,6 +18,26 @@ https://github.com/user-attachments/assets/56f37418-23cc-4763-af3c-3253fb06f517
 
 **Optional AI.** Connect a signed-in CLI or an HTTP MCP client. Review AI suggestions before saving. External AI services may receive the content you send.
 
+## Your local knowledge, in ChatGPT
+
+**Access your local knowledge base from anywhere.** Select LeafLoom in a ChatGPT web conversation to search your chosen folders, read notes and follow the sources while you chat. Your LeafLoom computer must be online with the app running. The current connection supports searching and reading; edit notes in LeafLoom.
+
+![Illustration of Chat selected with the LeafLoom plugin in the conversation composer](assets/promo/leafloom-chatgpt.png)
+
+*Illustrative Chat experience; the settings below are captured from the actual desktop app.*
+
+### Connect once, start with the app
+
+1. In the LeafLoom desktop app, open **Settings → ChatGPT connection**. Enter your existing **Tunnel ID** and **App Key** with **Tunnels Read + Use** permissions, then choose **Save and connect**. The client is built in: no separate download, configuration file or terminal is needed.
+2. In ChatGPT, add a custom MCP server, choose **Tunnel**, enter the same Tunnel ID and select **No authentication**. Install the connection and select **LeafLoom** in your chat. Your ChatGPT account or workspace must allow custom MCP connections; see the [official setup guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels).
+3. Ask, for example: “Find my notes about this topic and show the sources.” Choose your searchable folders in LeafLoom first; no folders are indexed by default.
+
+![LeafLoom desktop settings for ChatGPT connection: Tunnel ID, encrypted App Key, automatic connection and connection status](assets/screenshots/en/showcase-chatgpt-settings.png)
+
+The App Key is encrypted by the operating system. Connections start with LeafLoom, continue while the window is closed to the tray, and stop when you quit. **Disconnect** disables automatic connection until you enable it again. Notes stay on your computer; requested tool results are sent to ChatGPT.
+
+[Desktop installation and connection details](docs/DESKTOP.md#chatgpt-connection) · [Platform validation and current limits](docs/TUNNEL_VALIDATION.md)
+
 ## A workspace for connected thinking
 
 Try the built-in [learning studio](vault_rag/examples/en) from **Try the demo** on first launch. It includes connected notes, a local HTML reading room, and reusable project, reading and decision templates. You can edit the examples; reopening the demo keeps your changes.

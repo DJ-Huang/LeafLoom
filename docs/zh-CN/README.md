@@ -18,6 +18,26 @@ https://github.com/user-attachments/assets/56f37418-23cc-4763-af3c-3253fb06f517
 
 **可选 AI.** 连接已登录的 CLI 或 HTTP MCP 客户端。AI 修改先检查再保存；外部模型服务可能收到你发送的内容。
 
+## 在 ChatGPT 中使用本地知识库
+
+**随时随地，访问自己的本地知识库。** 在 ChatGPT 网页对话中选择 LeafLoom，即可检索已选择的目录、读取笔记，并沿着来源继续交流。运行 LeafLoom 的电脑需要保持联网、应用保持运行。当前连接支持检索和读取，笔记编辑在 LeafLoom 中完成。
+
+![英文示意图：选中 Chat，在对话输入框中使用 LeafLoom 插件](../../assets/promo/leafloom-chatgpt.png)
+
+*上图为 Chat 使用场景示意；下方设置页来自实际桌面应用。*
+
+### 配置一次，随应用自动连接
+
+1. 在 LeafLoom 桌面应用中打开 **设置 → ChatGPT 连接**，填写已有的 **Tunnel ID** 和具有 **Tunnels Read + Use** 权限的 **App Key**，点击 **保存并连接**。客户端已内置，无需另外下载、编写配置文件或打开终端。
+2. 在 ChatGPT 中添加自定义 MCP，连接方式选择 **Tunnel**，填写同一 Tunnel ID，认证选择 **无认证**。安装连接后，在对话中选择 **LeafLoom**。ChatGPT 账号或工作区需要允许自定义 MCP 连接；详见[官方接入指南](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)。
+3. 试着问：“找到与这个主题有关的笔记，并列出来源。”先在 LeafLoom 中选择检索目录；默认不索引任何目录。
+
+![LeafLoom 的 ChatGPT 连接设置：Tunnel ID、加密保存的 App Key、自动连接开关与连接状态](../../assets/screenshots/zh-CN/showcase-chatgpt-settings.png)
+
+App Key 由操作系统加密保存。连接随应用启动，关闭窗口留在托盘时继续运行，退出应用时停止。点击 **断开** 会停用自动连接，直到再次启用。笔记保存在自己的电脑上；调用工具时，请求的结果会发送给 ChatGPT。
+
+[桌面安装与连接详情](../DESKTOP.md#chatgpt-connection) · [平台验证与当前限制](../TUNNEL_VALIDATION.md)
+
 ## 看见知识工作台
 
 首次启动时点击「体验演示知识库」，即可打开内置的[阅读与学习工作室](../../vault_rag/examples/zh-CN)。示例包含相互连接的笔记、本地 HTML 阅览室，以及项目、阅读和决策模板。可以直接修改，再次打开会保留已有编辑。
