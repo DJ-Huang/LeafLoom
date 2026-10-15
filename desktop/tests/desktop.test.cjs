@@ -19,6 +19,16 @@ test('external links never invoke arbitrary handlers or loopback services', () =
   assert.equal(policy.externalUrl('https://example.com/notes'), 'https://example.com/notes');
   for (const value of ['javascript:alert(1)', 'file:///C:/Windows/system.ini', 'data:text/html,x', 'cmd:run', 'http://localhost:18080/', 'http://2130706433/', 'http://[::1]/', 'https://user:pass@example.com/']) assert.throws(() => policy.externalUrl(value));
 });
+test('website origins are stable loopback siblings with no workspace privilege', () => {
+  const install = 'a'.repeat(32), project = 'b'.repeat(32);
+  const ui = `http://app.${install}.localhost:18080/`;
+  const site = `http://p-${project}.${install}.localhost:18080/index.html`;
+  assert.equal(policy.workspaceOrigin(ui, 'http://127.0.0.1:18080/'), new URL(ui).origin);
+  assert.ok(policy.projectUrl(site, new URL(ui).origin));
+  assert.equal(policy.trustedPage(site, new URL(ui).origin), false);
+  for (const url of [site.replace(':18080', ':18081'), site.replace(install, 'c'.repeat(32)), ui]) assert.equal(policy.projectUrl(url, new URL(ui).origin), false);
+  for (const url of [site, ui.replace('http:', 'https:'), ui.replace('.localhost', '.localhost.evil.example'), ui + 'other']) assert.throws(() => policy.workspaceOrigin(url, 'http://127.0.0.1:18080/'));
+});
 test('file reveal boundary is directory-aware and rejects parent/sibling paths', () => {
   const root = path.resolve('fixture', 'vault');
   assert.ok(policy.inside(root, path.join(root, 'a.md')));

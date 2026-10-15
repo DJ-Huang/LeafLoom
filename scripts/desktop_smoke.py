@@ -77,7 +77,7 @@ def exercise(python, workspace, *, commit=True):
                 if error.code != 401:
                     raise RuntimeError(f'{route}: HTTP {error.code}: {error.read().decode("utf-8")}') from error
                 raise
-        assert b'<html' in request('/').lower()
+        assert request('/').lstrip().lower().startswith(b'<!doctype html')
         status = request('/api/status')
         assert not status['model']['prepared'] and status['model']['load_count'] == 0
         deadline = time.monotonic() + 20

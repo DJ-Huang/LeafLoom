@@ -39,7 +39,7 @@ async function main() {
     appProcess = application.process();
     const page = await application.firstWindow();
     page.on('pageerror', e => errors.push(e.message));
-    await page.waitForURL('http://127.0.0.1:' + p + '/', {timeout: 110000});
+    await page.waitForURL(url => /^app\.[a-f0-9]{32}\.localhost$/.test(url.hostname) && url.port === String(p) && url.pathname === '/', {timeout: 110000});
     await page.getByRole('button', {name: 'Settings', exact: true}).waitFor({timeout: 60000});
     assert.equal(await application.evaluate(({BrowserWindow}) => {const p=BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences(); return p.nodeIntegration === false && p.contextIsolation === true && p.sandbox === true && p.webSecurity === true;}), true);
     const info = await page.evaluate(() => window.leafloomDesktop.appInfo()); assert.equal(info.version, '0.1.0');

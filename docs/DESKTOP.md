@@ -153,3 +153,11 @@ Actual OS installation, signed Gatekeeper/SmartScreen behavior, login restart,
 model download/retry/inference, existing-install migration, upgrade and uninstall
 need target-machine acceptance before public release. Windows checks do not prove
 Mac UI, login, signing or MPS behavior.
+
+## Shared HTML websites
+
+The desktop window and browser use the same front-end build and project website
+container. The canonical UI uses a stable local `.localhost` hostname; the original
+loopback entrance preserves owned drafts and reading state before opening it.
+MCP addresses, service ownership and quit/tray behavior are unchanged.
+See [HTML project setup, origins and validation](HTML_PROJECTS.md).

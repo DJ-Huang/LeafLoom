@@ -46,6 +46,17 @@ def service(action: str = typer.Argument('status')) -> None:
     control(action)
 
 @app.command()
+def local_resolver(action: str = typer.Argument('status')) -> None:
+    """Install/remove scoped Safari name resolution (macOS administrator dialog)."""
+    from vault_rag.local_state import LocalConfig
+    from vault_rag.html_projects import HtmlProjects
+    from vault_rag.local_dns import LocalDns
+    if action not in ('status','install','remove'):raise typer.BadParameter('Use status/install/remove')
+    config=LocalConfig();websites=HtmlProjects(config,config.data['port'])
+    resolver=LocalDns(websites.install_id,config.data['port'])
+    _print_json_utf8(resolver.status() if action=='status' else resolver.configure(action=='install'))
+
+@app.command()
 def tray() -> None:
     """Run the Windows notification-area icon without loading the model."""
     from vault_rag.windows_entry import main as run

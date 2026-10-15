@@ -77,7 +77,7 @@ export async function api<T=any>(path:string,body?:any,method?:string,options:{s
   }
   if(!response.ok&&response.status!==304)throw Object.assign(new Error(data.error||(response.status===404&&path==='trash/clear'?"当前后台服务尚未加载清空功能，请重启服务后重试":typeof data.detail==='string'?data.detail:"操作未完成")),{conflict:response.status===409,status:response.status});
   if(readable&&scope+'\n'+resource===key&&(versions.get(key)||0)===generation)remember(key,{value:data,etag:response.headers.get('ETag')||previous?.etag,bytes:typeof data.text==='string'?data.text.length*2+512:JSON.stringify(data).length*2,valid:true});
-  if(verb!=='GET'&&verb!=='HEAD'&&!path.startsWith('ai/')&&!['activity','preferences','demo','query','knowledge-search','html-preview','choose-directory','model-prepare','reindex','skills/wiki-search/install'].includes(path))invalidate({type:'write',paths:[body?.path,body?.source,body?.destination,data.path].filter(Boolean)});
+  if(verb!=='GET'&&verb!=='HEAD'&&!path.startsWith('ai/')&&!path.startsWith('html-')&&!['activity','preferences','demo','query','knowledge-search','html-preview','choose-directory','model-prepare','reindex','skills/wiki-search/install'].includes(path))invalidate({type:'write',paths:[body?.path,body?.source,body?.destination,data.path].filter(Boolean)});
   return data;
  };
  const entry:Pending={controller,users:0,settled:false,promise:Promise.resolve()};
