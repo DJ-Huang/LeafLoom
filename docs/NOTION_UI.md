@@ -1,5 +1,7 @@
 # 页面改版与验收
 
+> 本文记录此前的页面、设置与图谱改版及当时验收。当前 Markdown 已采用正文富文本编辑和源码切换，HTML 已按项目运行；最新操作见[使用指南](zh-CN/GUIDE.md)，功能边界见 [HTML 项目说明](HTML_PROJECTS.md)。
+
 ## 设计与操作
 
 以 [Notion 的设置分类与搜索](https://www.notion.com/help/workspace-settings) 和 [导航与快捷搜索](https://www.notion.com/help/navigate-with-the-sidebar) 为参考，在现有 React/CodeMirror 页面中统一浅色文档工作台、设置面板与操作组件。原始文件、HTTP/MCP 接口、检索引擎和 HTML 沙箱保持现有机制。
@@ -14,7 +16,7 @@
 
 顶部导航已按后续反馈由多标签改为路径导航；下方文档工具栏不再重复显示路径。目录地址可在刷新后恢复，隐藏文档仍遵循原有缓存和媒体生命周期。此次路径导航调整已通过生产构建与静态差异检查，未追加浏览器验收；下表记录的是此前整体改版的验收。
 
-本轮保留 Markdown 编辑方式。块编辑器的 Markdown 转换可能丢失信息，参见 [BlockNote 官方说明](https://www.blocknotejs.org/docs/features/export/markdown)。
+当时保留了原有 Markdown 编辑方式。PR #3 后使用 Tiptap/ProseMirror 编辑正文、CodeMirror 编辑源码，通过原文映射保留未修改内容，并共用文档级撤销历史；当前行为见[编辑指南](zh-CN/GUIDE.md#用命令快速编辑)。
 
 ## 统一设置中心（2026-10-13）
 
