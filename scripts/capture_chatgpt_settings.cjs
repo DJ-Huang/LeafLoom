@@ -35,7 +35,7 @@ async function main() {
         window.showInactive();
       });
       const page = await application.firstWindow();
-      await page.waitForURL(`http://127.0.0.1:${port}/`, {timeout: 25000});
+      await page.waitForURL(url => /^app\.[a-f0-9]{32}\.localhost$/.test(url.hostname) && url.port === String(port) && url.pathname === '/', {timeout: 25000});
       await page.waitForFunction(locale => document.documentElement.lang === locale, locale, {polling: 100});
       await page.getByRole('button', {name: text('设置'), exact: true}).click();
       await page.getByRole('button', {name: text('tunnel.title'), exact: true}).click();

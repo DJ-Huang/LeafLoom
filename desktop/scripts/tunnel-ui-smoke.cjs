@@ -28,7 +28,7 @@ async function main() {
     application = await _electron.launch({executablePath, args: ['--background'], env, timeout: 60000});
     const page = await application.firstWindow();
     page.on('pageerror', () => errors.push('renderer-error'));
-    await page.waitForURL(`http://127.0.0.1:${port}/`, {timeout: 20000});
+    await page.waitForURL(url => /^app\.[a-f0-9]{32}\.localhost$/.test(url.hostname) && url.port === String(port) && url.pathname === '/', {timeout: 20000});
     await page.getByRole('button', {name: 'Settings', exact: true}).click();
     await page.getByRole('button', {name: 'ChatGPT connection', exact: true}).click();
     return page;

@@ -2,7 +2,7 @@ import {Diagnostic} from './i18n';
 import {t,useLocale} from './i18n';
 import React,{lazy,Suspense,useCallback,useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {BookOpen,Calendar,Home,PanelLeft,Plus,RefreshCw,Search,Settings,ArrowLeft,Network,MessageSquare} from 'lucide-react';
+import {BookOpen,Calendar,Home,PanelLeft,Plus,RefreshCw,Search,Settings,ArrowLeft,Network,MessageSquare,Globe} from 'lucide-react';
 import {api,applySession,invalidate,media,Config,OpenNote,Session} from './api';
 import {DirectoryTree,FolderView} from './tree';
 import {Action,ActionMenu,Modal,LoadingShell,LazyBoundary,FormDialog,FormField} from './ui';
@@ -16,6 +16,8 @@ import {AiSelectionEvent} from './ai-context';
 import {Welcome,SetupGuide,GettingStarted,Guide,UserPreferences} from './onboarding';
 import {setLocale} from './i18n';
 import {Logo} from './brand';
+import {StorageMigrationNotice} from './storage-migration';
+import {HtmlPreview} from './html-preview';
 
 let documentModule:Promise<typeof import('./document')>|undefined;
 function DocumentPane(props:React.ComponentProps<typeof import('./document')['DocumentPane']>){
@@ -29,7 +31,7 @@ const FileSearch=lazy(()=>import('./search').then(module=>({default:module.FileS
 const KnowledgeSearch=lazy(()=>import('./search').then(module=>({default:module.KnowledgeSearch})));
 const GraphPage=lazy(()=>import('./graph').then(module=>({default:module.GraphPage})));
 const AiPanel=lazy(()=>import('./ai-panel').then(module=>({default:module.AiPanel})));
-type View='home'|'document'|'knowledge'|'folder'|'graph';
+type View='home'|'document'|'knowledge'|'folder'|'graph'|'web';
 type FileOperation={kind:'file'|'rename'|'move'|'delete',path?:string};
 const folderOf=(path:string)=>path.includes('/')?path.slice(0,path.lastIndexOf('/')):'';
 const within=(path:string,parent:string)=>path===parent||path.startsWith(parent+'/');
@@ -63,7 +65,7 @@ function App(){
  const loadSession=useCallback(async()=>{
   const request=++sessionRequest.current;
   try{const next=await api<Session>('session');if(request!==sessionRequest.current)return;const previous=session.current,scopeChanged=applySession(next);session.current=next;setConfig(value=>JSON.stringify(value)===JSON.stringify(next.config)?value:next.config);setSuggestion(next.suggested_root);setConnectionError('');
-   if(!previous){const params=new URLSearchParams(location.search),target=params.get('note'),folder=params.get('folder');if(target&&next.config.root){setTabs([target]);setActive(target);setView('document');}else if(folder!==null&&next.config.root){setCurrentFolder(folder);setView('folder');}else if(params.get('view')==='knowledge'){setView('knowledge');setKnowledgeVisited(true);}else if(params.get('view')==='graph'){setView('graph');setGraphVisited(true);}}
+   if(!previous){const params=new URLSearchParams(location.search),target=params.get('note'),folder=params.get('folder');if(target&&next.config.root){setTabs([target]);setActive(target);setView('document');}else if(folder!==null&&next.config.root){setCurrentFolder(folder);setView('folder');}else if(params.get('view')==='knowledge'){setView('knowledge');setKnowledgeVisited(true);}else if(params.get('view')==='web'){setView('web');}else if(params.get('view')==='graph'){setView('graph');setGraphVisited(true);}}
    else if(previous.config.root!==next.config.root)resetWorkspace();
    if(scopeChanged&&previous)invalidate({reset:true});
    const [status,userPreferences]=await Promise.all([api('status'),api<UserPreferences>('preferences')]);if(request===sessionRequest.current){updateStatus(status);setLocale(userPreferences.locale);setGuide(userPreferences.guide);setDemoMode(!!next.demo);}
@@ -131,16 +133,18 @@ function App(){
     <button className={view==='home'?'active':''} onClick={showHome}><Home size={17}/>{t("首页")}</button>
     <button className={view==='knowledge'?'active':''} onClick={showKnowledge}><Search size={17}/>{t("知识检索")}</button>
     <button className={view==='graph'?'active':''} onClick={showGraph}><Network size={17}/>{t("关系图谱")}</button>
+    <button className={view==='web'?'active':''} onClick={()=>{setView('web');setMobileOpen(false);history.replaceState(null,'','/?view=web');}}><Globe size={17}/>{t('网页')}</button>
     <button onClick={()=>void daily()}><Calendar size={17}/>{t("今日笔记")}</button>
    </nav>
    <div className="section-label"><span>{t("文件目录")}</span><div><Action title={t("刷新数据")} onClick={refreshData}><RefreshCw size={14}/></Action><Action title={t("新建笔记")} onClick={()=>newFile('file')}><Plus size={15}/></Action></div></div>
    <div className="file-tree"><DirectoryTree key={config.root} onOpen={openFile} onFolder={setCurrentFolder} selected={view==='document'?active:''} refresh={refresh} manage={manage}/></div>
    <div className="sidebar-tools"><button onClick={()=>openSettings()}><Settings size={16}/>{t("设置")}</button><button className="help-button" onClick={()=>{showHome();void saveGuide({step:'done',dismissed:false}).catch(error=>notify(error.message));}}>{t("新手指南")}</button></div><IndexStatus onOpen={()=>openSettings({section:'index',targetId:'sync'})}/>
   </Sidebar>
-  <main className="main" inert={narrow&&mobileOpen}>
+  <main className="main" inert={narrow&&mobileOpen}><StorageMigrationNotice/>
    {connectionError&&<div role="status" className="connection-banner">{<Diagnostic message={connectionError}/>}<button onClick={refreshData}>{t("刷新数据")}</button></div>}
    <div className="workspace-topbar"><button className="icon-button sidebar-toggle" aria-label={t("切换导航")} aria-controls="workspace-sidebar" aria-expanded={narrow?mobileOpen:!preferences.sidebarCollapsed} onClick={toggleSidebar}><PanelLeft size={17}/></button><PathNavigation view={view} path={view==='document'?active:currentFolder} onFolder={showFolder}/><button className="ai-open-button" aria-expanded={aiOpen} onClick={()=>setAiOpen(value=>!value)}><MessageSquare size={15}/>{t("AI 对话")}</button></div>
    {view==='home'&&<Dashboard config={config} recent={preferences.recent} onOpen={openFile} onCreate={()=>newFile('file')} onKnowledge={showKnowledge} onDaily={()=>void daily()} guideContent={<GettingStarted guide={guide} onGuide={saveGuide} onAction={action=>{if(action==='create')newFile('file');else if(action==='search'||action==='source')showKnowledge();else if(action==='graph')showGraph();else if(action==='ai'){setAiOpen(true);setAiVisited(true);}else if(config.homepage)openFile(config.homepage);else showFolder('');}}/>}/>}
+   {view==='web'&&<HtmlPreview path="" root={config.root} active/>}
    {view==='folder'&&<FolderView key={config.root+'\n'+currentFolder} path={currentFolder} onOpen={openFile} onFolder={showFolder} onCreate={()=>newFile('file')} refresh={refresh} manage={manage}/>}
    {knowledgeVisited&&<LazyBoundary><Suspense fallback={view==='knowledge'?<p className="pad subtle">{t("正在打开知识检索…")}</p>:null}><KnowledgeSearch key={config.root} active={view==='knowledge'} revision={config.revision} onOpen={path=>{setBackToKnowledge(true);setBackToGraph(false);void open(path);}} onSettings={()=>openSettings({section:'index',targetId:'scope'})}/></Suspense></LazyBoundary>}
    {graphVisited&&<LazyBoundary><Suspense fallback={view==='graph'?<p className="pad subtle">{t("正在打开关系图谱…")}</p>:null}><GraphPage key={config.root} path={active} active={view==='graph'} onOpen={path=>{setBackToKnowledge(false);setBackToGraph(true);void open(path);}}/></Suspense></LazyBoundary>}
