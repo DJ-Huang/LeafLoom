@@ -1,59 +1,85 @@
 import {t,useLocale} from './i18n';
-import React,{useEffect,useRef} from 'react';
-import {createRoot,Root} from 'react-dom/client';
-import {EditorState} from '@codemirror/state';
-import {EditorView,Decoration,WidgetType,keymap} from '@codemirror/view';
-import {defaultKeymap,history,historyKeymap} from '@codemirror/commands';
+import React,{useEffect,useRef,useState} from 'react';
+import {Compartment,EditorState} from '@codemirror/state';
+import {EditorView,keymap,tooltips,ViewPlugin} from '@codemirror/view';
+import {defaultKeymap,history,historyKeymap,redo} from '@codemirror/commands';
 import {search,searchKeymap,openSearchPanel} from '@codemirror/search';
-import {markdown} from '@codemirror/lang-markdown';
+import {startCompletion,closeCompletion} from '@codemirror/autocomplete';
 import {OpenNote} from './api';
-import {MarkdownPreview} from './reader';
+import {FormDialog} from './ui';
+import {editingMarkdown,prosePosition} from './editor-syntax';
+import {formatCommands,insertLink,InsertId,InsertRange,insertSnippet,safeLink,toggleFormat} from './editor-commands';
+import {editorCompletion} from './editor-completion';
+import {editorUI,editorVisible,refreshEditorUI,dismissEditorUI} from './editor-ui';
+import {pendingAnchors,removeAnchor,trackRange,trackedRange} from './editor-anchors';
+import {attachmentController,attachmentEvents} from './editor-attachments';
+import {liveDecorations} from './editor-decorations';
+import './editor.css';
 export {openSearchPanel};
-class WikiLinkWidget extends WidgetType{
- constructor(readonly target:string,readonly label:string,readonly open:OpenNote){super();}
- eq(other:WikiLinkWidget){return other.target===this.target&&other.label===this.label;}
- toDOM(){const a=document.createElement('a');a.textContent=this.label;a.href='#';a.className='live-wikilink';a.onclick=e=>{e.preventDefault();e.stopPropagation();this.open(this.target);};return a;}
- ignoreEvent(){return true;}
-}
 
-class MarkdownWidget extends WidgetType{
- root?:Root;
- constructor(readonly text:string,readonly path:string,readonly open:OpenNote,readonly from:number,readonly task:(pos:number)=>void){super();}
- eq(other:MarkdownWidget){return other.text===this.text&&other.path===this.path&&other.from===this.from;}
- toDOM(){const div=document.createElement('div');div.className='live-widget';this.root=createRoot(div);this.root.render(<MarkdownPreview text={this.text} path={this.path} onOpen={this.open} onTask={i=>{const matches=[...this.text.matchAll(/^[ \t]*[-*+] \[([ xX])\]/gm)];if(matches[i])this.task(this.from+matches[i].index!+matches[i][0].indexOf('[')+1);}}/>);return div;}
- destroy(){const root=this.root;queueMicrotask(()=>root?.unmount());}
- ignoreEvent(){return true;}
-}
+// IME confirmation belongs to the browser, including the interval before its
+// first text mutation and Chromium's EditContext composition path.
+const compositionGuard=ViewPlugin.fromClass(class{
+ composing=false;
+ start=()=>{this.composing=true;};
+ end=()=>{this.composing=false;};
+ key=(event:KeyboardEvent)=>{if(event.isComposing||event.keyCode===229||this.composing||this.view.compositionStarted)event.stopImmediatePropagation();};
+ constructor(readonly view:EditorView){view.contentDOM.addEventListener('compositionstart',this.start,true);view.contentDOM.addEventListener('compositionend',this.end,true);view.contentDOM.addEventListener('keydown',this.key,true);}
+ destroy(){this.view.contentDOM.removeEventListener('compositionstart',this.start,true);this.view.contentDOM.removeEventListener('compositionend',this.end,true);this.view.contentDOM.removeEventListener('keydown',this.key,true);}
+});
 
-export function LiveEditor({initial,path,onChange,onOpen,source,onReady,onRelease}:{initial:string,path:string,onChange:(text:string)=>void,onOpen:OpenNote,source:boolean,onReady?:(view:EditorView)=>void,onRelease?:(view:EditorView)=>void}){
- useLocale();
- const host=useRef<HTMLDivElement>(null);const view=useRef<EditorView|null>(null);const callbacks=useRef({onChange,onOpen});callbacks.current={onChange,onOpen};
+const phrases=()=>EditorState.phrases.of({'Find':t('查找'),'Replace':t('替换'),'next':t('下一个'),'previous':t('上一个'),'all':t('全部'),'match case':t('区分大小写'),'regexp':t('正则表达式'),'by word':t('整词'),'close':t('关闭'),'replace':t('替换'),'replace all':t('全部替换')});
+type Props={initial:string,path:string,root:string,onChange:(text:string)=>void,onOpen:OpenNote,source:boolean,active?:boolean,onReady?:(view:EditorView)=>void,onRelease?:(view:EditorView)=>void};
+export function LiveEditor({initial,path,root,onChange,onOpen,source,active=true,onReady,onRelease}:Props){
+ const locale=useLocale(),host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null);
+ const callbacks=useRef({onChange,onOpen,active});callbacks.current={onChange,onOpen,active};
+ const attachments=useRef<ReturnType<typeof attachmentController>|undefined>(undefined);
+ const language=useRef(new Compartment());
+ const [link,setLink]=useState<{id:string,label:string}>(),[status,setStatus]=useState<{message:string,error?:boolean}>();
+ const closeLink=()=>{const current=view.current;if(current&&link){current.dispatch({effects:removeAnchor.of(link.id)});current.focus();}setLink(undefined);};
  useEffect(()=>{
   if(!host.current)return;
-  const open:OpenNote=(target,anchor)=>callbacks.current.onOpen(target,anchor);
-  const makeDecorations=(v:EditorView)=>{
-   const ranges:any[]=[];const builder={add:(from:number,to:number,d:Decoration)=>ranges.push(d.range(from,to)),finish:()=>Decoration.set(ranges,true)};if(source)return builder.finish();const doc=v.state.doc;const cursor=v.state.selection.main;let line=1;
-   const task=(pos:number)=>{const editor=view.current;if(!editor)return;const current=editor.state.doc.sliceString(pos,pos+1);editor.dispatch({changes:{from:pos,to:pos+1,insert:current===' '? 'x':' '}});};
-   while(line<=doc.lines){const start=doc.line(line);let end=line;let block=false;
-    if(start.text.startsWith('```')||start.text.trim()==='$$'){const marker=start.text.startsWith('```')?'```':'$$';while(end<doc.lines){end++;if(doc.line(end).text.startsWith(marker))break;}block=end>line;}
-    else if(start.text.startsWith('|')&&line<doc.lines&&/^\s*\|?[\s:|-]+\|/.test(doc.line(line+1).text)){while(end<doc.lines&&doc.line(end+1).text.startsWith('|'))end++;block=true;}
-    else if(/^!\[\[.*\]\]$/.test(start.text.trim())||/^[ \t]*[-*+] \[[ xX]\]/.test(start.text))block=true;
-    else if(start.text.trim()==='---'&&line===1){block=true;while(end<doc.lines){end++;if(doc.line(end).text.trim()==='---')break;}}
-    const last=doc.line(end);const active=cursor.from<=last.to&&cursor.to>=start.from;
-    if(block&&!active){const text=doc.sliceString(start.from,last.to);builder.add(start.from,last.to,Decoration.replace({widget:new MarkdownWidget(text,path,open,start.from,task),block:true}));line=end+1;continue;}
-    const heading=/^(#{1,6}) /.exec(start.text);if(heading){builder.add(start.from,start.to,Decoration.mark({class:'cm-heading cm-h'+heading[1].length}));if(!active)builder.add(start.from,start.from+heading[0].length,Decoration.replace({}));}
-    // Decorations must be ordered; inline ranges are collected then sorted.
-    if(!active){const ranges:{from:number,to:number,dec:Decoration}[]=[];for(const m of start.text.matchAll(/(?<!!)\[\[([^\]\n]+)\]\]/g)){const [target,...aliases]=m[1].split('|');const pos=start.from+m.index!;ranges.push({from:pos,to:pos+m[0].length,dec:Decoration.replace({widget:new WikiLinkWidget(target,aliases.join('|')||target.split('/').pop()||target,open)})});}for(const m of start.text.matchAll(/\*\*([^*]+)\*\*/g)){const pos=start.from+m.index!;ranges.push({from:pos,to:pos+2,dec:Decoration.replace({})},{from:pos+2,to:pos+m[0].length-2,dec:Decoration.mark({class:'cm-bold'})},{from:pos+m[0].length-2,to:pos+m[0].length,dec:Decoration.replace({})});}ranges.sort((a,b)=>a.from-b.from);for(const x of ranges)builder.add(x.from,x.to,x.dec);}
-    line++;
+  let editor:EditorView;
+  const run=(id:InsertId,range:InsertRange)=>{
+   if(editor.composing)return;
+   if(id==='image'||id==='file'){attachments.current?.choose(id==='image',range);return;}
+   if(id==='link'){
+    const anchor=trackRange(editor,range),selected=editor.state.doc.sliceString(range.from,range.to);
+    editor.dispatch({effects:dismissEditorUI.of(null)});setLink({id:anchor,label:editor.state.selection.main.empty&&selected.startsWith('/')?'':selected});return;
    }
-   return builder.finish();
+   insertSnippet(editor,id,range);if(id==='wiki')startCompletion(editor);
   };
-  // Block decorations are a direct state facet, not viewport decorations.
-  const plugin=EditorView.decorations.compute(['doc','selection'],state=>makeDecorations({state} as EditorView));
-  const bold={key:'Mod-b',run:(v:EditorView)=>{const s=v.state.selection.main;v.dispatch({changes:{from:s.from,to:s.to,insert:'**'+v.state.doc.sliceString(s.from,s.to)+'**'}});return true;}};
-  const state=EditorState.create({doc:initial,extensions:[markdown(),history(),search(),keymap.of([bold,...searchKeymap,...defaultKeymap,...historyKeymap]),EditorState.phrases.of({'Find':t("查找"),'Replace':t("替换"),'next':t("下一个"),'previous':t("上一个"),'all':t("全部"),'match case':t("区分大小写"),'regexp':t("正则表达式"),'by word':t("整词"),'close':t("关闭"),'replace':t("替换"),'replace all':t("全部替换")}),EditorView.lineWrapping,plugin,EditorView.updateListener.of(update=>{if(update.docChanged)callbacks.current.onChange(update.state.doc.toString());}),EditorView.theme({'&':{fontSize:'16px'},'.cm-content':{fontFamily:'inherit',padding:'32px',minHeight:'65vh'},'.cm-focused':{outline:'none'}})]});
-  const editor=new EditorView({state,parent:host.current});view.current=editor;onReady?.(editor);
-  return()=>{onRelease?.(editor);view.current=null;editor.destroy();};
- },[path,source]);
- return <div className={'live-editor'+(source?' source-editor':'')} ref={host}/>;
+  const state=EditorState.create({doc:initial,extensions:[
+   editingMarkdown(),history(),search(),compositionGuard,language.current.of(phrases()),EditorView.lineWrapping,
+   keymap.of([
+    {key:'Mod-Shift-z',run:redo},
+    ...(!source?[{key:'Mod-Shift-k',run:(v:EditorView)=>{if(prosePosition(v.state,v.state.selection.main.from))run('link',v.state.selection.main);return true;}}]:[]),
+    ...formatCommands.map(command=>({key:command.key,run:(v:EditorView)=>toggleFormat(v,command.id)})),
+    ...searchKeymap,...defaultKeymap,...historyKeymap
+   ]),
+   ...(!source?[
+    pendingAnchors,editorCompletion(run),editorUI(run),attachmentEvents(()=>attachments.current),
+    liveDecorations(path,(target,anchor)=>callbacks.current.onOpen(target,anchor)),
+    tooltips({parent:document.body})
+   ]:[]),
+   EditorView.updateListener.of(update=>{if(update.docChanged)callbacks.current.onChange(update.state.doc.toString());}),
+   EditorView.theme({'&':{fontSize:'16px'},'.cm-content':{fontFamily:'inherit',padding:source?'32px':'32px 40px 100px 64px',minHeight:'65vh'},'.cm-focused':{outline:'none'}})
+  ]});
+  editor=new EditorView({state,parent:host.current});view.current=editor;
+  if(!source)attachments.current=attachmentController(editor,{root,path,active:()=>callbacks.current.active,status:(message,error)=>setStatus({message,error})});
+  onReady?.(editor);
+  return()=>{attachments.current?.destroy();attachments.current=undefined;onRelease?.(editor);view.current=null;editor.destroy();};
+ },[path,root,source]);
+ useEffect(()=>{const editor=view.current;if(editor){editor.dispatch({effects:[language.current.reconfigure(phrases()),...(!source?[refreshEditorUI.of(null)]:[])]});if(!source)closeCompletion(editor);}},[locale,source]);
+ useEffect(()=>{const editor=view.current;if(editor&&!source){editor.dispatch({effects:editorVisible.of(active)});if(!active){closeCompletion(editor);attachments.current?.abortAll();setLink(undefined);}}},[active,source]);
+ return <div className={'live-editor'+(source?' source-editor':'')}>
+  <div ref={host}/>
+  {status&&<div className={'editor-upload-status'+(status.error?' error':'')} role="status"><span>{status.message}</span><button type="button" aria-label={t('关闭')} onClick={()=>setStatus(undefined)}>×</button></div>}
+  {link&&<FormDialog title={t('网页链接')} fields={[{name:'url',label:t('链接地址'),required:true},{name:'label',label:t('显示文字'),value:link.label}]} submitLabel={t('插入')} onClose={closeLink} onSubmit={async values=>{
+   const editor=view.current,range=editor&&trackedRange(editor,link.id);
+   if(!editor||!range||!active)throw new Error(t('插入位置已改变，请重新操作'));
+   if(!safeLink(values.url.trim()))throw new Error(t('请输入有效的网页或邮件链接'));
+   insertLink(editor,range,values.url.trim(),values.label||values.url.trim());editor.dispatch({effects:removeAnchor.of(link.id)});
+  }}/>}
+ </div>;
 }
