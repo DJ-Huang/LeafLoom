@@ -250,7 +250,7 @@
   "AI 连接中断，正在恢复；会话与已收到的回答仍保留": "Reconnecting to AI. Your conversation and received answers are kept.",
   "AI 通知暂不可用，请重新连接": "AI updates are unavailable. Reconnect to continue.",
   "AI 问题": "Question for AI",
-  "AI 集成": "AI integration",
+  "Skill": "Skill",
   "BGE-M3 模型准备与加载状态": "BGE-M3 preparation and loading status",
   "HTML 网页浏览": "HTML preview",
   "WebGL 2 绘制；是否使用硬件加速由浏览器决定。": "WebGL 2 rendering. Hardware acceleration is controlled by your browser.",
