@@ -19,6 +19,7 @@
 - [Run the source desktop with automatic frontend updates](DESKTOP.md#source-development)
 - [Desktop installation and source development setup](SETUP.md)
 - [HTML project folders, sessions, storage migration and Safari compatibility](HTML_PROJECTS.md)
+- [Design Studio workflows, portable documents, scripts and validation boundaries](DESIGN_STUDIO.md)
 - [Folder organization and indexing scope](VAULT_ORGANIZATION.md)
 - [AI assistant implementation](AI_ASSISTANT.md)
 - [Complete MCP tools, credentials and note workflows](MCP.md)

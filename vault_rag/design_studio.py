@@ -6,11 +6,13 @@ persistent Figma-style layer transforms, and design contract checking.
 from __future__ import annotations
 
 import hashlib
+import copy
 import json
 from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
+import threading
 import time
 from typing import Any
 
@@ -69,6 +71,12 @@ class DesignStudio:
         self.runtime = runtime
         self.files = runtime.files
         self.websites = websites
+        from vault_rag.design_documents import DesignDocuments
+        from vault_rag.design_workspace import DesignWorkspace
+        self.documents = DesignDocuments(self)
+        self.workspace = DesignWorkspace(self, self.documents)
+        self._listing_cache = None
+        self._listing_lock = threading.RLock()
 
     @property
     def workspace_revision(self) -> str:
@@ -97,34 +105,20 @@ class DesignStudio:
             return screens, variants, boards
 
         # Fast marker parser for LeafLoom-generated screens.js
-        marker_match = re.search(r'/\*__LEAFLOOM_SCREENS_JSON__\*/\s*(\{.*?\})\s*/\*__END_LEAFLOOM_SCREENS_JSON__\*/', text, re.S)
-        if marker_match:
-            try:
-                data = json.loads(marker_match.group(1))
-                screens = data.get('screens', [])
-                variants = data.get('variants', [])
-                boards = data.get('boards', screens + variants)
-                return screens, variants, boards
-            except json.JSONDecodeError:
-                pass
+        from vault_rag.design_literals import marked_screen_data
+        data = marked_screen_data(text)
+        if data is not None:
+            screens = data.get('screens', [])
+            variants = data.get('variants', [])
+            boards = data.get('boards', screens + variants)
+            return screens, variants, boards
 
-        import os
-        ext_path = os.environ.get('PATH', '') + os.pathsep + '/opt/homebrew/bin' + os.pathsep + '/usr/local/bin'
-        node = shutil.which('node', path=ext_path)
-        if node:
-            script = (
-                "const m=require(process.argv[1]);"
-                "process.stdout.write(JSON.stringify({screens:m.screens||[],variants:m.variants||[],boards:m.boards||[]}));"
-            )
-            try:
-                res = subprocess.run([node, '-e', script, str(screen_path)], check=True, capture_output=True, text=True, timeout=10, env={**os.environ, 'PATH': ext_path})
-                data = json.loads(res.stdout)
-                screens = data.get('screens', [])
-                variants = data.get('variants', [])
-                boards = data.get('boards', screens + variants)
-                return screens, variants, boards
-            except Exception:
-                pass
+        # Discovery must never execute code from an imported project. Older
+        # literal screen lists are read by a small, non-evaluating parser.
+        from vault_rag.design_literals import screen_literals
+        parsed = screen_literals(text)
+        if parsed:
+            return parsed
         return [], [], []
 
     def _read_transforms_file(self, project_dir: Path) -> dict[str, dict[str, Any]]:
@@ -161,6 +155,13 @@ class DesignStudio:
 
         rel_dir = '' if project_dir == root else project_dir.relative_to(root).as_posix()
         proj_meta = spec['project']
+        managed_path = project_dir / 'Design/studio/project.json'
+        managed = None
+        if managed_path.is_file() and not is_link(managed_path):
+            try:
+                managed = json.loads(managed_path.read_text(encoding='utf-8'))
+            except (ValueError, OSError):
+                pass
         sources = proj_meta.get('sources') if isinstance(proj_meta.get('sources'), dict) else {}
         screens_rel = sources.get('screens', 'Design/UI/Site/screens.js')
         assets_rel = sources.get('assets', 'Design/Assets/manifest.json')
@@ -168,11 +169,16 @@ class DesignStudio:
         assets_path = (project_dir / assets_rel).resolve()
 
         screens, variants, boards = ([], [], [])
-        if screens_path.is_relative_to(project_dir):
+        if managed:
+            screens = [{k: p.get(k) for k in ('id', 'name', 'group', 'width', 'height')} for p in managed.get('pages', [])]
+            boards = screens
+        elif screens_path.is_relative_to(project_dir):
             screens, variants, boards = self._parse_screens_file(screens_path)
 
         asset_count = 0
-        if assets_path.is_relative_to(project_dir) and assets_path.is_file():
+        if managed:
+            asset_count = len(managed.get('assets', {}))
+        elif assets_path.is_relative_to(project_dir) and assets_path.is_file():
             try:
                 manifest = json.loads(assets_path.read_text(encoding='utf-8'))
                 asset_count = len(manifest.get('assets', []))
@@ -183,6 +189,8 @@ class DesignStudio:
         transformed_layers = sum(len(v) for v in transforms_boards.values() if isinstance(v, dict))
 
         gallery_entry, portal_entry = self._entry_for_project(project_dir, root)
+        if managed and (project_dir / 'Design/studio/runtime.html').is_file():
+            gallery_entry = (project_dir / 'Design/studio/runtime.html').relative_to(root).as_posix()
         html_project = None
         if (root / gallery_entry).is_file():
             try:
@@ -195,8 +203,9 @@ class DesignStudio:
         height = first_board.get('height', 1560) if isinstance(first_board, dict) else 1560
 
         return {
-            'id': str(proj_meta.get('id') or _slug(project_dir.name)),
-            'name': str(proj_meta.get('name') or project_dir.name),
+            'id': str((managed or {}).get('id') or proj_meta.get('id') or _slug(project_dir.name)),
+            'name': str((managed or {}).get('name') or proj_meta.get('name') or project_dir.name),
+            'managed': bool(managed),
             'directory': rel_dir,
             'spec_path': spec_file.relative_to(root).as_posix(),
             'entry': gallery_entry,
@@ -226,6 +235,10 @@ class DesignStudio:
         }
 
     def list_projects(self, folder: str = '', current_path: str = '') -> dict[str, Any]:
+        with self._listing_lock:
+            return self._list_projects(folder, current_path)
+
+    def _list_projects(self, folder: str = '', current_path: str = '') -> dict[str, Any]:
         root = self.config.root
         folder = relative(folder)
         current_path = relative(current_path)
@@ -233,31 +246,22 @@ class DesignStudio:
         if not start_dir.is_dir():
             raise ValueError('folder must be an existing directory')
 
-        discovered: list[Path] = []
-        stack: list[tuple[Path, int]] = [(start_dir, 0)]
-        while stack:
-            curr, depth = stack.pop()
-            if self._find_spec_file(curr) is not None:
-                discovered.append(curr)
-                continue
-            if depth >= 5:
-                continue
-            try:
-                children = sorted(curr.iterdir(), key=lambda p: p.name.lower(), reverse=True)
-            except OSError:
-                continue
-            for child in children:
-                if child.name.startswith('.') or path_key(child.name) in SKIP_SCAN_DIRS:
-                    continue
-                if is_link(child) or not child.is_dir():
-                    continue
-                stack.append((child, depth + 1))
-
+        discovered, summary_cache = self._discover_projects(root, start_dir)
         projects = []
         for proj_dir in sorted(discovered, key=lambda p: p.relative_to(root).as_posix().lower()):
-            summary = self._project_summary(proj_dir, root)
+            key = proj_dir.relative_to(root).as_posix()
+            cached = summary_cache.get(key)
+            watched = cached['watched'] if cached else []
+            fingerprint = tuple(self._listing_stat(path) for path in watched)
+            if cached is None or fingerprint != cached['fingerprint']:
+                summary = self._project_summary(proj_dir, root)
+                watched = self._listing_sources(proj_dir, root)
+                summary_cache[key] = {'watched': watched, 'fingerprint': tuple(self._listing_stat(path) for path in watched), 'summary': summary}
+            else:
+                summary = cached['summary']
             if summary is not None:
-                projects.append(summary)
+                # Workspace display metadata must never contaminate source caches.
+                projects.append(copy.deepcopy(summary))
 
         selected = None
         if current_path:
@@ -270,13 +274,145 @@ class DesignStudio:
         if selected is None and projects:
             selected = projects[0]
 
+        workspace = self.workspace.state()
+        for project in projects:
+            project.update(workspace['meta'].get(project['directory'], {}))
         return {
             'ok': True,
             'root': str(root),
             'projects': projects,
             'selected': selected,
             'workspace_revision': self.workspace_revision,
+            'management_revision': workspace['revision'],
+            'management_history': workspace['history'],
+            'trash': [dict(v.get('project', {}), directory=k, **{x: y for x, y in v.items() if x != 'project'}) for k, v in workspace['meta'].items() if v.get('deleted')],
         }
+
+    @staticmethod
+    def _listing_stat(path):
+        try:
+            if is_link(path):
+                return None
+            value = path.stat()
+            return value.st_mtime_ns, value.st_size, value.st_ino
+        except OSError:
+            return None
+
+    def _discovery_stat(self, path):
+        return (self._listing_stat(path), self._listing_stat(path / 'project-spec.json'),
+                self._listing_stat(path / 'Design/project-spec.json'))
+
+    def _listing_sources(self, project, root):
+        names = ['Design/project-spec.json', 'project-spec.json', 'Design/studio/project.json',
+                 'Design/layer-transforms.json', 'layer-transforms.json', 'Design/UI/Site/ui-gallery.html',
+                 'Design/index.html', 'index.html']
+        spec_path = self._find_spec_file(project)
+        if spec_path:
+            try:
+                sources = json.loads(spec_path.read_text(encoding='utf-8')).get('project', {}).get('sources', {})
+                names.extend((sources.get('screens', 'Design/UI/Site/screens.js'), sources.get('assets', 'Design/Assets/manifest.json')))
+            except (ValueError, OSError, AttributeError):
+                pass
+        result = []
+        for name in names:
+            try:
+                path = project / relative(name)
+                self.config.path_for(path.relative_to(root).as_posix())
+                result.append(path)
+            except (ValueError, TypeError):
+                continue
+        return result
+
+    def _discover_projects(self, root, start_dir):
+        """Keep a directory index and rewalk only changed branches.
+
+        Directory mtimes cover external changes even before a watcher starts.
+        Bounded event history and catalog versions identify invalidated summaries
+        without repeatedly parsing project content or evaluating source modules.
+        """
+        cache_key = (str(root), str(start_dir))
+        if not isinstance(self._listing_cache, dict):
+            self._listing_cache = {}
+        cache = self._listing_cache.get(cache_key)
+        events = self.runtime.events
+        condition = getattr(events, 'condition', None)
+        if condition is not None:
+            with condition:
+                sequence = events.sequence
+                messages = list(events.messages)
+        else:
+            sequence, messages = getattr(events, 'sequence', 0), []
+        catalog = getattr(getattr(self.runtime, 'catalog', None), 'version', None)
+        if cache is None:
+            if len(self._listing_cache) >= 8:
+                self._listing_cache.pop(next(iter(self._listing_cache)))
+            cache = self._listing_cache[cache_key] = {'directories': {}, 'projects': set(), 'summaries': {}, 'sequence': sequence, 'catalog': catalog}
+            changed = {start_dir}
+        else:
+            changed = {directory for directory, signature in cache['directories'].items()
+                       if self._discovery_stat(directory) != signature}
+            paths = {path for message in messages if message.get('sequence', 0) > cache['sequence']
+                     for path in message.get('paths', []) if isinstance(path, str)}
+            for value in paths:
+                try:
+                    target = self.config.path_for(value)
+                except ValueError:
+                    continue
+                if not target.is_relative_to(start_dir):
+                    continue
+                owners = [project for project in cache['projects'] if target.is_relative_to(project)]
+                if owners:
+                    for project in owners:
+                        cache['summaries'].pop(project.relative_to(root).as_posix(), None)
+                else:
+                    parent = target if target.is_dir() else target.parent
+                    while parent not in cache['directories'] and parent != start_dir:
+                        parent = parent.parent
+                    changed.add(parent)
+            # A catalog reset or a notification gap still has stat evidence for
+            # discovery; source fingerprints below handle existing projects.
+            if cache['catalog'] != catalog and any(message.get('type') in ('reset', 'config') for message in messages if message.get('sequence', 0) > cache['sequence']):
+                changed.add(start_dir)
+        cache['sequence'], cache['catalog'] = sequence, catalog
+        # A changed ancestor covers all its descendants in one incremental walk.
+        branches = [path for path in sorted(changed, key=lambda path: len(path.parts))
+                    if not any(path != parent and path.is_relative_to(parent) for parent in changed)]
+        for branch in branches:
+            prior_directories = {path: signature for path, signature in cache['directories'].items() if path.is_relative_to(branch)}
+            prior_projects = {path for path in cache['projects'] if path.is_relative_to(branch)}
+            for path in list(cache['directories']):
+                if path.is_relative_to(branch):
+                    cache['directories'].pop(path)
+            for project in list(cache['projects']):
+                if project.is_relative_to(branch):
+                    cache['projects'].remove(project)
+            stack = [branch]
+            while stack:
+                current = stack.pop()
+                if not current.is_dir() or is_link(current):
+                    continue
+                signature = self._discovery_stat(current)
+                if current != branch and prior_directories.get(current) == signature:
+                    # A changed parent's new child does not require walking its
+                    # unchanged siblings, including unrelated knowledge trees.
+                    cache['directories'].update({path: value for path, value in prior_directories.items() if path.is_relative_to(current)})
+                    cache['projects'].update(path for path in prior_projects if path.is_relative_to(current))
+                    continue
+                cache['directories'][current] = signature
+                if self._find_spec_file(current) is not None:
+                    cache['projects'].add(current)
+                    continue
+                try:
+                    children = list(current.iterdir())
+                except OSError:
+                    continue
+                stack.extend(child for child in children if not child.name.startswith('.')
+                             and path_key(child.name) not in SKIP_SCAN_DIRS and not is_link(child) and child.is_dir())
+        present = {path.relative_to(root).as_posix() for path in cache['projects']}
+        for key in list(cache['summaries']):
+            if key not in present:
+                cache['summaries'].pop(key)
+        return list(cache['projects']), cache['summaries']
 
     def get_project(self, directory: str, board_id: str | None = None) -> dict[str, Any]:
         root = self.config.root
@@ -297,6 +433,8 @@ class DesignStudio:
             'transforms': transforms_boards,
             'workspace_revision': self.workspace_revision,
         }
+        if summary.get('managed'):
+            result.update(self.documents.read(directory, board_id))
         if board_id is not None:
             result['board_id'] = board_id
             result['board_transforms'] = transforms_boards.get(board_id, {})
@@ -326,6 +464,7 @@ class DesignStudio:
         *,
         workspace_revision: str | None = None,
         merge: bool = False,
+        expected_revision: str | None = None,
     ) -> dict[str, Any]:
         with self.config.lock, self.files.lock:
             self._check_workspace(workspace_revision)
@@ -334,6 +473,24 @@ class DesignStudio:
             proj_dir = self.config.path_for(directory, writable=True) if directory else root
             if not proj_dir.is_dir():
                 raise FileNotFoundError(f'Design project directory not found: {directory}')
+            if (proj_dir / 'Design/studio/project.json').is_file():
+                if not expected_revision:
+                    raise ConflictError('Managed designs require expected_revision; use design_operations')
+                commands = []
+                for node_id, patch in transforms.items():
+                    if not isinstance(patch, dict):
+                        raise ValueError('Use design_operations for structural changes and resets')
+                    style = {k: v for k, v in patch.items() if k in ('x', 'y', 'width', 'height', 'rotate', 'scaleX', 'scaleY', 'opacity', 'zIndex')}
+                    update = {'style': style}
+                    if 'text' in patch:
+                        update['props'] = {'text': patch['text']}
+                    update.update({k: patch[k] for k in ('hidden', 'locked') if k in patch})
+                    if any(k not in ('x', 'y', 'width', 'height', 'rotate', 'scaleX', 'scaleY', 'opacity', 'zIndex', 'text', 'hidden', 'locked') for k in patch):
+                        raise ValueError('Use design_operations for managed layout and flip transforms')
+                    commands.append({'type': 'node.update', 'page_id': board_id, 'node_id': node_id, 'patch': update})
+                import uuid
+                return self.documents.apply(directory, commands, expected_revision, uuid.uuid4().hex,
+                                            label='Update layers', workspace_revision=workspace_revision)
             if not isinstance(board_id, str) or not board_id.strip():
                 raise ValueError('board_id is required')
             if not isinstance(transforms, dict):
@@ -397,15 +554,11 @@ class DesignStudio:
                 changed_paths.append(rel_js)
 
             self.files.changed(*changed_paths)
-            self.runtime.events.publish({
-                'type': 'files',
-                'paths': changed_paths,
-                'design_transforms': {
+            self.runtime.events.publish('files', paths=changed_paths, design_transforms={
                     'directory': directory,
                     'board_id': board_id,
                     'transforms': current_board,
-                },
-            })
+                })
             return {
                 'ok': True,
                 'saved': True,
@@ -416,6 +569,17 @@ class DesignStudio:
                 'layer_count': len(current_board),
                 'workspace_revision': self.workspace_revision,
             }
+
+    def create_managed_project(self, directory, name, *, workspace_revision=None, **options):
+        with self.config.lock, self.files.lock:
+            self._check_workspace(workspace_revision)
+            result = self.create_project(directory, name, workspace_revision=workspace_revision, **options)
+            document = self.documents.create(directory, name, result['project']['width'], result['project']['height'])
+            self.workspace.install_runtime(directory)
+            self.workspace.record_creation(directory)
+            result['project'] = self._project_summary(self.config.path_for(directory), self.config.root)
+            result.update(document)
+            return result
 
     def create_project(
         self,
@@ -712,6 +876,12 @@ class DesignStudio:
         atomic_write(proj_dir / 'README.md', readme_md.encode('utf-8'))
 
     def _write_screens_js(self, path: Path, screens: list[dict], variants: list[dict]) -> None:
+        if path.exists():
+            from vault_rag.design_literals import replace_screen_metadata
+            source = path.read_bytes().decode('utf-8')
+            updated = replace_screen_metadata(source, screens, variants)
+            atomic_write(path, updated.encode('utf-8'))
+            return
         boards = screens + variants
         payload = json.dumps({'screens': screens, 'variants': variants, 'boards': boards}, ensure_ascii=False, indent=2)
         js = (
@@ -1116,6 +1286,7 @@ openBoard(hashMatch ? decodeURIComponent(hashMatch[1]) : screens[0].id, false);
         height: int | None = None,
         html: str | None = None,
         css: str | None = None,
+        expected_revision: str | None = None,
     ) -> dict[str, Any]:
         with self.config.lock, self.files.lock:
             self._check_workspace(workspace_revision)
@@ -1125,6 +1296,25 @@ openBoard(hashMatch ? decodeURIComponent(hashMatch[1]) : screens[0].id, false);
             spec_file = self._find_spec_file(proj_dir)
             if spec_file is None:
                 raise FileNotFoundError(f'No Design/project-spec.json found in {directory}')
+            if (proj_dir / 'Design/studio/project.json').is_file():
+                import uuid
+                value = self.documents.read(directory)
+                page = next((p for p in value['document']['pages'] if p['id'] == screen_id), None)
+                patch = {'name': name, 'group': group}
+                if width is not None: patch['width'] = width
+                if height is not None: patch['height'] = height
+                if css is not None: patch['css'] = css
+                if page:
+                    commands = [{'type': 'page.update', 'page_id': screen_id, 'patch': patch}]
+                    if html is not None:
+                        raise ValueError('Use design_operations to replace existing page elements')
+                else:
+                    patch.update(id=screen_id, nodes=[])
+                    if html is not None:
+                        patch['nodes'].append({'id': uuid.uuid4().hex, 'name': name, 'type': 'html', 'props': {'html': html, 'css': css or ''}, 'style': {'x': 0, 'y': 0, 'width': width or 720, 'height': height or 1560}, 'children': []})
+                    commands = [{'type': 'page.create', 'page': patch}]
+                return self.documents.apply(directory, commands, expected_revision, uuid.uuid4().hex,
+                                            label='Update page' if page else 'Create page', workspace_revision=workspace_revision)
 
             sid = _slug(screen_id or name, fallback='screen')
             sname = (name or sid).strip()
@@ -1142,6 +1332,22 @@ openBoard(hashMatch ? decodeURIComponent(hashMatch[1]) : screens[0].id, false);
             h = int(height or default_h)
 
             existing = next((s for s in screens if s.get('id') == sid), None)
+            if existing is None or html is not None:
+                # An older authored renderer may switch only on its original
+                # screen kinds. Writing metadata/custom HTML would then create
+                # a page it cannot display. Reject before history or user files
+                # change; conversion keeps this source intact and gives the new
+                # managed runtime the complete structural editing capability.
+                runtime_path = screens_path.parent / 'artboards.js'
+                self.config.path_for(runtime_path.relative_to(root).as_posix())
+                supports_custom = False
+                if runtime_path.is_file():
+                    from vault_rag.design_literals import tokens
+                    runtime_tokens = tokens(runtime_path.read_text(encoding='utf-8'))
+                    supports_custom = any(value == 'CUSTOM_ARTBOARDS' and index + 1 < len(runtime_tokens) and runtime_tokens[index + 1][0] == '['
+                                          for index, (value, _, _) in enumerate(runtime_tokens))
+                if not supports_custom:
+                    raise ValueError('Convert this legacy project to a managed copy before adding custom pages or overriding HTML; its renderer does not support custom pages')
             if existing is not None:
                 existing['name'] = sname
                 existing['group'] = group or existing.get('group', '核心页面')
@@ -1231,7 +1437,7 @@ openBoard(hashMatch ? decodeURIComponent(hashMatch[1]) : screens[0].id, false);
                 changed_paths.append(css_path.relative_to(root).as_posix())
 
             self.files.changed(*changed_paths)
-            self.runtime.events.publish({'type': 'files', 'paths': changed_paths})
+            self.runtime.events.publish('files', paths=changed_paths)
             return {
                 'ok': True,
                 'directory': directory,

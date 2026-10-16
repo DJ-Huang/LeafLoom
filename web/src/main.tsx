@@ -18,7 +18,7 @@ import {setLocale} from './i18n';
 import {Logo} from './brand';
 import {StorageMigrationNotice} from './storage-migration';
 import {HtmlPreview} from './html-preview';
-import {DesignStudio} from './design-studio';
+const DesignStudio=lazy(()=>import('./design-studio').then(module=>({default:module.DesignStudio})));
 
 let documentModule:Promise<typeof import('./document')>|undefined;
 function DocumentPane(props:React.ComponentProps<typeof import('./document')['DocumentPane']>){
@@ -149,7 +149,7 @@ function App(){
    <div className="workspace-topbar"><button className="icon-button sidebar-toggle" aria-label={t("切换导航")} aria-controls="workspace-sidebar" aria-expanded={narrow?mobileOpen:!preferences.sidebarCollapsed} onClick={toggleSidebar}><PanelLeft size={17}/></button><PathNavigation view={view} path={view==='document'?active:currentFolder} onFolder={showFolder}/><button className="ai-open-button" aria-expanded={aiOpen} onClick={()=>setAiOpen(value=>!value)}><MessageSquare size={15}/>{t("AI 对话")}</button></div>
    {view==='home'&&<Dashboard config={config} recent={preferences.recent} onOpen={openFile} onCreate={()=>newFile('file')} onKnowledge={showKnowledge} onDaily={()=>void daily()} onDesign={()=>showDesign()} guideContent={<GettingStarted guide={guide} onGuide={saveGuide} onAction={action=>{if(action==='create')newFile('file');else if(action==='search'||action==='source')showKnowledge();else if(action==='graph')showGraph();else if(action==='ai'){setAiOpen(true);setAiVisited(true);}else if(config.homepage)openFile(config.homepage);else showFolder('');}}/>}/>}
    {view==='web'&&<HtmlPreview path="" root={config.root} active/>}
-   {view==='design'&&<DesignStudio root={config.root} active={view==='design'} initialFolder={currentFolder} createInFolder={designCreateFolder} onClearCreateInFolder={()=>setDesignCreateFolder(undefined)} onOpenNote={openFile} onOpenFolder={showFolder} notify={notify} refresh={refresh}/>}
+   {view==='design'&&<LazyBoundary><Suspense fallback={<p className="pad subtle">{t('正在加载设计工作台画板…')}</p>}><DesignStudio root={config.root} active={view==='design'} initialFolder={currentFolder} createInFolder={designCreateFolder} onClearCreateInFolder={()=>setDesignCreateFolder(undefined)} onOpenNote={openFile} onOpenFolder={showFolder} notify={notify} refresh={refresh}/></Suspense></LazyBoundary>}
    {view==='folder'&&<FolderView key={config.root+'\n'+currentFolder} path={currentFolder} onOpen={openFile} onFolder={showFolder} onCreate={()=>newFile('file')} onCreateDesign={folder=>showDesign(folder)} refresh={refresh} manage={manage}/>}
    {knowledgeVisited&&<LazyBoundary><Suspense fallback={view==='knowledge'?<p className="pad subtle">{t("正在打开知识检索…")}</p>:null}><KnowledgeSearch key={config.root} active={view==='knowledge'} revision={config.revision} onOpen={path=>{setBackToKnowledge(true);setBackToGraph(false);void open(path);}} onSettings={()=>openSettings({section:'index',targetId:'scope'})}/></Suspense></LazyBoundary>}
    {graphVisited&&<LazyBoundary><Suspense fallback={view==='graph'?<p className="pad subtle">{t("正在打开关系图谱…")}</p>:null}><GraphPage key={config.root} path={active} active={view==='graph'} onOpen={path=>{setBackToKnowledge(false);setBackToGraph(true);void open(path);}}/></Suspense></LazyBoundary>}

@@ -4,13 +4,17 @@
 
 ## Unreleased
 
+- Show a restart diagnostic when a newer project homepage meets an older backend. Disable management actions until workspace state loads, expose retry, and prevent delete from silently doing nothing.
+
 - Add English, Chinese and Japanese About pages with the creator’s GitHub and X profiles, linked from website navigation and footers.
 
 - Keep the latest available stable Windows and Mac website downloads independently, with matching versions, release notes and checksums. Allow `v*` tags in the Pages environment so Release events can deploy automatically.
 
-- Add the built-in Design Studio workspace to create 1.1.0 design projects directly inside any connected vault directory, manage screens and edit layers with Figma-style canvas gizmos, smart guides, inspector controls, `Design/layer-transforms.json` persistence, dual-mode PNG/SVG/asset export and AI layer references.
+- Expand Design Studio into a visual HTML game-screen workbench: project home and recycle bin, asset metadata/replacement, reusable components and embedded pages, versioned personal shared libraries, and standalone ZIP export. Keep legacy 1.1.0 projects and convert authored DOM/CSS into a separate copy, adapting recognized navigation, switches and context-dependent page states; original scripts remain in the copied source and other runtime behavior needs new scripts.
 
-- Expand the combined HTTP MCP surface to 34 tools: 23 note tools, six Design Studio tools and five optional Feishu tools, retaining independent note and Feishu permissions.
+- Share durable transaction undo/redo across pages, source edits, assets and directly applied AI batches, including after restart. Add version checks, idempotent retries, pending-save recovery and external-change protection. Offer animation presets and per-element/page `mount(ctx)` scripts with editable parameters, isolated preview, tracked cleanup and console/error attribution. Canvas gestures update selected nodes per frame and commit once; real-project and pressure-test budgets remain explicit acceptance targets.
+
+- Expand the combined HTTP MCP surface to 42 tools: 23 note tools, 14 Design Studio tools and five optional Feishu tools, retaining independent note and Feishu permissions. Refresh client tools after updating; managed designs use document, operation, history, asset, shared-library and export interfaces.
 
 ## 0.1.2 — 2026-10-16
 

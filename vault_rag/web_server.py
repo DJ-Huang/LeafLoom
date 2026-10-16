@@ -82,6 +82,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     app.state.design=design
     app.state.local_dns=local_dns
     app.include_router(ai_router(ai))
+    from vault_rag.design_routes import design_router
+    app.include_router(design_router(design))
     @app.middleware('http')
     async def local_security(request,call_next):
         host=request.headers.get('host','')
@@ -260,8 +262,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         websites.release(sid)
         return {'released':True}
     @app.get('/api/design/projects')
-    async def design_projects(folder:str='',path:str=''):
-        return json_response(await asyncio.to_thread(design.list_projects,folder,path))
+    async def design_projects(folder:str='',path:str='',current_path:str=''):
+        return json_response(await asyncio.to_thread(design.list_projects,folder,current_path or path))
     @app.get('/api/design/project')
     async def design_project_detail(directory:str,board_id:str|None=None):
         return json_response(await asyncio.to_thread(design.get_project,directory,board_id))
@@ -270,19 +272,20 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         body=await request.json()
         if not isinstance(body,dict) or not isinstance(body.get('directory'),str) or not isinstance(body.get('name'),str):
             raise ValueError('创建设计项目需要指定存放目录与项目名称')
-        return json_response(await asyncio.to_thread(
-            design.create_project,
-            body['directory'],
-            body['name'],
-            workspace_revision=body.get('workspace_revision'),
-            project_id=body.get('project_id'),
-            preset=body.get('preset','mobile-portrait'),
-            width=body.get('width'),
-            height=body.get('height'),
-            orientation=body.get('orientation',''),
-            platforms=body.get('platforms'),
-            initial_screens=body.get('initial_screens'),
-        ))
+        if body.get('managed') and body.get('root') != str(config.root):
+            raise ConflictError('Connected folder changed; reopen Design Studio')
+        def create():
+            with config.lock:
+                if body.get('managed') and body.get('root') != str(config.root):
+                    raise ConflictError('Connected folder changed; reopen Design Studio')
+                operation = design.create_managed_project if body.get('managed') else design.create_project
+                return operation(body['directory'], body['name'],
+                    workspace_revision=body.get('workspace_revision',design.workspace_revision) if body.get('managed') else body.get('workspace_revision'),
+                    project_id=body.get('project_id'), preset=body.get('preset','mobile-portrait'),
+                    width=body.get('width'), height=body.get('height'), orientation=body.get('orientation',''),
+                    platforms=body.get('platforms'), initial_screens=body.get('initial_screens'))
+        result = await asyncio.to_thread(create)
+        return json_response(result)
     @app.post('/api/design/projects/screens')
     async def upsert_design_screen(request:Request):
         body=await request.json()
@@ -300,6 +303,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
             height=body.get('height'),
             html=body.get('html'),
             css=body.get('css'),
+            expected_revision=body.get('expected_revision'),
         ))
     @app.get('/api/design/projects/transforms')
     async def read_design_transforms(directory:str,board_id:str=''):
@@ -316,6 +320,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
             body['transforms'],
             workspace_revision=body.get('workspace_revision'),
             merge=bool(body.get('merge',False)),
+            expected_revision=body.get('expected_revision'),
         ))
     @app.post('/api/design/projects/check')
     async def check_design_project(request:Request):

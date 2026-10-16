@@ -267,13 +267,14 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         orientation: str = '',
         platforms: list[str] | None = None,
         initial_screens: list[dict[str, Any]] | None = None,
+        managed: bool = False,
     ) -> CallToolResult:
         """Create a complete 1.1.0 Design Studio project at a chosen vault directory with Figma-like layer editing,
         artboards, manifest, and offline-compatible runtime. Never overwrites an existing design project.
         """
         return await call(
             ctx,
-            design.create_project,
+            design.create_managed_project if managed else design.create_project,
             directory,
             name,
             workspace_revision=workspace_revision,
@@ -300,6 +301,7 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         height: int | None = None,
         html: str | None = None,
         css: str | None = None,
+        expected_revision: str | None = None,
     ) -> CallToolResult:
         """Add or update an artboard/screen in a Design Studio project, updating screens.js, project-spec.json,
         and optional custom layered HTML/CSS. Prior versions are preserved in history.
@@ -317,6 +319,7 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
             height=height,
             html=html,
             css=css,
+            expected_revision=expected_revision,
             write=True,
         )
 
@@ -328,6 +331,7 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         workspace_revision: str,
         ctx: Context,
         merge: bool = True,
+        expected_revision: str | None = None,
     ) -> CallToolResult:
         """Batch-update or reset Figma-like layer transforms and overrides (tx, ty, x, y, width, height,
         scaleX, scaleY, rotate, flipX, flipY, opacity, zIndex, text) for a board in Design/layer-transforms.json.
@@ -341,6 +345,7 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
             layers,
             workspace_revision=workspace_revision,
             merge=merge,
+            expected_revision=expected_revision,
             write=True,
         )
 
@@ -350,6 +355,84 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         and layer transforms) and return a structured report.
         """
         return await call(ctx, design.check_project, directory)
+
+    @tool()
+    async def design_document(directory: str, ctx: Context, page_id: str | None = None, manifest: bool = False) -> CallToolResult:
+        """Read a managed design's stable pages, elements, components, assets, scripts and current revision.
+        Use manifest=true for page summaries, then page_id for a selected page. Retain revision and workspace_revision.
+        """
+        return await call(ctx, design.documents.manifest if manifest else design.documents.read, directory,
+                          **({} if manifest else {'page_id': page_id}))
+
+    @tool(write=True)
+    async def design_operations(directory: str, commands: list[dict[str, Any]], expected_revision: str,
+                                operation_id: str, workspace_revision: str, ctx: Context, label: str = '') -> CallToolResult:
+        """Apply one atomic, undoable design instruction. Commands use type and stable IDs: page.create/update/delete/duplicate/move,
+        node.create/update/replace/delete/duplicate/move/group/ungroup, component.create/update/delete/detach,
+        asset.update/delete/replace, style.create/update/delete, script.create/update/delete, project.update.
+        node.create: {page_id,parent_id?,node}; node.update: {page_id,node_id,patch}.
+        Node {id,type,name,children,style:{x,y,width,height,...CSS},props:{text,assetId,pageId,componentId,html,css},
+        script:{source:'export function mount(ctx){return ()=>{}}',props,parameters},animation:{preset,trigger,duration,delay,iterations,easing}}.
+        Script ctx includes el, props, state, find, on, onEvent, emit, animate, timers, assets, navigation and overlays.
+        All commands in one call are one undo step. A stale revision saves nothing; re-read and merge. Reuse operation_id only to retry identical requests.
+        """
+        return await call(ctx, design.documents.apply, directory, commands, expected_revision, operation_id,
+                          label=label, workspace_revision=workspace_revision, write=True)
+
+    @tool(write=True)
+    async def design_history(directory: str, action: Literal['list', 'undo', 'redo'], workspace_revision: str,
+                             ctx: Context, expected_revision: str | None = None, operation_id: str | None = None,
+                             offset: int = 0, limit: int = 50) -> CallToolResult:
+        """Read persistent operation history or undo/redo a project transaction. Undo/redo require current expected_revision and unique operation_id.
+        History survives page switches, application restart and project relocation.
+        """
+        def run():
+            design._check_workspace(workspace_revision)
+            return design.documents.history(directory, action, expected_revision, operation_id, offset, limit)
+        return await call(ctx, run, write=True)
+
+    @tool(write=True, additive=True)
+    async def design_import_asset(directory: str, name: str, data_base64: str, expected_revision: str,
+                                  operation_id: str, workspace_revision: str, ctx: Context, mime: str = '') -> CallToolResult:
+        """Import original asset bytes as base64 into a managed project, recording metadata and one undoable library insertion.
+        Undo removes the asset registration; original bytes remain available for redo.
+        """
+        def run():
+            design._check_workspace(workspace_revision)
+            return design.documents.import_asset(directory, name, data_base64, expected_revision, operation_id, mime)
+        return await call(ctx, run, write=True)
+
+    @tool()
+    async def design_library(ctx: Context) -> CallToolResult:
+        """List published personal shared-library items and available versions."""
+        return await call(ctx, design.workspace.library)
+
+    @tool(write=True, additive=True)
+    async def design_publish_library(directory: str, kind: Literal['component','asset','style','script'], item_id: str,
+                                     workspace_revision: str, ctx: Context, expected_workspace_revision: str | None = None,
+                                     operation_id: str | None = None) -> CallToolResult:
+        """Publish a versioned project component, asset, style or script to the personal shared library."""
+        def run():
+            design._check_workspace(workspace_revision)
+            return design.workspace.publish(directory, kind, item_id, expected_workspace_revision, operation_id)
+        return await call(ctx, run, write=True)
+
+    @tool(write=True, additive=True)
+    async def design_import_library(directory: str, item_id: str, expected_revision: str, operation_id: str,
+                                    workspace_revision: str, ctx: Context, version: int | None = None) -> CallToolResult:
+        """Import or explicitly update a shared item and its dependencies. Resources are copied into the project for offline export."""
+        def run():
+            design._check_workspace(workspace_revision)
+            return design.workspace.import_library(directory, item_id, expected_revision, operation_id, version)
+        return await call(ctx, run, write=True)
+
+    @tool(write=True, additive=True)
+    async def design_export(directory: str, workspace_revision: str, ctx: Context) -> CallToolResult:
+        """Export an independent ZIP containing HTML, assets, scripts, dependencies and the preview runtime."""
+        def run():
+            design._check_workspace(workspace_revision)
+            return design.workspace.export(directory)
+        return await call(ctx, run, write=True)
 
     if feishu is not None:
         async def feishu_call(ctx, operation, *, write=False):

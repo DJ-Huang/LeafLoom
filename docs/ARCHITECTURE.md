@@ -10,7 +10,7 @@ Dev 和安装版共用 Tunnel 配置、应用启动／退出生命周期；存�
 
 源码桌面开发通过 `Dev.cmd`（Windows）、`Dev.command` / `sh Dev.sh`（Mac）或 `node scripts/dev-desktop.cjs` 启动：Dev 与安装版通过 `desktop/state-home.cjs` 共用同一用户数据目录、配置、模型、凭据与桌面 profile；后端沿用共享配置中的端口（新配置默认 18080），仅开发 Python 环境位于 `.cache/desktop-dev/.venv`，Vite 使用 5173。仅未打包桌面端显式传入开发地址时，`dev_frontend.py` 才从 Vite 获取入口和模块，保留原有工作区域名、API 认证与 HTML 项目隔离；前端通过本机 WebSocket 自动更新。生产桌面端移除该开发变量，普通服务不隐式读取它。详见[桌面开发](DESKTOP.md#source-development)。
 
-生产 MCP 注册位于 `mcp_tools.py`，完整笔记工作流位于 `note_operations.py`，设计项目与图层工作流位于 `design_studio.py`，与网页共用 `Files` 的保存、历史、回收区和移动事务；网页模板、日记与设计工作台也复用该工作流。`mcp_access.py` 在私有配置保存本机凭据哈希与独立权限，Tunnel 凭据只驻留后端内存并通过环境引用注入运行时的发现及调用请求。旧五项只读工具与 `/ai-mcp` 保持原有范围（`/ai-mcp` 同时支持只读查看设计项目与提出图层变换草稿）；完整访问须显式启用，两个连接的写入分别授权。工具、分页、版本与错误契约见 [MCP](MCP.md)。
+生产 MCP 注册位于 `mcp_tools.py`，完整笔记工作流位于 `note_operations.py`，设计项目与图层工作流位于 `design_studio.py`，与网页共用 `Files` 的访问边界；受管设计文档使用独立的版本事务与持久历史。网页模板和日记复用笔记工作流。`mcp_access.py` 在私有配置保存本机凭据哈希与独立权限，Tunnel 凭据只驻留后端内存并通过环境引用注入运行时的发现及调用请求。旧五项只读工具保持原有范围；内部 `/ai-mcp` 允许读取设计项目，但只有用户在当前对话附加的设计项目可以直接应用设计事务。完整 MCP 访问须显式启用，两个连接的写入分别授权。工具、分页、版本与错误契约见 [MCP](MCP.md)。
 
 - 网页入口：`http://127.0.0.1:18080/`；浏览器迁移到 `http://app.<installation-id>.localhost:18080/`，端口跟随配置。
 
@@ -56,6 +56,14 @@ BGE-M3 使用本地已准备的权重；macOS 优先 MPS 并可回退 CPU，Wind
 前端入口不包含编辑器、图谱、Mermaid、KaTeX 或 Base。请求按服务实例、根目录、配置版本和路径隔离，合并同一读取，最后消费者离开时取消；仅读取允许重试。正文 LRU 上限 64 条或 32 MiB，不写入浏览器持久缓存。草稿和阅读状态另行保存，最多驻留三个文档，HTML/PDF 仅当前标签驻留。Markdown 正文初始解析在文本估算大小超过 256 KiB 时使用 Worker；源码编辑器与其他预览内容按各自模块加载。超过两百项的目录、列表、表格和任务视图使用 TanStack Virtual。
 
 哈希命名的静态资源 immutable 一年，入口与会话 no-store。知识素材 private/no-cache，校验根目录与权限后处理 ETag/304、视频 Range；媒体 ETag 包含根目录与配置版本。HTML 快照正文 no-store，配套资源可条件校验，失效地址即使携带旧 ETag 也不能得到 304。
+
+## Design Studio 编辑模型
+
+`design_documents.py` 以项目内 `Design/studio/project.json` 为编辑真源，保存具有稳定 ID 的页面、元素、素材、组件、样式与脚本。网页、公共 MCP 和内置 AI 共用同一批量命令及版本校验；一次指令作为一个事务，旧版 `design_studio.py` 接口保留兼容适配。项目私有 `.vault-rag/design-studio/<id>/history.sqlite3` 保存正反差量、请求回执、周期检查点与未完成提交，衔接 SQLite 与 JSON 原子替换；恢复与撤销遇到外部修改时保留冲突数据，不覆盖新内容。
+
+`design_workspace.py` 管理项目组织、移动与回收、版本共享库和独立 ZIP 导出，工作区管理历史与项目编辑历史分离；项目管理中的显示名称用于工作台、复制和导出。跨项目组件导入将闭包依赖及二进制资源落盘，显式选择版本更新。`design_references.py` 静态识别声明式引用、原生资源路径和受支持的脚本字面量调用，供素材保护、替换、引用展示及共享库闭包收集复用，不执行项目代码。迁移先复制旧项目，再由隔离来源捕获原生 DOM/CSS；原脚本保留在副本源码，任意动态行为不自动转译。
+
+`design_routes.py` 提供网页接口；React `design-workbench` 按需加载，串行保存并保留待处理指令及源码草稿。页面投影只传输活动页面和递归嵌入依赖，其他页面保留摘要；引用索引按版本缓存，避免丢失未加载页面的素材使用位置。素材列表虚拟化，缩略图在 Worker 中以有界队列生成。项目来源的 `design_assets/studio/runtime` 接收经过来源、父窗口与会话校验的文档，按活动页面渲染，命名空间隔离嵌入内容。拖动只在帧内更新选中节点，结束提交一次操作；同页简单修改增量应用到已有 DOM。编辑状态暂停脚本，预览通过 `mount(ctx)` 提供受跟踪事件、计时器、动画、消息和页面导航，停止时清理并从设计文档重建。导出复用同一渲染器，包含素材与本地脚本依赖。数据契约、运行限制和验收目标见 [Design Studio](DESIGN_STUDIO.md)。
 
 ## Markdown 编辑与原文保存
 

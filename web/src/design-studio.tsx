@@ -5,6 +5,9 @@ import {api,Change,OpenNote} from './api';
 import {Modal} from './ui';
 import {DirectoryTree} from './tree';
 import {addAiReference} from './ai-context';
+import {DesignWorkbench} from './design-workbench';
+import {DesignProjects} from './design-projects';
+import './design-projects.css';
 
 export type DesignScreenSummary={
  id:string;
@@ -16,6 +19,8 @@ export type DesignScreenSummary={
 };
 
 export type DesignProjectSummary={
+ managed?:boolean;
+ cover?:string;
  id:string;
  name:string;
  directory:string;
@@ -99,6 +104,7 @@ export function DesignStudio({
  const [frameBusy,setFrameBusy]=useState(false);
  const [revision,setRevision]=useState(0);
  const [full,setFull]=useState(false);
+ const [showHome,setShowHome]=useState(true);
 
  // Live canvas state from layer_review.js
  const [activeBoardId,setActiveBoardId]=useState<string>('');
@@ -155,7 +161,7 @@ export function DesignStudio({
 
  useEffect(()=>{
   if(active)void loadProjects();
- },[active,root,refresh]);
+ },[active,root,refresh,showHome]);
 
  // Open Create Modal when triggered from FolderView or Sidebar tree ("在此新建设计项目")
  useEffect(()=>{
@@ -172,7 +178,7 @@ export function DesignStudio({
  // Start HTML viewer session for the selected design project
  const projectTransformsRef=useRef<Record<string,Record<string,any>>>({});
  useEffect(()=>{
-  if(!active||!selectedProject)return;
+  if(!active||!selectedProject||selectedProject.managed||showHome)return;
   let alive=true,created:WebSession|null=null;
   setFrameBusy(true);setError('');setSession(null);
   setSelectedLayer(null);setActiveBoardId('');setDirty(false);
@@ -206,7 +212,7 @@ export function DesignStudio({
    alive=false;currentSession.current=null;
    if(created?.id)void api('html-sessions/'+created.id,undefined,'DELETE').catch(()=>{});
   };
- },[active,root,selectedProject?.directory,selectedProject?.entry,selectedProject?.html_project_id,revision]);
+ },[active,root,selectedProject?.directory,selectedProject?.entry,selectedProject?.html_project_id,revision,showHome]);
 
  const saveTransformsNow=useCallback(async(boardId:string,transforms:Record<string,any>,silent=false)=>{
   if(!selectedProject||!boardId)return;
@@ -246,6 +252,7 @@ export function DesignStudio({
   }
   addAiReference({
    root,
+   kind:'design',label:selectedProject.name+' / '+layer.name,
    path:selectedProject.spec_path,
    text:lines.join('\n'),
   });
@@ -355,6 +362,7 @@ export function DesignStudio({
   setCreating(true);setCreateError('');
   try{
    const res=await api<{project:DesignProjectSummary}>('design/projects',{
+    root,managed:true,
     directory:targetDirectory,
     name:projectName.trim()||folderSlug.trim()||targetDirectory.split('/').pop(),
     preset,
@@ -365,6 +373,7 @@ export function DesignStudio({
    notify(t('已创建设计项目：')+res.project.name);
    await loadProjects(res.project.directory);
    setSelectedDir(res.project.directory);
+   setShowHome(false);
    setRevision(n=>n+1);
   }catch(e){
    setCreateError((e as Error).message);
@@ -420,9 +429,10 @@ export function DesignStudio({
  })();
 
  return <section className={'design-studio'+(full?' design-studio-full':'')} hidden={!active} aria-label={t('设计工作台')}>
-  <div className="design-studio-toolbar">
+  {!showHome&&<div className="design-studio-toolbar">
    <div className="design-studio-left">
     <span className="design-badge"><Palette size={15}/>{t('设计工作台')}</span>
+    <button onClick={()=>setShowHome(true)}><Folder size={15}/>{t('所有项目')}</button>
     {projects.length>0&&(
      <select
       className="design-project-select"
@@ -432,7 +442,7 @@ export function DesignStudio({
      >
       {projects.map(p=>(
        <option key={p.directory} value={p.directory}>
-        {p.name} ({p.directory||'/'} · {p.board_count} {t('画板')})
+        {p.name} ({p.directory||'/'})
        </option>
       ))}
      </select>
@@ -440,14 +450,14 @@ export function DesignStudio({
     <button type="button" className="primary" onClick={()=>{setParentFolder(initialFolder||'');setFolderSlug('NewDesignProject');setProjectName('');setCreateError('');setCreateOpen(true);}}>
      <Plus size={15}/>{t('新建设计项目')}
     </button>
-    {selectedProject&&(
-     <button type="button" onClick={()=>{setScreenId('');setScreenName('');setScreenCaption('');setScreenError('');setScreenModalOpen(true);}}>
-      <Layers size={15}/>{t('新增画板')}
+    {selectedProject&&!selectedProject.managed&&(
+     <button type="button" onClick={()=>setShowHome(true)}>
+      <Layers size={15}/>{t('转换为可视化副本')}
      </button>
     )}
    </div>
 
-   {selectedProject&&(
+   {selectedProject&&!selectedProject.managed&&(
     <div className="design-studio-actions">
      <button
       type="button"
@@ -487,16 +497,19 @@ export function DesignStudio({
      </button>
     </div>
    )}
-  </div>
+  </div>}
 
-  {(frameBusy||error)&&(
+  {showHome&&<DesignProjects root={root} projects={projects} onOpen={directory=>{setSelectedDir(directory);setShowHome(false);}} onCreate={()=>{setParentFolder(initialFolder||'');setFolderSlug('NewDesignProject');setProjectName('');setCreateError('');setCreateOpen(true);}} reload={()=>loadProjects()} notify={notify}/>}
+  {!showHome&&selectedProject?.managed&&<DesignWorkbench key={root+'::'+selectedProject.directory} root={root} directory={selectedProject.directory} displayName={selectedProject.name} notify={notify} onBack={()=>setShowHome(true)} onOpenNote={onOpenNote}/>}
+
+  {!showHome&&!selectedProject?.managed&&(frameBusy||error)&&(
    <div className={'html-preview-message'+(error?' error':'')} role={error?'alert':'status'}>
     {error?<Diagnostic message={error}/>:t('正在加载设计工作台画板…')}
     {error&&<button onClick={()=>setRevision(n=>n+1)}>{t('重试')}</button>}
    </div>
   )}
 
-  {!loading&&projects.length===0&&!error&&(
+  {!showHome&&!loading&&projects.length===0&&!error&&(
    <div className="empty-state">
     <Palette size={38}/>
     <h2>{t('在知识库中开启类 Figma 网页与 UI 设计')}</h2>
@@ -507,7 +520,7 @@ export function DesignStudio({
    </div>
   )}
 
-  {selectedProject&&session&&(
+  {!showHome&&!selectedProject?.managed&&selectedProject&&session&&(
    <iframe
     key={session.url}
     ref={frame}

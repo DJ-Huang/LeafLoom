@@ -25,6 +25,7 @@ Your files and search indexes live on your computer. Browse, write and search lo
 | **A knowledge base that grows with you** | Organize notes, research and project docs into a personal wiki with bidirectional links, backlinks, templates and a knowledge graph. |
 | **Privacy you control** | Keep files and indexes on your own computer. Choose exactly which folders enter search; no hosted knowledge base is required. |
 | **Markdown + HTML** | Write Markdown with tables and tasks, and open local HTML pages with their styles, images and supported scripts inside the same workspace. |
+| **Game screens you can edit** | Use [Design Studio](docs/DESIGN_STUDIO.md) to organize projects and assets, combine reusable pages/components, add scripts and animation, undo human or AI edits, and export portable HTML. |
 | **Answers you can trace** | Use keyword search, Wiki navigation and optional local BGE-M3 semantic retrieval. Follow results back to the original notes. |
 | **AI in your workflow** | Connect MCP clients, install the bundled `wiki-search` Skill, or use AI Chat beside your notes. The built-in chat previews edits; authorized MCP clients can save directly with history. |
 | **Your knowledge in ChatGPT** | Connect the desktop app through its built-in Tunnel client to search and read local notes from a ChatGPT conversation. |

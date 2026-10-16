@@ -42,13 +42,15 @@ Markdown/TXT; neither full access nor saving a note expands that selection.
 | Markdown relationships | `vault_links`, `vault_graph` |
 | Templates and diary | `vault_list_templates`, `vault_daily_note` |
 | Design Studio | `design_list_projects`, `design_get_project`, `design_create_project`, `design_upsert_screen`, `design_update_layers`, `design_check_project` |
+| Managed design editing | `design_document`, `design_operations`, `design_history`, `design_import_asset` |
+| Shared design library and export | `design_library`, `design_publish_library`, `design_import_library`, `design_export` |
 | Synchronize | `vault_reindex` |
 | Feishu account | `feishu_status` |
 | Feishu command discovery | `feishu_cli_inspect` |
 | Feishu business commands | `feishu_cli_read`, `feishu_cli_write` |
 | Feishu temporary files | `feishu_files` |
 
-The current surface contains 34 tools: the original 23 note tools, six Design Studio
+The current surface contains 42 tools: the original 23 note tools, 14 Design Studio
 tools and five optional Feishu tools. Configure the external CLI in **Settings → AI connections → Feishu / Lark**,
 then grant Feishu reading/writing independently for local and Tunnel connections.
 These scopes share each connection's dedicated credential; disabling note access does
@@ -72,6 +74,32 @@ creates or updates screen HTML artboards and rebuilds the portal; `design_update
 merges or replaces `Design/layer-transforms.json` and `Design/layer-transforms.js`
 using `workspace_revision`; and `design_check_project` runs structural and
 layer-review validation.
+
+New managed projects use `Design/studio/project.json`. `design_document` returns
+stable page/element IDs, components, assets, styles, scripts, the project revision
+and `workspace_revision`; `manifest=true` reads page summaries and `page_id`
+reads one page. `design_operations` requires the current `expected_revision`,
+`workspace_revision` and a unique `operation_id`. Its `type`-discriminated batch
+is one atomic undo step. It edits page/node structure, layout, text, asset
+references, components, scripts and animation settings. Identical request retries
+reuse their receipt; stale versions and conflicting operation IDs save nothing.
+
+`design_history` pages persistent history or executes versioned undo/redo;
+`design_import_asset` accepts original bytes as base64 and retains those bytes
+when registration is undone. `design_library` lists published personal items;
+`design_publish_library` publishes a versioned component/asset/style/script and
+`design_import_library` explicitly imports or updates it with local dependency
+copies. `design_export` creates an independent HTML ZIP. Reading requires full
+note access; modifying tools use the connection's separate note-write grant.
+The legacy tools remain compatible, with managed-project adapters preserving
+version checks and transaction history.
+
+The built-in assistant's `/ai-mcp` exposes `design_document` and
+`design_operations` too: managed design operations apply directly and remain
+undoable. Existing note-edit proposals keep their workflow. Send stable selection
+IDs and read revisions before each batch; on conflict, re-read and merge rather
+than overwriting new content. See [Design Studio](DESIGN_STUDIO.md) for the full
+document, command and `mount(ctx)` script API, export boundaries and validation.
 
 Lists and operation impact previews default to 50 results (maximum 200) and return `next_cursor`.
 Record previews use `path_limit`/`path_cursor` for affected paths and `offset`/`limit` for text. Cursors are

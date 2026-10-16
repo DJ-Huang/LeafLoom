@@ -60,6 +60,29 @@ def ai_mcp_server(ai, design=None):
             conversation(ctx)
             return json.dumps(design.save_transforms(directory, board_id, layers, merge=merge), ensure_ascii=False, default=str)
 
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False))
+        def design_document(directory: str, ctx: Context, page_id: str | None = None, manifest: bool = False) -> str:
+            """Read managed design pages/elements/assets/components/scripts and revision. Use stable IDs in design_operations."""
+            conversation(ctx)
+            return json.dumps(design.documents.manifest(directory) if manifest else design.documents.read(directory, page_id), ensure_ascii=False)
+
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False))
+        def design_operations(directory: str, commands: list[dict], expected_revision: str, operation_id: str,
+                              workspace_revision: str, ctx: Context, label: str = '') -> str:
+            """Apply one directly undoable AI instruction. Commands type page.create/update/delete, node.create/update/replace/delete/move,
+            component.create/update/detach, asset.update/replace, project.update. node.update uses {page_id,node_id,patch}.
+            Nodes support script:{source:'export function mount(ctx){...}',props,parameters} and animation:{preset,trigger,duration,delay,iterations,easing}.
+            ctx provides el,props,state,find,on,onEvent,emit,animate,timers,assets,navigate and overlays. Retain expected_revision; stale writes save nothing.
+            """
+            current = conversation(ctx)
+            turn = ai.rows('SELECT references_json FROM turns WHERE id=?', (ai.active_turns.get(current['id'], ''),))
+            references = json.loads(turn[0]['references_json']) if turn else []
+            from vault_rag.local_state import relative
+            if not any(ref.get('kind') == 'design' and ref.get('directory') == relative(directory) for ref in references):
+                raise ValueError('Attach this Design Studio project before applying AI edits')
+            return json.dumps(design.documents.apply(directory, commands, expected_revision, operation_id,
+                                                      label=label, workspace_revision=workspace_revision), ensure_ascii=False)
+
     return server
 
 

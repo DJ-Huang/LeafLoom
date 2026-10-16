@@ -96,6 +96,8 @@ class HtmlProjects:
                 raise ValueError('网页项目不存在')
             project = {'id': previous['id'] if previous else secrets.token_hex(16), 'vault': root,
                        'directory': directory, 'entry': entry, 'spa': spa}
+            if previous == project:
+                return project
             updated = [p for p in self.projects if p['id'] != project['id']] + [project]
             atomic_write(self.registry_file, json.dumps(updated, ensure_ascii=False).encode())
             self.projects = updated
@@ -200,6 +202,12 @@ class HtmlProjects:
                        request.headers.get('origin') == origin or referred)
         sid = request.query_params.get('session')
         capability = path in {INTERNAL + name for name in ('viewer', 'viewer.js', 'status')} and any(s['id'] == sid for s in candidates)
+        # Managed editor entrypoints carry the same narrow per-session proof as
+        # the ordinary viewer. This also works when Safari partitions cookies.
+        managed_capability = any(s['id'] == sid and s['entry'] in ('Design/studio/runtime.html', 'Design/studio/capture.html') and
+                                 (path == '/' + s['entry'] or re.fullmatch(r'/Design/exports/[a-f0-9]{32}(?:\.zip|/index\.html)', path))
+                                 for s in candidates)
+        capability = capability or managed_capability
         if not candidates or not (cookie or capability or same_origin):
             return HTMLResponse('网页会话已失效，请回到知识库重新打开。', status_code=410, headers={**headers, 'Cache-Control': 'no-store'})
         session = candidates[-1]
