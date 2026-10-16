@@ -932,3 +932,64 @@ macOS 14/15 的 Safari 需要本机解析配置。仅配置本应用的专属域
 已启用|Enabled|有効
 未启用|Disabled|無効
 正在处理…|Processing…|処理中…
+# Public website. Authored here, compiled with the shared catalogs.
+site.title|LeafLoom — 你的本地知识库与个人 Wiki|LeafLoom — Your local knowledge base & personal wiki|LeafLoom — ローカルの知識ベースと個人 Wiki
+site.description|用 LeafLoom 整理 Markdown、HTML 和零散想法。本地优先的开源知识库，支持知识图谱与可选 AI 接入。免费下载 Windows 和 Mac 版。|A local-first, open-source home for your Markdown, HTML and ideas. Connect your notes with a knowledge graph and optional AI. Download for Windows and Mac.|Markdown、HTML、アイデアを一つに。知識グラフと任意の AI 連携に対応する、ローカルファーストのオープンソース知識ベース。Windows・Mac 版をダウンロード。
+site.skip|跳至正文|Skip to content|本文へ移動
+site.navigation|主导航|Main navigation|メインナビゲーション
+site.languages|选择语言|Choose language|言語を選択
+site.nav_features|功能|Features|機能
+site.nav_download|下载|Download|ダウンロード
+site.nav_docs|使用指南|User guide|利用ガイド
+site.eyebrow|开源 · 本地优先 · 为你的知识而生|OPEN SOURCE · LOCAL FIRST · YOURS TO KEEP|オープンソース · ローカルファースト
+site.headline|让零散的想法，长成自己的知识。|A home for everything you know.|散らばったメモを、育つ知識へ。
+site.intro|把笔记、项目文档和收藏网页，织成自己的知识库与个人 Wiki。文件留在本地，需要时再连接 AI。|Turn notes, project docs and saved webpages into a connected knowledge base and personal wiki. Keep your files local. Bring AI in when you want it.|メモ、プロジェクト資料、保存したウェブページを、自分の知識ベースと個人 Wiki に。ファイルは手元に。AI は必要なときだけ。
+site.download_windows|下载 Windows 版|Download for Windows|Windows 版をダウンロード
+site.download_macos|下载 Mac 版|Download for Mac|Mac 版をダウンロード
+site.windows|Windows|Windows|Windows
+site.macos|Mac|Mac|Mac
+site.unavailable|暂不可用|Not available yet|現在準備中
+site.hero_note|免费使用 · 无需注册 · 中文 / English / 日本語|Free to use · No signup · English / 中文 / 日本語|無料 · 登録不要 · 日本語 / English / 中文
+site.workspace|你的知识工作区|Your knowledge workspace|自分の知識ワークスペース
+site.demo_caption|实际应用界面，使用虚构的演示知识库；截图内容随语言切换。|The real app, with a fictional demo library. Screenshots follow your language.|実際のアプリ画面。架空のデモ資料を使用し、言語に合わせたスクリーンショットを表示しています。
+site.markdown_alt|LeafLoom 中的 Markdown 笔记，包含表格、任务、文档大纲和反向链接|A Markdown note in LeafLoom with a table, tasks, outline and backlinks|表、タスク、目次、バックリンクを含む LeafLoom の Markdown ノート
+site.features_eyebrow|从记录，到连接，再到发现|CAPTURE. CONNECT. REDISCOVER.|書く。つなぐ。見つけなおす。
+site.features_title|不止存下来，还能用起来。|Less scattered. More connected.|保存した知識を、使える知識に。
+site.features_intro|为自己的想法留一个安静的地方，也为下一次灵感留好线索。|A quiet place to think, and a clear path back to the ideas that matter.|落ち着いて考えられる場所と、大切なアイデアに戻るための道しるべ。
+site.markdown_title|写得顺手，读得舒服。|Make room for your next idea.|書きやすく、読みやすく。
+site.markdown_body|直接在排版后的页面里写 Markdown，用斜杠命令插入表格和任务，粘贴图片或拖入附件。随时切换源码，共享撤销历史。|Write on the formatted Markdown page. Add tables and tasks with slash commands, paste images or drop attachments. Switch to source with shared undo history.|整形されたページに Markdown を直接入力。スラッシュコマンドで表やタスクを追加し、画像や添付も貼り付けられます。元の Markdown と取り消し履歴を共有します。
+site.graph_title|让想法之间，有迹可循。|Follow the thread between ideas.|アイデアのつながりをたどる。
+site.graph_body|用双链与反向链接连接笔记，在知识图谱中探索关联。从一个概念走到阅读笔记，再回到它影响的项目。|Link notes in both directions and explore them in a knowledge graph. Follow a concept to a reading note, then back to the project it inspired.|双方向リンクとバックリンクでノートをつなぎ、知識グラフで関係を探索。概念から読書メモへ、そこから影響を受けたプロジェクトへ進めます。
+site.graph_alt|LeafLoom 知识图谱中相互连接的演示笔记|Connected demo notes in the LeafLoom knowledge graph|LeafLoom の知識グラフでつながるデモノート
+site.html_title|网页，也是你的知识。|A home for saved webpages, too.|保存したウェブページも、一緒に。
+site.html_body|在同一工作区打开本地 HTML 项目，保留配套样式、图片和受支持的脚本。把阅读资料与自己的笔记放在一起。|Open local HTML projects alongside your notes, with their styles, images and supported scripts. Keep your reading material close to your own thinking.|ノートと同じワークスペースでローカル HTML プロジェクトを開けます。スタイル、画像、対応するスクリプトを保ち、読む資料と自分の考えを一緒に扱えます。
+site.html_alt|在 LeafLoom 内打开的本地 HTML 阅读室|A local HTML reading room open inside LeafLoom|LeafLoom 内で開いたローカル HTML の読書室
+site.search_title|找回原文，也找回上下文。|Find the source. Keep the context.|原文と、その文脈に戻る。
+site.search_body|先用关键词检索和 Wiki 导航找到资料，需要时再准备本地语义检索模型。每条检索结果都能带你回到来源。|Start with keyword search and Wiki navigation. Prepare the optional local semantic-search model when you need it. Follow results back to their original notes.|まずはキーワード検索と Wiki ナビゲーションで資料へ。必要になったらローカルの意味検索モデルを準備。検索結果から元のノートをたどれます。
+site.search_alt|LeafLoom 的知识检索结果及原文入口|LeafLoom search results linking back to original notes|元のノートへのリンクが付いた LeafLoom の検索結果
+site.local_eyebrow|本地为本，连接由你|LOCAL BY DESIGN. CONNECTED BY CHOICE.|ローカルが基本。連携は自分で選ぶ。
+site.local_title|你的文件，你的知识，你来掌控。|Your files. Your knowledge. Your call.|ファイルも知識も、自分の手に。
+site.files_title|文件留在自己的目录|Your folders stay yours|ファイルは自分のフォルダーに
+site.files_body|笔记和索引保存在自己的电脑上。日常阅读、编辑、图谱与本地检索，无需托管知识库。|Notes and indexes live on your computer. Read, edit, explore and search locally, without a hosted knowledge base.|ノートと索引は自分のパソコンに保存。クラウドに知識ベースを預けず、ローカルで閲覧・編集・探索・検索できます。
+site.scope_title|检索范围，由你选择|Choose what enters search|検索対象は自分で選ぶ
+site.scope_body|默认不索引任何文件夹。先浏览，再明确选择需要检索的内容；浏览与检索范围相互独立。|No folders are indexed by default. Browse first, then explicitly choose what to search. Browsing and retrieval have separate scopes.|初期状態ではどのフォルダーも索引化しません。まず閲覧し、検索したい内容を選択。閲覧範囲と検索範囲は独立しています。
+site.optional_title|AI 接入，按需开启|Bring AI in on your terms|AI は必要なときに
+site.optional_body|AI Chat 会向所选服务发送启用的上下文；ChatGPT 接收请求的工具结果。外部 AI 接入是可选能力。|AI Chat sends enabled context to your chosen provider; ChatGPT receives requested tool results. External AI connections are optional.|AI Chat は有効にした文脈を選択したサービスに送信し、ChatGPT は要求したツール結果を受け取ります。外部 AI 連携は任意です。
+site.privacy_link|了解存储与隐私边界|Read about storage and privacy|保存とプライバシーについて
+site.ai_eyebrow|需要 AI 时，知识就在身边|WHEN YOU WANT AI, YOUR KNOWLEDGE IS READY|AI が必要なとき、知識をそばに。
+site.ai_title|把自己的知识，带进对话。|Give your AI something worth knowing.|自分の知識を、対話につなぐ。
+site.ai_body|在笔记旁使用 AI Chat，追溯引用、审阅建议；通过 MCP 与 Skill 连接常用助手，或使用内置 Tunnel 接入 ChatGPT。|Chat beside your notes, follow citations and review suggestions. Connect your assistant through MCP and the bundled Skill, or use the built-in Tunnel to bring your knowledge into ChatGPT.|ノートの隣で AI Chat を使い、引用をたどり、提案を確認。MCP と同梱 Skill でアシスタントを接続したり、内蔵 Tunnel で ChatGPT と連携できます。
+site.ai_link|查看 AI 接入指南|Explore AI connections|AI 連携ガイドを見る
+site.ai_alt|LeafLoom 笔记旁的 AI Chat，使用明确标识的虚构演示对话|AI Chat beside a LeafLoom note, with a clearly labeled fictional conversation|LeafLoom のノート横の AI Chat。架空の会話であることを明記したデモ
+site.ai_caption|虚构的 AI 对话演示，未调用外部 AI。ChatGPT 连接需要账号、网络与相应权限，且 LeafLoom 须保持运行。|Fictional AI conversation; no external AI was called. ChatGPT needs an account, network access and the relevant permissions, with LeafLoom running.|架空の AI 会話です。外部 AI は呼び出していません。ChatGPT 連携にはアカウント、ネットワーク、必要な権限、および LeafLoom の起動が必要です。
+site.download_eyebrow|从你自己的文件夹开始|START WITH A FOLDER OF YOUR OWN|自分のフォルダーから始めよう
+site.download_title|给你的知识，一个自己的家。|Make yourself at home.|知識に、自分だけの居場所を。
+site.download_intro|安装桌面应用，体验内置演示或打开自己的文件夹。无需预装 Python、Node 或 Ollama。|Install the desktop app. Try the demo or open your own folder. No preinstalled Python, Node or Ollama needed.|デスクトップアプリをインストールし、デモを試すか自分のフォルダーを開きます。Python、Node、Ollama の事前インストールは不要です。
+site.release_notes|版本说明|Release notes|リリースノート
+site.installation|安装指南|Installation guide|インストールガイド
+site.all_releases|所有版本|All releases|すべてのリリース
+site.install_note|当前安装包未签名，macOS 版未公证；如遇系统提示，请查看安装指南。暂不提供 Linux、Intel Mac 或 Windows ARM 安装包。|Current installers are unsigned; the Mac app is not notarized. See the installation guide for system prompts. No Linux, Intel Mac or Windows ARM installer is provided.|現在のインストーラーは未署名で、Mac 版は未公証です。システムの警告はインストールガイドをご確認ください。Linux・Intel Mac・Windows ARM 版は提供していません。
+site.faq_question|不使用 AI，也能正常使用吗？|Can I use LeafLoom without AI?|AI を使わなくても利用できますか？
+site.faq_answer|可以。阅读、编辑、知识图谱和关键词检索不依赖模型。完成依赖准备后可以离线使用；需要本地语义检索时再准备 BGE-M3。外部 AI 与 ChatGPT 则需要各自的账号、权限和网络。|Yes. Reading, editing, the graph and keyword search work without a model, and work offline after dependencies are prepared. Prepare BGE-M3 only for local semantic search. External AI and ChatGPT need their own accounts, permissions and network access.|はい。閲覧、編集、知識グラフ、キーワード検索はモデル不要です。依存関係を準備すればオフラインでも利用できます。ローカル意味検索には BGE-M3 を準備してください。外部 AI や ChatGPT は各サービスのアカウント・権限・ネットワークが必要です。
+site.footer_line|让知识留在本地，让想法自由生长。|Keep your knowledge local. Let your ideas grow.|知識は手元に。アイデアは自由に。
+site.feedback|反馈与建议|Feedback|フィードバック

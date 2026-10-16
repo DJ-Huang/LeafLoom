@@ -6,6 +6,8 @@
 
 [English](../../README.md) · [中文](../../docs/zh-CN/README.md) · [日本語](../../docs/ja/README.md)
 
+**[公式サイト・ダウンロード](https://dj-huang.github.io/LeafLoom/ja/)** · 製品画面、Windows / Mac インストーラー、リリースノートを確認できます。
+
 散らばったメモ、プロジェクト資料、保存したウェブページを、つながる知識ベースへ。**LeafLoom は、オープンソースでローカルファーストのナレッジ管理ツール・個人 Wiki** です。Markdown と HTML、出典をたどれる検索、知識グラフ、MCP、Skill、AI Chat、ChatGPT 連携を一つのワークスペースで使えます。
 
 ファイルと検索インデックスは自分のパソコンに保存。読む、書く、探す作業はローカルで行い、必要なときに AI をつなげられます。

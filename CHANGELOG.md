@@ -12,6 +12,8 @@
 
 - Show persistent model preparation stages, download volume/speed, elapsed time, waiting hints and retry details in search settings and setup. Avoid duplicate preparation requests, premature ten-minute download timeouts and duplicate weight hashing.
 
+- Add a responsive English, Chinese and Japanese product website on GitHub Pages, with real screenshots, direct latest-stable Windows/Mac downloads, release notes and checksum links. Website content and download links refresh on relevant main-branch changes and Release events.
+
 - Strengthen ignore rules for private configuration, credentials and local state; anonymize personal paths and private commit emails in repository history while preserving public author names.
 
 - Remove the old repository launchers; manage installed apps directly and use Dev for source development.

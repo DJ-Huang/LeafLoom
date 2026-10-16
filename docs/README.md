@@ -13,6 +13,8 @@
 
 ## Feature and setup references · 功能与配置
 
+- [Public website build, downloads and GitHub Pages maintenance](WEBSITE.md)
+
 - [Desktop installation, builds and ChatGPT connection](DESKTOP.md)
 - [Run the source desktop with automatic frontend updates](DESKTOP.md#source-development)
 - [Desktop installation and source development setup](SETUP.md)
