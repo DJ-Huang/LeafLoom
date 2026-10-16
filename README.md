@@ -124,7 +124,7 @@ cd LeafLoom
 
 1. Download or clone this repository into a writable local folder.
 2. Install Node 22+ (with npm) and uv. Windows 10/11 x64: double-click `Dev.cmd`. macOS 14+ Apple Silicon: double-click `Dev.command` or run `sh Dev.sh`.
-3. First launch prepares a separate Python environment and dependencies, then opens the source desktop with automatic frontend updates. Development settings live in `.cache/desktop-dev/`. The local search model is prepared only when requested in settings.
+3. First launch prepares a separate Python environment and dependencies, then opens the source desktop with automatic frontend updates. Dev shares the installed app's user settings, models and data. Only development dependencies stay in `.cache/desktop-dev/.venv`. Quit the running app before switching modes. The local search model is prepared only when requested in settings.
 4. Choose a language, try the fictional demo or connect your folder, then explicitly select what to search.
 
 </details>

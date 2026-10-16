@@ -142,3 +142,29 @@ exactly. The restored temporary note was retained for inspection. The already
 running Codex session continued using its previous credential and five-tool
 inventory, so client reload is still required. ChatGPT Tunnel setup/acceptance
 was excluded from further work at the user's request.
+
+
+### Windows Dev acceptance — 2026-10-16
+
+Dev was restarted against the installed application's existing Windows data
+folder on port 18080; the previous 18081 instance exited normally. No installer
+or private backend payload was built or installed for this acceptance. The shared
+configuration, browser/API token and saved Tunnel configuration were retained.
+The user enabled full local and Tunnel read/write access, and the existing local
+Codex connection was updated with a dedicated MCP credential.
+
+The source registry, configured local HTTP connection, local client tool inventory
+and refreshed ChatGPT LeafLoom plugin each contained the same 23 tool names
+(14 read tools and 9 write tools). Fresh configured local calls reported
+`connection: local`; plugin calls reported `connection: tunnel`, both with
+workspace read/write enabled. Each connection independently completed creation,
+exact-text editing, recoverable deletion, record preview, restoration and final
+read of a uniquely named disposable note. Both test notes were finally moved to
+recoverable Trash; no existing notes were edited.
+
+The inherited local MCP connection in the already-running Codex session still
+reported `connection: legacy` after the configuration file changed. It needs a
+client reconnect/restart to use the new credential. This cached session is not
+evidence that the new credential or shared access settings failed. The plugin
+connection was refreshed and its full read/write workflow was verified in the
+current session. macOS was not exercised in this Windows Dev acceptance.

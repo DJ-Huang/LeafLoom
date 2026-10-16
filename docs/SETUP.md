@@ -25,7 +25,7 @@
 
 首次启动按 `uv.lock` 自动准备独立 Python 3.12 环境，安装缺失的前端／桌面依赖，然后启动 Vite 与源码桌面端。后续复用依赖；前端修改自动更新，无需手动构建或打安装包。修改 Python／Electron 主进程或 preload 后，从开发实例的托盘／菜单栏退出，再重新运行 Dev。
 
-开发设置和 Python 环境位于 `.cache/desktop-dev/`；后端默认端口 **18081**，Vite 使用 **5173**。Dev 不使用安装版配置或仓库原来的 `.venv`。首次用示例库或虚构目录验证；关联真实目录仍会修改原始文件。
+Dev 与安装版完全共用用户配置、模型、AI/MCP 凭据和桌面草稿，使用同一份配置中的后端端口（新配置默认 **18080**）。Windows 默认目录为 `%LOCALAPPDATA%\VaultRag`，Mac 为 `~/Library/Application Support/VaultRag`；同样遵循安装版记住的自定义目录和显式 `--home` / `VAULT_RAG_HOME`。只有开发 Python 环境保留在 `.cache/desktop-dev/.venv`，Vite 使用 **5173**。切换启动方式前先从托盘退出当前实例；需要隔离验证时显式设置临时 `VAULT_RAG_HOME`。
 
 退出开发实例可选择其托盘／菜单栏 **退出**，或在启动终端按 Ctrl+C；若出现未保存提示，应先在窗口中处理。正常退出会一并关闭自己的后端和 Vite。旧仓库启动、停止和安装入口已移除，不再提供旧源码服务的日常管理流程。
 
@@ -39,17 +39,17 @@
 | 日志 | 上述目录的 `logs` | 上述目录的 `logs` |
 | 元数据、索引、历史和回收区 | 已关联目录的 `.vault-rag` | 已关联目录的 `.vault-rag` |
 
-源码开发使用自己的 `.cache/desktop-dev/`，其中 `.venv` 为开发依赖环境。笔记始终保存在所关联的用户目录中；安装版更新与开发启动均不应覆盖笔记目录。
+源码开发也使用上表中的同一套用户数据目录；`.cache/desktop-dev/.venv` 仅存放开发依赖。旧 Dev 配置保留在原处，不覆盖安装版配置；共享目录尚无 `models/` 时，会复制复用旧模型，保留原文件且不合并或覆盖已有模型目录。笔记始终保存在所关联的用户目录中；安装版更新与开发启动均不应覆盖笔记目录。
 
-`VAULT_RAG_HOME` 是底层私有状态目录兼容接口；Dev 固定使用自己的独立目录。目录和检索范围通过界面设置管理，桌面使用无需 `.env`。已有 `.env` 仅供旧版审计助手使用，不会自动关联知识库。
+`VAULT_RAG_HOME` 是安装版和 Dev 共用的私有状态目录兼容接口。目录和检索范围通过界面设置管理，桌面使用无需 `.env`。已有 `.env` 仅供旧版审计助手使用，不会自动关联知识库。
 
 旧版审计命令通过 `vault_rag.settings.Settings` 读取环境变量或私有 `.env`；这些内部兼容接口不作为桌面启动流程。保留 `vault-rag`、`VAULT_RAG_HOME`、`.vault-rag/` 与 `/mcp` 的兼容性。
 
-HTTP 服务只监听本机回环地址。安装版默认使用端口 18080，Dev 默认使用 18081；修改各自私有 `config.json` 的 `port` 后需退出并重新启动。端口冲突不会结束占用端口的其他应用。关联目录仅支持本机目录，拒绝 UNC 网络共享和符号链接／junction 越界。
+HTTP 服务只监听本机回环地址。安装版与 Dev 使用同一份 `config.json` 的 `port`，新配置默认 18080；修改后需退出并重新启动。端口冲突不会结束占用端口的其他应用。关联目录仅支持本机目录，拒绝 UNC 网络共享和符号链接／junction 越界。
 
 ## MCP 客户端
 
-优先通过应用的 AI 接入设置管理本机／ChatGPT 的 MCP 凭据和权限；安装版与 Dev 使用各自的状态和端口。完整工具与只读／写入授权见 [MCP](MCP.md)，外部连接见三语 [AI 指南](en/AI.md)。
+优先通过应用的 AI 接入设置管理本机／ChatGPT 的 MCP 凭据和权限；安装版与 Dev 共用状态、凭据和端口。完整工具与只读／写入授权见 [MCP](MCP.md)，外部连接见三语 [AI 指南](en/AI.md)。
 
 底层 `scripts/write_mcp_fragment.py` 可生成 `_generated/cursor-mcp-vault-rag.fragment.json`，使用实际配置端口和 `<LOCAL_TOKEN>` 占位符。凭据只保存在私有配置中，不要提交到仓库或共享文档。Codex 使用 `url` 与 `http_headers.Authorization`；Cursor 使用 `url` 与 `headers.Authorization`；Claude Code 使用 `type: http`、`url` 与 `headers.Authorization`。客户端连接共享 HTTP 服务，不各自启动模型进程。
 

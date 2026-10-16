@@ -1,0 +1,25 @@
+.model-preparation { font-size: 12px; line-height: 1.6; }
+.model-preparation-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; }
+.model-preparation-heading strong { display: block; font-weight: 600; }
+.model-preparation-heading div>span { display: block; color: var(--muted); margin-top: 3px; }
+.model-preparation-heading button { flex-shrink: 0; }
+.model-preparation-directory { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 14px; }
+.model-preparation-directory>div { min-width: 0; }
+.model-preparation-directory span { display: block; color: var(--muted); }
+.model-preparation-directory code { display: block; margin-top: 3px; overflow-wrap: anywhere; user-select: text; font-size: 11px; }
+.model-preparation-directory button { flex-shrink: 0; }
+.model-preparation-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; background: var(--surface, transparent); }
+.model-preparation-steps { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; list-style: none; padding: 0; margin: 0 0 16px; color: var(--muted); }
+.model-preparation-steps li { display: flex; align-items: center; gap: 7px; }
+.model-preparation-steps li>span { display: inline-flex; align-items: center; justify-content: center; width: 21px; height: 21px; border: 1px solid var(--border); border-radius: 50%; font-size: 11px; }
+.model-preparation-steps .current { color: var(--text); font-weight: 600; }
+.model-preparation-steps .current>span,.model-preparation-steps .done>span { border-color: var(--primary); color: var(--primary); }
+.model-preparation-meter { display: flex; align-items: center; gap: 14px; }
+.model-preparation-meter progress { flex: 1; min-width: 80px; height: 8px; accent-color: var(--primary); }
+.model-preparation-meter>span { white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+.model-preparation-details { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.model-preparation-file { overflow-wrap: anywhere; color: var(--muted); margin-top: 4px; }
+.model-preparation-card p,.model-preparation-help { margin: 10px 0 0; color: var(--muted); font-size: 12px; }
+.model-preparation-error { color: var(--danger, #a43c32); margin-top: 10px; overflow-wrap: anywhere; }
+.model-preparation-card.failed { border-color: var(--danger, #a43c32); }
+.model-preparation-card .model-preparation-wait { color: var(--text); }

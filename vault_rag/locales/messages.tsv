@@ -358,6 +358,34 @@ Wiki 导航目录|Wiki navigation folders|Wiki ナビゲーションのフォル
 已安装最新版本|Up to date|最新バージョンです
 已完成|Done|完了
 已开始准备本地模型|Local model preparation started|ローカルモデルの準備を開始しました
+model.starting|正在启动模型准备…|Starting model preparation…|モデルの準備を開始中…
+model.checking|正在检查已有模型文件…|Checking existing model files…|既存のモデルファイルを確認中…
+model.connecting|正在连接模型下载服务…|Connecting to the model download service…|モデルの配信サービスに接続中…
+model.downloading|正在下载模型文件…|Downloading model files…|モデルファイルをダウンロード中…
+model.verifying|正在校验模型文件…|Verifying model files…|モデルファイルを検証中…
+model.saving|正在保存模型校验信息…|Saving model verification details…|モデルの検証情報を保存中…
+model.failed|模型准备失败|Model preparation failed|モデルの準備に失敗しました
+model.preparing|准备中…|Preparing…|準備中…
+model.retry|重试准备|Retry preparation|準備を再試行
+model.steps|模型准备步骤|Model preparation steps|モデル準備の手順
+model.directory|模型保存路径|Model storage path|モデルの保存先
+model.pathLoading|正在读取保存路径…|Reading storage path…|保存先を確認中…
+model.openDirectory|打开目录|Open folder|フォルダーを開く
+model.openingDirectory|正在打开…|Opening…|開いています…
+model.openDirectoryFailed|无法打开模型目录|Unable to open the model folder|モデルフォルダーを開けませんでした
+model.stepConnect|连接|Connect|接続
+model.stepDownload|下载|Download|ダウンロード
+model.stepVerify|校验|Verify|検証
+model.elapsed|已用时 {time}|Elapsed {time}|経過 {time}
+model.downloadFiles|已下载 {done} / {total} 个文件|Downloaded {done} / {total} files|{done} / {total} ファイルをダウンロード済み
+model.checkedFiles|已校验 {done} / {total} 个文件|Verified {done} / {total} files|{done} / {total} ファイルを検証済み
+model.received|本次已接收 {size}|Received {size} this attempt|今回の受信量 {size}
+model.slowNetwork|暂未收到新的下载进度，可能正在连接或等待网络响应。任务仍在后台进行。|No new download progress yet. The service may be connecting or waiting for the network; the task continues in the background.|新しい進捗がありません。接続中またはネットワークの応答待ちの可能性があります。処理はバックグラウンドで続いています。
+model.largeFile|正在处理较大的模型文件，可能需要一些时间。|Processing a large model file; this may take a while.|大きなモデルファイルを処理しています。しばらくお待ちください。
+model.backgroundHelp|可以关闭设置继续阅读，准备会在后台继续；退出应用会中断任务。|You can close settings and keep reading while preparation continues. Quitting the app interrupts the task.|設定を閉じて閲覧を続けられます。準備はバックグラウンドで続きますが、アプリを終了すると中断されます。
+model.readyHelp|模型文件已就绪，可在索引状态中查看后续进度。|Model files are ready. Check indexing status for the next steps.|モデルファイルの準備ができました。以降の進捗は索引の状態で確認できます。
+model.retryHelp|请检查网络连接后重试，已下载的文件会尽量复用。|Check your network connection and retry. Downloaded files will be reused where possible.|ネットワーク接続を確認して再試行してください。ダウンロード済みファイルは可能な限り再利用します。
+model.firstDownload|首次准备需要联网下载较大的模型文件，耗时取决于网络速度。阅读与关键词搜索可照常使用。|First-time preparation downloads large model files and depends on your connection speed. Reading and keyword search remain available.|初回は大きなモデルファイルをダウンロードするため、通信速度に応じて時間がかかります。閲覧とキーワード検索は引き続き利用できます。
 已拒绝|Rejected|却下済み
 已接受|Accepted|承認済み
 已移入回收区，可以恢复|Moved to Trash. You can restore it.|ゴミ箱に移動しました。復元できます。

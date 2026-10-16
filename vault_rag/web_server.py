@@ -10,7 +10,7 @@ from vault_rag.html_preview import HtmlPreviews
 from vault_rag.html_projects import HtmlProjects
 from vault_rag.browser_storage import BrowserStorageMigration, migration_script
 from vault_rag.local_dns import LocalDns
-from vault_rag.platform_support import choose_directory, private_file_mode, is_windows
+from vault_rag.platform_support import choose_directory, open_directory, private_file_mode, is_windows
 from vault_rag.http_cache import conditional_file
 from vault_rag.skill_install import install_skill, skill_status
 from vault_rag.ai_service import AiService
@@ -354,11 +354,20 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         runtime.request_index(force=True);return {'ok':True,'state':'已排队'}
     @app.post('/api/model-prepare')
     async def prepare():
-        if runtime.model.download_state=='下载模型中':return {'state':'下载中'}
+        if not runtime.model.begin_prepare():return {'state':'下载中'}
+        runtime.publish('status',status=runtime.status())
         def download():
-            try:runtime.model.prepare();runtime.request_index(force=True)
+            try:runtime.model.prepare(reserved=True);runtime.request_index(force=True)
             except Exception:logging.exception('Model preparation failed')
+            finally:runtime.publish('status',status=runtime.status())
         threading.Thread(target=download,daemon=True,name='model-download').start();return {'state':'模型准备已开始'}
+    @app.post('/api/model-directory/open')
+    async def open_model_directory():
+        # The client cannot select an arbitrary local path through this action.
+        directory=runtime.model.available.path
+        try:await asyncio.to_thread(open_directory,directory)
+        except (OSError,subprocess.SubprocessError) as error:return json_response({'error':str(error)},400)
+        return {'ok':True}
     # The SDK owns /mcp; share its single session manager in the root lifespan.
     app.router.routes.extend(mcp_app.routes)
     app.router.routes.extend(ai_app.routes)

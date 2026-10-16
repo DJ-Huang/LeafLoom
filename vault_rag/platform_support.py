@@ -63,6 +63,17 @@ def hidden_process_options() -> dict:
     return {'creationflags': subprocess.CREATE_NO_WINDOW} if is_windows() else {}
 
 
+def open_directory(directory: Path) -> None:
+    directory=directory.expanduser().resolve()
+    directory.mkdir(parents=True,exist_ok=True)
+    if is_windows():
+        os.startfile(str(directory))
+    else:
+        command='/usr/bin/open' if sys.platform=='darwin' else 'xdg-open'
+        subprocess.run([command,str(directory)],check=True,timeout=10,
+                       stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+
+
 def powershell(script: str, *, timeout: float = 120) -> subprocess.CompletedProcess:
     import base64
     encoded = base64.b64encode(script.encode('utf-16-le')).decode('ascii')

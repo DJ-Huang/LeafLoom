@@ -4,9 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {spawn, spawnSync} = require('node:child_process');
 const {pathToFileURL} = require('node:url');
+const {resolveStateHome} = require('../desktop/state-home.cjs');
+const {reuseLegacyModels} = require('./dev-state.cjs');
 const root = path.resolve(__dirname, '..');
-const home = path.join(root, '.cache', 'desktop-dev');
-const environment = path.join(home, '.venv');
+const {home, registrationHome} = resolveStateHome();
+const legacyHome = path.join(root, '.cache', 'desktop-dev');
+const environment = path.join(legacyHome, '.venv');
 const python = path.join(environment, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
 const uvEnvironment = {...process.env, UV_CACHE_DIR: path.join(root, '.cache', 'uv'), UV_PROJECT_ENVIRONMENT: environment};
 
@@ -34,10 +37,7 @@ async function main() {
     'import sys; from pathlib import Path; import vault_rag; sys.exit(Path(vault_rag.__file__).resolve().parent != Path(sys.argv[1]).resolve())', path.join(root, 'vault_rag')], {stdio: 'ignore', windowsHide: true});
   if (sourceCheck.status !== 0) run('uv', ['pip', 'install', '--python', python, '--no-deps', '-e', '.']);
   npmInstall('web'); npmInstall('desktop');
-  fs.mkdirSync(home, {recursive: true});
-  const configPath = path.join(home, 'config.json');
-  if (!fs.existsSync(configPath)) run(python, ['-I', '-c',
-    'import sys; from pathlib import Path; from vault_rag.local_state import LocalConfig; LocalConfig(Path(sys.argv[1])).save({"port": 18081})', home]);
+  reuseLegacyModels(legacyHome, home);
   const {createServer} = await import(pathToFileURL(path.join(root, 'web/node_modules/vite/dist/node/index.js')).href);
   const vite = await createServer({root: path.join(root, 'web'), server: {
     host: '127.0.0.1', port: 5173, strictPort: true,
@@ -48,9 +48,9 @@ async function main() {
     await vite.listen();
     const electron = require(path.join(root, 'desktop/node_modules/electron'));
     const env = {...process.env, LEAFLOOM_PYTHON: python, VAULT_RAG_HOME: home,
-      LEAFLOOM_REGISTRATION_HOME: home, LEAFLOOM_DEV_SERVER: 'http://127.0.0.1:5173'};
+      LEAFLOOM_REGISTRATION_HOME: registrationHome, LEAFLOOM_DEV_SERVER: 'http://127.0.0.1:5173'};
     delete env.ELECTRON_RUN_AS_NODE;
-    console.log(`\nLeafLoom development | settings: ${home}\nFrontend edits update automatically. Quit from the tray to stop.\n`);
+    console.log(`\nLeafLoom development | shared app data: ${home}\nUses the installed app's settings, models and credentials. Quit the running app before switching modes.\nFrontend edits update automatically. Quit from the tray to stop.\n`);
     child = spawn(electron, [path.join(root, 'desktop')], {cwd: root, env, stdio: 'inherit', windowsHide: true});
     // Ask Electron to quit normally so pending edits and the sidecar can settle.
     const quit = () => {

@@ -124,7 +124,7 @@ cd LeafLoom
 
 1. 下载或克隆仓库到可写的本机目录，完整解压。
 2. 安装 Node 22+（含 npm）和 uv。Windows 10/11 x64：双击 `Dev.cmd`。macOS 14+ Apple 芯片：双击 `Dev.command` 或运行 `sh Dev.sh`。
-3. 首次自动准备独立 Python 环境与依赖，打开源码桌面并启用前端自动更新。开发配置位于 `.cache/desktop-dev/`；检索模型在设置中按需准备。
+3. 首次自动准备独立 Python 环境与依赖，打开源码桌面并启用前端自动更新。Dev 与安装版共用用户配置、模型和数据，只有开发依赖位于 `.cache/desktop-dev/.venv`；切换前先退出当前应用。检索模型在设置中按需准备。
 4. 选择语言，体验虚构演示库或关联自己的目录，再明确选择检索范围。
 
 </details>

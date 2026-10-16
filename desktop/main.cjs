@@ -2,7 +2,6 @@
 const {app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, nativeImage, screen, session, safeStorage} = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
 const {pathToFileURL} = require('node:url');
 const {Backend} = require('./backend.cjs');
 const {TunnelSettings} = require('./tunnel.cjs');
@@ -10,15 +9,7 @@ const policy = require('./policy.cjs');
 const {strings, resolve} = require('./strings.cjs');
 
 function readJson(file) {try {return JSON.parse(fs.readFileSync(file, 'utf8'));} catch {return null;}}
-const defaultHome = process.platform === 'win32'
-  ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'VaultRag')
-  : path.join(os.homedir(), 'Library', 'Application Support', 'VaultRag');
-const registrationHome = process.env.LEAFLOOM_REGISTRATION_HOME || defaultHome;
-const registered = readJson(path.join(registrationHome, 'desktop-current-home.json'));
-const savedHome = registered?.schema === 1 && typeof registered.home === 'string' && path.isAbsolute(registered.home) && fs.existsSync(path.join(registered.home, 'desktop-install.json')) ? registered.home : null;
-const homeArgument = process.argv.indexOf('--home');
-if (homeArgument >= 0 && (!process.argv[homeArgument + 1] || !path.isAbsolute(process.argv[homeArgument + 1]))) throw new Error('--home requires an absolute state directory');
-const home = path.resolve((homeArgument >= 0 && process.argv[homeArgument + 1]) || process.env.VAULT_RAG_HOME || savedHome || defaultHome);
+const {home, registrationHome} = require('./state-home.cjs').resolveStateHome();
 fs.mkdirSync(path.join(home, 'desktop-ui'), {recursive: true, mode: 0o700});
 app.setPath('userData', path.join(home, 'desktop-ui'));
 app.setAppUserModelId('com.djhuang.leafloom');
