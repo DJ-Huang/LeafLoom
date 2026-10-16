@@ -17,6 +17,7 @@ from vault_rag.local_state import LocalConfig
 from vault_rag.knowledge import Runtime
 from vault_rag.web_server import create_app, create_server
 from vault_rag.tunnel import TunnelManager, failure_code, request
+from vault_rag.mcp_access import TUNNEL_AUTH_HEADER
 
 INIT = {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {
     'protocolVersion': '2025-06-18', 'capabilities': {}, 'clientInfo': {'name': 'test', 'version': '1'}}}
@@ -73,6 +74,47 @@ class McpSecurityTests(unittest.TestCase):
         with self.client('::1') as client:
             self.assertEqual(client.post('/mcp', json=INIT, headers=HEADERS).status_code, 200)
 
+    def test_tunnel_identity_ignores_chat_bearers_and_checks_live_permissions(self):
+        access = self.app.state.mcp_access
+        access.configure('tunnel', enabled=False, write=False, resource='workspace')
+        access.configure('tunnel', enabled=True, write=False, resource='feishu')
+        legacy = 'Bearer ' + (self.config.directory / 'auth-token').read_text().strip()
+        proof = access.tunnel_authorization()
+        status = {'jsonrpc': '2.0', 'id': 7, 'method': 'tools/call',
+                  'params': {'name': 'vault_index_status', 'arguments': {}}}
+        read = {'jsonrpc': '2.0', 'id': 8, 'method': 'tools/call',
+                'params': {'name': 'feishu_cli_read', 'arguments': {'argv': ['base', '+url-resolve', '--url=https://example.feishu.cn/wiki/test']}}}
+        with self.client() as client, patch.object(self.app.state.feishu, 'execute', return_value={'ok': True}) as adapter:
+            # Different chats retain different connector bearers. Neither bearer
+            # may override the private, authenticated runtime identity.
+            for bearer in ('', legacy, 'Bearer stale-connector-token'):
+                headers = {**HEADERS, TUNNEL_AUTH_HEADER: proof}
+                if bearer: headers['Authorization'] = bearer
+                result = client.post('/mcp', json=status, headers=headers).json()['result']['structuredContent']
+                self.assertEqual(result['capabilities'], {'connection': 'tunnel', 'read_workspace': False,
+                    'write_workspace': False, 'read_feishu': True, 'write_feishu': False, 'high_risk_feishu': False})
+                self.assertTrue(client.post('/mcp', json=read, headers=headers).json()['result']['structuredContent']['ok'])
+            self.assertEqual(adapter.call_count, 3)
+            # A forged proof cannot downgrade to otherwise-valid legacy auth.
+            headers = {**HEADERS, 'Authorization': legacy, TUNNEL_AUTH_HEADER: 'Bearer forged'}
+            self.assertEqual(client.post('/mcp', json=status, headers=headers).status_code, 401)
+            remote = self.client('203.0.113.5')
+            self.assertEqual(remote.post('/mcp', json=status, headers={**HEADERS,
+                TUNNEL_AUTH_HEADER: proof, 'X-Forwarded-For': '127.0.0.1'}).status_code, 401)
+            # Retaining note access must not retain revoked Feishu access.
+            access.configure('tunnel', enabled=True, write=False)
+            access.configure('tunnel', enabled=False, write=False, resource='feishu')
+            headers[TUNNEL_AUTH_HEADER] = proof
+            self.assertEqual(client.post('/mcp', json=read, headers=headers).status_code, 401)
+            headers[TUNNEL_AUTH_HEADER] = access.tunnel_authorization()
+            denied = client.post('/mcp', json=read, headers=headers).json()['result']['structuredContent']
+            self.assertEqual(denied['error_code'], 'permission_denied')
+            self.assertEqual(denied['error_source'], 'leafloom_mcp')
+            self.assertEqual(denied['connection'], 'tunnel')
+            self.assertEqual(denied['resource'], 'feishu')
+            self.assertEqual(client.get('/api/status', headers={TUNNEL_AUTH_HEADER: access.tunnel_authorization()}).status_code, 401)
+            self.assertEqual(adapter.call_count, 3)
+
 
 RUNNER = r'''
 import http.server,json,sys
@@ -94,6 +136,56 @@ class TunnelLifecycleTests(unittest.TestCase):
         deadline = time.monotonic() + 8
         while not predicate() and time.monotonic() < deadline: time.sleep(.03)
         self.assertTrue(predicate())
+
+    def test_shared_home_allows_one_owner_and_quit_releases_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            children, managers = [], []
+            popen = subprocess.Popen
+            def launch(args, **kwargs):
+                health = args[args.index('--health.url-file') + 1]
+                child = popen([sys.executable, '-u', '-c', RUNNER, health], **kwargs)
+                children.append(child)
+                return child
+            def local_request(url, payload=None, **kwargs):
+                return (200, {'result': {}}) if payload else request(url)
+            settings = {'enabled': True, 'binary': sys.executable, 'tunnelId': 'tunnel_'+'a'*32, 'apiKey': 'fictional-key'}
+            with patch('vault_rag.tunnel.subprocess.Popen', side_effect=launch), patch('vault_rag.tunnel.request', side_effect=local_request):
+                try:
+                    first = TunnelManager(temp, 19234, lambda *a, **k: None); managers.append(first)
+                    first.configure(settings); self.wait(lambda: first.last_state == ('ready', ''))
+                    second = TunnelManager(temp, 19234, lambda *a, **k: None); managers.append(second)
+                    second.configure(settings); self.wait(lambda: second.last_state == ('failed', 'tunnel.error.process'))
+                    self.assertEqual(len(children), 1)
+                    first.close(); self.assertIsNotNone(children[0].poll())
+                    third = TunnelManager(temp, 19234, lambda *a, **k: None); managers.append(third)
+                    third.configure(settings); self.wait(lambda: third.last_state == ('ready', ''))
+                    self.assertEqual(len(children), 2)
+                finally:
+                    for manager in managers: manager.close()
+                self.assertTrue(all(child.poll() is not None for child in children))
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows kill-on-close job validation')
+    def test_abnormal_backend_exit_kills_its_owned_runtime(self):
+        import ctypes
+        from ctypes import wintypes
+        code = "import subprocess,sys,time; from vault_rag.worker_lifetime import WorkerJob; p=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']); job=WorkerJob(p); print(p.pid,flush=True); time.sleep(60)"
+        owner = subprocess.Popen([sys.executable, '-u', '-c', code], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 creationflags=subprocess.CREATE_NO_WINDOW)
+        handle = None
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]; kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]; kernel.WaitForSingleObject.restype = wintypes.DWORD
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        try:
+            child_pid = int(owner.stdout.readline())
+            handle = kernel.OpenProcess(0x00100000, False, child_pid)
+            self.assertTrue(handle)
+            owner.kill(); owner.wait(timeout=5)
+            self.assertEqual(kernel.WaitForSingleObject(handle, 5000), 0)
+        finally:
+            if owner.poll() is None: owner.kill(); owner.wait(timeout=5)
+            if handle: kernel.CloseHandle(handle)
+            owner.stdout.close(); owner.stderr.close()
 
     def test_workspace_discovery_and_calls_receive_private_revocable_credential(self):
         from vault_rag.mcp_access import McpAccess
@@ -119,10 +211,10 @@ class TunnelLifecycleTests(unittest.TestCase):
                     self.wait(lambda: len(launches) == 1 and manager.last_state == ('ready', ''))
                     args, env = launches[0]
                     authorization = env['LEAFLOOM_TUNNEL_MCP_AUTHORIZATION']
-                    self.assertEqual(probes[0], {'Authorization': authorization})
+                    self.assertEqual(probes[0], {TUNNEL_AUTH_HEADER: authorization})
                     self.assertEqual(access.principal(authorization, 'legacy'), 'tunnel')
                     for flag in ('--mcp.extra-headers', '--mcp.discovery-extra-headers'):
-                        self.assertEqual(args[args.index(flag) + 1], 'Authorization: env:LEAFLOOM_TUNNEL_MCP_AUTHORIZATION')
+                        self.assertEqual(args[args.index(flag) + 1], f'{TUNNEL_AUTH_HEADER}: env:LEAFLOOM_TUNNEL_MCP_AUTHORIZATION')
                     self.assertNotIn(authorization, repr(args))
                     access.configure('tunnel', enabled=True, write=False)
                     with self.assertRaises(PermissionError):access.principal(authorization, 'legacy', loopback=True)
@@ -210,12 +302,26 @@ class TunnelLifecycleTests(unittest.TestCase):
         platform = 'windows-x64' if sys.platform == 'win32' else 'macos-arm64'
         binary = Path(__file__).resolve().parents[1] / 'desktop/resources/tunnel' / platform / ('tunnel-client-runtime.exe' if sys.platform == 'win32' else 'tunnel-client-runtime')
         if not binary.is_file(): self.skipTest('Build the native Tunnel payload first')
+        from vault_rag.mcp_access import McpAccess
+        import datetime
+        access_home = tempfile.TemporaryDirectory()
+        self.addCleanup(access_home.cleanup)
+        access = McpAccess(LocalConfig(Path(access_home.name) / 'state'))
+        access.configure('tunnel', enabled=True, write=False, resource='feishu')
+        pending, responses, seen = [], [], []
+        guard = threading.Lock()
         class LocalServer(http.server.BaseHTTPRequestHandler):
             polls = 0
             def log_message(self, *args): pass
             def do_GET(self):
                 if '/v1/tunnels/' in self.path and '/poll' in self.path:
                     LocalServer.polls += 1
+                    with guard:
+                        commands = pending[:]
+                        pending.clear()
+                    if commands:
+                        self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
+                        self.wfile.write(json.dumps({'commands': commands}).encode()); return
                     time.sleep(.05)
                     self.send_response(204); self.end_headers()
                 else:
@@ -225,10 +331,20 @@ class TunnelLifecycleTests(unittest.TestCase):
                 if not raw:
                     self.send_response(400); self.end_headers(); return
                 payload = json.loads(raw)
+                if self.path.endswith('/response'):
+                    with guard: responses.append(payload)
+                    self.send_response(200); self.end_headers(); self.wfile.write(b'{}'); return
                 method = payload.get('method')
                 if method == 'notifications/initialized':
                     self.send_response(202); self.end_headers(); return
                 result = {'protocolVersion': '2025-06-18', 'capabilities': {'tools': {}}, 'serverInfo': {'name': 'fixture', 'version': '1'}} if method == 'initialize' else {'tools': []}
+                if method == 'tools/call':
+                    bearer = self.headers.get('Authorization', '')
+                    proof = self.headers.get(TUNNEL_AUTH_HEADER, '')
+                    try: who = access.principal(bearer, 'legacy-chat-token', loopback=True, tunnel_header=proof)
+                    except PermissionError: who = 'invalid'
+                    with guard: seen.append((bearer, who))
+                    result = {'content': [{'type': 'text', 'text': who}]}
                 self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
                 self.wfile.write(json.dumps({'jsonrpc': '2.0', 'id': payload.get('id'), 'result': result}).encode())
         class FixtureServer(http.server.ThreadingHTTPServer):
@@ -243,11 +359,40 @@ class TunnelLifecycleTests(unittest.TestCase):
                 return popen([*args, '--control-plane.base-url', f'http://127.0.0.1:{server.server_port}'], **kwargs)
             try:
                 with patch('vault_rag.tunnel.subprocess.Popen', side_effect=launch):
-                    manager = TunnelManager(temp, server.server_port, lambda kind, **value: states.append(value))
+                    manager = TunnelManager(temp, server.server_port, lambda kind, **value: states.append(value), mcp_access=access)
                     try:
                         manager.configure({'enabled': True, 'binary': str(binary), 'tunnelId': 'tunnel_'+'a'*32, 'apiKey': 'sk-test-local-fixture-only'})
                         self.wait(lambda: any(s['state'] == 'ready' for s in states))
                         self.assertGreater(LocalServer.polls, 0)
+                        # Reproduce the old Authorization collision in the actual
+                        # bundled executable, then exercise the fix without a
+                        # refresh/reconnect between different chat credentials.
+                        for header_name, expected in (('Authorization', ['tunnel', 'legacy', 'invalid']),
+                                                       (TUNNEL_AUTH_HEADER, ['tunnel', 'tunnel', 'tunnel'])):
+                            if header_name == 'Authorization':
+                                # Start the old configuration only for the regression fixture.
+                                manager.close()
+                                with patch('vault_rag.tunnel.TUNNEL_AUTH_HEADER', 'Authorization'):
+                                    manager = TunnelManager(temp, server.server_port, lambda *a, **k: None, mcp_access=access)
+                                    manager.configure({'enabled': True, 'binary': str(binary), 'tunnelId': 'tunnel_'+'a'*32, 'apiKey': 'sk-test-local-fixture-only'})
+                                    self.wait(lambda: manager.last_state == ('ready', ''))
+                            else:
+                                manager.close()
+                                manager = TunnelManager(temp, server.server_port, lambda *a, **k: None, mcp_access=access)
+                                manager.configure({'enabled': True, 'binary': str(binary), 'tunnelId': 'tunnel_'+'a'*32, 'apiKey': 'sk-test-local-fixture-only'})
+                                self.wait(lambda: manager.last_state == ('ready', ''))
+                            for i, bearer in enumerate(('', 'Bearer legacy-chat-token', 'Bearer stale-chat-token')):
+                                request_id = f'{header_name}-{i}'
+                                command = {'command_type': 'jsonrpc', 'request_id': request_id, 'shard_token': request_id,
+                                           'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                           'jsonrpc': {'jsonrpc': '2.0', 'id': i + 10, 'method': 'tools/call',
+                                                       'params': {'name': 'identity', 'arguments': {}}},
+                                           'headers': {'Authorization': [bearer]} if bearer else {}}
+                                with guard: pending.append(command)
+                                self.wait(lambda: any(r.get('request_id') == request_id for r in responses))
+                                response = next(r for r in responses if r.get('request_id') == request_id)
+                                self.assertEqual(response['resp_json']['result']['content'][0]['text'], expected[i])
+                        self.assertEqual([who for _, who in seen], ['tunnel', 'legacy', 'invalid', 'tunnel', 'tunnel', 'tunnel'])
                         process = manager.process
                     finally: manager.close()
                     self.assertIsNotNone(process.poll())

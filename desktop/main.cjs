@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
 const {Backend} = require('./backend.cjs');
-const {TunnelSettings} = require('./tunnel.cjs');
+const {TunnelSettings, tunnelBinary} = require('./tunnel.cjs');
 const {Updater} = require('./updater.cjs');
 const policy = require('./policy.cjs');
 const {strings, resolve} = require('./strings.cjs');
@@ -37,8 +37,7 @@ function configureTunnel() {
     tunnel.state = {state: tunnel.value.enabled ? 'waiting' : 'disabled', error: ''};
     return tunnel.status();
   }
-  const root = app.isPackaged ? path.join(process.resourcesPath, 'tunnel') : path.join(__dirname, 'resources', 'tunnel', process.platform === 'win32' ? 'windows-x64' : 'macos-arm64');
-  const binary = path.join(root, process.platform === 'win32' ? 'tunnel-client-runtime.exe' : 'tunnel-client-runtime');
+  const binary = tunnelBinary({packaged: app.isPackaged, resourcesPath: process.resourcesPath, home});
   const command = tunnel.command(binary);
   tunnel.state = {state: command.enabled ? 'starting' : 'disabled', error: ''};
   backend.send('tunnel-configure', command);
