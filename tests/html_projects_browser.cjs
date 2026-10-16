@@ -8,6 +8,14 @@ const root=path.resolve(__dirname,'..');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function freePort(){const s=net.createServer();await new Promise(r=>s.listen(0,'127.0.0.1',r));const p=s.address().port;await new Promise(r=>s.close(r));return p;}
 async function ready(url){for(let i=0;i<150;i++){try{if((await fetch(url+'/healthz')).ok)return;}catch{}await sleep(100);}throw new Error('Fixture server failed to start');}
+async function systemLookup(hostname){
+ let failure;
+ for(let attempt=0;attempt<50;attempt++){
+  try{return await require('node:dns').promises.lookup(hostname);}
+  catch(error){failure=error;await sleep(200);}
+ }
+ throw new Error(`System DNS did not resolve ${hostname} after scoped resolver installation: ${failure?.message||'unknown error'}`);
+}
 async function loadUi(page,navigate){
  // A mounted React root precedes bootstrap completion. Finish these requests
  // before the next top-level navigation so WebKit does not report teardown
@@ -55,7 +63,7 @@ async function main(){
   if(process.platform==='darwin'&&process.env.HTML_TEST_RESOLVER){
    resolverArgs=['-m','vault_rag.local_dns','--identity',new URL(info.ui).hostname.split('.')[1],'--port',String(port),...(process.env.HTML_TEST_RESOLVER==='sudo'?['--sudo']:[])];
    const installed=await execFile(python,[...resolverArgs,'install'],{cwd:root,timeout:190000});assert.equal(JSON.parse(installed.stdout).configured,true);
-   const lookup=await require('node:dns').promises.lookup(new URL(info.ui).hostname);assert.equal(lookup.address,'127.0.0.1');checks.push('macos-scoped-system-resolution');
+   const lookup=await systemLookup(new URL(info.ui).hostname);assert.equal(lookup.address,'127.0.0.1');checks.push('macos-scoped-system-resolution');
   }
   const api=async(endpoint,body)=>{const r=await fetch(info.url+'/api/'+endpoint,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();assert.ok(r.ok,JSON.stringify(d));return d;};
   const engine=process.env.HTML_TEST_BROWSER||'chrome';
