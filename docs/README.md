@@ -13,6 +13,8 @@
 
 ## Feature and setup references · 功能与配置
 
+- [Public website build, downloads and GitHub Pages maintenance](WEBSITE.md)
+
 - [Desktop installation, builds and ChatGPT connection](DESKTOP.md)
 - [Source installation and service setup](SETUP.md)
 - [HTML project folders, sessions, storage migration and Safari compatibility](HTML_PROJECTS.md)

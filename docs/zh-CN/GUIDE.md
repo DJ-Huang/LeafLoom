@@ -6,6 +6,8 @@
 
 ## 安装与打开
 
+[LeafLoom 官网](https://dj-huang.github.io/LeafLoom/zh-CN/) 提供中英日三语介绍、产品截图和最新正式 Release 安装包直达下载。按平台选择 Windows 或 Mac，旁边可查看版本说明与 SHA-256 校验文件；若当前版本缺少某平台安装包，可通过“所有版本”查找历史发布。
+
 支持 Windows 10/11 x64，以及 macOS 14+ Apple 芯片。桌面安装器暂不支持 Linux、Intel Mac 和 Windows ARM。
 
 **推荐从 [最新 Release](https://github.com/DJ-Huang/LeafLoom/releases/latest) 下载桌面安装包。** 无需克隆仓库，也无需预装 Python、Node 或 Ollama。
