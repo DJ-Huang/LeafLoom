@@ -43,8 +43,9 @@ Markdown/TXT; neither full access nor saving a note expands that selection.
 | Templates and diary | `vault_list_templates`, `vault_daily_note` |
 | Synchronize | `vault_reindex` |
 | Feishu account | `feishu_status` |
-| Feishu documents | `feishu_docs_read`, `feishu_docs_write` |
-| Feishu Base records | `feishu_base_read`, `feishu_base_write` |
+| Feishu command discovery | `feishu_cli_inspect` |
+| Feishu business commands | `feishu_cli_read`, `feishu_cli_write` |
+| Feishu temporary files | `feishu_files` |
 
 The current surface contains 28 tools: the original 23 note tools and five optional
 Feishu tools. Configure the external CLI in **Settings → AI connections → Feishu / Lark**,
@@ -181,3 +182,9 @@ client reconnect/restart to use the new credential. This cached session is not
 evidence that the new credential or shared access settings failed. The plugin
 connection was refreshed and its full read/write workflow was verified in the
 current session. macOS was not exercised in this Windows Dev acceptance.
+
+Feishu now forwards installed lark-cli business commands through generic tools. Refresh
+the tool list after upgrading; the old document/Base tools were removed. High-risk
+commands and raw API calls need a separate per-connection permission and explicit
+confirmation. File IDs are credential-scoped; connected-file imports also need note
+read permission. See [Feishu](FEISHU.md) for the complete interface.

@@ -291,23 +291,22 @@ class WorkspaceMcpTests(unittest.TestCase):
         self.configure('local', enabled=False, write=False)
         self.call('vault_read_note', {'note_id': 'Archive/b.md'}, error='permission_denied')
         self.call('feishu_status', token='legacy', error='permission_denied')
-        with patch.object(service, 'docs_read', return_value={'ok': True, 'data': {'page_token': 'next'}}) as read:
-            value = self.call('feishu_docs_read', {'action': 'search', 'query': 'example'})
+        with patch.object(service, 'execute', return_value={'ok': True, 'data': {'page_token': 'next'}}) as read:
+            value = self.call('feishu_cli_read', {'argv': ['docs', '+search', '--query=example']})
             self.assertEqual(value['data']['page_token'], 'next')
             self.configure('tunnel', enabled=True, write=False)
             tunnel = self.app.state.mcp_access.tunnel_authorization()
-            self.call('feishu_docs_read', {'action': 'search', 'query': 'example'}, token=tunnel, error='permission_denied')
+            self.call('feishu_cli_read', {'argv': ['docs', '+search', '--query=example']}, token=tunnel, error='permission_denied')
             self.assertEqual(read.call_count, 1)
         self.configure('local', enabled=True, write=False, resource='feishu')
-        with patch.object(service, 'docs_write') as write:
-            self.call('feishu_docs_write', {'action': 'create', 'title': 'Example', 'content': 'body'}, error='permission_denied')
+        with patch.object(service, 'execute') as write:
+            self.call('feishu_cli_write', {'argv': ['docs', '+create', '--title=Example', '--content=-'], 'stdin': 'body'}, error='permission_denied')
             write.assert_not_called()
         self.configure('tunnel', enabled=True, write=True, resource='feishu')
         self.configure('tunnel', enabled=False, write=False)
         tunnel = self.app.state.mcp_access.tunnel_authorization()
-        with patch.object(service, 'base_write', return_value={'ok': True, 'data': {'updated': True}}):
-            self.call('feishu_base_write', {'action': 'update_record', 'base_token': 'base_example',
-                      'table_id': 'tbl_example', 'record_id': 'rec_example', 'fields': {'Title': 'New'}}, token=tunnel)
+        with patch.object(service, 'execute', return_value={'ok': True, 'data': {'updated': True}}):
+            self.call('feishu_cli_write', {'argv': ['base', '+record-upsert', '--base-token=base_example', '--table-id=tbl_example', '--record-id=rec_example', '--json={}']}, token=tunnel)
         self.call('vault_read_note', {'note_id': 'Archive/b.md'}, token=tunnel, error='permission_denied')
         self.configure('local', enabled=False, write=False, resource='feishu')
         self.assertEqual(self.request('tools/list').status_code, 401)
@@ -323,9 +322,48 @@ class WorkspaceMcpTests(unittest.TestCase):
             self.assertEqual(self.client.post('/api/feishu/verify', headers=self.legacy, json={}).status_code, 200)
             verify.assert_called_once()
         tools = {t['name']: t for t in self.request('tools/list').json()['result']['tools']}
-        self.assertTrue(tools['feishu_docs_read']['annotations']['readOnlyHint'])
-        self.assertFalse(tools['feishu_docs_write']['annotations']['readOnlyHint'])
-        self.assertTrue(tools['feishu_base_write']['annotations']['openWorldHint'])
+        self.assertTrue(tools['feishu_cli_read']['annotations']['readOnlyHint'])
+        self.assertFalse(tools['feishu_cli_write']['annotations']['readOnlyHint'])
+        self.assertTrue(tools['feishu_files']['annotations']['openWorldHint'])
+
+    def test_feishu_staged_files_live_scope_and_rotation(self):
+        import base64, hashlib
+        self.configure('local', enabled=True, write=True, resource='feishu', high_risk=True)
+        access = self.app.state.mcp_access
+        access.require('local', resource='feishu', high_risk=True)
+        old_owner = access.file_owner('local')
+        content = b'fictional attachment'
+        item = self.call('feishu_files', {'action': 'put', 'name': 'a.txt', 'data_base64': base64.b64encode(content).decode(),
+            'complete': True, 'size': len(content), 'sha256': hashlib.sha256(content).hexdigest()})
+        self.assertTrue(self.call('feishu_files', {'action': 'get', 'file_id': item['file_id']})['eof'])
+        imported = self.call('feishu_files', {'action': 'import_workspace', 'path': 'Selected/a.md'})
+        self.configure('local', enabled=False, write=False)
+        self.call('feishu_files', {'action': 'get', 'file_id': imported['file_id']}, error='permission_denied')
+        self.configure('local', enabled=True, write=False, resource='feishu')
+        self.assertFalse(access.status()['local']['feishu_high_risk'])
+        self.call('feishu_files', {'action': 'get', 'file_id': item['file_id']})
+        self.local = self.configure('local', enabled=True, write=False, rotate=True, resource='feishu')['token']
+        self.assertNotEqual(old_owner, access.file_owner('local'))
+        self.call('feishu_files', {'action': 'get', 'file_id': item['file_id']}, error='not_found')
+        tools = {t['name'] for t in self.request('tools/list').json()['result']['tools']}
+        self.assertFalse(tools & {'feishu_docs_read', 'feishu_docs_write', 'feishu_base_read', 'feishu_base_write'})
+
+    def test_feishu_high_risk_needs_both_live_permission_and_confirmation(self):
+        import sys
+        service = self.app.state.feishu
+        service.configure({'enabled': True, 'binary': sys.executable})
+        self.configure('local', enabled=True, write=True, resource='feishu')
+        metadata = (['docs', '+delete'], ['docs', '+delete'], {}, {'--yes': ('--yes', False)}, 'high-risk-write')
+        with patch.object(service, '_ready'), patch.object(service, '_parse', return_value=metadata), \
+             patch.object(service, '_run', return_value=(0, '{"ok":true,"identity":"user","data":{}}', '')) as runner:
+            self.call('feishu_cli_write', {'argv': ['docs', '+delete'], 'confirm': True}, error='permission_denied')
+            runner.assert_not_called()
+            self.configure('local', enabled=True, write=True, resource='feishu', high_risk=True)
+            self.call('feishu_cli_write', {'argv': ['docs', '+delete']}, error='confirmation_required')
+            runner.assert_not_called()
+            self.call('feishu_cli_write', {'argv': ['docs', '+delete'], 'confirm': True})
+            self.assertIn('--yes', runner.call_args.args[0])
+            self.assertEqual(runner.call_count, 1)
 
     def test_root_switch_protected_subtrees_and_symlinks(self):
         for path in ('../outside.md', '.hidden.md', '.vault-rag/notes.md'):

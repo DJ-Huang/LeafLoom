@@ -4,12 +4,14 @@
 
 ## 0.1.2 — 2026-10-16
 
+- Replace the four Feishu document/Base adapters with installed lark-cli discovery, generic read/write execution and credential-scoped attachment transfer. Support XML block edits, preserve document revision prechecks, and add separate local/Tunnel high-risk permission with explicit per-operation confirmation. Refresh client tools after upgrading.
+
 - Unify Dev and installed Tunnel startup: reuse the installed runtime when available, enforce one owner per shared state directory, and always release the owned process job on quit. Distinguish LeafLoom MCP authorization errors from invalid Feishu table references.
 
 - Fix inconsistent MCP permissions across ChatGPT conversations: authenticate the owned Tunnel runtime independently of connector Authorization headers, preserving resource grants and immediate revocation.
 
-- Add optional Feishu/Lark settings backed by an externally installed and authorized lark-cli, with account verification and five MCP tools for documents and Base records. Separate local/Tunnel Feishu permissions from note access; preserve CLI credential ownership and require read-time revisions for document edits.
-- Validate live Base cell-matrix pagination and reject document revision mismatches before writing. The upstream revision parameter is not an atomic cross-client edit guard.
+- Add optional Feishu/Lark settings backed by an externally installed and authorized lark-cli, with account verification and a unified CLI MCP bridge. Separate local/Tunnel Feishu permissions from note access; preserve CLI credential ownership and require read-time revisions for document edits.
+- Preserve CLI pagination and reject document revision mismatches before writing. The upstream revision parameter is not an atomic cross-client edit guard.
 
 - Add Settings → General → App updates with current/latest versions, verified installer downloads, a progress bar and installer launch after a normal quit. macOS opens the DMG; source Dev checks versions only.
 

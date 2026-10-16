@@ -21,87 +21,136 @@ LeafLoom does not install/update the CLI, initiate OAuth or copy its credentials
 
 Configuration changes invalidate previous verification. CLI login/profile changes made
 outside LeafLoom require re-verification; the displayed result is a timestamped snapshot.
-All business operations explicitly use `--as=user` and the configured profile. Native
-CLI help is checked for required commands and flags; the initial compatibility baseline
-is 1.0.66. Missing interfaces produce an incompatible-version state.
+All business operations explicitly use `--as=user` and the configured profile.
+Discovery is read from the installed binary; the validated baseline is 1.0.66.
+LeafLoom neither upgrades the CLI nor copies its credential store.
 
-## MCP contract
+## Unified MCP contract
 
-The existing `/mcp` endpoint exposes five additional tools:
+Refresh the client's tool list after restarting the upgraded backend. The old
+`feishu_docs_read/write` and `feishu_base_read/write` tools have been removed.
+There are still five Feishu tools; command capabilities now come from lark-cli.
 
-| Tool | Actions and inputs |
+| Tool | Inputs and behavior |
 | --- | --- |
-| `feishu_status` | Cached account status; `verify=true` performs online verification. |
-| `feishu_docs_read` | `search`: `query`, `limit` (1–20), `page_token`. `fetch`: `document` URL/token (Docx or Wiki); returns full detail including `document.revision_id`. |
-| `feishu_docs_write` | `create`: `title`, Markdown `content`. `append` / `replace_text`: `document`, `content`, positive `expected_revision` from fetch; replacement also needs `old_text`. |
-| `feishu_base_read` | `resolve`: `url`. `tables`: `base_token`. `fields` / `records`: also `table_id`. `get_record`: also `record_id`. Lists use `limit` / `offset`; record queries accept `filter`, `sort`, and projected `fields`. |
-| `feishu_base_write` | `create_record` / `update_record`: `base_token`, `table_id`, `fields` map. Updates require an explicit `record_id`; creates must omit it. |
+| `feishu_status` | `verify=false`; reports account snapshot, current CLI version, bridge availability and live connection capabilities. |
+| `feishu_cli_inspect` | `action`: `help`, `schema`, `skills_list`, `skills_read`. Help takes a command-path `argv` array (empty for root); schema takes a dotted `path`; skills take `skill[/reference]` in `path`. Returns native JSON or text. |
+| `feishu_cli_read` | `argv` string array without executable name; optional `stdin` and `input_files` mapping relative paths to temporary file IDs. Service-side CLI metadata must classify the command as read-only. |
+| `feishu_cli_write` | Same inputs, plus `confirm=false` and optional `expected_revision`. Requires write permission. High-risk commands and **all raw API calls**, including GET, also require the high-risk permission and explicit per-operation confirmation. |
+| `feishu_files` | `action`: `put`, `get`, `stat`, `remove`, `import_workspace`. Operates on credential-scoped temporary file IDs, never arbitrary computer paths. |
 
-Read results retain CLI `data`, resource coordinates and pagination. Base lists add
-`has_more` and `next_offset` when needed, using the CLI's `total` or pagination signal.
-Tables allow 1–100 rows per page; fields/records allow 1–200. A partial page cannot
-support whole-table counts or conclusions. Base filter/sort are structured CLI JSON,
-not shell expressions. Resource names/IDs must come from actual results.
+First inspect the command's current help and read its embedded Skill/reference.
+For example, inspect `help` with `argv: ["docs", "+update"]`, then read
+`skills_read` with `path: "lark-doc/references/lark-doc-update.md"` and the
+referenced XML guidance. Newly discovered business commands require no new
+LeafLoom tool or business-specific parameter mapping.
 
-Document writes use Markdown and send content through stdin (maximum 512 KiB).
-`replace_text` maps to CLI `str_replace`, including its ellipsis pattern semantics;
-it is not a guaranteed literal replacement. Before editing, the adapter fetches current
-revision metadata and rejects a mismatch, then forwards the read-time revision to the CLI.
-Live testing found that the upstream update endpoint accepts stale revision values, so
-this preflight check is not an atomic compare-and-swap against other cloud clients.
-Read again after a conflict and avoid concurrent editing during an operation.
+An actual block replacement, after fetching the document and target block:
 
-Base writes read every field-schema page before submitting only the supplied fields.
-Computed, system, attachment and unknown field types are rejected. Duplicate name/ID
-aliases and select values absent from the returned schema are rejected. A field map
-is limited to 16 KiB for safe native command-line transport. Writes are serialized
-within this LeafLoom instance; Base has no adapter-provided atomic revision guard.
+```json
+{
+  "argv": ["docs", "+update", "--doc=DOCUMENT", "--command=block_replace", "--block-id=BLOCK", "--content=-"],
+  "stdin": "<h4>2026/10/16</h4>",
+  "expected_revision": 12
+}
+```
 
-Errors follow the existing MCP `ok=false`, `error_code`, `error`, `isError=true`
-contract, with safe `missing_scopes` and `upstream_code` when available. Raw CLI
-stderr and credentials are not returned. No automatic write retry occurs: a timeout,
-output-limit failure or partial write may have changed the cloud resource. Read it
-before deciding to retry. Each native command times out after 45 seconds and each
-output stream is limited to 2 MiB. There is no `--yes`, raw-API or shell escape hatch.
+Send this to `feishu_cli_write`. XML is the CLI default; explicitly pass
+`--doc-format=markdown` when wanted. LeafLoom does not convert or reformat content.
+The supplied positive document revision is checked immediately before updating
+and passed to the CLI. Raw API edits under `/open-apis/docx/v*/documents/ID` use
+the same preflight check. This is not atomic compare-and-swap across cloud clients.
 
-## Permissions and storage
+The bridge forwards the CLI's full result in `data`, preserving object/array/scalar
+shapes and pagination. It adds `ok`, `exit_code`, `risk` and `files`; help/Skill text
+uses `text`. Do not treat one page as a whole collection. There is no Base schema
+prevalidation, synthetic next offset, or automatic pagination. Incomplete writes
+retain their upstream details and return `ok=false`, `error_code=partial_write`.
 
-The authenticated browser API provides `GET /api/feishu` (settings/status),
-`POST /api/feishu` (`enabled`, `binary`, `profile`) and `POST /api/feishu/verify`.
-Permission updates use `POST /api/mcp-access` with `kind: local|tunnel`,
-`resource: feishu`, `enabled`, `write`. Omitting `resource` retains the existing
-workspace meaning. These management routes require the existing browser/API
-authentication and write CSRF checks; MCP credentials cannot use them.
+## Command policy
 
-Feishu permissions default off for both channels and are independent of local notes.
-A dedicated MCP credential may grant notes, Feishu or both. Disabling one resource
-revokes that resource's permission; the credential remains usable for other granted
-resources. Disabling all scopes or rotating the local credential revokes it entirely.
-Tunnel permission changes rotate its in-memory credential and reconnect discovery/calls.
+Typed command risk comes from the installed CLI schema; shortcut risk comes from
+its help. Discovery is cached against native executable path, timestamp, size and
+profile, and invalidated when those change. Missing risk information is rejected.
+Management/auth/config/update, local servers/watchers, clipboard access and arbitrary
+program execution are unavailable. No shell is used. Output/filter, identity,
+profile, revision and CLI confirmation flags are managed by the bridge; pass
+`confirm=true` only after the user authorizes that specific high-risk action.
+The bridge supplies `--yes` only when confirmed and the command supports it.
 
-MCP authorization failures include `error_source: leafloom_mcp`, the connection identity and required resource permission. They occur before CLI access and do not mean Feishu needs reauthorization. CLI/API failures identify `error_source: feishu_cli`. Upstream `800010116` means the reference resolves to a document block, not a table: list Base tables and use a returned ID.
+Raw `api` accepts only a canonical `/open-apis/` path, without a host/query/fragment,
+encoded path escapes or credential endpoints. Use typed commands or shortcuts first.
+All raw calls conservatively need high-risk authorization, since raw API metadata
+cannot classify individual endpoints. This does not bypass upstream permissions.
 
-The runtime injects that credential as `X-LeafLoom-Tunnel-Authorization` for discovery and calls. Only a real loopback peer presenting the current secret can use it; an invalid proof is rejected without falling back to legacy access. Chat-specific `Authorization` headers cannot override this runtime identity, so conversations using the same Tunnel receive the same configured resource permissions.
-Legacy/anonymous MCP clients and `/ai-mcp` receive no Feishu privileges.
+Each command has a 45-second timeout, or 300 seconds when file arguments are used.
+Each output stream is limited to 2 MiB; stdin text is limited to 512 KiB.
+No write is retried automatically. After a timeout, partial result or output-limit
+error, read the resource before deciding whether to retry.
+Errors retain upstream type, hint and safe scope details in `data`; credentials,
+local internal paths and update notices are filtered. Unstructured errors are withheld.
+`error_source=leafloom_mcp` identifies local authorization failures;
+`error_source=feishu_cli` identifies upstream failures. The existing special guidance
+for upstream `800010116` (document block used as Base table ID) remains.
 
-The private state directory contains `feishu.json`: enabled state, executable override,
-profile and allowlisted verification fields. CLI tokens, app secrets and raw auth output
-are not copied. `mcp-access.json` stores independent per-channel permissions and the local
-credential hash. Old access configurations default to no Feishu access. MCP callers
-cannot change the executable/profile or call browser management APIs.
+## Files
 
-Cloud operations require the computer running LeafLoom to have network access. Results
-are returned to the calling AI client; Feishu content is not automatically imported,
-indexed or synchronized with local notes. This version provides no record/document
-deletion, Base schema changes, attachment writes or permission administration.
+`put` accepts a plain `name` on the first chunk; subsequent chunks supply `file_id`.
+Each call supplies `data_base64` and a sequential byte `offset` (initially zero).
+Finish with `complete=true`, total byte `size` and hexadecimal `sha256`; a failed
+integrity check discards the upload. Completed files are immutable. `get` returns
+up to 256 KiB plus `next_offset` and `eof`; `stat` returns metadata; `remove` deletes
+only the staged file. Use IDs returned by actual results.
+
+Limits: 256 KiB decoded per chunk, 256 MiB per file, 1 GiB staged data and 1024 files
+per credential, 24-hour expiry. Expired files are removed on the next file/command
+operation; all IDs are lost on backend restart. Credential rotation makes old IDs
+unavailable. Files are private and separate from vault content, indexes and history.
+
+To upload an attachment, put its bytes, then call the CLI with e.g.
+`argv: ["docs", "+media-insert", "--doc=DOCUMENT", "--file=in/report.txt", "--type=file"]`
+and `input_files: {"in/report.txt": "FILE_ID"}`. Each command runs in its own working
+directory; inputs are copied there. Downloads may use `--output=out/report.txt`.
+Generated files are registered and returned in `files` with a relative `path` and
+file ID, including files from an upstream partial result. Retrieve their bytes with
+`feishu_files.get`. Binary bytes do not enter the CLI's stdout JSON.
+
+Absolute paths, traversal, symbolic links and Windows junctions are rejected.
+The native CLI's own file guards also restrict relative paths to its working directory.
+Temporary file actions require Feishu read permission, even though their MCP
+annotation conservatively marks them as modifying temporary storage. They do not
+require cloud write permission.
+
+`import_workspace` takes a connected-directory-relative `path`. It additionally
+requires the connection's **note read permission** and uses the existing protected
+path checks. Subsequent reads/use of that file, and files generated from it, recheck
+note permission and the original connected root/path. Feishu-only access cannot read
+local notes or arbitrary local files. Local clients and Tunnel cannot share IDs.
+
+## Permissions and migration
+
+In Settings, configure Feishu read, write and **high-risk** permission separately
+for local and Tunnel clients. High-risk defaults off, requires read+write, and clears
+when either is disabled. Enabling it permits execution; each high-risk request still
+requires specific user authorization and `confirm=true`. Never silently confirm.
+
+The settings API remains `GET/POST /api/feishu` and `POST /api/feishu/verify`.
+`POST /api/mcp-access` adds optional `high_risk` for `resource: "feishu"`; omitted
+values preserve that setting unless read/write is disabled. GET responses include
+`feishu_high_risk`; MCP capabilities include `high_risk_feishu`. Existing settings,
+profiles and credentials remain valid; migration does not enable high-risk operations.
+Settings routes retain browser/API authentication and CSRF protection.
+
+The existing per-resource local credential and private Tunnel runtime authentication
+remain unchanged. A chat's connector bearer cannot override runtime identity.
+Legacy/anonymous clients and `/ai-mcp` receive no Feishu access. MCP cannot change
+settings, initiate login, obtain CLI credentials or update the CLI. A verified login
+is not proof of access to a particular resource. Cloud content is never automatically
+imported, indexed or synchronized into local notes.
 
 ## Validation
 
-See [Windows Dev live acceptance](FEISHU_VALIDATION.md) for the account, shared
-settings UI, document and Base read/write checks completed on 2026-10-16.
-
-Run `python -m unittest discover -s tests -p test_feishu.py` and the workspace MCP
-tests for adapter contracts and channel isolation. Fixtures never touch real documents.
-For real acceptance, verify login first, then use a dedicated test document and Base.
-Windows verification does not establish macOS packaging or live document/Base write
-acceptance; record those separately.
+See [Windows acceptance records](FEISHU_VALIDATION.md). Run the focused Feishu,
+workspace MCP and Tunnel tests against fictional data. Live acceptance must use a
+new synthetic document and attachment; never use existing work records. Report native
+CLI, HTTP MCP, UI, remote client and macOS validation separately.

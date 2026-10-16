@@ -1,3 +1,72 @@
+# ChatGPT through Tunnel — 2026-10-16
+
+Restarted the running source Dev application through its normal quit/start flow;
+the old backend and managed Tunnel exited, and the new backend served the five
+unified Feishu tools on its existing port. Existing settings, credentials and note
+permissions were retained; high-risk access remained disabled.
+
+In the signed-in ChatGPT browser, used LeafLoom plugin management → Refresh tools.
+The application tool dialog then showed `feishu_status`, `feishu_cli_inspect`,
+`feishu_cli_read`, `feishu_cli_write` and `feishu_files`, with the old document/Base
+names absent. A fresh ChatGPT conversation executed all five tools through Tunnel:
+
+| Check | Observed result |
+| --- | --- |
+| Account and connection | `connection=tunnel`, `bridge_available=true`, verified user login; high-risk off |
+| Installed help and Skills | Read docs create/fetch/update help and the corresponding embedded guidance |
+| Cloud write and read | Created a new synthetic document, fetched paragraph/revision, replaced its block, fetched actual `<h4>2026/10/16</h4>` at revision 4 |
+| Temporary files | Uploaded and retrieved `hello.txt`; Base64, 5-byte size and SHA-256 matched |
+
+One initial update was rejected because the client supplied the bridge-managed
+`--revision-id` flag. No mutation ran for that rejected request. ChatGPT removed
+that flag and supplied `expected_revision=3`, then completed the update/readback.
+No existing business document, local note, message, deletion or high-risk setting
+was used in the test. This validates the ChatGPT browser client and actual Tunnel,
+not only a local HTTP simulation. It does not establish macOS acceptance.
+
+The signed-in acceptance chat URL is retained only in the private local run record.
+Local screenshots are in the ignored `.cache/leafloom-chatgpt-tools-refreshed.png`
+and `.cache/leafloom-chatgpt-tunnel-passed.png`; private test resource coordinates
+are recorded only in `.cache/leafloom-chatgpt-tunnel-validation.json`.
+
+---
+
+# Unified CLI bridge acceptance — 2026-10-16
+
+Windows, native lark-cli 1.0.66, new source backend exercised through HTTP MCP
+using Starlette TestClient (no real listening port). This is an isolated backend
+with temporary LeafLoom settings and MCP credentials; the existing CLI user login
+was reused. The running desktop/backend and its saved permissions were not changed.
+
+- Discovery returned exactly the new five Feishu tools. Native help and embedded
+  Skill retrieval worked through the MCP interface.
+- Created one synthetic acceptance document, fetched the ordinary date paragraph,
+  replaced that block with `<h4>2026/10/16</h4>` using its fetched revision, and
+  fetched again to confirm an actual `h4` block.
+- Uploaded a synthetic TXT attachment via `feishu_files.put` and
+  `docs +media-insert`, downloaded it through `docs +media-download`, then retrieved
+  its temporary file ID. The bytes and SHA-256 matched:
+  `638585ef89fd19108c1a268b08848baa87e18cb065bafa0a2555f80b9e480651`.
+- Direct native CLI dry-run probes rejected both parent traversal and absolute
+  `@file` paths before resource creation. The bridge also validates mapped paths.
+- Only the new synthetic document/attachment were changed. No messages, deletions,
+  existing business documents, CLI upgrade or account reconfiguration were performed.
+
+The dedicated document remains for review. Its URL and readbacks are in the ignored
+`.cache/feishu-bridge-acceptance/result.json`; no CLI credentials were copied there.
+This confirms native CLI + HTTP MCP behavior on Windows. At that isolated-backend
+checkpoint, no ChatGPT/Tunnel remote-client session,
+GUI inspection, installer or macOS execution was performed; the subsequent
+ChatGPT/Tunnel check is recorded above.
+The shared settings page was type-checked and built; automated tests cover permission
+migration, channel/file isolation and immediate checks of current permissions.
+
+The records below describe the **previous, removed document/Base interface** and
+remain as historical evidence; their tool names and pagination behavior do not
+apply to the unified bridge.
+
+---
+
 # Feishu live acceptance — 2026-10-16
 
 ## Environment and boundary

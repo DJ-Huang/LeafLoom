@@ -1027,5 +1027,8 @@
   "site.faq_question": "不使用 AI，也能正常使用吗？",
   "site.faq_answer": "可以。阅读、编辑、知识图谱和关键词检索不依赖模型。完成依赖准备后可以离线使用；需要本地语义检索时再准备 BGE-M3。外部 AI 与 ChatGPT 则需要各自的账号、权限和网络。",
   "site.footer_line": "让知识留在本地，让想法自由生长。",
-  "site.feedback": "反馈与建议"
+  "site.feedback": "反馈与建议",
+  "feishu.localHighRisk": "允许本机飞书高风险操作",
+  "feishu.tunnelHighRisk": "允许 Tunnel 飞书高风险操作",
+  "feishu.highRiskHelp": "包括 CLI 标记的高风险命令及原始 API 调用。需先开启写入；每次操作仍须明确确认。"
 }

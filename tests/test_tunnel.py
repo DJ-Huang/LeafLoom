@@ -83,8 +83,8 @@ class McpSecurityTests(unittest.TestCase):
         status = {'jsonrpc': '2.0', 'id': 7, 'method': 'tools/call',
                   'params': {'name': 'vault_index_status', 'arguments': {}}}
         read = {'jsonrpc': '2.0', 'id': 8, 'method': 'tools/call',
-                'params': {'name': 'feishu_base_read', 'arguments': {'action': 'resolve', 'url': 'https://example.feishu.cn/wiki/test'}}}
-        with self.client() as client, patch.object(self.app.state.feishu, 'base_read', return_value={'ok': True}) as adapter:
+                'params': {'name': 'feishu_cli_read', 'arguments': {'argv': ['base', '+url-resolve', '--url=https://example.feishu.cn/wiki/test']}}}
+        with self.client() as client, patch.object(self.app.state.feishu, 'execute', return_value={'ok': True}) as adapter:
             # Different chats retain different connector bearers. Neither bearer
             # may override the private, authenticated runtime identity.
             for bearer in ('', legacy, 'Bearer stale-connector-token'):
@@ -92,7 +92,7 @@ class McpSecurityTests(unittest.TestCase):
                 if bearer: headers['Authorization'] = bearer
                 result = client.post('/mcp', json=status, headers=headers).json()['result']['structuredContent']
                 self.assertEqual(result['capabilities'], {'connection': 'tunnel', 'read_workspace': False,
-                    'write_workspace': False, 'read_feishu': True, 'write_feishu': False})
+                    'write_workspace': False, 'read_feishu': True, 'write_feishu': False, 'high_risk_feishu': False})
                 self.assertTrue(client.post('/mcp', json=read, headers=headers).json()['result']['structuredContent']['ok'])
             self.assertEqual(adapter.call_count, 3)
             # A forged proof cannot downgrade to otherwise-valid legacy auth.

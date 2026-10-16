@@ -185,7 +185,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         if not isinstance(body,dict):raise ValueError('Invalid MCP access settings')
         return json_response(await asyncio.to_thread(mcp_access.configure,body.get('kind'),
             enabled=body.get('enabled'),write=body.get('write'),rotate=body.get('rotate',False),
-            resource=body.get('resource','workspace')))
+            resource=body.get('resource','workspace'),high_risk=body.get('high_risk')))
     @app.get('/api/feishu')
     async def feishu_settings():return json_response(feishu.status())
     @app.post('/api/feishu')

@@ -17,161 +17,185 @@ def envelope(data):
 
 
 class FeishuTests(unittest.TestCase):
-    def test_document_block_table_reference_is_not_an_auth_error(self):
-        error = Feishu._failure({'error': {'type': 'api', 'subtype': 'unknown', 'code': 800010116,
-                                           'message': 'invalid_request: reference resolves to a docx block'}})
-        self.assertEqual(error.code, 'invalid_request')
-        self.assertEqual(error.details['error_source'], 'feishu_cli')
-        self.assertEqual(error.details['missing_scopes'], [])
-
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.config = SimpleNamespace(directory=Path(temp.name))
         self.service = Feishu(self.config)
+        self.addCleanup(self.service.files.temp.cleanup)
         self.service.configure({'enabled': True, 'binary': sys.executable, 'profile': 'work'})
         self.calls = []
-        self.status = {'appId': 'fictional-app', 'identity': 'bot', 'verified': True,
-                       'identities': {'user': {'available': True, 'verified': True, 'userName': 'Example',
-                                              'openId': 'ou_example', 'access_token': 'never-save'}}}
+        self.status = {'appId': 'fictional-app', 'identities': {'user': {'available': True, 'verified': True,
+                       'userName': 'Example', 'openId': 'ou_example', 'access_token': 'never-save'}}}
         self.result = envelope({'document': {'revision_id': 12}, 'has_more': True, 'page_token': 'next'})
-        self.schema = [{'id': 'fld_title', 'name': 'Title', 'type': 'text'},
-                       {'id': 'fld_formula', 'name': 'Computed', 'type': 'formula'},
-                       {'id': 'fld_status', 'name': 'Status', 'type': 'select', 'options': [{'name': 'Done'}]}]
+        self.risks = {'+fetch': 'read', '+future': 'read', '+update': 'write', '+create': 'write', '+delete': 'high-risk-write'}
         self.runner = patch('vault_rag.feishu.run_cli', side_effect=self.fake)
         self.runner.start(); self.addCleanup(self.runner.stop)
 
     def fake(self, binary, args, **kwargs):
         self.calls.append((list(args), kwargs))
+        if args == ['--help']:
+            return 0, 'Lark domains:\n  docs  Documents\n  calendar  Calendars\n  base  Base\nAgent tooling:\n  schema  Schema\n  skills  Skills', ''
         if '--help' in args:
-            return 0, ' '.join(flag for flags in Feishu.COMMANDS.values() for flag in flags) + ' --as --format', ''
+            risk = self.risks.get(args[1] if len(args) > 1 else '', 'read')
+            return 0, '\n'.join(['Risk: ' + risk] + ['  ' + flag + '  description' for flag in (
+                '--as string', '--format string', '--json', '--verify', '--doc string', '--content string',
+                '--command string', '--block-id string', '--doc-format string', '--revision-id int', '--query string',
+                '--file string', '--output string', '--params string', '--data string', '--yes', '--dry-run') if not (args[0] == 'api' and flag == '--yes')]), ''
         if args == ['--version']: return 0, 'lark-cli version 1.0.66', ''
         if args[:2] == ['auth', 'status']: return 0, json.dumps(self.status), ''
-        if args[:2] == ['base', '+field-list']:
-            return envelope({'fields': self.schema, 'total': len(self.schema)})
+        if args[0] == 'schema': return 0, json.dumps({'_meta': {'risk': 'read'}}), ''
+        if args[:2] == ['skills', 'read']: return 0, '# Installed skill\nUse block_replace', ''
         return self.result
 
-    def test_verify_user_not_bot_and_persist_only_allowlisted_status(self):
+    def execute(self, argv, **kwargs):
+        return self.service.execute(argv, owner='local-generation', source_check=lambda source: None,
+                                    require_high_risk=lambda: None, **kwargs)
+
+    def test_verify_and_configuration_preserve_cli_credentials(self):
         self.assertEqual(self.service.verify()['verification']['state'], 'connected')
-        saved = self.service.path.read_text()
-        self.assertNotIn('never-save', saved)
-        self.assertNotIn('access_token', saved)
-        self.assertEqual(Feishu(self.config).status()['verification']['user_name'], 'Example')
+        self.assertNotIn('never-save', self.service.path.read_text())
+        self.assertTrue(self.service.account_status()['bridge_available'])
         self.service.configure({'profile': 'personal'})
         self.assertEqual(self.service.status()['verification'], {'state': 'unchecked'})
-        self.status['identities']['user']['available'] = False
-        self.assertEqual(self.service.verify()['verification']['state'], 'not_logged_in')
-
-    def test_verification_states(self):
-        for status, expected in [({'identities': {}}, 'not_configured'),
-                                 ({'appId': 'app', 'identities': {'user': {'available': True, 'verified': False}}}, 'login_expired')]:
-            self.status = status
-            self.assertEqual(self.service.verify()['verification']['state'], expected)
-        for code, expected in [('cli_not_installed', 'not_installed'), ('cli_incompatible', 'incompatible'),
-                               ('cli_timeout', 'network_error'), ('network_error', 'network_error'),
-                               ('not_configured', 'not_configured')]:
-            with patch.object(self.service, '_compatible', side_effect=FeishuError(code, 'fixture')):
-                self.assertEqual(self.service.verify()['verification']['state'], expected)
-
-    def test_incompatible_command_does_not_run_auth(self):
-        with patch('vault_rag.feishu.run_cli', return_value=(0, 'missing flags', '')):
-            self.assertEqual(self.service.verify()['verification']['state'], 'incompatible')
-        self.assertFalse(any(args[:2] == ['auth', 'status'] for args, _ in self.calls))
-
-    def test_document_arguments_stdin_revision_and_profile(self):
-        body = '@private-file\n中文 & $(do-not-execute) `literal`'
-        self.service.docs_write('append', body, 'https://example.feishu.cn/wiki/example', expected_revision=12)
-        args, options = self.calls[-1]
-        self.assertEqual(options['content'], body)
-        self.assertEqual(options['profile'], 'work')
-        self.assertNotIn(body, args)
-        self.assertIn('--content=-', args)
-        self.assertIn('--revision-id=12', args)
-        self.assertIn('--as=user', args)
-        for revision in (None, -1, 0, True):
-            with self.assertRaises(ValueError): self.service.docs_write('append', body, 'example', expected_revision=revision)
-        self.service.docs_read('search', query='--as=bot', page_token='next', limit=20)
-        self.assertIn('--query=--as=bot', self.calls[-1][0])
-        self.assertIn('--page-token=next', self.calls[-1][0])
-
-    def test_errors_do_not_echo_cli_credentials_and_never_retry(self):
-        self.result = (1, '', json.dumps({'ok': False, 'error': {'type': 'auth', 'subtype': 'permission_denied',
-                        'message': 'scope missing: never-echo', 'missing_scopes': ['base:record:update']}}))
-        with self.assertRaises(FeishuError) as raised:
-            self.service.docs_read('fetch', document='example')
-        self.assertEqual(raised.exception.code, 'permission_denied')
-        self.assertEqual(raised.exception.details['missing_scopes'], ['base:record:update'])
-        self.assertNotIn('never-echo', str(raised.exception))
-        self.assertEqual(sum(args[:2] == ['docs', '+fetch'] and '--help' not in args for args, _ in self.calls), 1)
-        self.result = envelope({'result': 'partial_success'})
-        with self.assertRaises(FeishuError) as partial:
-            self.service.docs_write('create', 'body', title='Title')
-        self.assertEqual(partial.exception.code, 'partial_write')
-        self.result = envelope({'record': {'ignored_fields': ['Title']}})
-        with self.assertRaises(FeishuError) as ignored:
-            self.service.base_write('update_record', 'base_example', 'tbl_example', {'Title': 'New'}, 'rec_example')
-        self.assertEqual(ignored.exception.code, 'partial_write')
-
-    def test_invalid_json_and_identity_are_errors(self):
-        for response, code in [((0, 'not json', ''), 'invalid_cli_response'),
-                               ((0, '{"identity":"user","data":{}}', ''), 'invalid_cli_response'),
-                               ((0, '{"ok":true,"identity":"bot","data":{}}', ''), 'identity_mismatch')]:
-            self.result = response
-            with self.assertRaises(FeishuError) as raised: self.service.docs_read('fetch', document='example')
-            self.assertEqual(raised.exception.code, code)
-
-    def test_stale_document_revision_never_submits_a_write(self):
-        with self.assertRaises(FeishuError) as stale:
-            self.service.docs_write('append', 'must not write', document='example', expected_revision=11)
-        self.assertEqual(stale.exception.code, 'write_conflict')
-        self.assertEqual(stale.exception.details['current_revision'], 12)
-        self.assertFalse(any(args[:2] == ['docs', '+update'] and '--help' not in args for args, _ in self.calls))
-
-    def test_base_schema_and_exact_patch(self):
-        self.service.base_write('update_record', 'base_example', 'tbl_example', {'Title': 'Updated'}, 'rec_example')
-        args, _ = self.calls[-1]
-        self.assertIn('--record-id=rec_example', args)
-        payload = json.loads(next(a.removeprefix('--json=') for a in args if a.startswith('--json=')))
-        self.assertEqual(payload, {'Title': 'Updated'})
-        for fields in ({'Computed': 'bad'}, {'Missing': 1}, {'Status': 'New option'}, {'Title': 'a', 'fld_title': 'b'}):
-            with self.assertRaises(ValueError): self.service.base_write('create_record', 'base_example', 'tbl_example', fields)
-
-    def test_base_schema_pagination_uses_total(self):
-        pages = [envelope({'fields': self.schema[:1], 'total': 2}), envelope({'fields': self.schema[1:2], 'total': 2})]
-        original = self.fake
-        def runner(binary, args, **kwargs):
-            if args[:2] == ['base', '+field-list'] and '--help' not in args:
-                self.calls.append((args, kwargs)); return pages.pop(0)
-            return original(binary, args, **kwargs)
-        with patch('vault_rag.feishu.run_cli', side_effect=runner):
-            with self.assertRaises(ValueError):
-                self.service.base_write('update_record', 'base_example', 'tbl_example', {'Computed': 1}, 'rec_example')
-        self.assertFalse(pages)
-        self.assertTrue(any('--offset=1' in args for args, _ in self.calls))
-
-    def test_base_queries_preserve_pagination_and_server_filters(self):
-        self.result = envelope({'records': [{'record_id': 'rec_example'}], 'total': 4})
-        result = self.service.base_read('records', 'base_example', 'tbl_example', limit=1, offset=2,
-                                        filter={'logic': 'and'}, sort=[{'field': 'Title', 'desc': True}], fields=['Title'])
-        self.assertEqual(result['data']['next_offset'], 3)
-        self.assertTrue(result['data']['has_more'])
-        args = self.calls[-1][0]
-        self.assertIn('--field-id=Title', args)
-        self.assertTrue(any(a.startswith('--filter-json={') for a in args))
-        self.result = envelope({'data': [['Example', 1]], 'fields': ['Title', 'Count'],
-                                'record_id_list': ['rec_example'], 'has_more': True})
-        matrix = self.service.base_read('records', 'base_example', 'tbl_example', limit=1, offset=2)
-        self.assertEqual(matrix['data']['next_offset'], 3)
-        self.assertEqual(matrix['data']['data'], [['Example', 1]])
-
-    def test_native_executable_selection_and_configuration_validation(self):
         for profile in ('../other', '--as=bot', 'name/other'):
             with self.assertRaises(ValueError): self.service.configure({'profile': profile})
         self.service.configure({'binary': str(self.config.directory / 'lark-cli.cmd')})
         with self.assertRaises(FeishuError): self.service._binary()
-        self.service.configure({'enabled': False})
-        with self.assertRaises(FeishuError) as raised: self.service.docs_read('fetch', document='example')
-        self.assertEqual(raised.exception.code, 'integration_disabled')
+
+    def test_discovery_plaintext_schema_and_new_command_without_adapter(self):
+        self.assertIn('Installed skill', self.service.inspect('skills_read', path='lark-doc')['text'])
+        self.assertEqual(self.service.inspect('schema', path='calendar.calendars.list')['data']['_meta']['risk'], 'read')
+        result = self.execute(['docs', '+future', '--query', '--as=bot'])
+        self.assertEqual(result['data']['data']['page_token'], 'next')
+        self.assertIn('--query=--as=bot', self.calls[-1][0])
+        self.assertIn('--as=user', self.calls[-1][0])
+        self.execute(['calendar', 'calendars', 'list'])
+        self.assertTrue(any(args == ['schema', 'calendar.calendars.list'] for args, _ in self.calls))
+        count = sum('--help' in args for args, _ in self.calls)
+        self.execute(['docs', '+future'])
+        self.assertEqual(count, sum('--help' in args for args, _ in self.calls))
+        self.service.configure({'profile': 'new'})
+        self.execute(['docs', '+future'])
+        self.assertGreater(sum('--help' in args for args, _ in self.calls), count)
+
+    def test_unknown_risk_and_read_write_boundaries_fail_closed(self):
+        self.risks['+future'] = 'unknown'
+        for argv in (['docs', '+future'], ['docs', '+create']):
+            with self.assertRaises(FeishuError): self.execute(argv)
+        for argv in (['auth', 'status'], ['docs', 'watch'], ['config', 'init']):
+            with self.assertRaises(FeishuError): self.execute(argv)
+        for flag in ('--as=bot', '--profile=other', '--format=table', '--yes', '--revision-id=1', '--help'):
+            with self.assertRaises(ValueError): self.execute(['docs', '+fetch', flag])
+        self.assertFalse(any('--as=user' in args for args, _ in self.calls))
+
+    def test_raw_api_paths_and_confirmation(self):
+        for path in ('https://evil/open-apis/im/v1/messages', '/open-apis/auth/v3/token',
+                     '/open-apis/x/../auth/token', '/open-apis/%61uth/token', '/open-apis/im/v1/messages?x=1'):
+            with self.assertRaises(ValueError): self.execute(['api', 'GET', path], write=True, confirm=True)
+        with self.assertRaises(FeishuError) as confirm:
+            self.execute(['api', 'GET', '/open-apis/im/v1/messages'], write=True)
+        self.assertEqual(confirm.exception.code, 'confirmation_required')
+        self.execute(['api', 'GET', '/open-apis/im/v1/messages'], write=True, confirm=True)
+        self.assertNotIn('--yes', self.calls[-1][0])
+        self.execute(['docs', '+delete'], write=True, confirm=True)
+        self.assertIn('--yes', self.calls[-1][0])
+
+    def test_stdin_xml_and_revision_preflight(self):
+        body = '<h4>中文 &amp; literal</h4>'
+        self.execute(['docs', '+update', '--doc=example', '--command=block_replace', '--content=-', '--block-id=block'],
+                     write=True, stdin=body, expected_revision=12)
+        args, options = self.calls[-1]
+        self.assertEqual(options['content'], body)
+        self.assertEqual(options['profile'], 'work')
+        self.assertIn('--revision-id=12', args)
+        self.assertNotIn('--doc-format=markdown', args)
+        for revision in (None, 0, True, 11):
+            before = len(self.calls)
+            with self.assertRaises((FeishuError, ValueError)):
+                self.execute(['docs', '+update', '--doc=example'], write=True, expected_revision=revision)
+            self.assertFalse(any(args[:2] == ['docs', '+update'] and '--as=user' in args for args, _ in self.calls[before:]))
+        with self.assertRaises(FeishuError):
+            self.execute(['api', 'PATCH', '/open-apis/docx/v1/documents/example/blocks/a'],
+                         write=True, confirm=True, expected_revision=11)
+
+    def test_results_preserve_shapes_partial_success_and_errors_without_retry(self):
+        for value in ([{'title': 'a'}], 42, 'hello', None):
+            self.result = (0, json.dumps(value), '')
+            self.assertEqual(self.execute(['docs', '+fetch'])['data'], value)
+        self.result = envelope({'result': 'partial_success', 'ignored_fields': ['Title']})
+        self.assertEqual(self.execute(['docs', '+create'], write=True)['error_code'], 'partial_write')
+        self.result = (1, '', json.dumps({'ok': False, 'error': {'type': 'authorization',
+            'subtype': 'missing_scope', 'message': 'access_token=secret-value', 'hint': 'Read the scope docs',
+            'missing_scopes': ['docs:read'], 'access_token': 'secret-value'}}))
+        before = len(self.calls)
+        result = self.execute(['docs', '+fetch'])
+        self.assertNotIn('secret-value', json.dumps(result))
+        self.assertEqual(result['data']['error']['hint'], 'Read the scope docs')
+        self.assertEqual(result['error_source'], 'feishu_cli')
+        self.assertEqual(sum('--as=user' in args for args, _ in self.calls[before:]), 1)
+
+    def test_input_and_output_file_transport(self):
+        import base64, hashlib
+        data = b'attachment bytes'
+        file = self.service.files.operation('local-generation', lambda source: None, 'put', name='a.txt',
+            data_base64=base64.b64encode(data).decode(), complete=True, size=len(data), sha256=hashlib.sha256(data).hexdigest())
+        original = self.fake
+        def download(binary, args, **kwargs):
+            if '--output=out/result.txt' in args:
+                job = Path(kwargs['cwd'])
+                self.assertEqual((job / 'in/a.txt').read_bytes(), data)
+                (job / 'out/result.txt').write_bytes(data)
+            return original(binary, args, **kwargs)
+        with patch('vault_rag.feishu.run_cli', side_effect=download):
+            result = self.execute(['docs', '+fetch', '--output=out/result.txt'], input_files={'in/a.txt': file['file_id']})
+        self.assertEqual(result['files'][0]['sha256'], file['sha256'])
+        self.assertNotIn(str(self.config.directory), json.dumps(result))
+        for value in ('../outside', 'C:/outside', '/outside'):
+            with self.assertRaises(ValueError): self.execute(['docs', '+fetch', '--output=' + value])
+        with self.assertRaises(ValueError): self.execute(['docs', '+fetch', '--content=@missing.txt'])
+
+
+class FileTests(unittest.TestCase):
+    def test_chunks_ownership_expiry_integrity_and_quota(self):
+        import base64, hashlib, time
+        from vault_rag.feishu_files import FeishuFiles
+        with tempfile.TemporaryDirectory() as directory:
+            store = FeishuFiles(SimpleNamespace(directory=Path(directory)))
+            self.addCleanup(store.temp.cleanup)
+            check = lambda source: None
+            first = store.operation('a', check, 'put', name='test.txt', data_base64=base64.b64encode(b'abc').decode())
+            key = first['file_id']
+            with self.assertRaises(FileNotFoundError): store.operation('b', check, 'stat', file_id=key)
+            with self.assertRaises(ValueError): store.operation('a', check, 'put', file_id=key, offset=0)
+            done = store.operation('a', check, 'put', file_id=key, offset=3, complete=True,
+                                   size=3, sha256=hashlib.sha256(b'abc').hexdigest())
+            self.assertTrue(done['complete'])
+            self.assertTrue(store.operation('a', check, 'get', file_id=key)['eof'])
+            with self.assertRaises(ValueError): store.operation('a', check, 'put', name='bad.txt', complete=True, size=0, sha256='0'*64)
+            with patch.object(store, 'MAX_FILE', 1):
+                with self.assertRaises(ValueError): store.operation('a', check, 'put', name='large.txt', data_base64='YWJj')
+            store.entries[key]['expires_at'] = time.time() - 1
+            with self.assertRaises(FileNotFoundError): store.operation('a', check, 'stat', file_id=key)
+            self.assertFalse((store.root / key).exists())
+
+    def test_provenance_and_output_links(self):
+        from vault_rag.feishu_files import FeishuFiles
+        with tempfile.TemporaryDirectory() as directory:
+            store = FeishuFiles(SimpleNamespace(directory=Path(directory)))
+            self.addCleanup(store.temp.cleanup)
+            source = Path(directory) / 'source.txt'
+            source.write_bytes(b'example')
+            item = store.register('a', source, [{'root': 'old', 'path': 'source.txt'}])
+            def revoked(source): raise PermissionError('revoked')
+            with self.assertRaises(PermissionError): store.get('a', item['file_id'], revoked)
+            with tempfile.TemporaryDirectory(dir=store.root) as jobdir:
+                job = Path(jobdir)
+                for rel in ('../outside', '/absolute', 'C:/absolute', 'a\\b'):
+                    with self.assertRaises(ValueError): store.job_path(job, rel)
+                with patch('vault_rag.feishu_files.is_link', return_value=True):
+                    (job / 'link').write_text('x')
+                    with self.assertRaises(ValueError): store.scan('a', job, set())
 
 
 class AccessTests(unittest.TestCase):
