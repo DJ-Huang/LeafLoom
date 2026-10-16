@@ -6,6 +6,8 @@
 
 ## Install and open
 
+The [LeafLoom website](https://dj-huang.github.io/LeafLoom/) offers English, Chinese and Japanese pages with screenshots and direct downloads from the latest stable Release. Choose Windows or Mac explicitly; release notes and SHA-256 files are linked beside the installers. If a platform is unavailable in that Release, use **All releases** to check earlier versions.
+
 Supported: Windows 10/11 x64 and macOS 14+ on Apple Silicon. Linux, Intel Mac and Windows ARM are not supported by the desktop installer.
 
 **Recommended: download the desktop installer from the [latest Release](https://github.com/DJ-Huang/LeafLoom/releases/latest).** You do not need to clone the repository or install Python, Node or Ollama.
