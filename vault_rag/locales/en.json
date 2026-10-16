@@ -986,5 +986,12 @@
   "site.faq_question": "Can I use LeafLoom without AI?",
   "site.faq_answer": "Yes. Reading, editing, the graph and keyword search work without a model, and work offline after dependencies are prepared. Prepare BGE-M3 only for local semantic search. External AI and ChatGPT need their own accounts, permissions and network access.",
   "site.footer_line": "Keep your knowledge local. Let your ideas grow.",
-  "site.feedback": "Feedback"
+  "site.feedback": "Feedback",
+  "site.nav_about": "About",
+  "site.about_title": "About the creator · LeafLoom",
+  "site.about_heading": "Hi, I’m DJ.",
+  "site.about_intro": "I’m the creator of LeafLoom. Find my projects and updates on GitHub and X.",
+  "site.about_github": "Explore my open-source projects and code.",
+  "site.about_x": "Follow my posts and latest updates.",
+  "site.about_back": "Back to LeafLoom"
 }

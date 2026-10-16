@@ -14,6 +14,8 @@
 
 [LeafLoom 公式サイト](https://dj-huang.github.io/LeafLoom/ja/) は日英中の紹介、製品画面、各プラットフォームで利用できる最新正式版の直接ダウンロードに対応しています。Windows または Mac を選択し、リリースノートと SHA-256 ファイルも確認できます。新しい Release に対象のインストーラーがない場合は、利用できる最新正式版と、その版のリリースノート・チェックサムを引き続き掲載します。正式版に対象のインストーラーが一つもない場合のみ利用不可になります。
 
+公式サイトの「このサイトについて」ページで作者の GitHub と X のプロフィールを確認できます。上部ナビゲーションまたはフッターから開き、言語を切り替えても紹介ページに留まります。
+
 Windows 10/11 x64 と、macOS 14 以降の Apple Silicon に対応しています。デスクトップインストーラーは Linux、Intel Mac、Windows ARM に未対応です。
 
 **[最新の Release](https://github.com/DJ-Huang/LeafLoom/releases/latest) のデスクトップインストーラーがおすすめです。** リポジトリのクローンや、Python・Node・Ollama の事前インストールは不要です。

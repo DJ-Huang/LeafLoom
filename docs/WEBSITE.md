@@ -4,7 +4,7 @@
 
 ## Source and build
 
-`site/page.html` and `site/style.css` form an independent, static marketing website. It does not load the application frontend, run the Python service, access vaults, or include analytics. English is the root page; Chinese and Japanese have `/zh-CN/` and `/ja/` routes. All routes support direct loading without JavaScript.
+`site/page.html`, `site/about.html` and `site/style.css` form an independent, static marketing website. It does not load the application frontend, run the Python service, access vaults, or include analytics. English is the root page; Chinese and Japanese have `/zh-CN/` and `/ja/` routes. Each language has an `about/` page linked from the navigation and footer, with the creator’s GitHub and X profiles. Language links and canonical/alternate metadata retain the current page type; all six pages appear in the sitemap. All routes support direct loading without JavaScript.
 
 Author all website UI copy under `site.*` keys in `vault_rag/locales/messages.tsv`; do not edit generated catalogs or HTML. Run these commands from the repository root with Python 3.12+ (standard library only):
 

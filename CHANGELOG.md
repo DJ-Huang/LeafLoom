@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Add English, Chinese and Japanese About pages with the creator’s GitHub and X profiles, linked from website navigation and footers.
+
 - Keep the latest available stable Windows and Mac website downloads independently, with matching versions, release notes and checksums. Allow `v*` tags in the Pages environment so Release events can deploy automatically.
 
 ## 0.1.2 — 2026-10-16

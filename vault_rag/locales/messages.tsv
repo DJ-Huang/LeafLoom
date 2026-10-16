@@ -993,3 +993,11 @@ site.faq_question|不使用 AI，也能正常使用吗？|Can I use LeafLoom wit
 site.faq_answer|可以。阅读、编辑、知识图谱和关键词检索不依赖模型。完成依赖准备后可以离线使用；需要本地语义检索时再准备 BGE-M3。外部 AI 与 ChatGPT 则需要各自的账号、权限和网络。|Yes. Reading, editing, the graph and keyword search work without a model, and work offline after dependencies are prepared. Prepare BGE-M3 only for local semantic search. External AI and ChatGPT need their own accounts, permissions and network access.|はい。閲覧、編集、知識グラフ、キーワード検索はモデル不要です。依存関係を準備すればオフラインでも利用できます。ローカル意味検索には BGE-M3 を準備してください。外部 AI や ChatGPT は各サービスのアカウント・権限・ネットワークが必要です。
 site.footer_line|让知识留在本地，让想法自由生长。|Keep your knowledge local. Let your ideas grow.|知識は手元に。アイデアは自由に。
 site.feedback|反馈与建议|Feedback|フィードバック
+
+site.nav_about|关于|About|このサイトについて
+site.about_title|关于作者 · LeafLoom|About the creator · LeafLoom|作者について · LeafLoom
+site.about_heading|你好，我是 DJ。|Hi, I’m DJ.|こんにちは、DJ です。
+site.about_intro|我是 LeafLoom 的作者。欢迎通过 GitHub 和 X 了解我的项目与近况。|I’m the creator of LeafLoom. Find my projects and updates on GitHub and X.|LeafLoom の作者です。GitHub と X でプロジェクトや近況をご覧いただけます。
+site.about_github|查看我的开源项目和代码。|Explore my open-source projects and code.|オープンソースのプロジェクトとコードをご覧ください。
+site.about_x|查看我的分享与最新动态。|Follow my posts and latest updates.|投稿や最新情報をご覧ください。
+site.about_back|返回 LeafLoom 首页|Back to LeafLoom|LeafLoom のホームへ

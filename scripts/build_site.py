@@ -151,6 +151,7 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
         principles = "".join(f'<article><h3>{t(key + "_title")}</h3><p>{t(key + "_body")}</p></article>' for key in ("files", "scope", "optional"))
         values.update({
             "lang": lang, "og_locale": og_locale, "base": escape(base), "base_url": escape(base_url),
+            "about_url": escape(base + route + "about/"),
             "home": escape(base + route), "canonical": escape(base_url + route),
             "language_links": "".join(language_links), "alternates": "\n  ".join(alternates),
             "guide_url": guide_url, "ai_url": f"{REPO}/blob/main/docs/{lang}/AI.md",
@@ -162,11 +163,28 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
         folder = output / route
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "index.html").write_text(render(template, values), encoding="utf-8")
+        about_values = dict(values)
+        about_values.update({
+            "title": t("about_title"), "description": t("about_intro"),
+            "canonical": escape(base_url + route + "about/"),
+            "language_links": "".join(
+                f'<a href="{escape(base + other_route + "about/")}" lang="{other}" hreflang="{other}"' +
+                (' aria-current="page"' if other == lang else '') + f'>{label}</a>'
+                for other, (label, other_route, _) in LANGUAGES.items()),
+            "alternates": "\n  ".join(
+                f'<link rel="alternate" hreflang="{other}" href="{escape(base_url + other_route + "about/")}">'
+                for other, (_, other_route, _) in LANGUAGES.items()) +
+                f'\n  <link rel="alternate" hreflang="x-default" href="{escape(base_url + "about/")}">',
+        })
+        about_folder = folder / "about"
+        about_folder.mkdir(exist_ok=True)
+        (about_folder / "index.html").write_text(
+            render((ROOT / "site/about.html").read_text(encoding="utf-8"), about_values), encoding="utf-8")
         target = assets_dir / lang
         target.mkdir(exist_ok=True)
         for shot in SHOTS:
             shutil.copy2(ROOT / f"assets/screenshots/{lang}/{shot}.png", target / f"{shot}.png")
-    urls = "".join(f"<url><loc>{escape(base_url + route)}</loc></url>" for _, route, _ in LANGUAGES.values())
+    urls = "".join(f"<url><loc>{escape(base_url + route)}</loc></url>" for _, route, _ in LANGUAGES.values() for route in (route, route + "about/"))
     (output / "sitemap.xml").write_text(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>\n', encoding="utf-8")
     (output / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {base_url}sitemap.xml\n", encoding="utf-8")
     (output / ".nojekyll").touch()

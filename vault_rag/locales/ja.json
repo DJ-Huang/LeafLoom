@@ -986,5 +986,12 @@
   "site.faq_question": "AI を使わなくても利用できますか？",
   "site.faq_answer": "はい。閲覧、編集、知識グラフ、キーワード検索はモデル不要です。依存関係を準備すればオフラインでも利用できます。ローカル意味検索には BGE-M3 を準備してください。外部 AI や ChatGPT は各サービスのアカウント・権限・ネットワークが必要です。",
   "site.footer_line": "知識は手元に。アイデアは自由に。",
-  "site.feedback": "フィードバック"
+  "site.feedback": "フィードバック",
+  "site.nav_about": "このサイトについて",
+  "site.about_title": "作者について · LeafLoom",
+  "site.about_heading": "こんにちは、DJ です。",
+  "site.about_intro": "LeafLoom の作者です。GitHub と X でプロジェクトや近況をご覧いただけます。",
+  "site.about_github": "オープンソースのプロジェクトとコードをご覧ください。",
+  "site.about_x": "投稿や最新情報をご覧ください。",
+  "site.about_back": "LeafLoom のホームへ"
 }
