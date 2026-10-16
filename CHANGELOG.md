@@ -2,6 +2,10 @@
 
 [English](CHANGELOG.md) · [中文](docs/zh-CN/CHANGELOG.md) · [日本語](docs/ja/CHANGELOG.md)
 
+## Unreleased
+
+- Keep the latest available stable Windows and Mac website downloads independently, with matching versions, release notes and checksums. Allow `v*` tags in the Pages environment so Release events can deploy automatically.
+
 ## 0.1.2 — 2026-10-16
 
 - Add Settings → General → App updates with current/latest versions, verified installer downloads, a progress bar and installer launch after a normal quit. macOS opens the DMG; source Dev checks versions only.

@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from urllib.parse import unquote, urlsplit
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +90,47 @@ class WebsiteTests(unittest.TestCase):
         release["assets"][0]["browser_download_url"] = "https://example.com/untrusted.exe"
         with self.assertRaises(ValueError):
             site.release_info(release)
+
+    def test_platform_fallback_uses_newest_stable_version_and_matching_checksum(self):
+        release = fixture()
+        release["assets"] = [asset for asset in release["assets"] if not asset["name"].endswith(".dmg")]
+
+        def older(tag):
+            candidate = fixture()
+            candidate["tag_name"] = tag
+            for asset in candidate["assets"]:
+                asset["name"] = asset["name"].replace("1.2.3", tag[1:])
+                asset["browser_download_url"] = asset["browser_download_url"].replace("1.2.3", tag[1:])
+            return candidate
+
+        preview = older("v1.2.2")
+        preview["prerelease"] = True
+        draft = older("v1.2.2")
+        draft["draft"] = True
+        release["fallback_releases"] = [older("v1.1.9"), preview, draft, older("v1.2.1"), older("v1.2.0"), older("v2.0.0")]
+        with tempfile.TemporaryDirectory() as temp:
+            site.build(Path(temp), release)
+            for _, route, _ in site.LANGUAGES.values():
+                content = (Path(temp) / route / "index.html").read_text(encoding="utf-8")
+                self.assertIn("v1.2.3/LeafLoom-1.2.3-windows-x64-setup.exe", content)
+                self.assertIn("v1.2.1/LeafLoom-1.2.1-macos-arm64.dmg", content)
+                self.assertIn("v1.2.1/SHA256SUMS.txt", content)
+                self.assertIn("v1.2.3/SHA256SUMS-windows.txt", content)
+                self.assertIn('releases/tag/v1.2.1">v1.2.1</a>', content)
+                self.assertNotIn('aria-disabled="true"', content)
+                self.assertNotIn("v1.2.2", content)
+                self.assertNotIn("v1.1.9", content)
+
+    def test_history_fetch_paginates_and_skips_history_for_complete_release(self):
+        release = fixture()
+        with patch.object(site, "release_json", return_value=release) as fetch:
+            self.assertEqual(site.latest_release(), release)
+            fetch.assert_called_once_with("releases/latest")
+        release["assets"] = []
+        with patch.object(site, "release_json", side_effect=[release, [release] * 100, [fixture()]]) as fetch:
+            result = site.latest_release()
+            self.assertEqual(len(result["fallback_releases"]), 101)
+            self.assertEqual(fetch.call_args_list[-1].args, ("releases?per_page=100&page=2",))
 
     def test_template_rejects_missing_values(self):
         with self.assertRaisesRegex(ValueError, "Missing template value"):
