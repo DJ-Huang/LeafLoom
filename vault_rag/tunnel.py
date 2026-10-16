@@ -21,8 +21,8 @@ class TunnelError(Exception):
         self.code = code
 
 
-def request(url, payload=None):
-    headers = {'Accept': 'application/json, text/event-stream'}
+def request(url, payload=None, *, headers=None):
+    headers = {'Accept': 'application/json, text/event-stream', **(headers or {})}
     if payload is not None:
         headers['Content-Type'] = 'application/json'
     req = urllib.request.Request(url, data=None if payload is None else json.dumps(payload).encode(), headers=headers)
@@ -52,7 +52,7 @@ def failure_code(value):
 
 
 class TunnelManager:
-    def __init__(self, directory, port, emit):
+    def __init__(self, directory, port, emit, *, mcp_access=None):
         self.directory = Path(directory) / 'tunnel'
         self.port = port
         self.emit = emit
@@ -63,8 +63,16 @@ class TunnelManager:
         self.process = None
         self.job = None
         self.last_state = None
+        self.mcp_access = mcp_access
+        if mcp_access is not None:mcp_access.on_change = self.reconnect
         self.thread = threading.Thread(target=self._run, name='desktop-tunnel', daemon=True)
         self.thread.start()
+
+    def reconnect(self):
+        with self.condition:
+            if not self.closed:
+                self.revision += 1
+                self.condition.notify_all()
 
     def configure(self, values):
         # Do not retain arbitrary pipe fields or log malformed input containing keys.
@@ -100,7 +108,11 @@ class TunnelManager:
         payload = {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {
             'protocolVersion': '2025-06-18', 'capabilities': {},
             'clientInfo': {'name': 'LeafLoom Tunnel', 'version': '1'}}}
-        try: code, value = request(f'http://127.0.0.1:{self.port}/mcp', payload)
+        authorization = self.mcp_access.tunnel_authorization() if self.mcp_access else ''
+        try:
+            if authorization:
+                code, value = request(f'http://127.0.0.1:{self.port}/mcp', payload, headers={'Authorization': authorization})
+            else:code, value = request(f'http://127.0.0.1:{self.port}/mcp', payload)
         except (OSError, ValueError): raise TunnelError('tunnel.error.mcp') from None
         if code != 200 or 'result' not in value: raise TunnelError('tunnel.error.mcp')
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -108,7 +120,7 @@ class TunnelManager:
         self.health_file.unlink(missing_ok=True)
         env = {k: v for k, v in os.environ.items() if not k.upper().startswith(
             ('CONTROL_PLANE_', 'MCP_', 'TUNNEL_CLIENT_', 'HARPOON_', 'HEALTH_', 'LOG_'))
-            and k.upper() not in ('OPENAI_API_KEY', 'OPENAI_ADMIN_KEY')}
+            and k.upper() not in ('OPENAI_API_KEY', 'OPENAI_ADMIN_KEY', 'LEAFLOOM_TUNNEL_MCP_AUTHORIZATION')}
         env['CONTROL_PLANE_API_KEY'] = key
         env['NO_PROXY'] = env['no_proxy'] = '127.0.0.1,localhost,::1'
         args = [binary, 'run', '--control-plane.tunnel-id', tunnel_id,
@@ -116,6 +128,10 @@ class TunnelManager:
                 '--mcp.server-url', f'http://127.0.0.1:{self.port}/mcp',
                 '--health.listen-addr', '127.0.0.1:0', '--health.url-file', str(self.health_file),
                 '--log.format', 'json', '--log.level', 'info']
+        if authorization:
+            env['LEAFLOOM_TUNNEL_MCP_AUTHORIZATION'] = authorization
+            for flag in ('--mcp.extra-headers', '--mcp.discovery-extra-headers'):
+                args += [flag, 'Authorization: env:LEAFLOOM_TUNNEL_MCP_AUTHORIZATION']
         options = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {'start_new_session': True}
         self.process = subprocess.Popen(args, env=env, cwd=self.directory, stdin=subprocess.DEVNULL,
                                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **options)
@@ -138,6 +154,7 @@ class TunnelManager:
         threading.Thread(target=consume, args=(self.process,), name='tunnel-output', daemon=True).start()
 
     def _stop_process(self):
+        if self.mcp_access is not None:self.mcp_access.rotate_tunnel_secret()
         process, self.process = self.process, None
         if process is not None and process.poll() is None:
             try:

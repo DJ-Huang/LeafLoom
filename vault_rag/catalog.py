@@ -341,7 +341,7 @@ class Catalog:
         if path:
             paths={path}|{x['source'] for x in links if x['target']==path}|{x['target'] for x in links if x['source']==path}
             links=[x for x in links if x['source'] in paths and x['target'] in paths]
-        return {'nodes':[{'id':p,'label':self.entries[p]['title'],'type':self.files.config.role(p)} for p in sorted(paths) if p.endswith('.md')], 'links':[x for x in links if x['source'].endswith('.md') and x['target'].endswith('.md')]}
+        return {'nodes':[{'id':p,'label':self.entries[p]['title'],'type':self.files.config.role(p)} for p in sorted(paths) if p.lower().endswith('.md')], 'links':[x for x in links if x['source'].lower().endswith('.md') and x['target'].lower().endswith('.md')]}
     def query(self,source):
         lines=[line.strip() for line in source.splitlines() if line.strip()]
         if not lines or not re.match(r'^(TABLE|LIST)\b',lines[0],re.I):raise ValueError('支持 TABLE 和 LIST 查询')
@@ -355,7 +355,7 @@ class Catalog:
         rows=[]
         folders={part for path in self.entries for part in ['/'.join(path.split('/')[:i]) for i in range(1,len(path.split('/')))]}
         for entry in self.entries.values():
-            if not entry['path'].endswith('.md'):continue
+            if not entry['path'].lower().endswith('.md'):continue
             row={**entry['metadata'],'file':entry['file']}
             folder=clauses.get('FROM','').strip('"\'')
             if folder.startswith('#'):
@@ -420,7 +420,7 @@ class Catalog:
             if isinstance(filter_,dict):return all((all(matches(v,row) for v in vals) if op=='and' else any(matches(v,row) for v in vals) if op=='or' else not any(matches(v,row) for v in vals)) for op,vals in filter_.items())
             raise ValueError('视图筛选格式无效')
         for entry in self.entries.values():
-            if entry['path'].endswith('.md'):
+            if entry['path'].lower().endswith('.md'):
                 row={**entry['metadata'],'file':entry['file']}
                 if matches(data.get('filters'),row):rows.append({'path':entry['path'],'title':entry['title'],'metadata':entry['metadata'],'file':entry['file'],'etag':entry['sha256']})
         for index,view in enumerate(data.get('views',[])):

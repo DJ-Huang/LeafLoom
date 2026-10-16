@@ -1,4 +1,23 @@
 # Source | English | Japanese. Named placeholders must match.
+mcp.connectionTitle|AI 连接|AI connections|AI 連携
+mcp.connectionDescription|管理本机 AI 与 ChatGPT 的笔记访问。|Manage note access for local AI clients and ChatGPT.|ローカル AI と ChatGPT のメモアクセスを管理します。
+mcp.title|完整笔记访问（MCP）|Full note access (MCP)|メモ全体へのアクセス（MCP）
+mcp.scope|可访问关联目录内全部 Markdown、TXT 和 HTML，包括未勾选检索的笔记。RAG 仍只使用已选目录。|Access all connected Markdown, TXT and HTML notes, including notes outside retrieval. RAG still uses selected folders only.|検索対象外を含む接続フォルダー内の Markdown、TXT、HTML にアクセスできます。RAG は選択した範囲のみを使います。
+mcp.loading|正在读取连接权限…|Loading connection permissions…|接続権限を読み込み中…
+mcp.localRead|允许本机 AI 读取全部笔记|Allow local AI to read all notes|ローカル AI にすべてのメモの閲覧を許可
+mcp.localReadHelp|启用后生成专用连接配置；旧配置继续保持原有读取范围。|Enabling generates a dedicated connection configuration. Older configurations retain their original reading scope.|有効にすると専用の接続設定を生成します。以前の設定の閲覧範囲は変わりません。
+mcp.localWrite|允许本机 AI 修改笔记|Allow local AI to modify notes|ローカル AI にメモの変更を許可
+mcp.writeHelp|修改直接保存并保留历史；删除进入回收区。默认关闭。|Changes save directly with history; deleted notes go to Trash. Off by default.|変更は履歴を残して直接保存し、削除はゴミ箱に移動します。初期状態は無効です。
+mcp.rotate|重新生成连接凭据|Regenerate connection credential|接続用認証情報を再生成
+mcp.tokenOnce|此配置含私密凭据，仅本次显示。请保存到你的 AI 客户端；重新生成后旧凭据立即失效。|This configuration contains a private credential shown only now. Save it in your AI client. Regenerating immediately revokes the old credential.|この設定には今回だけ表示される認証情報が含まれます。AI クライアントに保存してください。再生成すると以前の認証情報は直ちに無効になります。
+mcp.connectionConfig|本机 MCP 连接配置|Local MCP connection configuration|ローカル MCP 接続設定
+mcp.copy|复制连接配置|Copy connection configuration|接続設定をコピー
+mcp.copied|已复制|Copied|コピーしました
+mcp.copyFailed|无法自动复制，请手动复制上方配置。|Copy failed. Copy the configuration above manually.|コピーできませんでした。上の設定を手動でコピーしてください。
+mcp.tunnelRead|允许 ChatGPT 读取全部笔记|Allow ChatGPT to read all notes|ChatGPT にすべてのメモの閲覧を許可
+mcp.tunnelReadHelp|使用下方已有的 ChatGPT 连接；权限变更后自动重连，请在客户端刷新工具列表。|Uses the ChatGPT connection below. Permission changes reconnect automatically; refresh the tool list in your client.|下の ChatGPT 接続を使用します。権限変更時に自動再接続するため、クライアントのツール一覧を更新してください。
+mcp.tunnelWrite|允许 ChatGPT 修改笔记|Allow ChatGPT to modify notes|ChatGPT にメモの変更を許可
+mcp.legacy|未启用完整访问的旧连接仅保留原有五项只读工具权限；可随时关闭访问以撤销专用凭据。|Connections without full access retain the five original read-only capabilities. Disable access at any time to revoke dedicated credentials.|完全アクセスを有効にしていない接続では、従来の 5 つの読み取り専用機能のみ利用できます。アクセスを無効にすると専用の認証情報は失効します。
 uv 下载校验失败|Installer download checksum failed|インストーラーのチェックサム検証に失敗しました
 Python 准备失败。|Python preparation failed.|Python の準備に失敗しました。
 启动准备失败：|Launch preparation failed: |起動の準備に失敗しました：

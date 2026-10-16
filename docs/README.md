@@ -18,6 +18,7 @@
 - [HTML project folders, sessions, storage migration and Safari compatibility](HTML_PROJECTS.md)
 - [Folder organization and indexing scope](VAULT_ORGANIZATION.md)
 - [AI assistant implementation](AI_ASSISTANT.md)
+- [Complete MCP tools, credentials and note workflows](MCP.md)
 - [Local access and privacy boundaries](SECURITY.md)
 - [Architecture and workflow](ARCHITECTURE.md)
 - [Screenshots and public media](MEDIA.md)

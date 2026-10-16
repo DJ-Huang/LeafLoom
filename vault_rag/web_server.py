@@ -5,7 +5,6 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.middleware.gzip import GZipMiddleware
-from mcp.server.fastmcp import FastMCP
 from vault_rag.local_state import LocalConfig,ConflictError,atomic_write
 from vault_rag.html_preview import HtmlPreviews
 from vault_rag.html_projects import HtmlProjects
@@ -19,6 +18,9 @@ from vault_rag.ai_routes import ai_router, ai_mcp_server
 from vault_rag.preferences import Preferences
 from vault_rag.demo import create_demo
 from vault_rag.i18n import error_code
+from vault_rag.mcp_access import McpAccess
+from vault_rag.mcp_tools import build_workspace_mcp
+from vault_rag.note_operations import NoteOperations
 
 def json_response(value,status=200):
     if isinstance(value,dict) and isinstance(value.get('error'),str):
@@ -51,34 +53,9 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     ai=AiService(config,runtime)
     ai_mcp=ai_mcp_server(ai)
     ai_app=ai_mcp.streamable_http_app()
-    mcp=FastMCP('vault-rag',host='127.0.0.1',port=port,stateless_http=True,json_response=True)
-    def result(fn,*args,**kwargs):
-        try:return json.dumps(fn(*args,**kwargs),ensure_ascii=False,default=str)
-        except Exception as e:return json.dumps({'ok':False,'error':str(e)},ensure_ascii=False)
-    @mcp.tool()
-    def vault_search(query:str,top_k:int=3,note_type:str|None=None,domain:str|None=None,compact:bool=True,mode:str='hybrid')->str:
-        """Search selected knowledge directories with Wiki, keywords and local BGE-M3.
-        mode=hybrid|wiki|rag|keyword. Use domain=estimation for cost-estimation cards.
-        Excludes rules; sources retain verification limits. Fetch full notes for formulas.
-        """
-        return result(runtime.knowledge.search,query,top_k=top_k,type_=note_type,domain=domain,compact=compact,mode=mode)
-    @mcp.tool()
-    def rule_search(query:str,top_k:int=3,domain:str|None=None,compact:bool=True)->str:
-        """Search selected rule directories only. Use for missing relevant rules."""
-        if domain=='pcg':return json.dumps({'ok':True,'no_relevant_hit':True,'results':[]})
-        return result(runtime.knowledge.search,query,top_k=top_k,domain=domain,rules=True,compact=compact)
-    @mcp.tool()
-    def vault_get_chunk(chunk_id:str)->str:
-        """Read a complete retrieved evidence chunk. Withdrawn sources are unavailable."""
-        return result(runtime.knowledge.get_chunk,chunk_id)
-    @mcp.tool()
-    def vault_get_note(note_id:str)->str:
-        """Read a full currently eligible note by ID or relative path, including formulas."""
-        return result(runtime.knowledge.get_note,note_id)
-    @mcp.tool()
-    def vault_index_status()->str:
-        """Report configured directory, indexed roots, write targets, model and sync state."""
-        return result(runtime.status)
+    mcp_access=McpAccess(config)
+    notes=NoteOperations(config,runtime)
+    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token)
     mcp_app=mcp.streamable_http_app()
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -92,6 +69,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     app=FastAPI(lifespan=lifespan,docs_url=None,redoc_url=None)
     app.add_middleware(StaticCompression)
     app.state.runtime=runtime;app.state.csrf=csrf
+    app.state.mcp_access=mcp_access;app.state.note_operations=notes
     app.state.ai=ai
     app.state.websites=websites
     app.state.local_dns=local_dns
@@ -115,9 +93,12 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         # Only the transport peer is authoritative; never trust forwarded IPs.
         try:local_mcp=is_mcp and request.client is not None and ipaddress.ip_address(request.client.host).is_loopback
         except ValueError:local_mcp=False
-        bearer=hmac.compare_digest(request.headers.get('authorization',''),'Bearer '+token)
-        session=hmac.compare_digest(request.cookies.get('vault_session',''),token)
-        if is_api and not (local_mcp or bearer or (session and not is_mcp)):return json_response({'error':'请从本机网页入口打开，或配置 MCP 本机令牌'},401)
+        bearer=hmac.compare_digest(request.headers.get('authorization','').encode('utf-8'),('Bearer '+token).encode('utf-8'))
+        session=hmac.compare_digest(request.cookies.get('vault_session','').encode('utf-8'),token.encode('utf-8'))
+        if is_mcp:
+            try:mcp_access.principal(request.headers.get('authorization',''),token,loopback=local_mcp)
+            except PermissionError:return json_response({'error':'MCP credential is missing, invalid or revoked','error_code':'permission_denied'},401)
+        elif is_api and not (bearer or session):return json_response({'error':'请从本机网页入口打开，或配置 MCP 本机令牌'},401)
         if path.startswith('/api/') and request.method not in ('GET','HEAD') and not bearer:
             if not hmac.compare_digest(request.headers.get('x-vault-csrf',''),csrf):return json_response({'error':'写入请求校验失败'},403)
         if path in ('/api/search-files','/api/graph','/api/related','/api/query','/api/base','/api/templates') and runtime.catalog.root!=config.data.get('root'):
@@ -182,6 +163,14 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     async def bootstrap():return json_response({'config':config.data,'status':runtime.status(),'csrf':csrf,'suggested_root':''})
     @app.get('/api/status')
     async def status():return json_response(runtime.status())
+    @app.get('/api/mcp-access')
+    async def mcp_access_status():return json_response(mcp_access.status())
+    @app.post('/api/mcp-access')
+    async def mcp_access_settings(request:Request):
+        body=await request.json()
+        if not isinstance(body,dict):raise ValueError('Invalid MCP access settings')
+        return json_response(await asyncio.to_thread(mcp_access.configure,body.get('kind'),
+            enabled=body.get('enabled'),write=body.get('write'),rotate=body.get('rotate',False)))
     @app.post('/api/activity')
     async def activity():runtime.activity();return {'ok':True}
 
@@ -345,20 +334,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         return [{'path':row['path'],'title':runtime.catalog.entries.get(row['path'],{}).get('title') or Path(row['name']).stem} for row in await asyncio.to_thread(runtime.catalog.tree,folder) if not row['directory'] and row['path'].endswith('.md')]
     @app.post('/api/template')
     async def template(request:Request):
-        from vault_rag.catalog import render_template
-        body=await request.json();rendered=render_template(runtime.files.read(body['template'])['text']);runtime.files.create(body['path'],text=rendered['text']);return {'path':body['path'],'cursor':rendered['cursor']}
+        body=await request.json()
+        return json_response(await asyncio.to_thread(notes.create,body['path'],notes.workspace_revision,template=body['template']))
     @app.post('/api/daily')
     async def daily():
-        from vault_rag.catalog import render_template
-        import datetime
-        folder=config.data['daily_folder'];config.path_for(folder).mkdir(exist_ok=True)
-        path=folder+'/'+datetime.date.today().isoformat()+'.md'
-        created=not config.path_for(path).exists()
-        if created:
-            template_path=config.data['templates']+'/tpl-daily-note.md'
-            text=runtime.files.read(template_path)['text'] if config.path_for(template_path).is_file() else '# {{date}}\n\n'
-            runtime.files.create(path,text=render_template(text)['text'])
-        return {'path':path,'created':created}
+        return json_response(await asyncio.to_thread(notes.daily,notes.workspace_revision))
     @app.post('/api/knowledge-search')
     async def knowledge_search(request:Request):
         body=await request.json();return json_response(await asyncio.to_thread(runtime.knowledge.search,body.get('query',''),top_k=body.get('top_k',3),type_=body.get('note_type'),mode=body.get('mode','hybrid'),domain=body.get('domain')))

@@ -7,7 +7,7 @@ import frontmatter
 import pathspec
 from ruamel.yaml import YAML
 from vault_rag.platform_support import (state_directory, protect_private_directory, private_file_mode,
-    preserve_file_mode, is_windows, is_link, path_key, validate_windows_parts)
+    preserve_file_mode, is_windows, is_link, path_key, validate_windows_parts, move_exclusive)
 
 PROTECTED = {'.git', '.obsidian', '.vault-rag', '.rag-layout-backups', 'node_modules', '__pycache__'}
 TEXT_EXTENSIONS = {'.md', '.txt', '.json', '.yaml', '.yml', '.toml', '.csv', '.srt', '.vtt', '.py', '.js', '.ts', '.tsx', '.css', '.html', '.htm', '.svg', '.base', '.log'}
@@ -127,6 +127,42 @@ class LocalConfig:
 
 class Files:
     def __init__(self,config:LocalConfig):self.config=config; self.lock=threading.RLock();self.changed=lambda *paths:None
+    def state_path(self,*parts):
+        """Internal records are trusted only after validating every path component."""
+        root=self.config.root;path=root
+        for part in ('.vault-rag',*parts):
+            if not isinstance(part,str) or not part or '/' in part or '\\' in part or part in ('.','..'):
+                raise ValueError('恢复记录路径无效')
+            path=path/part
+            if is_link(path):raise ValueError('历史和回收区不能指向符号链接或 junction')
+        if not path.resolve().is_relative_to(root):raise ValueError('恢复记录越出关联目录')
+        return path
+    def snapshot(self,rel):
+        """Hash a complete subtree, rejecting hidden/protected/link/special entries."""
+        import stat
+        base=self.config.path_for(rel,writable=True);out={};pending=[base]
+        while pending:
+            p=pending.pop();path=p.relative_to(self.config.root).as_posix()
+            self.config.path_for(path,writable=True)
+            mode=p.lstat().st_mode
+            if stat.S_ISDIR(mode):
+                out[path]='directory';pending.extend(p.iterdir())
+            elif stat.S_ISREG(mode):
+                with p.open('rb') as stream:out[path]=hashlib.file_digest(stream,'sha256').hexdigest()
+            else:raise ValueError('目录操作不能包含链接或特殊文件')
+        return dict(sorted(out.items()))
+    def record_snapshot(self,kind,key,entry='content'):
+        """Validate and hash stored content without following record symlinks."""
+        base=self.state_path(kind,key,entry);pending=[base];out={}
+        while pending:
+            p=pending.pop();parts=p.relative_to(base).parts
+            self.state_path(kind,key,entry,*parts)
+            mode=p.lstat().st_mode
+            if statlib.S_ISDIR(mode):out['/'.join(parts)]='directory';pending.extend(p.iterdir())
+            elif statlib.S_ISREG(mode):
+                with p.open('rb') as stream:out['/'.join(parts)]=hashlib.file_digest(stream,'sha256').hexdigest()
+            else:raise ValueError('恢复记录不能包含链接或特殊文件')
+        return dict(sorted(out.items()))
     def tree(self,rel=''):
         import copy
         with self.config.lock:
@@ -162,15 +198,16 @@ class Files:
         p=self.config.path_for(rel)
         if p.stat().st_size>10*1024*1024:raise ValueError('文本文件过大，请下载后打开')
         b=p.read_bytes();text=b.decode('utf-8-sig')
-        try:meta=frontmatter.loads(text).metadata if p.suffix=='.md' else {}
+        try:meta=frontmatter.loads(text).metadata if p.suffix.lower()=='.md' else {}
         except Exception:meta={}
         return {'path':rel,'root':str(self.config.root),'text':text,'etag':digest(b),'metadata':meta,'mtime':p.stat().st_mtime}
     def _history(self,p:Path):
         if not p.is_file():return
         rel=p.relative_to(self.config.root).as_posix();key=uuid.uuid4().hex
-        h=self.config.root/'.vault-rag/history'/key
+        h=self.state_path('history',key)
         h.mkdir(parents=True);shutil.copy2(p,h/'content')
         atomic_write(h/'record.json',json.dumps({'id':key,'path':rel,'time':time.time()},ensure_ascii=False).encode())
+        return key
     def save(self,rel,text,etag,*,expected_root=None):
         with self.config.lock,self.lock:
             if expected_root is not None and expected_root!=str(self.config.root):raise ConflictError('关联目录已切换，未写入；原草稿仍保留')
@@ -187,27 +224,38 @@ class Files:
             normalized=text.replace('\n','\r\n') if '\r' not in text and legacy_crlf else text
             new=normalized.encode('utf-8')
             if old.startswith(b'\xef\xbb\xbf'):new=b'\xef\xbb\xbf'+new
-            if new!=old:self._history(p);atomic_write(p,new);self.changed(rel)
-            return self.read(rel)
+            if len(new)>10*1024*1024:raise ValueError('文本文件过大，请下载后打开')
+            history=None
+            if new!=old:
+                history=self._history(p)
+                if p.read_bytes()!=old:raise ConflictError('文件在保存前发生变化，未覆盖；请重新读取并合并')
+                atomic_write(p,new);self.changed(rel)
+            return {**self.read(rel),'history_id':history}
     def properties(self,rel,updates,etag,*,expected_root=None):
         read=self.read(rel);text=read['text'];nl='\r\n' if '\r\n' in text else '\n'
         match=re.match(r'^---\r?\n(.*?)\r?\n---(?:\r?\n|$)',text,re.S)
         yaml=YAML();yaml.preserve_quotes=True;yaml.width=4096
-        data=yaml.load(match.group(1)) if match else {};data=data or {}
+        data=yaml.load(match.group(1).replace('\r\n','\n')) if match else {};data=data or {}
         for key,value in updates.items():
             if value is None:data.pop(key,None)
             else:data[key]=value
         out=io.StringIO();yaml.dump(data,out)
-        prefix='---\n'+out.getvalue().rstrip('\n')+'\n---\n'
+        prefix=('---\n'+out.getvalue().rstrip('\n')+'\n---\n').replace('\n',nl)
         return self.save(rel,prefix+(text[match.end():] if match else text),etag,expected_root=expected_root)
     def create(self,rel,*,directory=False,text=''):
-        with self.lock:
+        with self.config.lock,self.lock:
             p=self.config.path_for(rel,writable=True)
             if p.exists():raise ConflictError('名称已存在')
             if not p.parent.is_dir():raise ValueError('父目录不存在')
             if directory:p.mkdir()
             else:
-                with p.open('xb') as f:f.write(text.encode())
+                data=text.encode('utf-8')
+                if len(data)>10*1024*1024:raise ValueError('文本文件过大，请下载后打开')
+                temp=p.with_name('.create-'+uuid.uuid4().hex)
+                try:
+                    with temp.open('xb') as f:f.write(data);f.flush();os.fsync(f.fileno())
+                    move_exclusive(temp,p)
+                finally:temp.unlink(missing_ok=True)
             self.changed(rel);return {'path':rel}
     def upload(self,folder,name,data):
         if '/' in name or '\\' in name:raise ValueError('上传文件名无效')
@@ -215,21 +263,27 @@ class Files:
         if p.exists():raise ConflictError('同名文件已存在')
         with p.open('xb') as f:f.write(data)
         self.changed(rel);return {'path':rel}
-    def delete(self,rel):
-        with self.lock:
+    def delete(self,rel,*,expected_snapshot=None):
+        with self.config.lock,self.lock:
             p=self.config.path_for(rel,writable=True)
             if not p.exists():raise FileNotFoundError(rel)
-            key=uuid.uuid4().hex;trash=self.config.root/'.vault-rag/trash'/key;trash.mkdir(parents=True)
+            snapshot=self.snapshot(rel)
+            if expected_snapshot is not None and snapshot!=expected_snapshot:raise ConflictError('目录内容已变化，请重新预览')
+            key=uuid.uuid4().hex;trash=self.state_path('trash',key);trash.mkdir(parents=True)
             atomic_write(trash/'record.json',json.dumps({'id':key,'path':rel,'time':time.time()},ensure_ascii=False).encode())
-            shutil.move(str(p),str(trash/'content'));self.changed(rel);return {'id':key,'path':rel}
-    def records(self,kind,rel=None):
+            move_exclusive(p,trash/'content');self.changed(rel);return {'id':key,'path':rel}
+    def records(self,kind,rel=None,*,limit=200):
         if kind not in ('history','trash','operations'):raise ValueError('记录类型无效')
-        d=self.config.root/'.vault-rag'/kind;out=[]
+        d=self.state_path(kind);out=[]
         if d.exists():
-            for p in d.glob('*/record.json'):
+            for entry in d.iterdir():
+                if not re.fullmatch(r'[a-f0-9]{32}',entry.name):continue
+                p=self.state_path(kind,entry.name,'record.json')
+                if not p.is_file():continue
                 item=json.loads(p.read_text(encoding='utf-8'))
                 if rel is None or item.get('path')==rel:out.append(item)
-        return sorted(out,key=lambda x:x['time'],reverse=True)[:200]
+        rows=sorted(out,key=lambda x:(-x['time'],x['id']))
+        return rows if limit is None else rows[:limit]
     def clear_trash(self,*,expected_root):
         with self.config.lock,self.lock:
             root=self.config.root
@@ -247,15 +301,22 @@ class Files:
             return {'deleted':len(entries)}
     def restore(self,kind,key):
         if kind not in ('history','trash','operations') or not re.fullmatch(r'[a-f0-9]{32}',key):raise ValueError('恢复记录无效')
-        with self.lock:
-            d=self.config.root/'.vault-rag'/kind/key;record=json.loads((d/'record.json').read_text(encoding='utf-8'))
+        with self.config.lock,self.lock:
+            d=self.state_path(kind,key);record=json.loads(self.state_path(kind,key,'record.json').read_text(encoding='utf-8'))
             if kind=='operations':return self.undo_move(d,record)
             p=self.config.path_for(record['path'],writable=True)
+            content=self.state_path(kind,key,'content')
+            stored=self.record_snapshot(kind,key)
             if kind=='trash':
                 if p.exists():raise ConflictError('原位置已存在文件，请先重命名')
-                p.parent.mkdir(parents=True,exist_ok=True);shutil.move(str(d/'content'),str(p));shutil.rmtree(d)
+                if content.is_dir():
+                    for item in stored:self.config.path_for(record['path']+('/'+item if item else ''),writable=True)
+                p.parent.mkdir(parents=True,exist_ok=True);move_exclusive(content,p);shutil.rmtree(d)
             else:
-                self._history(p);atomic_write(p,(d/'content').read_bytes())
+                before=p.read_bytes() if p.exists() else None
+                replacement=content.read_bytes();self._history(p)
+                if (p.read_bytes() if p.exists() else None)!=before:raise ConflictError('笔记在恢复前发生变化，未覆盖')
+                atomic_write(p,replacement)
             self.changed(record['path']);return {'path':record['path']}
     def resolve(self,target,source='',*,paths=None,names=None,canonical=None):
         target=unquote(split_link(target)[0]).strip().strip('<>')
@@ -313,18 +374,20 @@ class Files:
                             if stats is not None:stats[p]=s
                             yield p
             except OSError:continue
-    def move(self,source,destination):
-        with self.lock:
+    def plan_move(self,source,destination):
+        """Calculate link edits without touching user files or operation history."""
+        with self.config.lock,self.lock:
             a=self.config.path_for(source,writable=True);b=self.config.path_for(destination,writable=True)
             if not a.exists():raise FileNotFoundError(source)
             if b.exists():raise ConflictError('目标名称已存在')
             if not b.parent.is_dir() or b.is_relative_to(a):raise ValueError('目标目录无效')
+            self.snapshot(source)
             allpaths={p.relative_to(self.config.root).as_posix() for p in self.walk()}
             names={}
             for rel in allpaths:names.setdefault(rel.rsplit('/',1)[-1],[]).append(rel)
             mapping={p:destination+p[len(source):] for p in allpaths if under(p,source)}
             edits={}
-            for rel in sorted(p for p in allpaths if p.endswith('.md')):
+            for rel in sorted(p for p in allpaths if p.lower().endswith('.md')):
                 p=self.config.root/rel;old=p.read_bytes();text=old.decode('utf-8-sig');newsource=mapping.get(rel,rel)
                 def replace(m):
                     target=m.group(2) if m.group(1) else m.group(5)
@@ -335,7 +398,7 @@ class Files:
                     if resolved not in mapping and newsource==rel:return m.group(0)
                     newtarget=mapping.get(resolved,resolved)
                     if m.group(1):
-                        if newtarget.endswith('.md') and not base.endswith('.md'):newtarget=newtarget[:-3]
+                        if newtarget.lower().endswith('.md') and not base.lower().endswith('.md'):newtarget=newtarget[:-3]
                         return m.group(1)+newtarget+anchor+alias+m.group(3)
                     if base=='':return m.group(0)
                     relative_target=os.path.relpath(self.config.root/newtarget,(self.config.root/newsource).parent).replace(os.sep,'/')
@@ -346,28 +409,92 @@ class Files:
                 if new!=text:
                     data=new.encode();data=(b'\xef\xbb\xbf'+data) if old.startswith(b'\xef\xbb\xbf') else data
                     edits[rel]=(old,data)
-            key=uuid.uuid4().hex;d=self.config.root/'.vault-rag/operations'/key;d.mkdir(parents=True)
-            record={'id':key,'path':source,'destination':destination,'time':time.time(),'mapping':mapping,'edits':[]}
+            return {'source':source,'destination':destination,'mapping':mapping,'edits':edits}
+    def move(self,source,destination,*,expected_state=None):
+        with self.config.lock,self.lock:
+            plan=self.plan_move(source,destination);mapping=plan['mapping'];edits=plan['edits']
+            source_tree=self.snapshot(source)
+            state={'tree':source_tree,'edits':{p:[digest(old),digest(new)] for p,(old,new) in edits.items()}}
+            if expected_state is not None and state!=expected_state:raise ConflictError('操作内容已变化，请重新预览')
+            a=self.config.path_for(source,writable=True);b=self.config.path_for(destination,writable=True)
+            key=uuid.uuid4().hex;d=self.state_path('operations',key);d.mkdir(parents=True)
+            record={'id':key,'path':source,'destination':destination,'time':time.time(),'mapping':mapping,'edits':[],'state':'prepared'}
             for i,(rel,(old,new)) in enumerate(edits.items()):
-                atomic_write(d/str(i),old);record['edits'].append({'path':rel,'after_path':mapping.get(rel,rel),'backup':str(i),'after_hash':digest(new)})
+                atomic_write(d/str(i),old);record['edits'].append({'path':rel,'after_path':mapping.get(rel,rel),'backup':str(i),'before_hash':digest(old),'after_hash':digest(new)})
             atomic_write(d/'record.json',json.dumps(record,ensure_ascii=False).encode())
             moved=False
             try:
                 for rel,(old,new) in edits.items():
                     if digest((self.config.root/rel).read_bytes())!=digest(old):raise ConflictError('关联文档发生修改，请重试移动')
-                a.rename(b);moved=True
-                for rel,(old,new) in edits.items():atomic_write(self.config.root/mapping.get(rel,rel),new)
+                if self.snapshot(source)!=source_tree:raise ConflictError('源目录内容已变化，请重新预览')
+                if b.exists():raise ConflictError('目标名称已存在')
+                move_exclusive(a,b);moved=True
+                record['state']='moved';atomic_write(d/'record.json',json.dumps(record,ensure_ascii=False).encode())
+                for rel,(old,new) in edits.items():
+                    p=self.config.path_for(mapping.get(rel,rel),writable=True)
+                    if digest(p.read_bytes())!=digest(old):raise ConflictError('关联文档发生修改，请检查操作历史')
+                    atomic_write(p,new)
+                record['state']='completed';record['after_tree']=self.snapshot(destination)
+                atomic_write(d/'record.json',json.dumps(record,ensure_ascii=False).encode())
             except Exception:
-                if moved:b.rename(a)
-                for rel,(old,new) in edits.items():atomic_write(self.config.root/rel,old)
+                # Never undo an external edit, including a file that was not yet
+                # written by this operation. Keep a journal when rollback conflicts.
+                partial=[]
+                for rel,(old,new) in reversed(list(edits.items())):
+                    p=self.config.path_for(mapping.get(rel,rel) if moved else rel,writable=True)
+                    try:
+                        current=p.read_bytes()
+                        if current==new:atomic_write(p,old)
+                        elif current!=old:partial.append(rel)
+                    except OSError:partial.append(rel)
+                if moved:
+                    if not a.exists() and b.exists():
+                        try:move_exclusive(b,a)
+                        except OSError:partial.append(source)
+                    else:partial.append(source)
+                if partial:
+                    record.update(state='partial',conflicts=partial)
+                    atomic_write(d/'record.json',json.dumps(record,ensure_ascii=False).encode())
+                    self.changed(source,destination,*edits)
+                    raise ConflictError('移动未完成，已保留外部修改；操作记录：'+key) from None
                 shutil.rmtree(d);raise
             self.changed(source,destination,*edits);return {'path':destination,'updated_links':len(edits),'operation_id':key}
     def undo_move(self,d,record):
+        if record.get('state','completed')!='completed':raise ConflictError('操作未完整完成，请检查操作记录并手动恢复')
         a=self.config.path_for(record['path'],writable=True);b=self.config.path_for(record['destination'],writable=True)
         if a.exists() or not b.exists():raise ConflictError('移动后的目录已变化，不能自动恢复')
+        if record.get('after_tree') is not None and self.snapshot(record['destination'])!=record['after_tree']:
+            raise ConflictError('移动后的内容后来已修改，不能覆盖恢复')
         for item in record['edits']:
+            backup=self.state_path('operations',record['id'],item['backup'])
+            if item.get('before_hash') and digest(backup.read_bytes())!=item['before_hash']:
+                raise ConflictError('移动备份已变化，不能覆盖恢复')
             p=self.config.path_for(item['after_path'])
             if not p.is_file() or digest(p.read_bytes())!=item['after_hash']:raise ConflictError('关联笔记后来已修改，不能覆盖恢复')
-        b.rename(a)
-        for item in record['edits']:atomic_write(self.config.path_for(item['path'],writable=True),(d/item['backup']).read_bytes())
+        backups={item['path']:self.state_path('operations',record['id'],item['backup']).read_bytes() for item in record['edits']}
+        after={item['path']:self.config.path_for(item['after_path']).read_bytes() for item in record['edits']}
+        record['state']='undoing';atomic_write(d/'record.json',json.dumps(record,ensure_ascii=False).encode())
+        moved=False
+        try:
+            move_exclusive(b,a);moved=True
+            for item in record['edits']:
+                p=self.config.path_for(item['path'],writable=True)
+                if digest(p.read_bytes())!=item['after_hash']:raise ConflictError('关联笔记在恢复前发生变化')
+                atomic_write(p,backups[item['path']])
+        except Exception:
+            conflicts=[]
+            for item in reversed(record['edits']):
+                p=self.config.path_for(item['path'] if moved else item['after_path'],writable=True)
+                try:
+                    current=p.read_bytes()
+                    if current==backups[item['path']]:atomic_write(p,after[item['path']])
+                    elif current!=after[item['path']]:conflicts.append(item['path'])
+                except OSError:conflicts.append(item['path'])
+            if moved:
+                try:move_exclusive(a,b)
+                except OSError:conflicts.append(record['path'])
+            record.update(state='partial' if conflicts else 'completed',conflicts=conflicts)
+            atomic_write(d/'record.json',json.dumps(record,ensure_ascii=False).encode())
+            self.changed(record['path'],record['destination'],*backups)
+            raise ConflictError('恢复未完成，操作记录：'+record['id']) from None
         shutil.rmtree(d);self.changed(record['path'],record['destination'],*[item['path'] for item in record['edits']]);return {'path':record['path']}

@@ -50,7 +50,7 @@ function consume<T>(entry:Pending,signal?:AbortSignal):Promise<T>{
 }
 export async function api<T=any>(path:string,body?:any,method?:string,options:{signal?:AbortSignal,force?:boolean}={}):Promise<T>{
  if(options.signal?.aborted)throw aborted();
- const verb=method||(body===undefined?'GET':'POST'),readable=(verb==='GET'&&!path.startsWith('ai/')&&!/^(session|status|bootstrap|records|preferences)(\?|$)/.test(path))||(verb==='POST'&&path==='query');
+ const verb=method||(body===undefined?'GET':'POST'),readable=(verb==='GET'&&!path.startsWith('ai/')&&!/^(session|status|bootstrap|records|preferences|mcp-access)(\?|$)/.test(path))||(verb==='POST'&&path==='query');
  const resource=path+(verb==='POST'&&path==='query'?'?query='+encodeURIComponent(JSON.stringify(body)):'');
  const key=scope+'\n'+resource,previous=cache.get(key);
  if(readable&&previous?.valid&&!options.force){cache.delete(key);cache.set(key,previous);return previous.value;}
