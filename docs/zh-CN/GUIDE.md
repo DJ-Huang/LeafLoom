@@ -1,5 +1,7 @@
 # 开始使用 LeafLoom · 知织
 
+在 **设置 → Skill** 中安装或更新内置的 `wiki-search` 技能。
+
 [English](../en/GUIDE.md) · [中文](GUIDE.md) · [日本語](../ja/GUIDE.md)
 
 [全部文档](../README.md)
