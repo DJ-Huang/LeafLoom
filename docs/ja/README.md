@@ -14,9 +14,7 @@
 
 [使い始める](#使い始める) · [ChatGPT と接続](#chatgpt-でローカルの知識を活用) · [MCP・Skill・AI Chat](#ai-connections) · [利用ガイド](GUIDE.md) · [ドキュメント一覧](../README.md)
 
-**LeafLoom の使い心地を動画で（英語）：**
-
-https://github.com/user-attachments/assets/56f37418-23cc-4763-af3c-3253fb06f517
+![LeafLoom のウェルカム画面：言語の選択、フォルダーを開く、デモを試す](../../assets/screenshots/ja/01-welcome.png)
 
 ## 自分の知識が育つ場所
 
@@ -131,9 +129,7 @@ cd LeafLoom
 
 </details>
 
-[📖 はじめてのガイドと FAQ](GUIDE.md) · [✨ AI 連携](AI.md) · [▶ 英語の紹介動画](../../assets/promo/leafloom-en.mp4)
-
-[![英語の紹介動画](../../assets/promo/cover.png)](../../assets/promo/leafloom-en.mp4)
+[📖 はじめてのガイドと FAQ](GUIDE.md) · [✨ AI 連携](AI.md)
 
 ## 3 つの言語
 
