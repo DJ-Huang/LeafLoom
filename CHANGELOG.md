@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Build Windows x64 and Mac arm64 installers on GitHub when a matching version tag is pushed; prepare a manually published Release draft with verified SHA-256 checksums. Keep manual artifact-only builds and protect published releases from replacement. Certificate-free Mac builds use ad-hoc signing without notarization.
+
 - Rename the settings sidebar entry and page title from AI integration to Skill.
 
 - Add English, Chinese and Japanese About pages with the creator’s GitHub and X profiles, linked from website navigation and footers.

@@ -1,5 +1,7 @@
 name: LeafLoom desktop packages
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       signed:
@@ -8,8 +10,26 @@ on:
         default: false
 permissions:
   contents: read
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check application versions and protect published releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
+        run: python scripts/desktop_release.py check
+      - name: Release automation regressions
+        run: python -m unittest discover -s tests -p test_desktop_release.py
   package:
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
@@ -28,6 +48,7 @@ jobs:
       APPLE_APP_SPECIFIC_PASSWORD: ${{ inputs.signed && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
       APPLE_TEAM_ID: ${{ inputs.signed && secrets.APPLE_TEAM_ID || '' }}
       CSC_FOR_PULL_REQUEST: 'false'
+      LEAFLOOM_UNSIGNED: ${{ inputs.signed && '0' || '1' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -118,3 +139,24 @@ jobs:
         with:
           name: desktop-window-${{ runner.os }}
           path: .cache/desktop-acceptance/
+  release-draft:
+    if: github.event_name == 'push'
+    needs: [validate, package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: leafloom-*-unsigned-test
+          path: dist/release
+          merge-multiple: true
+      - name: Create or refresh draft and verify uploaded installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python scripts/desktop_release.py draft --artifacts dist/release

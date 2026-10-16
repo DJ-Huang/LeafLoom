@@ -29,6 +29,14 @@ Closing the window keeps LeafLoom in the tray/menu bar; use **Quit** to stop the
 
 The service binds to `127.0.0.1`, normally on port `18080`. See [desktop installation details](../DESKTOP.md) for requirements and validation limits. Developers can use the [source installation instructions](../../README.md#get-started).
 
+For maintainers, pushing a matching `vX.Y.Z` version tag automatically builds both
+installers on GitHub and prepares a Release draft with `SHA256SUMS.txt`. Review the
+Actions results and draft, then publish manually. Failed builds can be rerun;
+published Releases are protected from replacement. Manual **Run workflow** builds
+only provide Actions downloads. Current tag builds have no trusted publisher
+signature (Mac uses ad-hoc signing without notarization), so system warnings or
+blocks remain possible. See [build, retry and release instructions](../DESKTOP.md#automatic-release-drafts).
+
 ## Choose a language and folder
 
 The welcome page follows your system language, with English as fallback. Select 中文, English or 日本語 to save a preference. Change it later in **Settings → General → Language**. Changing language keeps your open document, draft and position; it does not rebuild search indexes.

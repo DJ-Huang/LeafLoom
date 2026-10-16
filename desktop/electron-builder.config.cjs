@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const tunnelPlatform = process.platform === 'win32' ? 'windows-x64' : 'macos-arm64';
 const bundleFile = path.join(__dirname, 'resources/backend/bundle.json');
 const bundle = fs.existsSync(bundleFile) ? JSON.parse(fs.readFileSync(bundleFile, 'utf8')) : {};
+const unsigned = process.env.LEAFLOOM_UNSIGNED === '1';
 module.exports = {
   appId: 'com.djhuang.leafloom', productName: 'LeafLoom',
   electronDist: process.env.LEAFLOOM_ELECTRON_DIST || undefined,
@@ -33,8 +34,9 @@ module.exports = {
   },
   win: {target: [{target: 'nsis', arch: ['x64']}], icon: '../assets/brand/leafloom.ico', artifactName: 'LeafLoom-${version}-windows-${arch}-setup.${ext}'},
   nsis: {oneClick: false, perMachine: false, allowElevation: false, allowToChangeInstallationDirectory: true, createDesktopShortcut: true, deleteAppDataOnUninstall: false},
-  mac: {target: [{target: 'dmg', arch: ['arm64']}], icon: 'resources/leafloom.icns', category: 'public.app-category.productivity', minimumSystemVersion: '14.0', hardenedRuntime: true,
+  mac: {target: [{target: 'dmg', arch: ['arm64']}], icon: 'resources/leafloom.icns', category: 'public.app-category.productivity', minimumSystemVersion: '14.0', hardenedRuntime: !unsigned,
+    ...(unsigned ? {identity: '-'} : {}),
     binaries: [...(bundle.mac_binaries || []).map(file => 'Contents/Resources/backend/python/' + file), 'Contents/Resources/tunnel/tunnel-client-runtime'],
     entitlements: 'entitlements.mac.plist', entitlementsInherit: 'entitlements.mac.plist',
-    artifactName: 'LeafLoom-${version}-macos-${arch}.${ext}', notarize: Boolean(process.env.APPLE_API_KEY || process.env.APPLE_ID)},
+    artifactName: 'LeafLoom-${version}-macos-${arch}.${ext}', notarize: !unsigned && Boolean(process.env.APPLE_API_KEY || process.env.APPLE_ID)},
 };
