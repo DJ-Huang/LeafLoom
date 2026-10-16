@@ -18,7 +18,7 @@ CLI の公式手順でインストールし、通常の端末でログインし�
 
 ## MCP で他のクライアントを接続
 
-**設定 → AI 連携 → メモ全体へのアクセス（MCP）** でローカル AI の閲覧を有効にし、生成された接続設定をコピーします。専用の認証情報は一度だけ表示されます。Codex は `http_headers.Authorization`、Cursor は `headers.Authorization`、Claude Code は `type: http` と `headers.Authorization` を使います。再生成またはアクセスの無効化で古い認証情報は直ちに失効します。設定を共有しないでください。
+**設定 → AI 連携 → MCP アクセス権限** でローカル AI の閲覧を有効にし、生成された接続設定をコピーします。専用の認証情報は一度だけ表示されます。Codex は `http_headers.Authorization`、Cursor は `headers.Authorization`、Claude Code は `type: http` と `headers.Authorization` を使います。認証情報の再生成または全リソース権限の無効化で古い認証情報は直ちに失効します。設定を共有しないでください。
 
 直接保存するには、ローカル AI による変更を別途許可します。ChatGPT は既存の Tunnel と、全メモの閲覧・変更それぞれのスイッチを使います。権限の変更で自動再接続するため、クライアントのツール一覧を更新してください。どちらも書き込みは初期状態で無効です。
 

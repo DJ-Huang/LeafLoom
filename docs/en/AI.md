@@ -18,7 +18,7 @@ If the note, draft or saved version changed, regenerate or merge manually. LeafL
 
 ## Connect another AI client through MCP
 
-Open **Settings → AI connections → Full note access (MCP)**. Enable local AI reading and copy the generated connection configuration. Its dedicated credential is shown once. Use `http_headers.Authorization` in Codex, `headers.Authorization` in Cursor, and `type: http` plus `headers.Authorization` in Claude Code. Regenerating or disabling access revokes the old credential; keep configurations private.
+Open **Settings → AI connections → MCP access permissions**. Enable local AI reading and copy the generated connection configuration. Its dedicated credential is shown once. Use `http_headers.Authorization` in Codex, `headers.Authorization` in Cursor, and `type: http` plus `headers.Authorization` in Claude Code. Regenerating the credential or disabling all its resource scopes revokes it; keep configurations private.
 
 Enable **Allow local AI to modify notes** separately for direct saves. For ChatGPT, use the existing Tunnel connection and its separate **read all notes** and **modify notes** switches. Permission changes automatically reconnect the Tunnel; refresh the tool list in your client. Writing is off by default for both connections.
 

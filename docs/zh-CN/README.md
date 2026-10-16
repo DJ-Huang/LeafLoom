@@ -6,6 +6,8 @@
 
 [English](../../README.md) · [中文](../../docs/zh-CN/README.md) · [日本語](../../docs/ja/README.md)
 
+**[访问官网与下载安装包](https://dj-huang.github.io/LeafLoom/zh-CN/)** · 查看产品截图、Windows / Mac 下载和版本说明。
+
 让零散笔记、项目文档和收藏网页，成为查得到、连得起、用得上的知识。**LeafLoom 是开源、本地优先的知识库管理工具与个人 Wiki**，支持 Markdown 与 HTML，集成来源可追溯的检索、知识图谱、MCP、Skill、AI Chat 和 ChatGPT 连接。
 
 文件和检索索引保存在自己的电脑上。日常阅读、记录与检索在本地完成；需要 AI 时，再把知识带进对话。
@@ -68,6 +70,7 @@ App Key 由操作系统加密保存。连接随应用启动，关闭窗口留在
 | 连接方式 | 可以怎么用 |
 | --- | --- |
 | **MCP** | 将 Codex、Cursor、Claude Code 等客户端接入本地 HTTP MCP：`http://127.0.0.1:18080/mcp`（默认端口）。启用完整访问后可查找、创建、编辑、整理和恢复关联笔记；RAG 保持勾选范围，写入默认关闭。 |
+| **飞书** | 使用自行配置的 lark-cli 验证账号，让 MCP 客户端操作飞书文档与多维表格。本机和 Tunnel 权限分别设置，默认关闭。[接入指南](GUIDE.md#可选飞书接入)。 |
 | **Skill** | 在 **设置 → AI 集成 → 安装技能** 中安装内置的 [`wiki-search` Skill](../../wiki-search/SKILL.md)，引导兼容的 AI 助手完成检索、Wiki 导航与来源核对；MCP 连接需另行配置。 |
 | **AI Chat** | 连接受支持、已登录的 CLI，围绕当前笔记或选文对话，打开回答中的引用。先预览修改差异，接受到草稿后再决定何时保存。 |
 
@@ -123,8 +126,8 @@ cd LeafLoom
 ```
 
 1. 下载或克隆仓库到可写的本机目录，完整解压。
-2. Windows 10/11 x64：双击 `Start.cmd`。 macOS 14+ Apple 芯片：在仓库目录运行 `sh Start.sh`。
-3. 首次准备私有运行环境和依赖后打开工作区；检索模型在设置中按需准备，无需预装 Python、Node 或 Ollama。
+2. 安装 Node 22+（含 npm）和 uv。Windows 10/11 x64：双击 `Dev.cmd`。macOS 14+ Apple 芯片：双击 `Dev.command` 或运行 `sh Dev.sh`。
+3. 首次自动准备独立 Python 环境与依赖，打开源码桌面并启用前端自动更新。Dev 与安装版共用用户配置、模型和数据，只有开发依赖位于 `.cache/desktop-dev/.venv`；切换前先退出当前应用。检索模型在设置中按需准备。
 4. 选择语言，体验虚构演示库或关联自己的目录，再明确选择检索范围。
 
 </details>
@@ -147,7 +150,7 @@ cd LeafLoom
 
 **桌面应用：** 退出 LeafLoom，从 [Releases](https://github.com/DJ-Huang/LeafLoom/releases/latest) 下载对应系统的新版安装包，安装后重新打开。
 
-**源码安装：** 更新仓库后运行 `Install.cmd` 或 `sh Install.sh` 并重启服务。仅刷新浏览器不会更新服务器代码。
+**源码开发：** 更新仓库后重新运行 Dev。前端修改自动更新；修改 Python/Electron 后，从开发实例的托盘／菜单栏退出再启动。安装版通过自己的快捷方式和菜单管理。
 
 [Contributing](../../CONTRIBUTING.md) · [Changelog](../../CHANGELOG.md) · [Third-party notices](../../THIRD_PARTY_NOTICES.md) · [Media](../../docs/MEDIA.md)
 

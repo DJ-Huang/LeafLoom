@@ -1,8 +1,75 @@
 # Source | English | Japanese. Named placeholders must match.
+feishu.title|飞书|Feishu / Lark|Feishu / Lark
+feishu.description|连接本机 lark-cli，让 AI 操作飞书文档和多维表格。|Connect local lark-cli so AI can work with documents and Base records.|ローカルの lark-cli を接続し、AI でドキュメントと Base レコードを操作します。
+feishu.enabled|启用飞书接入|Enable Feishu integration|Feishu 連携を有効にする
+feishu.binary|CLI 可执行文件|CLI executable|CLI 実行ファイル
+feishu.binaryHelp|留空自动检测；手动选择时填写原生可执行文件的绝对路径。|Leave blank to detect automatically, or enter an absolute path to the native executable.|空欄で自動検出、またはネイティブ実行ファイルの絶対パスを入力します。
+feishu.automatic|自动检测 lark-cli|Detect lark-cli automatically|lark-cli を自動検出
+feishu.profile|CLI profile（可选）|CLI profile (optional)|CLI プロファイル（任意）
+feishu.profileHelp|留空使用 CLI 当前默认 profile；验证和操作使用同一设置。|Leave blank for the CLI default profile. Verification and operations use this same setting.|空欄では CLI の既定プロファイルを使用します。検証と操作には同じ設定を使用します。
+feishu.verify|验证连接|Verify connection|接続を検証
+feishu.working|正在处理…|Working…|処理中…
+feishu.saveFirst|请先保存接入设置，再验证连接。|Save integration settings before verifying.|連携設定を保存してから検証してください。
+feishu.checkedAt|上次验证：{time}|Last verified: {time}|最終検証：{time}
+feishu.permissionsHelp|账号验证通过仅代表登录有效；具体文档和表格的权限在操作时检查。|Account verification confirms login only. Access to documents and tables is checked during each operation.|アカウント検証はログインの有効性のみを確認します。文書やテーブルへの権限は操作時に確認します。
+feishu.externalSetup|请自行安装、配置并登录 lark-cli；凭据由 CLI 管理。|Install, configure and log in to lark-cli separately. The CLI manages credentials.|lark-cli のインストール、設定、ログインは別途行ってください。認証情報は CLI が管理します。
+feishu.setupGuide|官方配置指南|Official setup guide|公式セットアップガイド
+feishu.localRead|本机 MCP：读取飞书|Local MCP: read Feishu|ローカル MCP：Feishu の読み取り
+feishu.localWrite|本机 MCP：写入飞书|Local MCP: write Feishu|ローカル MCP：Feishu への書き込み
+feishu.tunnelRead|Tunnel：读取飞书|Tunnel: read Feishu|Tunnel：Feishu の読み取り
+feishu.tunnelWrite|Tunnel：写入飞书|Tunnel: write Feishu|Tunnel：Feishu への書き込み
+feishu.accessHelp|飞书和笔记权限分别控制，共用该连接的 MCP 专用凭据。|Feishu and note permissions are separate and share this connection's dedicated MCP credential.|Feishu とノートの権限は独立し、この接続の MCP 専用認証情報を共有します。
+feishu.state.unchecked|尚未验证连接|Connection not verified yet|接続は未検証です
+feishu.state.disabled|飞书接入已关闭|Feishu integration is disabled|Feishu 連携は無効です
+feishu.state.not_installed|未找到 CLI，请先安装或填写原生可执行文件路径。|CLI not found. Install it or enter its native executable path.|CLI が見つかりません。インストールするか、ネイティブ実行ファイルのパスを入力してください。
+feishu.state.incompatible|CLI 缺少所需接口，请在外部更新。|Required CLI interfaces are missing. Update the CLI externally.|必要な CLI インターフェースがありません。CLI を外部で更新してください。
+feishu.state.not_configured|CLI 尚未完成应用配置。|CLI app configuration is incomplete.|CLI のアプリ設定が完了していません。
+feishu.state.not_logged_in|CLI 尚未登录用户账号，请在外部登录。|No CLI user login. Log in externally.|CLI にユーザーログインがありません。外部でログインしてください。
+feishu.state.login_expired|CLI 用户登录已失效，请在外部重新登录。|CLI user login expired. Log in again externally.|CLI のログインが期限切れです。外部で再ログインしてください。
+feishu.state.network_error|连接飞书失败，请检查网络后重试。|Could not reach Feishu. Check the network and retry.|Feishu に接続できません。ネットワークを確認して再試行してください。
+feishu.state.connected|账号验证通过|Account verified|アカウント検証済み
+feishu.state.invalid_configuration|CLI 路径或配置无效，请检查设置。|Invalid CLI path or configuration. Check settings.|CLI のパスまたは設定が無効です。設定を確認してください。
+feishu.state.invalid_cli_response|无法识别 CLI 返回，请检查 CLI 版本。|Unrecognized CLI response. Check its version.|CLI の応答を認識できません。バージョンを確認してください。
+feishu.state.cli_failed|CLI 验证失败，请在外部检查配置和登录。|CLI verification failed. Check configuration and login externally.|CLI の検証に失敗しました。外部で設定とログインを確認してください。
+feishu.state.permission_denied|CLI 权限不足，请在外部检查授权。|CLI permission denied. Check authorization externally.|CLI の権限が不足しています。外部で認可を確認してください。
+feishu.state.confirmation_required|CLI 需要确认，请在外部完成设置。|CLI confirmation required. Complete setup externally.|CLI で確認が必要です。外部で設定を完了してください。
+feishu.state.output_limit|CLI 返回过大，验证已停止。|CLI output exceeded the limit. Verification stopped.|CLI の出力が上限を超えたため検証を停止しました。
+feishu.state.write_conflict|CLI 验证发生冲突，请稍后重试。|CLI verification conflicted. Retry later.|CLI の検証が競合しました。後で再試行してください。
+feishu.state.invalid_request|CLI 验证请求被拒绝，请检查版本与 profile。|CLI rejected verification. Check the version and profile.|CLI が検証を拒否しました。バージョンとプロファイルを確認してください。
+Invalid Feishu settings|飞书接入设置无效。|Invalid Feishu settings|Feishu の連携設定が無効です。
+Invalid enabled setting|接入开关无效。|Invalid enabled setting|連携の有効化設定が無効です。
+Invalid CLI executable|CLI 可执行文件路径无效。|Invalid CLI executable|CLI 実行ファイルのパスが無効です。
+Invalid CLI profile|CLI profile 无效，请使用字母、数字、下划线、点或连字符。|Invalid CLI profile|CLI プロファイルが無効です。英数字、アンダースコア、ドット、ハイフンを使ってください。
+update.title|应用更新|App updates|アプリの更新
+update.search|检查更新、当前版本、最新版本、下载安装|Check for updates, current version, latest version, download and install|更新を確認、現在のバージョン、最新バージョン、ダウンロードとインストール
+update.current|当前版本：{version}|Current version: {version}|現在のバージョン：{version}
+update.latest|最新版本：{version}|Latest version: {version}|最新バージョン：{version}
+update.unchecked|最新版本：尚未检查|Latest version: not checked yet|最新バージョン：未確認
+update.check|检查更新|Check for updates|更新を確認
+update.checking|正在检查…|Checking…|確認中…
+update.currentStatus|当前已是最新版本。|You are up to date.|最新バージョンです。
+update.development|开发模式仅检查版本；请更新源码后重新运行 Dev。|Development mode only checks versions. Update the source and restart Dev.|開発モードではバージョン確認のみ行います。ソースを更新して Dev を再起動してください。
+update.download|下载并安装|Download and install|ダウンロードしてインストール
+update.install|继续安装|Continue installation|インストールを続行
+update.windowsHelp|校验下载后会退出应用并打开安装向导。|After verification, the app quits and opens the installer.|ダウンロードの検証後、アプリを終了してインストーラーを開きます。
+update.macHelp|校验下载后会退出应用并打开 DMG，请将新版拖入“应用程序”。|After verification, the app quits and opens the DMG. Drag the new version to Applications.|検証後、アプリを終了して DMG を開きます。新版を「アプリケーション」にドラッグしてください。
+update.progress|正在下载 {percent}% · {received} / {total}|Downloading {percent}% · {received} / {total}|ダウンロード中 {percent}% · {received} / {total}
+update.verifying|正在校验安装包…|Verifying the installer…|インストーラーを検証中…
+update.installing|正在退出应用并打开安装程序…|Quitting the app and opening the installer…|アプリを終了してインストーラーを開いています…
+update.error.connection|无法读取更新状态，请重新打开设置后重试。|Cannot read update status. Reopen Settings and retry.|更新状態を取得できません。設定を開き直して再試行してください。
+update.error.network|更新请求失败，请检查网络后重试。|The update request failed. Check your connection and retry.|更新リクエストに失敗しました。接続を確認して再試行してください。
+update.error.storage|无法保存安装包，请检查磁盘空间和目录写入权限后重试。|Cannot save the installer. Check disk space and folder write permissions, then retry.|インストーラーを保存できません。空き容量とフォルダーの書き込み権限を確認して再試行してください。
+update.error.rate|更新服务暂时限制请求，请稍后重试。|The update service is rate limited. Try again later.|更新サービスのリクエスト制限に達しました。後でもう一度お試しください。
+update.error.release|无法识别正式发布版本，请稍后重新检查。|Cannot read a stable release. Check again later.|正式リリースを確認できません。後でもう一度確認してください。
+update.error.platform|当前系统或架构不支持此更新。|This system or architecture is not supported by this update.|このシステムまたはアーキテクチャは更新に対応していません。
+update.error.asset|最新版本尚未提供当前系统的安装包，请稍后重新检查。|The latest release has no installer for this system yet. Check again later.|最新リリースにはこのシステム用のインストーラーがありません。後でもう一度確認してください。
+update.error.checksum|安装包校验失败或缺少校验信息，未启动安装。请重新检查或下载。|Installer verification failed or checksum information is missing. Installation was not started. Check again or download again.|インストーラーの検証に失敗したか、チェックサムがありません。インストールは開始されていません。再確認または再ダウンロードしてください。
+update.error.check|请先检查更新，再下载安装。|Check for updates before downloading and installing.|先に更新を確認してからダウンロードしてください。
+update.error.install|无法打开安装程序，请重新下载后重试。|Cannot open the installer. Download it again and retry.|インストーラーを開けません。再ダウンロードしてお試しください。
 mcp.connectionTitle|AI 连接|AI connections|AI 連携
-mcp.connectionDescription|管理本机 AI 与 ChatGPT 的笔记访问。|Manage note access for local AI clients and ChatGPT.|ローカル AI と ChatGPT のメモアクセスを管理します。
-mcp.title|完整笔记访问（MCP）|Full note access (MCP)|メモ全体へのアクセス（MCP）
-mcp.scope|可访问关联目录内全部 Markdown、TXT 和 HTML，包括未勾选检索的笔记。RAG 仍只使用已选目录。|Access all connected Markdown, TXT and HTML notes, including notes outside retrieval. RAG still uses selected folders only.|検索対象外を含む接続フォルダー内の Markdown、TXT、HTML にアクセスできます。RAG は選択した範囲のみを使います。
+mcp.connectionDescription|管理本机 AI 与 ChatGPT 的笔记、飞书和连接权限。|Manage note, Feishu and connection permissions for local AI clients and ChatGPT.|ローカル AI と ChatGPT のノート、Feishu、接続の権限を管理します。
+mcp.title|MCP 访问权限|MCP access permissions|MCP アクセス権限
+mcp.scope|笔记权限覆盖关联目录内全部 Markdown、TXT 和 HTML；飞书权限单独控制。RAG 仍只使用已选目录。|Note access covers all connected Markdown, TXT and HTML; Feishu access is controlled separately. RAG uses selected folders only.|ノート権限は接続フォルダー内の Markdown、TXT、HTML 全体を対象とし、Feishu 権限は別に設定します。RAG は選択範囲のみを使います。
 mcp.loading|正在读取连接权限…|Loading connection permissions…|接続権限を読み込み中…
 mcp.localRead|允许本机 AI 读取全部笔记|Allow local AI to read all notes|ローカル AI にすべてのメモの閲覧を許可
 mcp.localReadHelp|启用后生成专用连接配置；旧配置继续保持原有读取范围。|Enabling generates a dedicated connection configuration. Older configurations retain their original reading scope.|有効にすると専用の接続設定を生成します。以前の設定の閲覧範囲は変わりません。
@@ -358,6 +425,34 @@ Wiki 导航目录|Wiki navigation folders|Wiki ナビゲーションのフォル
 已安装最新版本|Up to date|最新バージョンです
 已完成|Done|完了
 已开始准备本地模型|Local model preparation started|ローカルモデルの準備を開始しました
+model.starting|正在启动模型准备…|Starting model preparation…|モデルの準備を開始中…
+model.checking|正在检查已有模型文件…|Checking existing model files…|既存のモデルファイルを確認中…
+model.connecting|正在连接模型下载服务…|Connecting to the model download service…|モデルの配信サービスに接続中…
+model.downloading|正在下载模型文件…|Downloading model files…|モデルファイルをダウンロード中…
+model.verifying|正在校验模型文件…|Verifying model files…|モデルファイルを検証中…
+model.saving|正在保存模型校验信息…|Saving model verification details…|モデルの検証情報を保存中…
+model.failed|模型准备失败|Model preparation failed|モデルの準備に失敗しました
+model.preparing|准备中…|Preparing…|準備中…
+model.retry|重试准备|Retry preparation|準備を再試行
+model.steps|模型准备步骤|Model preparation steps|モデル準備の手順
+model.directory|模型保存路径|Model storage path|モデルの保存先
+model.pathLoading|正在读取保存路径…|Reading storage path…|保存先を確認中…
+model.openDirectory|打开目录|Open folder|フォルダーを開く
+model.openingDirectory|正在打开…|Opening…|開いています…
+model.openDirectoryFailed|无法打开模型目录|Unable to open the model folder|モデルフォルダーを開けませんでした
+model.stepConnect|连接|Connect|接続
+model.stepDownload|下载|Download|ダウンロード
+model.stepVerify|校验|Verify|検証
+model.elapsed|已用时 {time}|Elapsed {time}|経過 {time}
+model.downloadFiles|已下载 {done} / {total} 个文件|Downloaded {done} / {total} files|{done} / {total} ファイルをダウンロード済み
+model.checkedFiles|已校验 {done} / {total} 个文件|Verified {done} / {total} files|{done} / {total} ファイルを検証済み
+model.received|本次已接收 {size}|Received {size} this attempt|今回の受信量 {size}
+model.slowNetwork|暂未收到新的下载进度，可能正在连接或等待网络响应。任务仍在后台进行。|No new download progress yet. The service may be connecting or waiting for the network; the task continues in the background.|新しい進捗がありません。接続中またはネットワークの応答待ちの可能性があります。処理はバックグラウンドで続いています。
+model.largeFile|正在处理较大的模型文件，可能需要一些时间。|Processing a large model file; this may take a while.|大きなモデルファイルを処理しています。しばらくお待ちください。
+model.backgroundHelp|可以关闭设置继续阅读，准备会在后台继续；退出应用会中断任务。|You can close settings and keep reading while preparation continues. Quitting the app interrupts the task.|設定を閉じて閲覧を続けられます。準備はバックグラウンドで続きますが、アプリを終了すると中断されます。
+model.readyHelp|模型文件已就绪，可在索引状态中查看后续进度。|Model files are ready. Check indexing status for the next steps.|モデルファイルの準備ができました。以降の進捗は索引の状態で確認できます。
+model.retryHelp|请检查网络连接后重试，已下载的文件会尽量复用。|Check your network connection and retry. Downloaded files will be reused where possible.|ネットワーク接続を確認して再試行してください。ダウンロード済みファイルは可能な限り再利用します。
+model.firstDownload|首次准备需要联网下载较大的模型文件，耗时取决于网络速度。阅读与关键词搜索可照常使用。|First-time preparation downloads large model files and depends on your connection speed. Reading and keyword search remain available.|初回は大きなモデルファイルをダウンロードするため、通信速度に応じて時間がかかります。閲覧とキーワード検索は引き続き利用できます。
 已拒绝|Rejected|却下済み
 已接受|Accepted|承認済み
 已移入回收区，可以恢复|Moved to Trash. You can restore it.|ゴミ箱に移動しました。復元できます。
@@ -937,3 +1032,75 @@ macOS 14/15 的 Safari 需要本机解析配置。仅配置本应用的专属域
 在编辑器中打开 Design/project-spec.json|Open Design/project-spec.json in editor|エディターで Design/project-spec.json を開く
 请选择或输入知识库内的项目子目录名称|Choose or enter a project subdirectory name inside the knowledge folder.|ナレッジ内のプロジェクトサブディレクトリ名を選択または入力してください。
 画板宽高须在 120 到 7680 像素之间|Artboard width and height must be between 120 and 7680 pixels.|アートボードの幅と高さは 120〜7680 ピクセルの間で指定してください。
+# Public website. Authored here, compiled with the shared catalogs.
+site.title|LeafLoom — 你的本地知识库与个人 Wiki|LeafLoom — Your local knowledge base & personal wiki|LeafLoom — ローカルの知識ベースと個人 Wiki
+site.description|用 LeafLoom 整理 Markdown、HTML 和零散想法。本地优先的开源知识库，支持知识图谱与可选 AI 接入。免费下载 Windows 和 Mac 版。|A local-first, open-source home for your Markdown, HTML and ideas. Connect your notes with a knowledge graph and optional AI. Download for Windows and Mac.|Markdown、HTML、アイデアを一つに。知識グラフと任意の AI 連携に対応する、ローカルファーストのオープンソース知識ベース。Windows・Mac 版をダウンロード。
+site.skip|跳至正文|Skip to content|本文へ移動
+site.navigation|主导航|Main navigation|メインナビゲーション
+site.languages|选择语言|Choose language|言語を選択
+site.nav_features|功能|Features|機能
+site.nav_download|下载|Download|ダウンロード
+site.nav_docs|使用指南|User guide|利用ガイド
+site.eyebrow|开源 · 本地优先 · 为你的知识而生|OPEN SOURCE · LOCAL FIRST · YOURS TO KEEP|オープンソース · ローカルファースト
+site.headline|让零散的想法，长成自己的知识。|A home for everything you know.|散らばったメモを、育つ知識へ。
+site.intro|把笔记、项目文档和收藏网页，织成自己的知识库与个人 Wiki。文件留在本地，需要时再连接 AI。|Turn notes, project docs and saved webpages into a connected knowledge base and personal wiki. Keep your files local. Bring AI in when you want it.|メモ、プロジェクト資料、保存したウェブページを、自分の知識ベースと個人 Wiki に。ファイルは手元に。AI は必要なときだけ。
+site.download_windows|下载 Windows 版|Download for Windows|Windows 版をダウンロード
+site.download_macos|下载 Mac 版|Download for Mac|Mac 版をダウンロード
+site.windows|Windows|Windows|Windows
+site.macos|Mac|Mac|Mac
+site.unavailable|暂不可用|Not available yet|現在準備中
+site.hero_note|免费使用 · 无需注册 · 中文 / English / 日本語|Free to use · No signup · English / 中文 / 日本語|無料 · 登録不要 · 日本語 / English / 中文
+site.workspace|你的知识工作区|Your knowledge workspace|自分の知識ワークスペース
+site.demo_caption|实际应用界面，使用虚构的演示知识库；截图内容随语言切换。|The real app, with a fictional demo library. Screenshots follow your language.|実際のアプリ画面。架空のデモ資料を使用し、言語に合わせたスクリーンショットを表示しています。
+site.markdown_alt|LeafLoom 中的 Markdown 笔记，包含表格、任务、文档大纲和反向链接|A Markdown note in LeafLoom with a table, tasks, outline and backlinks|表、タスク、目次、バックリンクを含む LeafLoom の Markdown ノート
+site.features_eyebrow|从记录，到连接，再到发现|CAPTURE. CONNECT. REDISCOVER.|書く。つなぐ。見つけなおす。
+site.features_title|不止存下来，还能用起来。|Less scattered. More connected.|保存した知識を、使える知識に。
+site.features_intro|为自己的想法留一个安静的地方，也为下一次灵感留好线索。|A quiet place to think, and a clear path back to the ideas that matter.|落ち着いて考えられる場所と、大切なアイデアに戻るための道しるべ。
+site.markdown_title|写得顺手，读得舒服。|Make room for your next idea.|書きやすく、読みやすく。
+site.markdown_body|直接在排版后的页面里写 Markdown，用斜杠命令插入表格和任务，粘贴图片或拖入附件。随时切换源码，共享撤销历史。|Write on the formatted Markdown page. Add tables and tasks with slash commands, paste images or drop attachments. Switch to source with shared undo history.|整形されたページに Markdown を直接入力。スラッシュコマンドで表やタスクを追加し、画像や添付も貼り付けられます。元の Markdown と取り消し履歴を共有します。
+site.graph_title|让想法之间，有迹可循。|Follow the thread between ideas.|アイデアのつながりをたどる。
+site.graph_body|用双链与反向链接连接笔记，在知识图谱中探索关联。从一个概念走到阅读笔记，再回到它影响的项目。|Link notes in both directions and explore them in a knowledge graph. Follow a concept to a reading note, then back to the project it inspired.|双方向リンクとバックリンクでノートをつなぎ、知識グラフで関係を探索。概念から読書メモへ、そこから影響を受けたプロジェクトへ進めます。
+site.graph_alt|LeafLoom 知识图谱中相互连接的演示笔记|Connected demo notes in the LeafLoom knowledge graph|LeafLoom の知識グラフでつながるデモノート
+site.html_title|网页，也是你的知识。|A home for saved webpages, too.|保存したウェブページも、一緒に。
+site.html_body|在同一工作区打开本地 HTML 项目，保留配套样式、图片和受支持的脚本。把阅读资料与自己的笔记放在一起。|Open local HTML projects alongside your notes, with their styles, images and supported scripts. Keep your reading material close to your own thinking.|ノートと同じワークスペースでローカル HTML プロジェクトを開けます。スタイル、画像、対応するスクリプトを保ち、読む資料と自分の考えを一緒に扱えます。
+site.html_alt|在 LeafLoom 内打开的本地 HTML 阅读室|A local HTML reading room open inside LeafLoom|LeafLoom 内で開いたローカル HTML の読書室
+site.search_title|找回原文，也找回上下文。|Find the source. Keep the context.|原文と、その文脈に戻る。
+site.search_body|先用关键词检索和 Wiki 导航找到资料，需要时再准备本地语义检索模型。每条检索结果都能带你回到来源。|Start with keyword search and Wiki navigation. Prepare the optional local semantic-search model when you need it. Follow results back to their original notes.|まずはキーワード検索と Wiki ナビゲーションで資料へ。必要になったらローカルの意味検索モデルを準備。検索結果から元のノートをたどれます。
+site.search_alt|LeafLoom 的知识检索结果及原文入口|LeafLoom search results linking back to original notes|元のノートへのリンクが付いた LeafLoom の検索結果
+site.local_eyebrow|本地为本，连接由你|LOCAL BY DESIGN. CONNECTED BY CHOICE.|ローカルが基本。連携は自分で選ぶ。
+site.local_title|你的文件，你的知识，你来掌控。|Your files. Your knowledge. Your call.|ファイルも知識も、自分の手に。
+site.files_title|文件留在自己的目录|Your folders stay yours|ファイルは自分のフォルダーに
+site.files_body|笔记和索引保存在自己的电脑上。日常阅读、编辑、图谱与本地检索，无需托管知识库。|Notes and indexes live on your computer. Read, edit, explore and search locally, without a hosted knowledge base.|ノートと索引は自分のパソコンに保存。クラウドに知識ベースを預けず、ローカルで閲覧・編集・探索・検索できます。
+site.scope_title|检索范围，由你选择|Choose what enters search|検索対象は自分で選ぶ
+site.scope_body|默认不索引任何文件夹。先浏览，再明确选择需要检索的内容；浏览与检索范围相互独立。|No folders are indexed by default. Browse first, then explicitly choose what to search. Browsing and retrieval have separate scopes.|初期状態ではどのフォルダーも索引化しません。まず閲覧し、検索したい内容を選択。閲覧範囲と検索範囲は独立しています。
+site.optional_title|AI 接入，按需开启|Bring AI in on your terms|AI は必要なときに
+site.optional_body|AI Chat 会向所选服务发送启用的上下文；ChatGPT 接收请求的工具结果。外部 AI 接入是可选能力。|AI Chat sends enabled context to your chosen provider; ChatGPT receives requested tool results. External AI connections are optional.|AI Chat は有効にした文脈を選択したサービスに送信し、ChatGPT は要求したツール結果を受け取ります。外部 AI 連携は任意です。
+site.privacy_link|了解存储与隐私边界|Read about storage and privacy|保存とプライバシーについて
+site.ai_eyebrow|需要 AI 时，知识就在身边|WHEN YOU WANT AI, YOUR KNOWLEDGE IS READY|AI が必要なとき、知識をそばに。
+site.ai_title|把自己的知识，带进对话。|Give your AI something worth knowing.|自分の知識を、対話につなぐ。
+site.ai_body|在笔记旁使用 AI Chat，追溯引用、审阅建议；通过 MCP 与 Skill 连接常用助手，或使用内置 Tunnel 接入 ChatGPT。|Chat beside your notes, follow citations and review suggestions. Connect your assistant through MCP and the bundled Skill, or use the built-in Tunnel to bring your knowledge into ChatGPT.|ノートの隣で AI Chat を使い、引用をたどり、提案を確認。MCP と同梱 Skill でアシスタントを接続したり、内蔵 Tunnel で ChatGPT と連携できます。
+site.ai_link|查看 AI 接入指南|Explore AI connections|AI 連携ガイドを見る
+site.ai_alt|LeafLoom 笔记旁的 AI Chat，使用明确标识的虚构演示对话|AI Chat beside a LeafLoom note, with a clearly labeled fictional conversation|LeafLoom のノート横の AI Chat。架空の会話であることを明記したデモ
+site.ai_caption|虚构的 AI 对话演示，未调用外部 AI。ChatGPT 连接需要账号、网络与相应权限，且 LeafLoom 须保持运行。|Fictional AI conversation; no external AI was called. ChatGPT needs an account, network access and the relevant permissions, with LeafLoom running.|架空の AI 会話です。外部 AI は呼び出していません。ChatGPT 連携にはアカウント、ネットワーク、必要な権限、および LeafLoom の起動が必要です。
+site.download_eyebrow|从你自己的文件夹开始|START WITH A FOLDER OF YOUR OWN|自分のフォルダーから始めよう
+site.download_title|给你的知识，一个自己的家。|Make yourself at home.|知識に、自分だけの居場所を。
+site.download_intro|安装桌面应用，体验内置演示或打开自己的文件夹。无需预装 Python、Node 或 Ollama。|Install the desktop app. Try the demo or open your own folder. No preinstalled Python, Node or Ollama needed.|デスクトップアプリをインストールし、デモを試すか自分のフォルダーを開きます。Python、Node、Ollama の事前インストールは不要です。
+site.release_notes|版本说明|Release notes|リリースノート
+site.installation|安装指南|Installation guide|インストールガイド
+site.all_releases|所有版本|All releases|すべてのリリース
+site.install_note|当前安装包未签名，macOS 版未公证；如遇系统提示，请查看安装指南。暂不提供 Linux、Intel Mac 或 Windows ARM 安装包。|Current installers are unsigned; the Mac app is not notarized. See the installation guide for system prompts. No Linux, Intel Mac or Windows ARM installer is provided.|現在のインストーラーは未署名で、Mac 版は未公証です。システムの警告はインストールガイドをご確認ください。Linux・Intel Mac・Windows ARM 版は提供していません。
+site.faq_question|不使用 AI，也能正常使用吗？|Can I use LeafLoom without AI?|AI を使わなくても利用できますか？
+site.faq_answer|可以。阅读、编辑、知识图谱和关键词检索不依赖模型。完成依赖准备后可以离线使用；需要本地语义检索时再准备 BGE-M3。外部 AI 与 ChatGPT 则需要各自的账号、权限和网络。|Yes. Reading, editing, the graph and keyword search work without a model, and work offline after dependencies are prepared. Prepare BGE-M3 only for local semantic search. External AI and ChatGPT need their own accounts, permissions and network access.|はい。閲覧、編集、知識グラフ、キーワード検索はモデル不要です。依存関係を準備すればオフラインでも利用できます。ローカル意味検索には BGE-M3 を準備してください。外部 AI や ChatGPT は各サービスのアカウント・権限・ネットワークが必要です。
+site.footer_line|让知识留在本地，让想法自由生长。|Keep your knowledge local. Let your ideas grow.|知識は手元に。アイデアは自由に。
+site.feedback|反馈与建议|Feedback|フィードバック
+
+feishu.localHighRisk|允许本机飞书高风险操作|Allow local high-risk Feishu operations|ローカルの Feishu 高リスク操作を許可
+feishu.tunnelHighRisk|允许 Tunnel 飞书高风险操作|Allow Tunnel high-risk Feishu operations|Tunnel の Feishu 高リスク操作を許可
+feishu.highRiskHelp|包括 CLI 标记的高风险命令及原始 API 调用。需先开启写入；每次操作仍须明确确认。|Includes CLI high-risk commands and raw API calls. Requires write access; each operation still needs explicit confirmation.|CLI の高リスクコマンドと raw API 呼び出しを含みます。書き込み権限に加え、操作ごとの明示的な確認が必要です。
+site.nav_about|关于|About|このサイトについて
+site.about_title|关于作者 · LeafLoom|About the creator · LeafLoom|作者について · LeafLoom
+site.about_heading|你好，我是 DJ。|Hi, I’m DJ.|こんにちは、DJ です。
+site.about_intro|我是 LeafLoom 的作者。欢迎通过 GitHub 和 X 了解我的项目与近况。|I’m the creator of LeafLoom. Find my projects and updates on GitHub and X.|LeafLoom の作者です。GitHub と X でプロジェクトや近況をご覧いただけます。
+site.about_github|查看我的开源项目和代码。|Explore my open-source projects and code.|オープンソースのプロジェクトとコードをご覧ください。
+site.about_x|查看我的分享与最新动态。|Follow my posts and latest updates.|投稿や最新情報をご覧ください。
+site.about_back|返回 LeafLoom 首页|Back to LeafLoom|LeafLoom のホームへ

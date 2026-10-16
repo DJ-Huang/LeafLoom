@@ -2,6 +2,23 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+function tunnelBinary({packaged, resourcesPath, appPath = __dirname, home, platform = process.platform}) {
+  const name = platform === 'win32' ? 'tunnel-client-runtime.exe' : 'tunnel-client-runtime';
+  if (packaged) return path.join(resourcesPath, 'tunnel', name);
+  // Dev uses the registered installation's runtime and shared settings, rather
+  // than starting a different copy from the checkout when an app is installed.
+  let installation;
+  try {installation = JSON.parse(fs.readFileSync(path.join(home, 'desktop-install.json'), 'utf8'));} catch {}
+  if (installation?.schema === 1 && typeof installation.executable === 'string' && path.isAbsolute(installation.executable)) {
+    const root = platform === 'win32' ? path.join(path.dirname(installation.executable), 'resources')
+      : path.resolve(path.dirname(installation.executable), '..', 'Resources');
+    const binary = path.join(root, 'tunnel', name);
+    if (fs.existsSync(binary)) return binary;
+  }
+  // A source-only checkout still works without first installing LeafLoom.
+  return path.join(appPath, 'resources', 'tunnel', platform === 'win32' ? 'windows-x64' : 'macos-arm64', name);
+}
+
 // The renderer never receives the stored ciphertext or the decrypted key.
 class TunnelSettings {
   constructor(home, safeStorage) {
@@ -60,4 +77,4 @@ class TunnelSettings {
   disable() { this.write({...this.value, enabled: false}); this.state = {state: 'disabled', error: ''}; return this.status(); }
   clear() { this.write({schema: 1, tunnelId: '', enabled: false}); this.state = {state: 'unconfigured', error: ''}; return this.status(); }
 }
-module.exports = {TunnelSettings};
+module.exports = {TunnelSettings, tunnelBinary};

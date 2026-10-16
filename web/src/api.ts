@@ -50,7 +50,7 @@ function consume<T>(entry:Pending,signal?:AbortSignal):Promise<T>{
 }
 export async function api<T=any>(path:string,body?:any,method?:string,options:{signal?:AbortSignal,force?:boolean}={}):Promise<T>{
  if(options.signal?.aborted)throw aborted();
- const verb=method||(body===undefined?'GET':'POST'),readable=(verb==='GET'&&!path.startsWith('ai/')&&!/^(session|status|bootstrap|records|preferences|mcp-access)(\?|$)/.test(path))||(verb==='POST'&&path==='query');
+ const verb=method||(body===undefined?'GET':'POST'),readable=(verb==='GET'&&!path.startsWith('ai/')&&!/^(session|status|bootstrap|records|preferences|mcp-access|feishu)(\?|$)/.test(path))||(verb==='POST'&&path==='query');
  const resource=path+(verb==='POST'&&path==='query'?'?query='+encodeURIComponent(JSON.stringify(body)):'');
  const key=scope+'\n'+resource,previous=cache.get(key);
  if(readable&&previous?.valid&&!options.force){cache.delete(key);cache.set(key,previous);return previous.value;}
@@ -77,7 +77,7 @@ export async function api<T=any>(path:string,body?:any,method?:string,options:{s
   }
   if(!response.ok&&response.status!==304)throw Object.assign(new Error(data.error||(response.status===404&&path==='trash/clear'?"当前后台服务尚未加载清空功能，请重启服务后重试":typeof data.detail==='string'?data.detail:"操作未完成")),{conflict:response.status===409,status:response.status});
   if(readable&&scope+'\n'+resource===key&&(versions.get(key)||0)===generation)remember(key,{value:data,etag:response.headers.get('ETag')||previous?.etag,bytes:typeof data.text==='string'?data.text.length*2+512:JSON.stringify(data).length*2,valid:true});
-  if(verb!=='GET'&&verb!=='HEAD'&&!path.startsWith('ai/')&&!path.startsWith('html-')&&!['activity','preferences','demo','query','knowledge-search','html-preview','choose-directory','model-prepare','reindex','skills/wiki-search/install'].includes(path))invalidate({type:'write',paths:[body?.path,body?.source,body?.destination,data.path].filter(Boolean)});
+  if(verb!=='GET'&&verb!=='HEAD'&&!path.startsWith('ai/')&&!path.startsWith('html-')&&!path.startsWith('feishu')&&!['activity','preferences','demo','query','knowledge-search','html-preview','choose-directory','model-directory/open','model-prepare','reindex','skills/wiki-search/install'].includes(path))invalidate({type:'write',paths:[body?.path,body?.source,body?.destination,data.path].filter(Boolean)});
   return data;
  };
  const entry:Pending={controller,users:0,settled:false,promise:Promise.resolve()};

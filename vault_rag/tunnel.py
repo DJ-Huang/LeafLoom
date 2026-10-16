@@ -14,6 +14,8 @@ import urllib.error
 import urllib.request
 
 from vault_rag.worker_lifetime import WorkerJob
+from vault_rag.mcp_access import TUNNEL_AUTH_HEADER
+from vault_rag.tunnel_owner import RuntimeLease
 
 
 class TunnelError(Exception):
@@ -111,7 +113,7 @@ class TunnelManager:
         authorization = self.mcp_access.tunnel_authorization() if self.mcp_access else ''
         try:
             if authorization:
-                code, value = request(f'http://127.0.0.1:{self.port}/mcp', payload, headers={'Authorization': authorization})
+                code, value = request(f'http://127.0.0.1:{self.port}/mcp', payload, headers={TUNNEL_AUTH_HEADER: authorization})
             else:code, value = request(f'http://127.0.0.1:{self.port}/mcp', payload)
         except (OSError, ValueError): raise TunnelError('tunnel.error.mcp') from None
         if code != 200 or 'result' not in value: raise TunnelError('tunnel.error.mcp')
@@ -131,7 +133,7 @@ class TunnelManager:
         if authorization:
             env['LEAFLOOM_TUNNEL_MCP_AUTHORIZATION'] = authorization
             for flag in ('--mcp.extra-headers', '--mcp.discovery-extra-headers'):
-                args += [flag, 'Authorization: env:LEAFLOOM_TUNNEL_MCP_AUTHORIZATION']
+                args += [flag, f'{TUNNEL_AUTH_HEADER}: env:LEAFLOOM_TUNNEL_MCP_AUTHORIZATION']
         options = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {'start_new_session': True}
         self.process = subprocess.Popen(args, env=env, cwd=self.directory, stdin=subprocess.DEVNULL,
                                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **options)
@@ -156,17 +158,23 @@ class TunnelManager:
     def _stop_process(self):
         if self.mcp_access is not None:self.mcp_access.rotate_tunnel_secret()
         process, self.process = self.process, None
-        if process is not None and process.poll() is None:
-            try:
-                if os.name == 'nt': process.terminate()
-                else: os.killpg(process.pid, signal.SIGTERM)
+        try:
+            if process is not None and process.poll() is None:
+                try:
+                    if os.name == 'nt': process.terminate()
+                    else: os.killpg(process.pid, signal.SIGTERM)
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    if os.name == 'nt': process.kill()
+                    else: os.killpg(process.pid, signal.SIGKILL)
+                    process.wait(timeout=5)
+                except ProcessLookupError: pass
+        finally:
+            # Release the kill-on-close job even when normal termination fails.
+            job, self.job = self.job, None
+            if job: job.close()
+            if process is not None and os.name == 'nt' and process.poll() is None:
                 process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                if os.name == 'nt': process.kill()
-                else: os.killpg(process.pid, signal.SIGKILL)
-                process.wait(timeout=5)
-            except ProcessLookupError: pass
-        if self.job: self.job.close(); self.job = None
 
     def _health(self):
         self.health_degraded = False
@@ -186,6 +194,13 @@ class TunnelManager:
         return code == 200 and control.get('status') == 'ok'
 
     def _run(self):
+        try:
+            with RuntimeLease(self.directory):
+                self._run_owned()
+        except OSError:
+            self._state('failed', 'tunnel.error.process')
+
+    def _run_owned(self):
         seen, desired, blocked, retry_at, attempts = -1, None, False, 0, 0
         try:
             while True:

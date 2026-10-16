@@ -6,6 +6,8 @@
 
 [English](../../README.md) · [中文](../../docs/zh-CN/README.md) · [日本語](../../docs/ja/README.md)
 
+**[公式サイト・ダウンロード](https://dj-huang.github.io/LeafLoom/ja/)** · 製品画面、Windows / Mac インストーラー、リリースノートを確認できます。
+
 散らばったメモ、プロジェクト資料、保存したウェブページを、つながる知識ベースへ。**LeafLoom は、オープンソースでローカルファーストのナレッジ管理ツール・個人 Wiki** です。Markdown と HTML、出典をたどれる検索、知識グラフ、MCP、Skill、AI Chat、ChatGPT 連携を一つのワークスペースで使えます。
 
 ファイルと検索インデックスは自分のパソコンに保存。読む、書く、探す作業はローカルで行い、必要なときに AI をつなげられます。
@@ -68,6 +70,7 @@ App Key は OS によって暗号化して保存されます。接続はアプ�
 | 接続方法 | 使い方 |
 | --- | --- |
 | **MCP** | Codex、Cursor、Claude Code などをローカル HTTP MCP の `http://127.0.0.1:18080/mcp`（既定のポート）に接続。完全アクセスを有効にすると接続メモの検索・作成・編集・整理・復元ができます。RAG は選択範囲を維持し、書き込みは初期状態で無効です。 |
+| **Feishu / Lark** | 外部で設定した lark-cli に接続し、アカウント検証と MCP からの文書・Base 操作を利用できます。ローカルと Tunnel の権限は個別で、初期状態は無効です。[接続ガイド](GUIDE.md#任意の-feishu--lark-連携)。 |
 | **Skill** | **設定 → AI 連携 → スキルをインストール** から同梱の [`wiki-search` Skill](../../wiki-search/SKILL.md) を追加。対応する AI アシスタントに検索、Wiki ナビゲーション、出典確認の手順を伝えます。MCP の接続設定は別途必要です。 |
 | **AI Chat** | 対応するログイン済み CLI をつなぎ、メモや選択した文章について対話。引用から原文を開き、編集差分を確認して下書きに取り込み、準備ができたら保存します。 |
 
@@ -123,8 +126,8 @@ cd LeafLoom
 ```
 
 1. リポジトリをダウンロードまたはクローンし、書き込み可能なフォルダーに展開します。
-2. Windows 10/11 x64：`Start.cmd` をダブルクリック。 macOS 14 以降の Apple Silicon：リポジトリで `sh Start.sh` を実行。
-3. 初回は専用の実行環境と依存関係を準備して画面を開きます。検索モデルは必要に応じて設定から準備します。Python、Node、Ollama の事前インストールは不要です。
+2. Node 22+（npm を含む）と uv を用意します。Windows 10/11 x64：`Dev.cmd` をダブルクリック。macOS 14+ Apple Silicon：`Dev.command` をダブルクリックするか `sh Dev.sh` を実行。
+3. 初回は専用 Python 環境と依存関係を準備し、フロントエンドの自動更新が有効なソース版デスクトップを開きます。Dev はインストール版とユーザー設定・モデル・データを共有し、開発依存関係のみ `.cache/desktop-dev/.venv` に保存します。切り替え前に現在のアプリを終了してください。検索モデルは設定から必要に応じて準備します。
 4. 言語を選び、架空のデモを試すか自分のフォルダーを接続して、検索範囲を明示的に選びます。
 
 </details>
@@ -147,7 +150,7 @@ cd LeafLoom
 
 **デスクトップアプリ：** LeafLoom を終了し、[Releases](https://github.com/DJ-Huang/LeafLoom/releases/latest) から対応する最新版をインストールして、再び開きます。
 
-**ソースからのインストール：** リポジトリの更新後に `Install.cmd` または `sh Install.sh` を実行してサービスを再起動します。ブラウザーの更新だけではサーバーは更新されません。
+**ソース開発：** リポジトリの更新後は Dev を再起動します。フロントエンドは自動更新されます。Python/Electron の変更後は Dev のトレイ／メニューバーから終了して再起動してください。インストール済みアプリは自身のショートカットとメニューで管理します。
 
 [Contributing](../../CONTRIBUTING.md) · [Changelog](../../CHANGELOG.md) · [Third-party notices](../../THIRD_PARTY_NOTICES.md) · [Media](../../docs/MEDIA.md)
 

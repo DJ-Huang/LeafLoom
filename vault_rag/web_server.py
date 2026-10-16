@@ -11,7 +11,7 @@ from vault_rag.html_projects import HtmlProjects
 from vault_rag.design_studio import DesignStudio
 from vault_rag.browser_storage import BrowserStorageMigration, migration_script
 from vault_rag.local_dns import LocalDns
-from vault_rag.platform_support import choose_directory, private_file_mode, is_windows
+from vault_rag.platform_support import choose_directory, open_directory, private_file_mode, is_windows
 from vault_rag.http_cache import conditional_file
 from vault_rag.skill_install import install_skill, skill_status
 from vault_rag.ai_service import AiService
@@ -19,9 +19,10 @@ from vault_rag.ai_routes import ai_router, ai_mcp_server
 from vault_rag.preferences import Preferences
 from vault_rag.demo import create_demo
 from vault_rag.i18n import error_code
-from vault_rag.mcp_access import McpAccess
+from vault_rag.mcp_access import McpAccess, TUNNEL_AUTH_HEADER
 from vault_rag.mcp_tools import build_workspace_mcp
 from vault_rag.note_operations import NoteOperations
+from vault_rag.feishu import Feishu
 
 def json_response(value,status=200):
     if isinstance(value,dict) and isinstance(value.get('error'),str):
@@ -37,7 +38,9 @@ class StaticCompression:
         app=self.compressed if scope['type']=='http' and not ranged and scope.get('path','').startswith('/assets/') else self.app
         await app(scope,receive,send)
 
-def create_app(config=None,runtime=None,*,start_background=True,static_dir=None):
+def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,dev_server=None):
+    from vault_rag.dev_frontend import DevFrontend
+    dev = DevFrontend(dev_server) if dev_server else None
     config=config or LocalConfig()
     if runtime is None:
         from vault_rag.knowledge import Runtime
@@ -57,7 +60,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     ai_app=ai_mcp.streamable_http_app()
     mcp_access=McpAccess(config)
     notes=NoteOperations(config,runtime)
-    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token,design)
+    feishu=Feishu(config)
+    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token,design=design,feishu=feishu)
     mcp_app=mcp.streamable_http_app()
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -73,6 +77,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     app.state.runtime=runtime;app.state.csrf=csrf
     app.state.mcp_access=mcp_access;app.state.note_operations=notes
     app.state.ai=ai
+    app.state.feishu=feishu
     app.state.websites=websites
     app.state.design=design
     app.state.local_dns=local_dns
@@ -99,7 +104,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         bearer=hmac.compare_digest(request.headers.get('authorization','').encode('utf-8'),('Bearer '+token).encode('utf-8'))
         session=hmac.compare_digest(request.cookies.get('vault_session','').encode('utf-8'),token.encode('utf-8'))
         if is_mcp:
-            try:mcp_access.principal(request.headers.get('authorization',''),token,loopback=local_mcp)
+            try:
+                who=mcp_access.principal(request.headers.get('authorization',''),token,loopback=local_mcp,
+                                         tunnel_header=request.headers.get(TUNNEL_AUTH_HEADER,''))
+                logging.getLogger(__name__).debug('MCP connection=%s runtime_proof=%s bearer=%s', who,
+                    bool(request.headers.get(TUNNEL_AUTH_HEADER,'')),bool(request.headers.get('authorization','')))
             except PermissionError:return json_response({'error':'MCP credential is missing, invalid or revoked','error_code':'permission_denied'},401)
         elif is_api and not (bearer or session):return json_response({'error':'请从本机网页入口打开，或配置 MCP 本机令牌'},401)
         if path.startswith('/api/') and request.method not in ('GET','HEAD') and not bearer:
@@ -108,7 +117,10 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
             return json_response({'error':'目录信息正在更新，请稍后重试'},503)
         foreground=path.startswith('/api/') and path not in ('/api/events','/api/status','/api/activity')
         if foreground:runtime.foreground_begin()
-        try:response=await call_next(request)
+        try:
+            if dev and request.url.hostname==websites.ui_host and request.method in ('GET','HEAD') and dev.asset(path):
+                response=await dev.response(path,request.url.query)
+            else:response=await call_next(request)
         except ConflictError as e:return json_response({'error':str(e),'error_code':'write_conflict','conflict':True},409)
         except FileNotFoundError as e:return json_response({'error':str(e),'error_code':'not_found'},400)
         except UnicodeDecodeError as e:return json_response({'error':str(e),'error_code':'invalid_text_encoding'},400)
@@ -119,6 +131,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         response.headers['Referrer-Policy']='no-referrer'
         if path.startswith('/api/') and path!='/api/media':response.headers.setdefault('Cache-Control','no-store')
         response.headers.setdefault('Content-Security-Policy',"default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob: http: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'")
+        if dev and request.url.hostname==websites.ui_host:
+            response.headers['Content-Security-Policy']=response.headers['Content-Security-Policy'].replace("script-src 'self'", "script-src 'self' 'unsafe-inline'").replace("connect-src 'self'", "connect-src 'self' " + dev.websocket)
         return response
     @app.get('/healthz')
     async def health():return {'ok':True,'service':'vault-rag'}
@@ -173,7 +187,15 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         body=await request.json()
         if not isinstance(body,dict):raise ValueError('Invalid MCP access settings')
         return json_response(await asyncio.to_thread(mcp_access.configure,body.get('kind'),
-            enabled=body.get('enabled'),write=body.get('write'),rotate=body.get('rotate',False)))
+            enabled=body.get('enabled'),write=body.get('write'),rotate=body.get('rotate',False),
+            resource=body.get('resource','workspace'),high_risk=body.get('high_risk')))
+    @app.get('/api/feishu')
+    async def feishu_settings():return json_response(feishu.status())
+    @app.post('/api/feishu')
+    async def save_feishu_settings(request:Request):
+        return json_response(await asyncio.to_thread(feishu.configure,await request.json()))
+    @app.post('/api/feishu/verify')
+    async def verify_feishu():return json_response(await asyncio.to_thread(feishu.verify))
     @app.post('/api/activity')
     async def activity():runtime.activity();return {'ok':True}
 
@@ -414,11 +436,20 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         runtime.request_index(force=True);return {'ok':True,'state':'已排队'}
     @app.post('/api/model-prepare')
     async def prepare():
-        if runtime.model.download_state=='下载模型中':return {'state':'下载中'}
+        if not runtime.model.begin_prepare():return {'state':'下载中'}
+        runtime.publish('status',status=runtime.status())
         def download():
-            try:runtime.model.prepare();runtime.request_index(force=True)
+            try:runtime.model.prepare(reserved=True);runtime.request_index(force=True)
             except Exception:logging.exception('Model preparation failed')
+            finally:runtime.publish('status',status=runtime.status())
         threading.Thread(target=download,daemon=True,name='model-download').start();return {'state':'模型准备已开始'}
+    @app.post('/api/model-directory/open')
+    async def open_model_directory():
+        # The client cannot select an arbitrary local path through this action.
+        directory=runtime.model.available.path
+        try:await asyncio.to_thread(open_directory,directory)
+        except (OSError,subprocess.SubprocessError) as error:return json_response({'error':str(error)},400)
+        return {'ok':True}
     # The SDK owns /mcp; share its single session manager in the root lifespan.
     app.router.routes.extend(mcp_app.routes)
     app.router.routes.extend(ai_app.routes)
@@ -459,10 +490,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         return json_response(await asyncio.to_thread(local_dns.configure,True))
     @app.get('/')
     async def index(request:Request):
-        if not (static/'index.html').is_file():return HTMLResponse('网页尚未构建，请运行前端构建',status_code=503)
+        if not dev and not (static/'index.html').is_file():return HTMLResponse('网页尚未构建，请运行前端构建',status_code=503)
         if request.url.hostname!=websites.ui_host:
             return storage_migration.page()
-        response=HTMLResponse((static/'index.html').read_text(encoding='utf-8'),headers={'Cache-Control':'no-store'});response.set_cookie('vault_session',token,httponly=True,samesite='strict',max_age=365*86400);return response
+        response=await dev.response('/') if dev else HTMLResponse((static/'index.html').read_text(encoding='utf-8'),headers={'Cache-Control':'no-store'})
+        response.set_cookie('vault_session',token,httponly=True,samesite='strict',max_age=365*86400);return response
     return app
 
 def create_server(app, **options):
