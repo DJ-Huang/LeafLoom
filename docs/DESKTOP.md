@@ -110,6 +110,7 @@ npm ci --prefix desktop
 npm ci --prefix web
 npm run build --prefix web
 python -X utf8 scripts/build_desktop_backend.py
+python -X utf8 scripts/build_tunnel.py
 npm run dist --prefix desktop
 ```
 
@@ -130,10 +131,64 @@ and run `npm start --prefix desktop`. Use a disposable `VAULT_RAG_HOME` for test
 
 ## Signing and release
 
-The `LeafLoom desktop packages` GitHub Actions workflow builds native Windows and
-Mac artifacts without publishing a release. Unsigned packages are test artifacts.
-Enable its `signed` input for public-distribution candidates; signing credentials
-must be configured in repository secrets.
+### Automatic release drafts
+
+The `LeafLoom desktop packages` GitHub Actions workflow builds Windows x64 on
+`windows-2025` and macOS arm64 on `macos-15`. No local build machine is required.
+The Mac job checks that it is actually running on Apple Silicon.
+Its packaging step raises the disposable runner's open-file limit for the signing
+tool's parallel scan of the embedded Python/Torch tree; local Mac builds with an
+`EMFILE` error need a sufficient open-file limit as well.
+
+1. Update the application version in `pyproject.toml`, `vault_rag/__init__.py`,
+   both `web/package.json` and `desktop/package.json`, the root application entries
+   in both npm lockfiles, and the `vault-rag` package in `uv.lock`. Update the three
+   changelogs. Commit the matching versions; CI checks them but never rewrites them.
+2. Push that commit, then create and push its stable `vX.Y.Z` tag. For example,
+   after preparing version 0.1.3: `git tag v0.1.3`, then
+   `git push public v0.1.3`. Use your actual remote name. Do not reuse an existing tag.
+3. In **Actions → LeafLoom desktop packages**, inspect both native builds and their
+   checks. Each build installs locked dependencies and prepares a full private
+   Python backend plus the verified Tunnel runtime. Either platform failing blocks
+   the draft upload job; logs and available acceptance reports remain in Actions.
+4. When both succeed, open the workflow summary's Release draft link. It contains
+   `LeafLoom-X.Y.Z-windows-x64-setup.exe`, `LeafLoom-X.Y.Z-macos-arm64.dmg`,
+   `SHA256SUMS.txt`, signing status, build links and generated release notes.
+   Uploaded file sizes and SHA-256 values are verified against the local outputs.
+5. Review the notes and installers, then click **Publish release** yourself.
+   Drafts are not offered by the app updater or the public website. Manual
+   publication triggers the existing website workflow.
+
+Build jobs have read-only repository access. Only the final draft job receives
+`contents: write`, using GitHub's built-in token; no personal access token is needed.
+Tag runs are serialized. Rerunning a failed job/workflow can replace the same
+draft's generated attachments while preserving edited notes. An upload failure
+may leave a partial draft: inspect it, rerun the failed job and publish only after
+verification succeeds. Already public Releases are rejected before replacement.
+For a source fix, commit a new version and tag instead of moving the old tag.
+There is no automatic public release or automatic version bump.
+
+### Manual builds and certificates
+
+For a build without a Release, use **Actions → LeafLoom desktop packages → Run
+workflow**, select the branch and leave `signed` unchecked. Download installers
+from the `leafloom-Windows-unsigned-test` and `leafloom-macOS-unsigned-test`
+artifacts after success. This entry point never creates or uploads a Release,
+even when a tag is selected. Test a new workflow branch here before its first
+release tag. The workflow must first be present on the default branch for the
+manual entry point to be available.
+
+Tag builds currently require no certificates: Windows is unsigned; Mac uses
+ad-hoc signing (`identity: "-"`), with Hardened Runtime and notarization disabled.
+The workflow selects this explicitly with `LEAFLOOM_UNSIGNED=1`; use the same
+environment variable for matching local builds. SmartScreen/Gatekeeper may warn
+or block installation. CI window acceptance does not prove a downloaded DMG will
+pass Gatekeeper on another Mac. Test the downloaded installers on target machines
+before manual publication; the draft explicitly records the signing limitation.
+
+For certificate-backed manual builds, enable `signed` and configure repository
+secrets below. This retains the existing signing and notarization checks; tag
+drafts remain without trusted signing until that release policy is changed.
 
 - Windows: `WINDOWS_CSC_LINK`, `WINDOWS_CSC_KEY_PASSWORD`. Mac:
   `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`. Local builds use electron-builder's
@@ -142,7 +197,7 @@ must be configured in repository secrets.
   All executables and native libraries in the bundled Python runtime must be signed
   as nested code before notarization; validate the resulting app with Gatekeeper.
 
-No signing credentials are checked into the repository. The workflow fails rather
+No signing credentials are checked into the repository. A signed build fails rather
 than treating a missing certificate as a signed release. App Store submission and
 unattended background installation are outside this version; updates are initiated
 explicitly from Settings.
