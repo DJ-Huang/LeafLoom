@@ -57,7 +57,7 @@ def run():
                     options['loop'] = 'asyncio:SelectorEventLoop'
                 server = create_server(app, **options)
                 from vault_rag.tunnel import TunnelManager
-                tunnel = TunnelManager(config.directory, options['port'], emit)
+                tunnel = TunnelManager(config.directory, options['port'], emit, mcp_access=app.state.mcp_access)
                 from vault_rag.control_pipe import ControlPipe
                 control = ControlPipe(sys.stdin)
                 def stop():

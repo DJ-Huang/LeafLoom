@@ -12,6 +12,7 @@ import {useStatus} from './hooks';
 import {FileTools,RecordsPage,SkillInstaller} from './settings-content';
 import {chooseDirectory,DesktopSettings} from './desktop';
 import {TunnelSettings} from './tunnel-settings';
+import {McpSettings} from './mcp-settings';
 import {LocalResolverSettings} from './local-resolver';
 import {RunAction,SettingGroup,SettingRow,StatusNotice} from './settings-ui';
 import {copyConfig,configChanged,searchSettings,settingsSections,SettingsLocation,SettingsResult} from './settings-model';
@@ -84,7 +85,7 @@ export function ConnectedSettings({config,location,folder,onSaved,onClose,onOpen
      {error&&<StatusNotice kind="error">{<Diagnostic message={error}/>}</StatusNotice>}{message&&<StatusNotice kind="success">{message}</StatusNotice>}
      {query?<div className="settings-search-results">{results.length?results.map(result=><button key={result.id} onClick={()=>select({section:result.section,targetId:result.id})}><div><strong>{result.title}</strong><span>{settingsSections.find(item=>item.id===result.section)!.title} · {result.description}</span></div><ArrowUpRight size={16}/></button>):<div className="setting-empty">{t("没有匹配的设置，试试“上传”“模板”或“索引”。")}</div>}</div>:<fieldset className="settings-fields" disabled={busy||externalChange}>
      {section==='general'&&<><SettingGroup title={t("界面语言")}><LocalePicker/></SettingGroup><DesktopSettings/><LocalResolverSettings/></>}
-     {section==='connection'&&<TunnelSettings/>}
+     {section==='connection'&&<><McpSettings port={config.port}/><TunnelSettings/></>}
      {blocked?<StatusNotice>{t("关联目录尚未保存。请先保存设置或取消更改，再操作此知识库。")}</StatusNotice>:<>
       {section==='general'&&<><SettingGroup id="root" title={t("关联目录")}><SettingRow label={t("知识库目录")} description={t("直接使用本机文件；网页可以浏览关联目录内的全部内容。")} stacked><div className="input-row"><input aria-label={t("关联目录")} value={draft.root||''} onChange={event=>setDraft(value=>({...value,root:event.target.value}))}/><button onClick={()=>void run(t("选择目录"),()=>chooseDirectory(),result=>{if(result.path)setDraft(value=>({...value,root:result.path}));})}>{t("选择目录")}</button></div></SettingRow>{rootChanged&&<StatusNotice>{t("保存后将切换知识库，并重新加载文件与检索范围。")}</StatusNotice>}</SettingGroup><SettingGroup id="homepage" title={t("开始页面")}><SettingRow label={t("知识库首页")} description={t("首页快捷入口指向的文件，相对于关联目录。")}>{field('homepage',t("知识库首页"))}</SettingRow></SettingGroup><div className="settings-local-note"><BookOpen size={18}/><p>{t("你的文件，你的知识。")}<br/><span>{t("笔记、附件与历史记录继续保存在本机。")}</span></p></div></>}
       {section==='files'&&<FileTools key={config.root} config={config} folder={folder} run={run} onOpen={result=>requestExit(result)} onChanged={onChanged}/>}

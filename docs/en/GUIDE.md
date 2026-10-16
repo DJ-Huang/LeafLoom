@@ -95,3 +95,7 @@ See [AI connections](AI.md). Browsing and local retrieval work without an AI sub
 **Can I use a network folder?** The desktop app expects a local folder. UNC shares and symbolic-link/junction access are rejected to keep file operations inside the connected folder.
 
 **How do I uninstall?** Quit LeafLoom, then uninstall it through Windows Settings or remove it from Applications on Mac. Notes, configuration, indexes and models are retained. For a legacy source-installed service, use `vault-rag service uninstall` from that environment. Remove retained data separately only when you no longer need it.
+
+## Full note access from AI clients
+
+In **Settings → AI connections**, enable full MCP reading for your local AI client or ChatGPT. Enable each connection's write switch separately to allow direct saves with history and recoverable deletion. It can find and edit all connected Markdown, TXT and HTML notes; RAG still uses only selected folders. Older connections retain their original five read-only capabilities. See [AI setup](AI.md) and the [tool contract](../MCP.md).

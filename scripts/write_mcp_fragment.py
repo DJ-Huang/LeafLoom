@@ -1,6 +1,7 @@
 """
 Write `_generated/cursor-mcp-vault-rag.fragment.json` for merging into Cursor global mcp.json.
 Run from repository root `vault-rag/` with: `python scripts/write_mcp_fragment.py`
+Replace the placeholder with the dedicated credential generated in Settings → AI connections.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ def main() -> None:
     fragment = {
         "user-vault-rag": {
             "url": f"http://127.0.0.1:{port}/mcp",
-            "headers": {"Authorization": "Bearer <LOCAL_TOKEN>"},
+            "headers": {"Authorization": "Bearer <MCP_TOKEN_FROM_SETTINGS>"},
         }
     }
     out = root / "_generated" / "cursor-mcp-vault-rag.fragment.json"

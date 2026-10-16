@@ -8,7 +8,7 @@ users do not need a browser, Python, Node, uv, a cloned repository or Ollama.
 
 ### ChatGPT connection
 
-Open **Settings → ChatGPT connection** in the desktop app. Enter your existing
+Open **Settings → AI connections → ChatGPT connection** in the desktop app. Enter your existing
 Tunnel ID and OpenAI Tunnel runtime App Key (Tunnels Read + Use), then choose
 **Save and connect**. Windows x64 and Apple Silicon packages include the verified
 official runtime; no separate download, YAML file or terminal is needed.
@@ -25,9 +25,7 @@ apply. Stop an existing manually started client yourself to avoid duplicate
 runtimes. Channel readiness is not proof of a successful ChatGPT tool call.
 Tool responses contain local knowledge and are sent to ChatGPT when invoked.
 
-The knowledge `/mcp` allows actual loopback peers without a token. Browser APIs
-and the assistant's `/ai-mcp` keep their existing authentication. Existing MCP
-clients with bearer tokens continue to work.
+The original five read-only `/mcp` capabilities allow actual loopback peers without a token. Full note access is enabled separately in **Settings → AI connections**; local and ChatGPT connections have independent write switches, off by default. The backend injects a private MCP-only credential into both Tunnel discovery and calls, reconnects after permission changes and revokes it when the runtime disconnects. Browser APIs and `/ai-mcp` keep their existing authentication; legacy bearer clients retain their original scope. See [MCP access](MCP.md).
 
 Build machines prepare the runtime with `python scripts/build_tunnel.py` before
 packaging (or `--platform all` to verify both payloads). Version and SHA256 values
