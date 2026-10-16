@@ -10,6 +10,8 @@ Browsing, graphs and local retrieval do not send your notes to a hosted knowledg
 
 These controls reduce exposure; they do not guarantee absolute security. Protect your operating-system account, keep backups and credentials private, and review untrusted files and external providers. The current desktop app does not provide a supported public multi-user web deployment. Do not expose its loopback port through a reverse proxy as if it were such a service.
 
+Repository hygiene: use fictional paths and a public GitHub noreply address for commits. Local environment files, MCP configuration, tokens, private signing keys and note state must stay outside tracked content. Scan the worktree and full Git history with [Gitleaks](https://github.com/gitleaks/gitleaks) using `--redact=100`, then review privacy findings separately from test values. Scanning does not prove that screenshots, archives or inaccessible files are free of sensitive content. History rewriting changes commit/tag IDs; keep any recovery backup private and coordinate remote replacement separately. If a real credential was exposed, revoke/rotate it before relying on history cleanup.
+
 ## 中文
 
 **自己的知识，自己部署，自己掌控。** 在受支持的电脑和自己的用户账户下运行 LeafLoom，自主选择本机资料目录。MIT 允许按其条款使用、修改和部署。
@@ -20,6 +22,8 @@ These controls reduce exposure; they do not guarantee absolute security. Protect
 
 这些机制减少暴露，无法保证绝对安全。保护系统账户、令牌和备份，审查不可信资料及外部服务。当前不是受支持的公网多用户部署方案，不应直接把本机端口代理到公网。
 
+仓库维护使用虚构路径和 GitHub 公开 noreply 提交邮箱；环境文件、MCP 配置、令牌、私有签名密钥和笔记状态不进入版本控制。发布前用 [Gitleaks](https://github.com/gitleaks/gitleaks) 加 `--redact=100` 扫描工作区和完整历史，再区分隐私信息与测试值。扫描不能证明图片、归档或无权访问的文件没有敏感内容。重写历史会改变提交／标签标识；恢复备份应私有保存，远端替换需单独协调。若真实凭据已暴露，应先撤销／轮换，不能只依赖删除历史。
+
 ## 日本語
 
 **自分の知識を、自分で配置し、自分で管理する。** 対応するコンピューターと自分のユーザーアカウントで実行し、ローカルの資料フォルダーを選べます。MIT の条項に従って利用、変更、配置できます。
@@ -29,3 +33,5 @@ These controls reduce exposure; they do not guarantee absolute security. Protect
 閲覧、グラフ、ローカル検索はメモをホスティングされた知識サービスへ送信しません。初回の依存関係とモデルのダウンロードには接続が必要です。任意の CLI AI は選択した内容を設定したモデルサービスへ送ることがあります。引用と変更を確認してください。
 
 これらの対策はリスクを減らしますが、絶対的な安全を保証しません。OS のアカウント、トークン、バックアップを保護し、不明なファイルや外部サービスを確認してください。公開の複数ユーザー向けウェブ配置は現在サポートしていません。
+
+リポジトリには架空のパスを使い、コミットには GitHub の公開 noreply アドレスを使用します。環境ファイル、MCP 設定、トークン、秘密署名鍵、ノート状態を追跡対象に含めないでください。公開前に [Gitleaks](https://github.com/gitleaks/gitleaks) を `--redact=100` 付きで実行し、作業ツリーと全履歴を確認してから、個人情報とテスト値を区別します。画像、アーカイブ、アクセスできないファイルまで安全と証明するものではありません。履歴の書き換えはコミット／タグ ID を変更します。復旧バックアップは非公開で保管し、リモートへの反映は別途調整してください。実際の認証情報が流出した場合は、履歴の削除だけに頼らず先に失効／更新します。

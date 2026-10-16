@@ -8,6 +8,8 @@ Open an issue with the problem, expected behavior, platform and reproducible ste
 
 For a change, keep the patch focused and preserve unrelated work. Technical identifiers (`vault-rag`, `VAULT_RAG_HOME`, `.vault-rag`) are compatibility interfaces, even though the product is named LeafLoom.
 
+Use fictional paths and data in examples, logs and public media, and a public GitHub noreply address for repository commits. Keep local configuration, tokens, private keys and recovery backups out of Git. Before publishing, scan the worktree and complete history with [Gitleaks](https://github.com/gitleaks/gitleaks), using `--redact=100`; do not paste raw findings into issues or commit them. See [local access and privacy](docs/SECURITY.md).
+
 UI text belongs in `vault_rag/locales/messages.tsv` (source, English, Japanese; named messages use key, Chinese, English, Japanese). Run `python scripts/compile_locales.py` after editing it. Keep placeholders consistent and update all three languages. The JSON catalogs are generated; do not maintain translations in build output.
 
 Use Python 3.12 and the locked project environment. Build the frontend with `npm ci` and `npm run build` in `web/`. Run checks relevant to the change; productization regressions are in `tests/test_productization.py`. Validate UI changes against a fictional, isolated folder. State clearly which checks were run and which platforms were not tested.

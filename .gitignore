@@ -11,6 +11,15 @@ _generated/
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+auth-token
+.vault-rag/
+/.mcp.json
+/.cursor/mcp.json
+*.pem
+*.p12
+*.pfx
 
 # --- Python ---
 __pycache__/
@@ -72,7 +81,7 @@ $RECYCLE.BIN/
 
 # Note: when INDEX_IN_VAULT=true (default), index lives at
 #   <VAULT_ROOT>/.vault-rag/
-# Add `.vault-rag/` to your Obsidian vault's .gitignore — not this repo.
+# Keep state out of Git even if a developer temporarily opens this checkout.
 
 web/node_modules/
 web/tsconfig.tsbuildinfo

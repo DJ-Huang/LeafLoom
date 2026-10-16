@@ -4,6 +4,8 @@
 
 ## Unreleased — 2026-10-16
 
+- Strengthen ignore rules for private configuration, credentials and local state; anonymize personal paths and private commit emails in repository history while preserving public author names.
+
 - Expand HTTP MCP to 23 tools for full-folder note discovery, Markdown/TXT/HTML editing, properties, folders, link-aware moves, recoverable deletion, history, templates, daily notes and index synchronization.
 - Add separate local/ChatGPT MCP credentials and write switches, defaulting to read-only; preserve legacy retrieval scope and the internal assistant's proposal workflow.
 - Check workspace/file/operation versions, preserve BOM and line endings, and retain external edits during failed move rollback.
