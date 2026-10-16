@@ -88,6 +88,19 @@ class ManagedDesignTests(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertFalse((self.root / 'Projects/Wrong').exists())
 
+    def test_project_trash_permanent_delete_requires_root_confirmation_and_revision(self):
+        self.create()
+        state = self.client.get('/api/design/workspace', headers=self.auth).json()
+        deleted = self.post('workspace', action='delete', expected_revision=state['revision'], operation_id='delete-http-project').json()
+        body = dict(directories=['Projects/Studio'], expected_revision=deleted['revision'], operation_id='purge-http-project')
+        self.assertEqual(self.post('workspace/trash', **body).status_code, 400)
+        self.assertEqual(self.post('workspace/trash', **body, confirm=True, root='/wrong').status_code, 409)
+        self.assertEqual(self.post('workspace/trash', **{**body, 'expected_revision': state['revision']}, confirm=True).status_code, 409)
+        purged = self.post('workspace/trash', **body, confirm=True)
+        self.assertEqual(purged.status_code, 200, purged.text)
+        self.assertEqual(purged.json()['deleted'], 1)
+        self.assertNotIn('Projects/Studio', purged.json()['meta'])
+
     def test_ai_design_references_and_attached_project_write_scope(self):
         value = self.create()
         ai = self.app.state.ai

@@ -88,6 +88,12 @@ def design_router(studio):
         body = await request.json(); guard(body)
         return await run(body, workspace.history, body['action'], body['expected_revision'])
 
+    @router.post('/workspace/trash')
+    async def purge_project_trash(request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, workspace.purge_trash, body.get('directories'), body['expected_revision'],
+                         body['operation_id'], confirm=body.get('confirm', False))
+
     @router.post('/copy')
     async def copy_project(request: Request):
         body = await request.json(); guard(body)

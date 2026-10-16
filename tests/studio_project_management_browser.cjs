@@ -30,8 +30,27 @@ async function main(){
   await homeView.getByRole('tab',{name:'回收站',exact:true}).click();const deleted=homeView.locator('.design-project-card').filter({hasText:'Delete fixture'});await deleted.getByRole('button',{name:'恢复项目',exact:true}).click();
   await deleted.waitFor({state:'detached'});assert.deepEqual(snapshot(project),before);
   await homeView.getByRole('tab',{name:'最近项目',exact:true}).click();await card.waitFor();assert.deepEqual(errors,[]);
+  // Permanent deletion stays behind an explicit modal; cancellation keeps bytes.
+  await card.locator('summary').click();await card.getByRole('button',{name:'移到回收站',exact:true}).click();await card.waitFor({state:'detached'});
+  await homeView.getByRole('tab',{name:'回收站',exact:true}).click();
+  await deleted.getByRole('button',{name:'永久删除项目',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'取消',exact:true}).click();await deleted.waitFor();
+  await deleted.getByRole('button',{name:'永久删除项目',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'永久删除项目',exact:true}).click();await deleted.waitFor({state:'detached'});
+  const request=async(endpoint,body)=>{const result=await fetch(info.url+'/api/design/'+endpoint,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify({root:info.root,...body})});assert.ok(result.ok,await result.clone().text());return result.json();};
+  let state=await request('workspace');assert.equal(state.meta['Projects/DeleteFixture'],undefined);
+  const clearedPaths=[];
+  for(const [name,managed] of [['ClearA',false],['ClearB',true]]){
+   const directory='Projects/'+name;await request('projects',{directory,name,managed});state=await request('workspace');
+   state=await request('workspace',{directory,action:'delete',expected_revision:state.revision,operation_id:crypto.randomUUID()});clearedPaths.push(path.join(info.root,state.meta[directory].trash));
+  }
+  await page.reload();await page.locator('.sidebar').getByRole('button',{name:'设计工作台',exact:true}).click();await homeView.getByRole('tab',{name:'回收站',exact:true}).click();
+  const clear=homeView.getByRole('button',{name:'清空项目回收站',exact:true});await clear.click();
+  await page.getByRole('dialog').getByRole('button',{name:'取消',exact:true}).click();assert.ok(clearedPaths.every(file=>fs.existsSync(file)));
+  await clear.click();await page.getByRole('dialog').getByRole('button',{name:'永久清空',exact:true}).click();
+  await homeView.getByText('这里还没有设计项目',{exact:true}).waitFor();assert.ok(clearedPaths.every(file=>!fs.existsSync(file)));assert.equal(await clear.isDisabled(),true);
   const evidence=path.join(repository,'.cache/studio-qa');fs.mkdirSync(evidence,{recursive:true});await page.screenshot({path:path.join(evidence,'project-management-fixed.png')});
-  console.log(JSON.stringify({ok:true,checks:['missing-workspace-route-restart-message','management-disabled-until-ready','retry-loads-management','legacy-project-delete-and-recycle','restore-preserves-all-files'],pageErrors:errors},null,2));
+  console.log(JSON.stringify({ok:true,checks:['missing-workspace-route-restart-message','management-disabled-until-ready','retry-loads-management','legacy-project-delete-and-recycle','restore-preserves-all-files','permanent-delete-cancel-and-confirm','clear-mixed-project-trash-cancel-and-confirm'],pageErrors:errors},null,2));
  }catch(error){if(page)try{await page.screenshot({path:path.join(home,'failure.png')});}catch{}console.error('Fixture retained at '+home);throw error;}
  finally{await browser?.close();server.kill('SIGTERM');}
 }

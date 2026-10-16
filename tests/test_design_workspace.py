@@ -65,6 +65,103 @@ class DesignWorkspaceTests(unittest.TestCase):
         self.assertNotIn('name', replay['meta'][self.directory])
         self.assertFalse(replay['history']['can_redo'])
 
+    def test_permanent_delete_requires_confirmation_revision_and_preserves_other_history(self):
+        other = 'Projects/Other'
+        self.create(other)
+        self.manage('rename', 'rename-before-purge', value='Removed project')
+        deleted = self.manage('delete', 'delete-for-purge')
+        trash = self.workspace._path(deleted['meta'][self.directory]['trash'])
+        history = self.workspace._state(self.project['document']['id'])
+        state = self.workspace.manage(other, 'favorite', deleted['revision'], 'favorite-survivor', value=True)
+        with self.assertRaises(ValueError):
+            self.workspace.purge_trash([self.directory], state['revision'], 'purge-one-project')
+        with self.assertRaises(ConflictError):
+            self.workspace.purge_trash([self.directory], deleted['revision'], 'purge-one-project', confirm=True)
+        self.assertTrue(trash.exists())
+        purged = self.workspace.purge_trash([self.directory], state['revision'], 'purge-one-project', confirm=True)
+        self.assertEqual(purged['deleted'], 1)
+        self.assertFalse(trash.exists())
+        self.assertFalse(history.exists())
+        self.assertNotIn(self.directory, purged['meta'])
+        self.assertTrue((self.root / other).exists())
+        undone = self.workspace.history('undo', purged['revision'])
+        self.assertNotIn('favorite', undone['meta'].get(other, {}))
+        self.assertFalse(undone['history']['can_undo'])
+        redone = self.workspace.history('redo', undone['revision'])
+        self.assertTrue(redone['meta'][other]['favorite'])
+        replay = self.workspace.purge_trash([self.directory], state['revision'], 'purge-one-project', confirm=True)
+        self.assertTrue(replay['replayed'])
+        self.assertEqual(replay['deleted'], 1)
+        self.assertNotIn(self.directory, replay['meta'])
+
+    def test_clear_project_trash_removes_legacy_and_managed_only(self):
+        legacy = self.root / 'Projects/Legacy'
+        (legacy / 'Design').mkdir(parents=True)
+        (legacy / 'Design/project-spec.json').write_text(json.dumps({'project': {'id': 'legacy', 'name': 'Legacy'}}))
+        (legacy / 'art.bin').write_bytes(b'original artwork')
+        live = self.create('Projects/Live')
+        blob = self.workspace._state('library-blobs', 'retained')
+        blob.parent.mkdir(parents=True)
+        blob.write_bytes(b'shared media')
+        deleted = self.manage('delete', 'delete-managed-trash')
+        state = self.workspace.manage('Projects/Legacy', 'delete', deleted['revision'], 'delete-legacy-trash')
+        paths = [self.workspace._path(value['trash']) for value in state['meta'].values() if value.get('deleted')]
+        cleared = self.workspace.purge_trash(None, state['revision'], 'clear-project-trash', confirm=True)
+        self.assertEqual(cleared['deleted'], 2)
+        self.assertFalse(any(value.get('deleted') for value in cleared['meta'].values()))
+        self.assertTrue(all(not path.exists() for path in paths))
+        self.assertEqual(blob.read_bytes(), b'shared media')
+        self.assertEqual(self.docs.read('Projects/Live')['document']['id'], live['document']['id'])
+        with self.assertRaises(ValueError):
+            self.workspace.purge_trash(['Projects/Live'], cleared['revision'], 'purge-live-project', confirm=True)
+
+    def test_permanent_delete_recovers_after_partial_filesystem_cleanup(self):
+        deleted = self.manage('delete', 'delete-before-cleanup')
+        trash = self.workspace._path(deleted['meta'][self.directory]['trash'])
+        history = self.workspace._state(self.project['document']['id'])
+        original = __import__('shutil').rmtree
+        def locked(path, *args, **kwargs):
+            if path == history:
+                raise OSError('History temporarily locked')
+            return original(path, *args, **kwargs)
+        with patch('vault_rag.design_workspace.shutil.rmtree', side_effect=locked):
+            with self.assertRaises(OSError):
+                self.workspace.purge_trash(None, deleted['revision'], 'recover-permanent-delete', confirm=True)
+        self.assertFalse(trash.exists())
+        self.assertTrue(history.exists())
+        self.assertTrue(self.workspace._state('workspace-pending.json').exists())
+        state = DesignWorkspace(self.studio, self.docs).state()
+        self.assertNotIn(self.directory, state['meta'])
+        self.assertFalse(history.exists())
+        self.assertFalse(self.workspace._state('workspace-pending.json').exists())
+
+    def test_permanent_delete_rejects_unowned_paths_and_shared_history_names(self):
+        deleted = self.manage('delete', 'delete-path-guard')
+        original = self.workspace._load()
+        invalid = copy.deepcopy(original)
+        invalid['meta'][self.directory]['trash'] = 'Projects/Live'
+        self.workspace._state('workspace.json').write_text(json.dumps(invalid))
+        with self.assertRaises(ValueError):
+            self.workspace.purge_trash(None, deleted['revision'], 'purge-path-guard', confirm=True)
+        self.workspace._state('workspace.json').write_text(json.dumps(original))
+        trash = self.workspace._path(original['meta'][self.directory]['trash'])
+        document = trash / 'Design/studio/project.json'
+        original_document = document.read_bytes()
+        content = json.loads(original_document);content['id'] = 'library-blobs'
+        document.write_text(json.dumps(content))
+        shared = self.workspace._state('library-blobs', 'safe')
+        shared.parent.mkdir(parents=True);shared.write_bytes(b'keep')
+        with self.assertRaises(ValueError):
+            self.workspace.purge_trash(None, deleted['revision'], 'purge-reserved-name', confirm=True)
+        self.assertTrue(trash.exists())
+        self.assertEqual(shared.read_bytes(), b'keep')
+        document.write_bytes(original_document)
+        victim = self.root / 'unrelated.txt';victim.write_text('keep original')
+        (trash / 'external-link').symlink_to(victim)
+        with self.assertRaises(ValueError):
+            self.workspace.purge_trash(None, deleted['revision'], 'purge-linked-content', confirm=True)
+        self.assertEqual(victim.read_text(), 'keep original')
+
     def test_managed_move_undo_keeps_newer_design_edits_and_history(self):
         self.manage('move', 'move-pets', destination='Projects/Moved')
         value = self.docs.read('Projects/Moved')

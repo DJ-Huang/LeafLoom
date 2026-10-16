@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Add permanent deletion and emptying to the design project recycle bin with confirmation, revision checks and resumable cleanup. Remove affected project recovery records while preserving unrelated history and shared libraries.
+
 - Show a restart diagnostic when a newer project homepage meets an older backend. Disable management actions until workspace state loads, expose retry, and prevent delete from silently doing nothing.
 
 - Add English, Chinese and Japanese About pages with the creator’s GitHub and X profiles, linked from website navigation and footers.

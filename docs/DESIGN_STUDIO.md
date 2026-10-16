@@ -10,6 +10,12 @@ recents, rename, copy, move, archive, and a recoverable recycle bin. Project
 management and shared-library changes have a workspace history. Page and element
 edits use a separate project history.
 
+Project **Recycle bin** offers restore, **Delete project permanently** and
+**Empty project recycle bin**. Permanent actions show the affected projects and
+require confirmation. They remove those project files and design histories,
+including related management undo/redo entries; other project history and shared
+libraries are retained. Cleanup is journaled and resumes after an interruption.
+
 ## Everyday workflow
 
 1. Open **Design Studio** and create a project in the connected folder. Choose a
@@ -112,6 +118,7 @@ write CSRF protection. They are under `/api/design`:
 | `POST /history` | `list`, `undo` or `redo`; undo/redo require the current revision and operation ID |
 | `POST /assets` | Stream original file bytes; query identifies project, name, root, revision and operation ID |
 | `GET/POST /workspace`, `POST /workspace/history` | Project metadata, physical moves/recycle, and workspace undo/redo |
+| `POST /workspace/trash` | Permanently delete `directories`, or clear with `directories:null`; requires `root`, `expected_revision`, `operation_id` and `confirm:true` |
 | `POST /copy`, `/migrate`, `/migrate/finish` | Duplicate a project or capture a separate legacy conversion |
 | `GET/POST /library` | List versions, publish or explicitly import/update a shared item |
 | `POST /session`, `/export` | Create the isolated project session or a standalone export |

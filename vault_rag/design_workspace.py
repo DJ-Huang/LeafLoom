@@ -12,6 +12,7 @@ import json
 import mimetypes
 import re
 import shutil
+import sqlite3
 import stat
 import time
 import uuid
@@ -59,10 +60,12 @@ class DesignWorkspace:
         if pending.exists():
             journal = json.loads(pending.read_text())
             if _digest(state) == journal['after_hash']:
+                self._purge_files(journal.get('purge', []))
                 pending.unlink()
             elif _digest(state) == journal['before_hash']:
                 self._move(journal.get('move'), recovering=True)
                 atomic_write(path, _bytes(journal['after']))
+                self._purge_files(journal.get('purge', []))
                 pending.unlink()
                 state = journal['after']
             else:
@@ -147,7 +150,7 @@ class DesignWorkspace:
                 out[path.relative_to(root).as_posix()] = hashlib.file_digest(stream, 'sha256').hexdigest()
         return out
 
-    def _commit(self, before, after, move=None):
+    def _commit(self, before, after, move=None, purge=None):
         path = self._state('workspace.json')
         path.parent.mkdir(parents=True, exist_ok=True)
         # Persist the initial state so interrupted first operations recover too.
@@ -157,7 +160,7 @@ class DesignWorkspace:
             raise ConflictError('Workspace metadata changed outside the studio; no files were overwritten')
         after['revision'] = uuid.uuid4().hex
         pending = self._state('workspace-pending.json')
-        atomic_write(pending, _bytes({'before_hash': _digest(before), 'after_hash': _digest(after), 'after': after, 'move': move}))
+        atomic_write(pending, _bytes({'before_hash': _digest(before), 'after_hash': _digest(after), 'after': after, 'move': move, 'purge': purge or []}))
         try:
             self._move(move)
         except BaseException:
@@ -167,8 +170,118 @@ class DesignWorkspace:
                 pending.unlink(missing_ok=True)
             raise
         atomic_write(path, _bytes(after))
+        self._purge_files(purge or [])
         pending.unlink()
         self.runtime.events.publish('files', paths=[], design_workspace=True)
+
+    def _trash_path(self, value):
+        if not isinstance(value, str) or not re.fullmatch(r'\.vault-rag/design-studio/workspace-trash/[a-zA-Z0-9_-]{8,128}/content', value):
+            raise ValueError('Invalid design project trash location')
+        return self._path(value)
+
+    def _purge_history_path(self, item):
+        document_id = item.get('document_id')
+        if not document_id:
+            return None
+        if not isinstance(document_id, str) or not re.fullmatch(r'[a-zA-Z0-9_-]+', document_id) or document_id in ('library-blobs', 'workspace-trash'):
+            raise ValueError('Invalid project document ID')
+        # Only the deleted project's own database may be removed. Shared
+        # library resources and live project histories are independent.
+        history = self._state(document_id)
+        if history.exists():
+            self._validate_tree(history)
+            database = self._state(document_id, 'history.sqlite3')
+            if database.exists():
+                from urllib.parse import quote
+                with sqlite3.connect('file:' + quote(str(database), safe='/') + '?mode=ro', uri=True) as db:
+                    row = db.execute('SELECT owner FROM meta WHERE id=1').fetchone()
+                if row is None or row[0] != str(self.config.root) + '\n' + item['trash']:
+                    raise ConflictError('Project history location changed; permanent deletion stopped')
+            elif not item.get('history_verified'):
+                raise ConflictError('Project history identity is unavailable; permanent deletion stopped')
+        return history
+
+    def _purge_files(self, items):
+        for item in items:
+            content = self._trash_path(item['trash'])
+            history = self._purge_history_path(item)
+            if content.exists():
+                self._validate_tree(content)
+                shutil.rmtree(content)
+            if history is not None and history.exists():
+                shutil.rmtree(history)
+            # Leave no empty operation directories, but never delete a sibling.
+            if content.parent.exists() and not any(content.parent.iterdir()):
+                content.parent.rmdir()
+
+    def purge_trash(self, directories, expected_revision, operation_id, confirm=False):
+        with self.config.lock, self.files.lock:
+            if confirm is not True:
+                raise ValueError('Confirm permanent project deletion before continuing')
+            if directories is not None and (not isinstance(directories, list) or not directories or
+                                             any(not isinstance(value, str) for value in directories)):
+                raise ValueError('Select deleted projects or clear the project recycle bin')
+            before = self._load()
+            requested = None if directories is None else sorted({relative(value) for value in directories})
+            fingerprint = _digest({'purge_trash': requested})
+            if self._request(before, operation_id, fingerprint):
+                return {**self.state(), 'deleted': before.get('purge_counts', {}).get(operation_id, 0), 'replayed': True}
+            self._validate_revision(before, expected_revision)
+            selected = requested if requested is not None else sorted(key for key, value in before['meta'].items() if value.get('deleted'))
+            targets = []
+            for directory in selected:
+                meta = before['meta'].get(directory, {})
+                if not meta.get('deleted') or not meta.get('trash'):
+                    raise ValueError('Only projects in the recycle bin can be permanently deleted')
+                content = self._trash_path(meta['trash'])
+                item = {'trash': meta['trash']}
+                if content.exists():
+                    self._validate_tree(content)
+                    document = content / 'Design/studio/project.json'
+                    if document.is_file():
+                        item['document_id'] = json.loads(document.read_bytes())['id']
+                elif meta.get('project', {}).get('managed'):
+                    item['document_id'] = meta['project']['id']
+                history = self._purge_history_path(item)
+                if history is not None and history.exists():
+                    item['history_verified'] = True
+                targets.append(item)
+
+            after = copy.deepcopy(before)
+            for directory in selected:
+                del after['meta'][directory]
+            # Remove only history involving these projects, including their
+            # prior locations. Other project and shared-library undo survives.
+            locations = set(selected) | {item['trash'] for item in targets}
+            for entry in reversed(before['history']):
+                for action in (entry.get('forward'), entry.get('backward')):
+                    if action and ({action.get('source'), action.get('destination')} & locations):
+                        locations.update((action['source'], action['destination']))
+            def related(entry):
+                for action in (entry.get('forward'), entry.get('backward')):
+                    if action and ({action.get('source'), action.get('destination')} & locations):
+                        return True
+                for operation in entry.get('delta', []) + entry.get('inverse', []):
+                    path = operation.get('path', [])
+                    if path and path[0] == 'meta' and (len(path) == 1 or path[1] in locations):
+                        return True
+                if 'before_meta' in entry and any(entry['before_meta'].get(name) != entry.get('after_meta', {}).get(name) for name in locations):
+                    return True
+                return False
+            retained, cursor = [], 0
+            for index, entry in enumerate(after['history']):
+                if related(entry):
+                    continue
+                for key in ('before_meta', 'after_meta'):
+                    if key in entry:
+                        entry[key] = {name: value for name, value in entry[key].items() if name not in locations}
+                retained.append(entry)
+                cursor += index < before['cursor']
+            after['history'], after['cursor'] = retained, cursor
+            after.setdefault('receipts', {})[operation_id] = fingerprint
+            after.setdefault('purge_counts', {})[operation_id] = len(selected)
+            self._commit(before, after, purge=targets)
+            return {**self.state(), 'deleted': len(selected)}
 
     def state(self):
         with self.config.lock, self.files.lock:

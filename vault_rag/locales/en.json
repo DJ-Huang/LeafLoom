@@ -1357,5 +1357,9 @@
   "项目已移动；部分源码草稿仍保留在原目录，请撤销移动后处理草稿": "Project moved. Some source drafts remain under the old directory; undo the move to resolve those drafts.",
   "当前后台尚未加载项目管理功能，请从托盘退出并重新启动应用；仅刷新页面无效。": "The running service has not loaded project management. Quit the app from the tray or menu bar and reopen it; refreshing the page is not enough.",
   "项目管理尚未就绪，请稍后重试": "Project management is not ready. Please retry shortly.",
-  "正在加载项目管理…": "Loading project management…"
+  "正在加载项目管理…": "Loading project management…",
+  "永久删除项目": "Delete project permanently",
+  "清空项目回收站": "Empty project recycle bin",
+  "永久删除以下 {count} 个项目？项目文件和设计历史将无法恢复，相关项目管理操作也将无法撤销。": "Permanently delete these {count} projects? Project files and design history cannot be recovered, and related project management actions can no longer be undone.",
+  "项目已永久删除": "Projects permanently deleted"
 }
