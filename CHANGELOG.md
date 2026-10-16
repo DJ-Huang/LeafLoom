@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · [中文](docs/zh-CN/CHANGELOG.md) · [日本語](docs/ja/CHANGELOG.md)
 
+## Unreleased
+
+- Add English, Chinese and Japanese About pages with the creator’s GitHub and X profiles, linked from website navigation and footers.
+
+- Keep the latest available stable Windows and Mac website downloads independently, with matching versions, release notes and checksums. Allow `v*` tags in the Pages environment so Release events can deploy automatically.
+
 ## 0.1.2 — 2026-10-16
 
 - Replace the four Feishu document/Base adapters with installed lark-cli discovery, generic read/write execution and credential-scoped attachment transfer. Support XML block edits, preserve document revision prechecks, and add separate local/Tunnel high-risk permission with explicit per-operation confirmation. Refresh client tools after upgrading.

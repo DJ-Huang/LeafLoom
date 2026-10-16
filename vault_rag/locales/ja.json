@@ -1030,5 +1030,12 @@
   "site.feedback": "フィードバック",
   "feishu.localHighRisk": "ローカルの Feishu 高リスク操作を許可",
   "feishu.tunnelHighRisk": "Tunnel の Feishu 高リスク操作を許可",
-  "feishu.highRiskHelp": "CLI の高リスクコマンドと raw API 呼び出しを含みます。書き込み権限に加え、操作ごとの明示的な確認が必要です。"
+  "feishu.highRiskHelp": "CLI の高リスクコマンドと raw API 呼び出しを含みます。書き込み権限に加え、操作ごとの明示的な確認が必要です。",
+  "site.nav_about": "このサイトについて",
+  "site.about_title": "作者について · LeafLoom",
+  "site.about_heading": "こんにちは、DJ です。",
+  "site.about_intro": "LeafLoom の作者です。GitHub と X でプロジェクトや近況をご覧いただけます。",
+  "site.about_github": "オープンソースのプロジェクトとコードをご覧ください。",
+  "site.about_x": "投稿や最新情報をご覧ください。",
+  "site.about_back": "LeafLoom のホームへ"
 }

@@ -1030,5 +1030,12 @@
   "site.feedback": "反馈与建议",
   "feishu.localHighRisk": "允许本机飞书高风险操作",
   "feishu.tunnelHighRisk": "允许 Tunnel 飞书高风险操作",
-  "feishu.highRiskHelp": "包括 CLI 标记的高风险命令及原始 API 调用。需先开启写入；每次操作仍须明确确认。"
+  "feishu.highRiskHelp": "包括 CLI 标记的高风险命令及原始 API 调用。需先开启写入；每次操作仍须明确确认。",
+  "site.nav_about": "关于",
+  "site.about_title": "关于作者 · LeafLoom",
+  "site.about_heading": "你好，我是 DJ。",
+  "site.about_intro": "我是 LeafLoom 的作者。欢迎通过 GitHub 和 X 了解我的项目与近况。",
+  "site.about_github": "查看我的开源项目和代码。",
+  "site.about_x": "查看我的分享与最新动态。",
+  "site.about_back": "返回 LeafLoom 首页"
 }

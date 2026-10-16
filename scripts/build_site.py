@@ -18,12 +18,30 @@ LANGUAGES = {"en": ("English", "", "en_US"), "zh-CN": ("中文", "zh-CN/", "zh_C
 SHOTS = ("showcase-markdown", "showcase-graph", "showcase-html", "04-search", "showcase-ai")
 
 
-def latest_release() -> dict:
+def release_json(path: str):
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "LeafLoom-pages"}
     if token := os.environ.get("GITHUB_TOKEN"):
         headers["Authorization"] = f"Bearer {token}"
-    with urlopen(Request("https://api.github.com/repos/DJ-Huang/LeafLoom/releases/latest", headers=headers), timeout=30) as response:
+    with urlopen(Request(f"https://api.github.com/repos/DJ-Huang/LeafLoom/{path}", headers=headers), timeout=30) as response:
         return json.load(response)
+
+
+def latest_release() -> dict:
+    release = release_json("releases/latest")
+    info = release_info(release)
+    if all(info[platform] for platform in ("windows", "macos")):
+        return release
+    # The API paginates by creation date, not version. Inspect the full history
+    # before selecting the newest available stable installer for each platform.
+    history = []
+    page = 1
+    while True:
+        batch = release_json(f"releases?per_page=100&page={page}")
+        history.extend(batch)
+        if len(batch) < 100:
+            break
+        page += 1
+    return {**release, "fallback_releases": history}
 
 
 def release_info(release: dict) -> dict:
@@ -46,6 +64,25 @@ def release_info(release: dict) -> dict:
     }
 
 
+def platform_releases(release: dict) -> dict:
+    latest = release_info(release)
+
+    def version(tag):
+        parts = tuple(map(int, tag.removeprefix("v").split(".")))
+        return parts + (0,) * (4 - len(parts))
+
+    history = []
+    for candidate in release.get("fallback_releases", []):
+        tag = candidate.get("tag_name", "")
+        if candidate.get("draft") or candidate.get("prerelease") or not re.fullmatch(r"v?\d+\.\d+\.\d+(?:\.\d+)?", tag):
+            continue
+        if version(tag) < version(latest["tag"]):
+            history.append(release_info(candidate))
+    candidates = [latest] + sorted(history, key=lambda item: version(item["tag"]), reverse=True)
+    return {platform: next((item for item in candidates if item[platform]), latest)
+            for platform in ("windows", "macos")}
+
+
 def render(template: str, values: dict) -> str:
     def substitute(match):
         key = match.group(1)
@@ -62,6 +99,7 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
     base_url = base_url.rstrip("/") + "/"
     base = urlsplit(base_url).path
     info = release_info(release)
+    downloads = platform_releases(release)
     template = (ROOT / "site/page.html").read_text(encoding="utf-8")
     output.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / "site/style.css", output / "style.css")
@@ -90,7 +128,7 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
         alternates.append(f'<link rel="alternate" hreflang="x-default" href="{escape(base_url)}">')
 
         def download_button(platform, secondary=False):
-            asset = info[platform]
+            asset = downloads[platform][platform]
             classes = "button secondary" if secondary else "button"
             if not asset:
                 return f'<span class="button unavailable" aria-disabled="true">{t(platform)} · {t("unavailable")}</span>'
@@ -98,12 +136,14 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
 
         platforms = []
         for platform, requirement in (("windows", "Windows 10 / 11 · x64"), ("macos", "macOS 14+ · Apple Silicon")):
-            asset = info[platform]
-            checksum_name = "SHA256SUMS-windows.txt" if platform == "windows" and "SHA256SUMS-windows.txt" in info["assets"] else "SHA256SUMS.txt"
-            checksum = info["assets"].get(checksum_name)
+            platform_info = downloads[platform]
+            asset = platform_info[platform]
+            checksum_name = "SHA256SUMS-windows.txt" if platform == "windows" and "SHA256SUMS-windows.txt" in platform_info["assets"] else "SHA256SUMS.txt"
+            checksum = platform_info["assets"].get(checksum_name)
             checksum_link = f'<a href="{escape(checksum["browser_download_url"])}">SHA-256 ↗</a>' if checksum and asset else ""
             size = f'{asset["size"] / (1024 * 1024):.0f} MB' if asset else t("unavailable")
-            platforms.append(f'<article class="platform"><h3>{t(platform)}</h3><p>{requirement}</p>{download_button(platform)}<div class="platform-meta"><span>{escape(info["tag"])} · {size}</span>{checksum_link}</div></article>')
+            version_link = f'<a href="{escape(platform_info["url"])}">{escape(platform_info["tag"])}</a>' if asset else ""
+            platforms.append(f'<article class="platform"><h3>{t(platform)}</h3><p>{requirement}</p>{download_button(platform)}<div class="platform-meta"><span>{version_link} · {size}</span>{checksum_link}</div></article>')
 
         features = []
         for number, key, shot in (("01", "markdown", "showcase-markdown"), ("02", "graph", "showcase-graph"), ("03", "html", "showcase-html"), ("04", "search", "04-search")):
@@ -111,6 +151,7 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
         principles = "".join(f'<article><h3>{t(key + "_title")}</h3><p>{t(key + "_body")}</p></article>' for key in ("files", "scope", "optional"))
         values.update({
             "lang": lang, "og_locale": og_locale, "base": escape(base), "base_url": escape(base_url),
+            "about_url": escape(base + route + "about/"),
             "home": escape(base + route), "canonical": escape(base_url + route),
             "language_links": "".join(language_links), "alternates": "\n  ".join(alternates),
             "guide_url": guide_url, "ai_url": f"{REPO}/blob/main/docs/{lang}/AI.md",
@@ -122,11 +163,28 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
         folder = output / route
         folder.mkdir(parents=True, exist_ok=True)
         (folder / "index.html").write_text(render(template, values), encoding="utf-8")
+        about_values = dict(values)
+        about_values.update({
+            "title": t("about_title"), "description": t("about_intro"),
+            "canonical": escape(base_url + route + "about/"),
+            "language_links": "".join(
+                f'<a href="{escape(base + other_route + "about/")}" lang="{other}" hreflang="{other}"' +
+                (' aria-current="page"' if other == lang else '') + f'>{label}</a>'
+                for other, (label, other_route, _) in LANGUAGES.items()),
+            "alternates": "\n  ".join(
+                f'<link rel="alternate" hreflang="{other}" href="{escape(base_url + other_route + "about/")}">'
+                for other, (_, other_route, _) in LANGUAGES.items()) +
+                f'\n  <link rel="alternate" hreflang="x-default" href="{escape(base_url + "about/")}">',
+        })
+        about_folder = folder / "about"
+        about_folder.mkdir(exist_ok=True)
+        (about_folder / "index.html").write_text(
+            render((ROOT / "site/about.html").read_text(encoding="utf-8"), about_values), encoding="utf-8")
         target = assets_dir / lang
         target.mkdir(exist_ok=True)
         for shot in SHOTS:
             shutil.copy2(ROOT / f"assets/screenshots/{lang}/{shot}.png", target / f"{shot}.png")
-    urls = "".join(f"<url><loc>{escape(base_url + route)}</loc></url>" for _, route, _ in LANGUAGES.values())
+    urls = "".join(f"<url><loc>{escape(base_url + route)}</loc></url>" for _, route, _ in LANGUAGES.values() for route in (route, route + "about/"))
     (output / "sitemap.xml").write_text(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>\n', encoding="utf-8")
     (output / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {base_url}sitemap.xml\n", encoding="utf-8")
     (output / ".nojekyll").touch()

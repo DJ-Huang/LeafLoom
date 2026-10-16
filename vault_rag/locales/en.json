@@ -1030,5 +1030,12 @@
   "site.feedback": "Feedback",
   "feishu.localHighRisk": "Allow local high-risk Feishu operations",
   "feishu.tunnelHighRisk": "Allow Tunnel high-risk Feishu operations",
-  "feishu.highRiskHelp": "Includes CLI high-risk commands and raw API calls. Requires write access; each operation still needs explicit confirmation."
+  "feishu.highRiskHelp": "Includes CLI high-risk commands and raw API calls. Requires write access; each operation still needs explicit confirmation.",
+  "site.nav_about": "About",
+  "site.about_title": "About the creator · LeafLoom",
+  "site.about_heading": "Hi, I’m DJ.",
+  "site.about_intro": "I’m the creator of LeafLoom. Find my projects and updates on GitHub and X.",
+  "site.about_github": "Explore my open-source projects and code.",
+  "site.about_x": "Follow my posts and latest updates.",
+  "site.about_back": "Back to LeafLoom"
 }
