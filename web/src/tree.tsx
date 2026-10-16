@@ -7,7 +7,7 @@ import {VirtualList} from './virtual';
 const within=(path:string,parent:string)=>!parent||path===parent||path.startsWith(parent+'/');
 export function selectedPath(path:string,includes:string[],excludes:string[]){const choices=[...includes.filter(p=>within(path,p)).map(p=>({depth:p.split('/').filter(Boolean).length,enabled:true})),...excludes.filter(p=>within(path,p)).map(p=>({depth:p.split('/').filter(Boolean).length,enabled:false}))];choices.sort((a,b)=>b.depth-a.depth||Number(a.enabled)-Number(b.enabled));return choices[0]?.enabled||false;}
 type Entry={path:string,name:string,directory:boolean};
-export function FolderView({path,onOpen,onFolder,onCreate,refresh,manage}:{path:string,onOpen:OpenNote,onFolder:(path:string)=>void,onCreate:()=>void,refresh:number,manage:(action:string,path:string)=>void}){
+export function FolderView({path,onOpen,onFolder,onCreate,onCreateDesign,refresh,manage}:{path:string,onOpen:OpenNote,onFolder:(path:string)=>void,onCreate:()=>void,onCreateDesign?:(folder:string)=>void,refresh:number,manage:(action:string,path:string)=>void}){
  useLocale();
  const [entries,setEntries]=useState<Entry[]>(),[error,setError]=useState(''),[retry,setRetry]=useState(0);
  useEffect(()=>{
@@ -17,7 +17,7 @@ export function FolderView({path,onOpen,onFolder,onCreate,refresh,manage}:{path:
   const changed=(event:Event)=>{if(affected('tree?path='+encodeURIComponent(path),(event as CustomEvent<Change>).detail))void load(true);};
   window.addEventListener('vault-data-changed',changed);return()=>{controller.abort();window.removeEventListener('vault-data-changed',changed);};
  },[path,refresh,retry]);
- return <section className="folder-page"><div className="folder-heading"><FolderOpen size={32}/><h1>{path.split('/').pop()||t("知识库")}</h1><button onClick={onCreate}>{t("新建笔记")}</button></div>
+ return <section className="folder-page"><div className="folder-heading"><FolderOpen size={32}/><h1>{path.split('/').pop()||t("知识库")}</h1><button onClick={onCreate}>{t("新建笔记")}</button>{onCreateDesign&&<button onClick={()=>onCreateDesign(path)}>{t("在此新建设计项目")}</button>}</div>
   {error&&<div role="alert" className="error">{<Diagnostic message={error}/>} <button onClick={()=>setRetry(value=>value+1)}>{t("重试")}</button></div>}
   {entries?<div className="folder-entries">{entries.length?<VirtualList items={entries} itemKey={entry=>entry.path} estimate={48} render={entry=><div className="folder-entry"><button className="folder-entry-link" onClick={()=>entry.directory?onFolder(entry.path):onOpen(entry.path)}>{entry.directory?<Folder size={18}/>:<FileText size={18}/>}<span>{entry.name}</span>{entry.directory&&<ChevronRight size={14}/>}</button><button className="icon-button" aria-label={t("管理 ")+entry.name} onClick={event=>{event.currentTarget.focus();manage('menu',entry.path);}}><MoreHorizontal size={16}/></button></div>}/>:<p className="subtle">{t("此目录暂无文件。")}</p>}</div>:!error&&<p className="subtle">{t("正在加载目录…")}</p>}
  </section>;

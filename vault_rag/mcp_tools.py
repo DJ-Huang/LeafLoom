@@ -13,7 +13,7 @@ from vault_rag.local_state import ConflictError
 from vault_rag.note_operations import NoteError
 
 
-def build_workspace_mcp(config, runtime, operations, access, legacy_token):
+def build_workspace_mcp(config, runtime, operations, access, legacy_token, design=None):
     mcp = FastMCP('vault-rag', host='127.0.0.1', port=config.data.get('port', 18080),
                   stateless_http=True, json_response=True)
 
@@ -233,5 +233,116 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token):
     async def vault_reindex(workspace_revision: str, ctx: Context) -> CallToolResult:
         """Queue index synchronization and return immediately. Does not download a model or change retrieval scope."""
         return await call(ctx, operations.reindex, workspace_revision, write=True)
+
+    @tool()
+    async def design_list_projects(ctx: Context, folder: str = '', current_path: str = '') -> CallToolResult:
+        """List all Design Studio projects (1.1.0 project-spec.json) in the connected vault or subfolder,
+        including board counts, asset counts, dimensions, and HTML project registration IDs.
+        """
+        return await call(ctx, design.list_projects, folder, current_path)
+
+    @tool()
+    async def design_get_project(directory: str, ctx: Context, board_id: str | None = None) -> CallToolResult:
+        """Read a Design Studio project's specification (project-spec.json), artboards/screens list,
+        and saved Figma-like layer transforms (optionally filtered to a specific board_id).
+        """
+        return await call(ctx, design.get_project, directory, board_id)
+
+    @tool(write=True, additive=True)
+    async def design_create_project(
+        directory: str,
+        name: str,
+        workspace_revision: str,
+        ctx: Context,
+        project_id: str | None = None,
+        preset: Literal['mobile-portrait', 'game-landscape', 'desktop-web', 'custom'] = 'mobile-portrait',
+        width: int | None = None,
+        height: int | None = None,
+        orientation: str = '',
+        platforms: list[str] | None = None,
+        initial_screens: list[dict[str, Any]] | None = None,
+    ) -> CallToolResult:
+        """Create a complete 1.1.0 Design Studio project at a chosen vault directory with Figma-like layer editing,
+        artboards, manifest, and offline-compatible runtime. Never overwrites an existing design project.
+        """
+        return await call(
+            ctx,
+            design.create_project,
+            directory,
+            name,
+            workspace_revision=workspace_revision,
+            project_id=project_id,
+            preset=preset,
+            width=width,
+            height=height,
+            orientation=orientation,
+            platforms=platforms,
+            initial_screens=initial_screens,
+            write=True,
+        )
+
+    @tool(write=True)
+    async def design_upsert_screen(
+        directory: str,
+        screen_id: str,
+        name: str,
+        workspace_revision: str,
+        ctx: Context,
+        group: str = '核心页面',
+        caption: str = '',
+        width: int | None = None,
+        height: int | None = None,
+        html: str | None = None,
+        css: str | None = None,
+    ) -> CallToolResult:
+        """Add or update an artboard/screen in a Design Studio project, updating screens.js, project-spec.json,
+        and optional custom layered HTML/CSS. Prior versions are preserved in history.
+        """
+        return await call(
+            ctx,
+            design.upsert_screen,
+            directory,
+            screen_id,
+            name,
+            workspace_revision=workspace_revision,
+            group=group,
+            caption=caption,
+            width=width,
+            height=height,
+            html=html,
+            css=css,
+            write=True,
+        )
+
+    @tool(write=True)
+    async def design_update_layers(
+        directory: str,
+        board_id: str,
+        layers: dict[str, dict[str, Any] | None],
+        workspace_revision: str,
+        ctx: Context,
+        merge: bool = True,
+    ) -> CallToolResult:
+        """Batch-update or reset Figma-like layer transforms and overrides (tx, ty, x, y, width, height,
+        scaleX, scaleY, rotate, flipX, flipY, opacity, zIndex, text) for a board in Design/layer-transforms.json.
+        Automatically notifies open Design Studio canvases to hot-reload the changes.
+        """
+        return await call(
+            ctx,
+            design.save_transforms,
+            directory,
+            board_id,
+            layers,
+            workspace_revision=workspace_revision,
+            merge=merge,
+            write=True,
+        )
+
+    @tool()
+    async def design_check_project(directory: str, ctx: Context) -> CallToolResult:
+        """Validate a Design Studio project's contract (project-spec.json, screens, asset SHA-256 hashes,
+        and layer transforms) and return a structured report.
+        """
+        return await call(ctx, design.check_project, directory)
 
     return mcp

@@ -8,6 +8,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from vault_rag.local_state import LocalConfig,ConflictError,atomic_write
 from vault_rag.html_preview import HtmlPreviews
 from vault_rag.html_projects import HtmlProjects
+from vault_rag.design_studio import DesignStudio
 from vault_rag.browser_storage import BrowserStorageMigration, migration_script
 from vault_rag.local_dns import LocalDns
 from vault_rag.platform_support import choose_directory, private_file_mode, is_windows
@@ -44,6 +45,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     port=config.data.get('port',18080)
     previews=HtmlPreviews(config)
     websites=HtmlProjects(config,port)
+    design=DesignStudio(config,runtime,websites)
     local_dns=LocalDns(websites.install_id,port)
     storage_migration=BrowserStorageMigration(websites.ui_origin,port,config.directory)
     preferences=Preferences(config.directory)
@@ -51,11 +53,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     if not secret_file.exists():atomic_write(secret_file,secrets.token_hex(32).encode());private_file_mode(secret_file)
     token=secret_file.read_text(encoding='utf-8').strip();csrf=hmac.new(token.encode(),b'browser-write-v1',hashlib.sha256).hexdigest()
     ai=AiService(config,runtime)
-    ai_mcp=ai_mcp_server(ai)
+    ai_mcp=ai_mcp_server(ai,design)
     ai_app=ai_mcp.streamable_http_app()
     mcp_access=McpAccess(config)
     notes=NoteOperations(config,runtime)
-    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token)
+    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token,design)
     mcp_app=mcp.streamable_http_app()
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -72,6 +74,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     app.state.mcp_access=mcp_access;app.state.note_operations=notes
     app.state.ai=ai
     app.state.websites=websites
+    app.state.design=design
     app.state.local_dns=local_dns
     app.include_router(ai_router(ai))
     @app.middleware('http')
@@ -234,6 +237,70 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
     async def release_html_session(sid:str):
         websites.release(sid)
         return {'released':True}
+    @app.get('/api/design/projects')
+    async def design_projects(folder:str='',path:str=''):
+        return json_response(await asyncio.to_thread(design.list_projects,folder,path))
+    @app.get('/api/design/project')
+    async def design_project_detail(directory:str,board_id:str|None=None):
+        return json_response(await asyncio.to_thread(design.get_project,directory,board_id))
+    @app.post('/api/design/projects')
+    async def create_design_project(request:Request):
+        body=await request.json()
+        if not isinstance(body,dict) or not isinstance(body.get('directory'),str) or not isinstance(body.get('name'),str):
+            raise ValueError('创建设计项目需要指定存放目录与项目名称')
+        return json_response(await asyncio.to_thread(
+            design.create_project,
+            body['directory'],
+            body['name'],
+            workspace_revision=body.get('workspace_revision'),
+            project_id=body.get('project_id'),
+            preset=body.get('preset','mobile-portrait'),
+            width=body.get('width'),
+            height=body.get('height'),
+            orientation=body.get('orientation',''),
+            platforms=body.get('platforms'),
+            initial_screens=body.get('initial_screens'),
+        ))
+    @app.post('/api/design/projects/screens')
+    async def upsert_design_screen(request:Request):
+        body=await request.json()
+        if not isinstance(body,dict) or not isinstance(body.get('directory'),str) or not isinstance(body.get('name'),str):
+            raise ValueError('新增或更新画板需要项目目录与画板名称')
+        return json_response(await asyncio.to_thread(
+            design.upsert_screen,
+            body['directory'],
+            body.get('screen_id') or body['name'],
+            body['name'],
+            workspace_revision=body.get('workspace_revision'),
+            group=body.get('group','核心页面'),
+            caption=body.get('caption',''),
+            width=body.get('width'),
+            height=body.get('height'),
+            html=body.get('html'),
+            css=body.get('css'),
+        ))
+    @app.get('/api/design/projects/transforms')
+    async def read_design_transforms(directory:str,board_id:str=''):
+        return json_response(await asyncio.to_thread(design.get_transforms,directory,board_id))
+    @app.post('/api/design/projects/transforms')
+    async def save_design_transforms(request:Request):
+        body=await request.json()
+        if not isinstance(body,dict) or not isinstance(body.get('directory'),str) or not isinstance(body.get('board_id'),str) or not isinstance(body.get('transforms'),dict):
+            raise ValueError('保存图层变换需要项目目录、画板 ID 与变换数据')
+        return json_response(await asyncio.to_thread(
+            design.save_transforms,
+            body['directory'],
+            body['board_id'],
+            body['transforms'],
+            workspace_revision=body.get('workspace_revision'),
+            merge=bool(body.get('merge',False)),
+        ))
+    @app.post('/api/design/projects/check')
+    async def check_design_project(request:Request):
+        body=await request.json()
+        if not isinstance(body,dict) or not isinstance(body.get('directory'),str):
+            raise ValueError('设计校验需要指定项目目录')
+        return json_response(await asyncio.to_thread(design.check_project,body['directory']))
     @app.api_route('/html-preview/{key}/files/{path:path}',methods=['GET','HEAD'])
     async def html_resource(request:Request,key:str,path:str,download:bool=False):
         return await asyncio.to_thread(previews.response,key,path,str(request.base_url).rstrip('/'),download,request)

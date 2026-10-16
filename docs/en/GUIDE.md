@@ -57,12 +57,13 @@ Hover beside a block to insert with **+**, or use its handle to convert, duplica
 
 Files remain ordinary Markdown; unchanged blocks and document properties retain their original source. The page and source views share undo history. Equations and Mermaid stay rendered and have dedicated editing panels. Complex or unsupported content is preserved for display and can be located in source. Changing the interface language keeps the editor and its history. Tables use simple Markdown structures, without merged cells or nested blocks inside cells.
 
-## Open HTML projects and websites
+## Open HTML projects, websites and Design Studio
 
 1. Open a local `.html` or `.htm` file from the directory. Confirm its **Project folder** and choose **Save and open**. Select a folder containing the entry and all companion resources; the website's `/` maps to this folder. An empty folder value uses the connected knowledge folder's root.
 2. Use **Project settings** to change the folder or enable **SPA routing** for a client-side application. This opens the project entry for missing page routes; missing scripts, images and JSON still return errors.
 3. Use back, forward, refresh, full screen or **Open in new tab** in the website toolbar. In the desktop app, the same website runs inside its window. Browser and desktop website storage are independent.
 4. To open an existing website or development server, choose **Preview → Open website** and enter its HTTP/HTTPS URL. LeafLoom does not install dependencies or start a backend. A site may refuse embedding or require sign-in.
+5. Open **Design Studio** from the sidebar (or right-click any folder and choose **New design project here**) to scaffold a `1.1.0` design project inside any connected folder (with mobile portrait `720×1560`, mobile landscape `1560×720`, desktop web `1440×900` or custom canvas presets), add screen artboards and run project checks. Inside a design project, drag layers with smart alignment guides, resize with 8-way handles, rotate, edit `X/Y/W/H`, opacity, flip, z-order and text in the inspector, undo/redo with `Ctrl/⌘+Z`, save layer transforms to `Design/layer-transforms.json`, export original assets or live PNG/SVG snapshots, and send layer references directly to AI chat. Generated project folders also remain offline-compatible when opened directly from disk.
 
 **Source** opens the HTML text. Ordinary edits autosave; if an unsaved draft remains, the website view previews it in a temporary origin without saving it. Companion resources still come from disk. HTML remains browsable independently of the selected search folders and is not indexed for knowledge search.
 
@@ -96,6 +97,6 @@ See [AI connections](AI.md). Browsing and local retrieval work without an AI sub
 
 **How do I uninstall?** Quit LeafLoom, then uninstall it through Windows Settings or remove it from Applications on Mac. Notes, configuration, indexes and models are retained. For a legacy source-installed service, use `vault-rag service uninstall` from that environment. Remove retained data separately only when you no longer need it.
 
-## Full note access from AI clients
+## Full note and design access from AI clients
 
-In **Settings → AI connections**, enable full MCP reading for your local AI client or ChatGPT. Enable each connection's write switch separately to allow direct saves with history and recoverable deletion. It can find and edit all connected Markdown, TXT and HTML notes; RAG still uses only selected folders. Older connections retain their original five read-only capabilities. See [AI setup](AI.md) and the [tool contract](../MCP.md).
+In **Settings → AI connections**, enable full MCP reading for your local AI client or ChatGPT. Enable each connection's write switch separately to allow direct saves with history and recoverable deletion. It can find and edit all connected Markdown, TXT, HTML notes and `1.1.0` design projects (`design_list_projects`, `design_get_project`, `design_create_project`, `design_upsert_screen`, `design_update_layers`, `design_check_project`); RAG still uses only selected folders. Older connections retain their original five read-only capabilities. See [AI setup](AI.md) and the [tool contract](../MCP.md).

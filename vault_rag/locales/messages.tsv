@@ -878,3 +878,62 @@ macOS 14/15 的 Safari 需要本机解析配置。仅配置本应用的专属域
 已启用|Enabled|有効
 未启用|Disabled|無効
 正在处理…|Processing…|処理中…
+设计工作台|Design Studio|デザインスタジオ
+设计工作台 · |Design Studio · |デザインスタジオ · 
+在此新建设计项目|Create design project here|ここにデザインプロジェクトを作成
+新建设计项目|New design project|新規デザインプロジェクト
+新增画板|Add artboard|アートボードを追加
+新增或更新画板|Add or update artboard|アートボードを追加または更新
+选择设计项目|Select design project|デザインプロジェクトを選択
+画板|artboards|アートボード
+保存修改 *|Save changes *|変更を保存 *
+已保存画板图层设计修改|Saved artboard layer design changes.|アートボードのレイヤー変更を保存しました。
+将当前画板的图层位置、缩放、旋转和文案修改保存到 Design/layer-transforms.json|Save layer position, scale, rotation, and text changes of the current artboard to Design/layer-transforms.json.|現在のアートボードのレイヤー位置・拡大縮小・回転・テキスト変更を Design/layer-transforms.json に保存します。
+引用图层：|Reference layer: |レイヤーを参照：
+将当前选中的画板图层作为上下文引用添加到 AI 对话|Add the currently selected artboard layer as a context reference to AI chat.|選択中のアートボードレイヤーをコンテキスト参照として AI チャットに追加します。
+已将选中图层添加到 AI 对话|Added selected layer to AI chat.|選択したレイヤーを AI チャットに追加しました。
+契约检查|Contract check|契約チェック
+检查中…|Checking…|確認中…
+打开目录|Open folder|フォルダーを開く
+在知识库目录中浏览该项目的所有 Markdown 与设计文件|Browse all Markdown and design files of this project in the knowledge folder.|ナレッジフォルダー内でこのプロジェクトの Markdown とデザインファイルを参照します。
+刷新设计画板|Refresh design artboard|デザインアートボードを更新
+在浏览器独立标签页中打开|Open in a standalone browser tab|独立したブラウザータブで開く
+全屏设计|Full-screen design|全画面デザイン
+正在加载设计工作台画板…|Loading Design Studio artboards…|デザインスタジオのアートボードを読み込み中…
+在知识库中开启类 Figma 网页与 UI 设计|Start Figma-like Web & UI Design in Your Knowledge Folder|ナレッジフォルダーで Figma 風の Web・UI デザインを開始
+选择知识库中的任意目录创建设计项目。每个项目包含多画板、可拖拽/缩放/旋转的图层树、组件契约与素材清单，并支持 AI/MCP 直接协同编辑。|Choose any folder in your knowledge vault to create a design project. Each project includes multi-screen artboards, a draggable/resizable/rotatable layer tree, component contracts, and asset manifests, with direct AI/MCP collaboration.|ナレッジ内の任意のフォルダーを選択してデザインプロジェクトを作成できます。複数アートボード、ドラッグ・拡大縮小・回転可能なレイヤーツリー、コンポーネント契約、アセット一覧を含み、AI/MCP による協調編集に対応します。
+在知识库中新建设计项目|New design project in knowledge folder|ナレッジフォルダー内にデザインプロジェクトを作成
+选择知识库内的目标文件夹，LeafLoom 将在该位置生成符合 1.1.0 规范的设计项目（含多画板、图层编辑引擎、项目契约与 Wiki 索引）。|Choose a target folder inside the knowledge vault. LeafLoom will scaffold a 1.1.0-compliant design project there (including multi-artboards, layer editing engine, project spec, and Wiki index).|ナレッジ内の対象フォルダーを選択してください。1.1.0 仕様に準拠したデザインプロジェクト（複数アートボード、レイヤー編集エンジン、プロジェクト仕様、Wiki インデックス）を生成します。
+1. 选择存放目录（知识库内）|1. Choose parent folder (inside knowledge vault)|1. 保存先フォルダーを選択（ナレッジ内）
+知识库根目录 /|Knowledge root /|ナレッジルート /
+项目文件夹名称（英文或中文目录名）|Project folder name|プロジェクトフォルダー名
+项目显示名称|Project display name|プロジェクト表示名
+例如：萌宠安家 UI 设计|e.g., Cozy Paws UI Design|例：Cozy Paws UI デザイン
+完整生成路径：|Full target path: |生成先パス：
+画板尺寸预设|Artboard size preset|アートボードサイズプリセット
+移动端竖屏 (720×1560)|Mobile Portrait (720×1560)|モバイル縦画面 (720×1560)
+游戏横屏 (1560×720)|Game Landscape (1560×720)|ゲーム横画面 (1560×720)
+桌面网页 (1440×900)|Desktop Web (1440×900)|デスクトップ Web (1440×900)
+自定义画板尺寸|Custom artboard size|カスタムアートボードサイズ
+画板宽度 (px)|Artboard width (px)|アートボード幅 (px)
+画板高度 (px)|Artboard height (px)|アートボード高さ (px)
+正在创建…|Creating…|作成中…
+创建并打开设计工作台|Create and open Design Studio|作成してデザインスタジオを開く
+请输入或选择知识库内的项目目录路径|Enter or choose a project folder path inside the knowledge folder.|ナレッジ内のプロジェクトフォルダーパスを入力または選択してください。
+已创建设计项目：|Created design project: |デザインプロジェクトを作成しました：
+所属设计项目：|Design project: |対象デザインプロジェクト：
+画板中文名称|Artboard name|アートボード名
+画板标识 ID（英文，留空自动生成）|Artboard ID (leave empty to auto-generate)|アートボード ID（空欄で自動生成）
+所属分组|Group|グループ
+画板设计说明|Artboard description|アートボードの説明
+保存画板|Save artboard|アートボードを保存
+请输入画板名称或标识|Enter an artboard name or ID.|アートボード名または ID を入力してください。
+已添加画板，正在刷新画板工作台|Artboard saved; refreshing Design Studio.|アートボードを保存しました。スタジオを更新しています。
+设计项目契约检查结果|Design project contract check result|デザインプロジェクト契約チェック結果
+✓ 契约检查通过|✓ Contract check passed|✓ 契約チェック合格
+✕ 契约检查存在问题|✕ Contract check found issues|✕ 契約チェックで問題が見つかりました
+错误项：|Errors:|エラー項目：
+提示项：|Warnings:|警告項目：
+在编辑器中打开 Design/project-spec.json|Open Design/project-spec.json in editor|エディターで Design/project-spec.json を開く
+请选择或输入知识库内的项目子目录名称|Choose or enter a project subdirectory name inside the knowledge folder.|ナレッジ内のプロジェクトサブディレクトリ名を選択または入力してください。
+画板宽高须在 120 到 7680 像素之间|Artboard width and height must be between 120 and 7680 pixels.|アートボードの幅と高さは 120〜7680 ピクセルの間で指定してください。

@@ -204,6 +204,13 @@ class HtmlProjects:
             return HTMLResponse('网页会话已失效，请回到知识库重新打开。', status_code=410, headers={**headers, 'Cache-Control': 'no-store'})
         session = candidates[-1]
         if path.startswith(INTERNAL):
+            if path in (INTERNAL + 'design/layer_review.js', INTERNAL + 'design/layer_review.css'):
+                asset_name = path.rsplit('/', 1)[-1]
+                asset_file = Path(__file__).resolve().parent / 'design_assets' / 'layer_review' / asset_name
+                if not asset_file.is_file():
+                    return Response(status_code=404, headers=headers)
+                media_type = 'text/javascript' if asset_name.endswith('.js') else 'text/css'
+                return Response(asset_file.read_bytes(), media_type=media_type, headers={**headers, 'Cache-Control': 'no-store'})
             sid = request.query_params.get('session')
             session = self.sessions.get(sid)
             if not session or session not in candidates:
@@ -273,11 +280,15 @@ VIEWER_JS = r"""
  function report(){try{const url=frame.contentWindow.location.href;if(url==='about:blank')return;if(url!==current){current=url;send('leafloom-web-location',{url});}}catch{send('leafloom-web-external');}}
  frame.addEventListener('load',()=>{started=true;report();send('leafloom-web-ready');});
  addEventListener('message',event=>{
+  if(event.origin===location.origin&&typeof event.data?.type==='string'&&event.data.type.startsWith('leafloom-design-')){
+   send(event.data.type,{...event.data});return;
+  }
   if(event.source!==parent||event.origin!==settings.parent||event.data?.session!==settings.session)return;
   try{if(event.data.command==='reload')frame.contentWindow.location.reload();
    if(event.data.command==='entry')frame.src=settings.entry;
    if(event.data.command==='back')frame.contentWindow.history.back();
    if(event.data.command==='forward')frame.contentWindow.history.forward();
+   if(event.data.command==='design-reload-transforms')frame.contentWindow.postMessage({type:'leafloom-design-reload-transforms',boardId:event.data.boardId,transforms:event.data.transforms},location.origin);
   }catch{if(event.data.command==='reload')frame.src=settings.entry;}
  });
  frame.src=settings.entry;

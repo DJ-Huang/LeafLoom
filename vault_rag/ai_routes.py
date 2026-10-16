@@ -12,7 +12,7 @@ from starlette.responses import StreamingResponse
 from vault_rag.local_state import ConflictError
 
 
-def ai_mcp_server(ai):
+def ai_mcp_server(ai, design=None):
     server = FastMCP('vault-ai', host='127.0.0.1', port=ai.config.data.get('port', 18080),
                      streamable_http_path='/ai-mcp', stateless_http=True, json_response=True)
 
@@ -40,6 +40,25 @@ def ai_mcp_server(ai):
         For existing notes supply read_note's base_hash. For a new note set create=true.
         """
         return json.dumps(ai.propose(conversation(ctx), path, text, base_hash, create), ensure_ascii=False)
+
+    if design is not None:
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False))
+        def design_list_projects(ctx: Context, folder: str = '') -> str:
+            """List all Design Studio projects in the connected vault."""
+            conversation(ctx)
+            return json.dumps(design.list_projects(folder), ensure_ascii=False, default=str)
+
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False))
+        def design_get_project(directory: str, ctx: Context, board_id: str | None = None) -> str:
+            """Read a Design Studio project's spec, artboards, and saved layer transforms."""
+            conversation(ctx)
+            return json.dumps(design.get_project(directory, board_id), ensure_ascii=False, default=str)
+
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False))
+        def design_update_layers(directory: str, board_id: str, layers: dict, ctx: Context, merge: bool = True) -> str:
+            """Apply Figma-like layer transforms (tx, ty, x, y, width, height, scaleX, scaleY, rotate, flipX, flipY, opacity, zIndex, text) to a design board."""
+            conversation(ctx)
+            return json.dumps(design.save_transforms(directory, board_id, layers, merge=merge), ensure_ascii=False, default=str)
 
     return server
 

@@ -4,9 +4,9 @@
 
 ## Unreleased — 2026-10-16
 
+- Add the built-in Design Studio workspace to create 1.1.0 design projects directly inside any connected vault directory, manage screens and edit layers with Figma-style canvas gizmos, smart guides, inspector controls, `Design/layer-transforms.json` persistence, dual-mode PNG/SVG/asset export and AI layer references.
 - Strengthen ignore rules for private configuration, credentials and local state; anonymize personal paths and private commit emails in repository history while preserving public author names.
-
-- Expand HTTP MCP to 23 tools for full-folder note discovery, Markdown/TXT/HTML editing, properties, folders, link-aware moves, recoverable deletion, history, templates, daily notes and index synchronization.
+- Expand HTTP MCP to 29 tools (including 6 `design_*` project, screen, layer and validation tools) alongside full-folder note discovery, Markdown/TXT/HTML editing, properties, folders, link-aware moves, recoverable deletion, history, templates, daily notes and index synchronization.
 - Add separate local/ChatGPT MCP credentials and write switches, defaulting to read-only; preserve legacy retrieval scope and the internal assistant's proposal workflow.
 - Check workspace/file/operation versions, preserve BOM and line endings, and retain external edits during failed move rollback.
 

@@ -4,7 +4,7 @@ export type Note={path:string,root?:string,text:string,etag:string,metadata:Reco
 export type Config={root:string|null,revision?:string,include_roots:string[],exclude_roots:string[],rules_roots:string[],wiki_roots:string[],estimation_roots:string[],write_targets:Record<string,string>,homepage:string,templates:string,daily_folder:string,port:number};
 export type OpenNote=(path:string,anchor?:string)=>void;
 export type Session={config:Config,csrf:string,suggested_root:string,service_instance_id:string,catalog_version:number,demo?:boolean};
-export type Change={type?:string,root?:string,config_revision?:string,service_instance_id?:string,catalog_version?:number,paths?:string[],reset?:boolean};
+export type Change={type?:string,root?:string,config_revision?:string,service_instance_id?:string,catalog_version?:number,paths?:string[],reset?:boolean,design_transforms?:{directory:string,board_id:string,transforms:Record<string,any>}};
 type Cached={value:any,etag?:string,bytes:number,valid:boolean};
 type Pending={promise:Promise<any>,controller:AbortController,users:number,settled:boolean};
 const cache=new Map<string,Cached>(),requests=new Map<string,Pending>(),versions=new Map<string,number>();

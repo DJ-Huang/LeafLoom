@@ -39,14 +39,25 @@ Markdown/TXT; neither full access nor saving a note expands that selection.
 | Preview and recover | `vault_list_records`, `vault_read_record`, `vault_restore` |
 | Markdown relationships | `vault_links`, `vault_graph` |
 | Templates and diary | `vault_list_templates`, `vault_daily_note` |
+| Design Studio | `design_list_projects`, `design_get_project`, `design_create_project`, `design_upsert_screen`, `design_update_layers`, `design_check_project` |
 | Synchronize | `vault_reindex` |
 
 `vault_index_status` adds `workspace_revision`, supported formats and the caller's
 `capabilities`. `vault_get_note` preserves its retrieval-scoped meaning; use
 `vault_read_note` for full workspace access. Tool definitions are in
 [`mcp_tools.py`](../vault_rag/mcp_tools.py); workflows use
-[`note_operations.py`](../vault_rag/note_operations.py) and the same durable file
+[`note_operations.py`](../vault_rag/note_operations.py) and
+[`design_studio.py`](../vault_rag/design_studio.py) with the same durable file
 operations as the browser.
+
+Design Studio tools inspect and mutate 1.1.0 design projects inside the connected
+vault: `design_list_projects` and `design_get_project` inspect project manifests,
+screens and layer transforms; `design_create_project` scaffolds a new `1.1.0`
+project in any vault directory and registers its HTML project; `design_upsert_screen`
+creates or updates screen HTML artboards and rebuilds the portal; `design_update_layers`
+merges or replaces `Design/layer-transforms.json` and `Design/layer-transforms.js`
+using `workspace_revision`; and `design_check_project` runs structural and
+layer-review validation.
 
 Lists and operation impact previews default to 50 results (maximum 200) and return `next_cursor`.
 Record previews use `path_limit`/`path_cursor` for affected paths and `offset`/`limit` for text. Cursors are

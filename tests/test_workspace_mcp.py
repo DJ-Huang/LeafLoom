@@ -114,7 +114,8 @@ class WorkspaceMcpTests(unittest.TestCase):
 
     def test_discovery_scopes_and_structured_errors(self):
         tools = {t['name']: t for t in self.request('tools/list').json()['result']['tools']}
-        self.assertEqual(len(tools), 23)
+        self.assertEqual(len(tools), 29)
+        self.assertTrue(tools['design_list_projects']['annotations']['readOnlyHint'])
         self.assertTrue(tools['vault_find_notes']['annotations']['readOnlyHint'])
         self.assertTrue(tools['vault_delete']['annotations']['destructiveHint'])
         self.assertNotIn('ctx', tools['vault_read_note']['inputSchema']['properties'])
