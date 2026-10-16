@@ -18,9 +18,10 @@ from vault_rag.ai_routes import ai_router, ai_mcp_server
 from vault_rag.preferences import Preferences
 from vault_rag.demo import create_demo
 from vault_rag.i18n import error_code
-from vault_rag.mcp_access import McpAccess
+from vault_rag.mcp_access import McpAccess, TUNNEL_AUTH_HEADER
 from vault_rag.mcp_tools import build_workspace_mcp
 from vault_rag.note_operations import NoteOperations
+from vault_rag.feishu import Feishu
 
 def json_response(value,status=200):
     if isinstance(value,dict) and isinstance(value.get('error'),str):
@@ -57,7 +58,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     ai_app=ai_mcp.streamable_http_app()
     mcp_access=McpAccess(config)
     notes=NoteOperations(config,runtime)
-    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token)
+    feishu=Feishu(config)
+    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token,feishu)
     mcp_app=mcp.streamable_http_app()
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -73,6 +75,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     app.state.runtime=runtime;app.state.csrf=csrf
     app.state.mcp_access=mcp_access;app.state.note_operations=notes
     app.state.ai=ai
+    app.state.feishu=feishu
     app.state.websites=websites
     app.state.local_dns=local_dns
     app.include_router(ai_router(ai))
@@ -98,7 +101,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         bearer=hmac.compare_digest(request.headers.get('authorization','').encode('utf-8'),('Bearer '+token).encode('utf-8'))
         session=hmac.compare_digest(request.cookies.get('vault_session','').encode('utf-8'),token.encode('utf-8'))
         if is_mcp:
-            try:mcp_access.principal(request.headers.get('authorization',''),token,loopback=local_mcp)
+            try:
+                who=mcp_access.principal(request.headers.get('authorization',''),token,loopback=local_mcp,
+                                         tunnel_header=request.headers.get(TUNNEL_AUTH_HEADER,''))
+                logging.getLogger(__name__).debug('MCP connection=%s runtime_proof=%s bearer=%s', who,
+                    bool(request.headers.get(TUNNEL_AUTH_HEADER,'')),bool(request.headers.get('authorization','')))
             except PermissionError:return json_response({'error':'MCP credential is missing, invalid or revoked','error_code':'permission_denied'},401)
         elif is_api and not (bearer or session):return json_response({'error':'请从本机网页入口打开，或配置 MCP 本机令牌'},401)
         if path.startswith('/api/') and request.method not in ('GET','HEAD') and not bearer:
@@ -177,7 +184,15 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         body=await request.json()
         if not isinstance(body,dict):raise ValueError('Invalid MCP access settings')
         return json_response(await asyncio.to_thread(mcp_access.configure,body.get('kind'),
-            enabled=body.get('enabled'),write=body.get('write'),rotate=body.get('rotate',False)))
+            enabled=body.get('enabled'),write=body.get('write'),rotate=body.get('rotate',False),
+            resource=body.get('resource','workspace')))
+    @app.get('/api/feishu')
+    async def feishu_settings():return json_response(feishu.status())
+    @app.post('/api/feishu')
+    async def save_feishu_settings(request:Request):
+        return json_response(await asyncio.to_thread(feishu.configure,await request.json()))
+    @app.post('/api/feishu/verify')
+    async def verify_feishu():return json_response(await asyncio.to_thread(feishu.verify))
     @app.post('/api/activity')
     async def activity():runtime.activity();return {'ok':True}
 

@@ -1,4 +1,45 @@
 # Source | English | Japanese. Named placeholders must match.
+feishu.title|飞书|Feishu / Lark|Feishu / Lark
+feishu.description|连接本机 lark-cli，让 AI 操作飞书文档和多维表格。|Connect local lark-cli so AI can work with documents and Base records.|ローカルの lark-cli を接続し、AI でドキュメントと Base レコードを操作します。
+feishu.enabled|启用飞书接入|Enable Feishu integration|Feishu 連携を有効にする
+feishu.binary|CLI 可执行文件|CLI executable|CLI 実行ファイル
+feishu.binaryHelp|留空自动检测；手动选择时填写原生可执行文件的绝对路径。|Leave blank to detect automatically, or enter an absolute path to the native executable.|空欄で自動検出、またはネイティブ実行ファイルの絶対パスを入力します。
+feishu.automatic|自动检测 lark-cli|Detect lark-cli automatically|lark-cli を自動検出
+feishu.profile|CLI profile（可选）|CLI profile (optional)|CLI プロファイル（任意）
+feishu.profileHelp|留空使用 CLI 当前默认 profile；验证和操作使用同一设置。|Leave blank for the CLI default profile. Verification and operations use this same setting.|空欄では CLI の既定プロファイルを使用します。検証と操作には同じ設定を使用します。
+feishu.verify|验证连接|Verify connection|接続を検証
+feishu.working|正在处理…|Working…|処理中…
+feishu.saveFirst|请先保存接入设置，再验证连接。|Save integration settings before verifying.|連携設定を保存してから検証してください。
+feishu.checkedAt|上次验证：{time}|Last verified: {time}|最終検証：{time}
+feishu.permissionsHelp|账号验证通过仅代表登录有效；具体文档和表格的权限在操作时检查。|Account verification confirms login only. Access to documents and tables is checked during each operation.|アカウント検証はログインの有効性のみを確認します。文書やテーブルへの権限は操作時に確認します。
+feishu.externalSetup|请自行安装、配置并登录 lark-cli；凭据由 CLI 管理。|Install, configure and log in to lark-cli separately. The CLI manages credentials.|lark-cli のインストール、設定、ログインは別途行ってください。認証情報は CLI が管理します。
+feishu.setupGuide|官方配置指南|Official setup guide|公式セットアップガイド
+feishu.localRead|本机 MCP：读取飞书|Local MCP: read Feishu|ローカル MCP：Feishu の読み取り
+feishu.localWrite|本机 MCP：写入飞书|Local MCP: write Feishu|ローカル MCP：Feishu への書き込み
+feishu.tunnelRead|Tunnel：读取飞书|Tunnel: read Feishu|Tunnel：Feishu の読み取り
+feishu.tunnelWrite|Tunnel：写入飞书|Tunnel: write Feishu|Tunnel：Feishu への書き込み
+feishu.accessHelp|飞书和笔记权限分别控制，共用该连接的 MCP 专用凭据。|Feishu and note permissions are separate and share this connection's dedicated MCP credential.|Feishu とノートの権限は独立し、この接続の MCP 専用認証情報を共有します。
+feishu.state.unchecked|尚未验证连接|Connection not verified yet|接続は未検証です
+feishu.state.disabled|飞书接入已关闭|Feishu integration is disabled|Feishu 連携は無効です
+feishu.state.not_installed|未找到 CLI，请先安装或填写原生可执行文件路径。|CLI not found. Install it or enter its native executable path.|CLI が見つかりません。インストールするか、ネイティブ実行ファイルのパスを入力してください。
+feishu.state.incompatible|CLI 缺少所需接口，请在外部更新。|Required CLI interfaces are missing. Update the CLI externally.|必要な CLI インターフェースがありません。CLI を外部で更新してください。
+feishu.state.not_configured|CLI 尚未完成应用配置。|CLI app configuration is incomplete.|CLI のアプリ設定が完了していません。
+feishu.state.not_logged_in|CLI 尚未登录用户账号，请在外部登录。|No CLI user login. Log in externally.|CLI にユーザーログインがありません。外部でログインしてください。
+feishu.state.login_expired|CLI 用户登录已失效，请在外部重新登录。|CLI user login expired. Log in again externally.|CLI のログインが期限切れです。外部で再ログインしてください。
+feishu.state.network_error|连接飞书失败，请检查网络后重试。|Could not reach Feishu. Check the network and retry.|Feishu に接続できません。ネットワークを確認して再試行してください。
+feishu.state.connected|账号验证通过|Account verified|アカウント検証済み
+feishu.state.invalid_configuration|CLI 路径或配置无效，请检查设置。|Invalid CLI path or configuration. Check settings.|CLI のパスまたは設定が無効です。設定を確認してください。
+feishu.state.invalid_cli_response|无法识别 CLI 返回，请检查 CLI 版本。|Unrecognized CLI response. Check its version.|CLI の応答を認識できません。バージョンを確認してください。
+feishu.state.cli_failed|CLI 验证失败，请在外部检查配置和登录。|CLI verification failed. Check configuration and login externally.|CLI の検証に失敗しました。外部で設定とログインを確認してください。
+feishu.state.permission_denied|CLI 权限不足，请在外部检查授权。|CLI permission denied. Check authorization externally.|CLI の権限が不足しています。外部で認可を確認してください。
+feishu.state.confirmation_required|CLI 需要确认，请在外部完成设置。|CLI confirmation required. Complete setup externally.|CLI で確認が必要です。外部で設定を完了してください。
+feishu.state.output_limit|CLI 返回过大，验证已停止。|CLI output exceeded the limit. Verification stopped.|CLI の出力が上限を超えたため検証を停止しました。
+feishu.state.write_conflict|CLI 验证发生冲突，请稍后重试。|CLI verification conflicted. Retry later.|CLI の検証が競合しました。後で再試行してください。
+feishu.state.invalid_request|CLI 验证请求被拒绝，请检查版本与 profile。|CLI rejected verification. Check the version and profile.|CLI が検証を拒否しました。バージョンとプロファイルを確認してください。
+Invalid Feishu settings|飞书接入设置无效。|Invalid Feishu settings|Feishu の連携設定が無効です。
+Invalid enabled setting|接入开关无效。|Invalid enabled setting|連携の有効化設定が無効です。
+Invalid CLI executable|CLI 可执行文件路径无效。|Invalid CLI executable|CLI 実行ファイルのパスが無効です。
+Invalid CLI profile|CLI profile 无效，请使用字母、数字、下划线、点或连字符。|Invalid CLI profile|CLI プロファイルが無効です。英数字、アンダースコア、ドット、ハイフンを使ってください。
 update.title|应用更新|App updates|アプリの更新
 update.search|检查更新、当前版本、最新版本、下载安装|Check for updates, current version, latest version, download and install|更新を確認、現在のバージョン、最新バージョン、ダウンロードとインストール
 update.current|当前版本：{version}|Current version: {version}|現在のバージョン：{version}
@@ -26,9 +67,9 @@ update.error.checksum|安装包校验失败或缺少校验信息，未启动安�
 update.error.check|请先检查更新，再下载安装。|Check for updates before downloading and installing.|先に更新を確認してからダウンロードしてください。
 update.error.install|无法打开安装程序，请重新下载后重试。|Cannot open the installer. Download it again and retry.|インストーラーを開けません。再ダウンロードしてお試しください。
 mcp.connectionTitle|AI 连接|AI connections|AI 連携
-mcp.connectionDescription|管理本机 AI 与 ChatGPT 的笔记访问。|Manage note access for local AI clients and ChatGPT.|ローカル AI と ChatGPT のメモアクセスを管理します。
-mcp.title|完整笔记访问（MCP）|Full note access (MCP)|メモ全体へのアクセス（MCP）
-mcp.scope|可访问关联目录内全部 Markdown、TXT 和 HTML，包括未勾选检索的笔记。RAG 仍只使用已选目录。|Access all connected Markdown, TXT and HTML notes, including notes outside retrieval. RAG still uses selected folders only.|検索対象外を含む接続フォルダー内の Markdown、TXT、HTML にアクセスできます。RAG は選択した範囲のみを使います。
+mcp.connectionDescription|管理本机 AI 与 ChatGPT 的笔记、飞书和连接权限。|Manage note, Feishu and connection permissions for local AI clients and ChatGPT.|ローカル AI と ChatGPT のノート、Feishu、接続の権限を管理します。
+mcp.title|MCP 访问权限|MCP access permissions|MCP アクセス権限
+mcp.scope|笔记权限覆盖关联目录内全部 Markdown、TXT 和 HTML；飞书权限单独控制。RAG 仍只使用已选目录。|Note access covers all connected Markdown, TXT and HTML; Feishu access is controlled separately. RAG uses selected folders only.|ノート権限は接続フォルダー内の Markdown、TXT、HTML 全体を対象とし、Feishu 権限は別に設定します。RAG は選択範囲のみを使います。
 mcp.loading|正在读取连接权限…|Loading connection permissions…|接続権限を読み込み中…
 mcp.localRead|允许本机 AI 读取全部笔记|Allow local AI to read all notes|ローカル AI にすべてのメモの閲覧を許可
 mcp.localReadHelp|启用后生成专用连接配置；旧配置继续保持原有读取范围。|Enabling generates a dedicated connection configuration. Older configurations retain their original reading scope.|有効にすると専用の接続設定を生成します。以前の設定の閲覧範囲は変わりません。

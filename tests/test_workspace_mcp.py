@@ -114,7 +114,7 @@ class WorkspaceMcpTests(unittest.TestCase):
 
     def test_discovery_scopes_and_structured_errors(self):
         tools = {t['name']: t for t in self.request('tools/list').json()['result']['tools']}
-        self.assertEqual(len(tools), 23)
+        self.assertEqual(len(tools), 28)
         self.assertTrue(tools['vault_find_notes']['annotations']['readOnlyHint'])
         self.assertTrue(tools['vault_delete']['annotations']['destructiveHint'])
         self.assertNotIn('ctx', tools['vault_read_note']['inputSchema']['properties'])
@@ -284,6 +284,48 @@ class WorkspaceMcpTests(unittest.TestCase):
         self.assertEqual(self.client.post('/api/mcp-access', json={'kind': 'local', 'enabled': True, 'write': True}).status_code, 403)
         self.configure('local', enabled=False, write=False)
         self.assertEqual(self.request('tools/list').status_code, 401)
+
+    def test_feishu_only_credentials_and_channel_isolation(self):
+        service = self.app.state.feishu
+        self.configure('local', enabled=True, write=True, resource='feishu')
+        self.configure('local', enabled=False, write=False)
+        self.call('vault_read_note', {'note_id': 'Archive/b.md'}, error='permission_denied')
+        self.call('feishu_status', token='legacy', error='permission_denied')
+        with patch.object(service, 'docs_read', return_value={'ok': True, 'data': {'page_token': 'next'}}) as read:
+            value = self.call('feishu_docs_read', {'action': 'search', 'query': 'example'})
+            self.assertEqual(value['data']['page_token'], 'next')
+            self.configure('tunnel', enabled=True, write=False)
+            tunnel = self.app.state.mcp_access.tunnel_authorization()
+            self.call('feishu_docs_read', {'action': 'search', 'query': 'example'}, token=tunnel, error='permission_denied')
+            self.assertEqual(read.call_count, 1)
+        self.configure('local', enabled=True, write=False, resource='feishu')
+        with patch.object(service, 'docs_write') as write:
+            self.call('feishu_docs_write', {'action': 'create', 'title': 'Example', 'content': 'body'}, error='permission_denied')
+            write.assert_not_called()
+        self.configure('tunnel', enabled=True, write=True, resource='feishu')
+        self.configure('tunnel', enabled=False, write=False)
+        tunnel = self.app.state.mcp_access.tunnel_authorization()
+        with patch.object(service, 'base_write', return_value={'ok': True, 'data': {'updated': True}}):
+            self.call('feishu_base_write', {'action': 'update_record', 'base_token': 'base_example',
+                      'table_id': 'tbl_example', 'record_id': 'rec_example', 'fields': {'Title': 'New'}}, token=tunnel)
+        self.call('vault_read_note', {'note_id': 'Archive/b.md'}, token=tunnel, error='permission_denied')
+        self.configure('local', enabled=False, write=False, resource='feishu')
+        self.assertEqual(self.request('tools/list').status_code, 401)
+
+    def test_feishu_settings_authentication_csrf_and_mcp_annotations(self):
+        self.assertEqual(self.client.get('/api/feishu', headers={'Authorization': 'Bearer ' + self.local}).status_code, 401)
+        response = self.client.post('/api/feishu', headers=self.legacy, json={'enabled': True, 'profile': 'work'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['verification']['state'], 'unchecked')
+        self.client.cookies.set('vault_session', self.legacy['Authorization'][7:])
+        self.assertEqual(self.client.post('/api/feishu/verify', json={}).status_code, 403)
+        with patch.object(self.app.state.feishu, 'verify', return_value={'verification': {'state': 'connected'}}) as verify:
+            self.assertEqual(self.client.post('/api/feishu/verify', headers=self.legacy, json={}).status_code, 200)
+            verify.assert_called_once()
+        tools = {t['name']: t for t in self.request('tools/list').json()['result']['tools']}
+        self.assertTrue(tools['feishu_docs_read']['annotations']['readOnlyHint'])
+        self.assertFalse(tools['feishu_docs_write']['annotations']['readOnlyHint'])
+        self.assertTrue(tools['feishu_base_write']['annotations']['openWorldHint'])
 
     def test_root_switch_protected_subtrees_and_symlinks(self):
         for path in ('../outside.md', '.hidden.md', '.vault-rag/notes.md'):

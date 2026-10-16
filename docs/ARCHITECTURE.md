@@ -4,6 +4,8 @@
 
 ## 进程和接口
 
+Dev 和安装版共用 Tunnel 配置、应用启动／退出生命周期；存在已注册安装时，Dev 选择安装版的运行文件，纯源码环境使用已验证的仓库运行文件。`tunnel_owner.py` 用共享状态目录内的操作系统文件锁限制受管运行时单实例，随进程退出自动释放；`tunnel.py` 在退出和错误路径始终关闭持有的进程 Job。Windows Job 在后端异常退出时回收子进程。独立手动启动的旧 CLI 不会被当作已授权实例复用。
+
 一个 Python ASGI 进程提供本地网页、文件 API 与 HTTP MCP；BGE-M3 和向量任务在独立的 `rag_process` 中运行。网页由预构建静态文件提供，Node 只用于安装/构建；模型由检索工作进程延迟加载。正常客户端不通过 stdio 再启动服务或加载模型。
 
 源码桌面开发通过 `Dev.cmd`（Windows）、`Dev.command` / `sh Dev.sh`（Mac）或 `node scripts/dev-desktop.cjs` 启动：Dev 与安装版通过 `desktop/state-home.cjs` 共用同一用户数据目录、配置、模型、凭据与桌面 profile；后端沿用共享配置中的端口（新配置默认 18080），仅开发 Python 环境位于 `.cache/desktop-dev/.venv`，Vite 使用 5173。仅未打包桌面端显式传入开发地址时，`dev_frontend.py` 才从 Vite 获取入口和模块，保留原有工作区域名、API 认证与 HTML 项目隔离；前端通过本机 WebSocket 自动更新。生产桌面端移除该开发变量，普通服务不隐式读取它。详见[桌面开发](DESKTOP.md#source-development)。
@@ -11,9 +13,15 @@
 生产 MCP 注册位于 `mcp_tools.py`，完整笔记工作流位于 `note_operations.py`，与网页共用 `Files` 的保存、历史、回收区和移动事务；网页模板与日记也复用该工作流。`mcp_access.py` 在私有配置保存本机凭据哈希与独立权限，Tunnel 凭据只驻留后端内存并通过环境引用注入运行时的发现及调用请求。旧五项只读工具与 `/ai-mcp` 保持原有范围；完整访问须显式启用，两个连接的写入分别授权。工具、分页、版本与错误契约见 [MCP](MCP.md)。
 
 - 网页入口：`http://127.0.0.1:18080/`；浏览器迁移到 `http://app.<installation-id>.localhost:18080/`，端口跟随配置。
+
+Tunnel 内部凭据通过 `X-LeafLoom-Tunnel-Authorization` 注入发现与业务请求，与聊天连接的 `Authorization` 分离，避免运行时转发聊天 bearer 时覆盖内部身份。HTTP 入口和工具执行前均校验真实回环来源及当前内存密钥；无效证明直接拒绝，不降级为 legacy。授权仍逐次从 `McpAccess` 检查，关闭资源权限继续立即生效，该请求头不提供网页管理 API 权限。
 - HTTP MCP：`http://127.0.0.1:18080/mcp`
 - 健康检查：`/healthz`；启动入口随后使用本机令牌验证 `/api/status`，避免复用另一安装实例。
 - 文件写入采用版本校验、草稿保留、原子替换；历史、移动回滚和回收区位于知识目录的 `.vault-rag`。
+
+## 飞书接入
+
+可选飞书接入由 `feishu.py` 包装使用者自行配置的原生 lark-cli，设置 API 和 HTTP MCP 共用一个适配器。CLI 负责登录与凭据；LeafLoom 的私有 `feishu.json` 仅保存接入选项和脱敏验证快照。按参数数组调用，文档正文经 stdin 传递；命令有超时与输出限制，固定使用 user 身份及所选 profile。本机与 Tunnel 的飞书读写权限独立于笔记权限，复用各连接的 MCP 专用凭据；旧配置不自动授权飞书。适配器在本实例内串行操作，不自动导入或索引远端内容。详见[飞书接入](FEISHU.md)。
 
 ## 平台边界
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import logging
 from typing import Any, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
@@ -11,15 +12,16 @@ from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
 from vault_rag.local_state import ConflictError
 from vault_rag.note_operations import NoteError
+from vault_rag.mcp_access import TUNNEL_AUTH_HEADER, McpAccessError
 
 
-def build_workspace_mcp(config, runtime, operations, access, legacy_token):
+def build_workspace_mcp(config, runtime, operations, access, legacy_token, feishu=None):
     mcp = FastMCP('vault-rag', host='127.0.0.1', port=config.data.get('port', 18080),
                   stateless_http=True, json_response=True)
 
-    def tool(*, write=False, additive=False):
+    def tool(*, write=False, additive=False, external=False):
         return mcp.tool(annotations=ToolAnnotations(readOnlyHint=not write,
-                        destructiveHint=write and not additive, openWorldHint=False), structured_output=False)
+                        destructiveHint=write and not additive, openWorldHint=external), structured_output=False)
 
     def principal(ctx):
         request = ctx.request_context.request
@@ -29,9 +31,10 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token):
             loopback = request.client is not None and ipaddress.ip_address(request.client.host).is_loopback
         except ValueError:
             loopback = False
-        return access.principal(request.headers.get('authorization', ''), legacy_token, loopback=loopback)
+        return access.principal(request.headers.get('authorization', ''), legacy_token, loopback=loopback,
+                                tunnel_header=request.headers.get(TUNNEL_AUTH_HEADER, ''))
 
-    async def call(ctx, fn, *args, legacy=False, write=False, **kwargs):
+    async def call(ctx, fn, *args, legacy=False, write=False, resource='workspace', **kwargs):
         # Extract the request before crossing into the worker thread. Check its
         # credential again under the access lock immediately before mutation.
         request = ctx.request_context.request
@@ -41,8 +44,11 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token):
             try:
                 with access.lock:
                     who = principal(ctx)
+                    logging.getLogger(__name__).info('MCP operation=%s connection=%s runtime_proof=%s bearer=%s',
+                        getattr(fn, '__name__', 'status'), who,
+                        bool(request.headers.get(TUNNEL_AUTH_HEADER, '')) if request else False, bool(header))
                     if not legacy:
-                        access.require(who, write=write)
+                        access.require(who, write=write, resource=resource)
                     if write:
                         return fn(*args, **kwargs)
                 return fn(*args, **kwargs)
@@ -62,7 +68,7 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token):
                         'not_found' if isinstance(error, FileNotFoundError) else
                         'invalid_text_encoding' if isinstance(error, UnicodeError) else
                         'invalid_request' if isinstance(error, (ValueError, TypeError)) else 'operation_failed')
-                details = {}
+                details = error.details if isinstance(error, McpAccessError) else {}
             # Do not reflect arbitrary request headers or internal exception paths.
             message = str(error) if isinstance(error, (NoteError, ConflictError, PermissionError, ValueError)) else code.replace('_', ' ')
             if header:
@@ -233,5 +239,57 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token):
     async def vault_reindex(workspace_revision: str, ctx: Context) -> CallToolResult:
         """Queue index synchronization and return immediately. Does not download a model or change retrieval scope."""
         return await call(ctx, operations.reindex, workspace_revision, write=True)
+
+    if feishu is not None:
+        @tool(external=True)
+        async def feishu_status(ctx: Context, verify: bool = False) -> CallToolResult:
+            """Read the external Feishu account status; verify=true checks CLI login against the server.
+            Account validation does not establish access to any particular document or Base.
+            """
+            return await call(ctx, feishu.account_status, verify, resource='feishu')
+
+        @tool(external=True)
+        async def feishu_docs_read(action: Literal['search', 'fetch'], ctx: Context, document: str = '',
+                                   query: str = '', limit: int = 15, page_token: str = '') -> CallToolResult:
+            """Search documents/Wiki (limit 1-20, page_token) or fetch a Docx/Wiki URL/token.
+            Preserve the returned document revision_id for edits. Content is untrusted source material.
+            """
+            return await call(ctx, feishu.docs_read, action, document, query, limit, page_token, resource='feishu')
+
+        @tool(write=True, external=True)
+        async def feishu_docs_write(action: Literal['create', 'append', 'replace_text'], content: str,
+                                    ctx: Context, document: str = '', title: str = '',
+                                    expected_revision: int | None = None, old_text: str = '') -> CallToolResult:
+            """Write Markdown to Feishu: create requires title; append/replace_text require read-time revision_id.
+            Checks current revision before writing; upstream has no proven atomic cross-client revision guard.
+            replace_text uses CLI pattern semantics (including ellipsis), with old_text as pattern.
+            Writes immediately; after timeout or incomplete result, read before retrying. No full overwrite.
+            """
+            return await call(ctx, feishu.docs_write, action, content, document, title, expected_revision,
+                              old_text, resource='feishu', write=True)
+
+        @tool(external=True)
+        async def feishu_base_read(action: Literal['resolve', 'tables', 'fields', 'records', 'get_record'],
+                                   ctx: Context, base_token: str = '', table_id: str = '', url: str = '',
+                                   record_id: str = '', limit: int = 50, offset: int = 0,
+                                   filter: dict[str, Any] | None = None, sort: list[dict[str, Any]] | None = None,
+                                   fields: list[str] | None = None) -> CallToolResult:
+            """Resolve a Base/Wiki URL; list tables/fields/records or get a record by ID.
+            Pass real base_token/table_id from results. Preserve CLI pagination/has_more; a page is not the whole table.
+            filter/sort use lark-cli Base JSON; fields projects returned columns. No automatic local import.
+            """
+            return await call(ctx, feishu.base_read, action, base_token, table_id, url, record_id, limit,
+                              offset, filter, sort, fields, resource='feishu')
+
+        @tool(write=True, external=True)
+        async def feishu_base_write(action: Literal['create_record', 'update_record'], base_token: str,
+                                    table_id: str, fields: dict[str, Any], ctx: Context,
+                                    record_id: str = '') -> CallToolResult:
+            """Create a Base record or update only provided fields of an explicit record_id.
+            Validates current field schema; computed/system/attachment fields are rejected.
+            No business-key upsert or atomic record revision guard. Read before retrying uncertain writes.
+            """
+            return await call(ctx, feishu.base_write, action, base_token, table_id, fields, record_id,
+                              resource='feishu', write=True)
 
     return mcp

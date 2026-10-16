@@ -7,9 +7,9 @@ proposal workflow.
 
 ## Enable access
 
-In **Settings → AI connections → Full note access (MCP)**, enable local access and
+In **Settings → AI connections → MCP access permissions**, enable local note access and
 copy the generated configuration into your client. This dedicated credential is
-shown once; regenerating or disabling it revokes the previous credential. The
+shown once; regenerating it or disabling all resource scopes revokes the previous credential. The
 saved access file contains only its hash. For Codex, use the configuration's URL
 and put its Authorization header in `http_headers`; Cursor/Claude use `headers`
 (Claude also uses `type: http`). Shared examples must use placeholders.
@@ -21,6 +21,8 @@ updating LeafLoom. Both connections start with write access disabled. Their
 separate write switches allow direct saves, with history and recoverable trash.
 The MCP credentials cannot authenticate browser management APIs. Bad credentials
 are rejected even from loopback; they never fall back to anonymous access.
+
+The owned Tunnel runtime sends its in-memory credential in `X-LeafLoom-Tunnel-Authorization`, independently of chat-specific `Authorization`. This prevents connector bearer headers from overriding the runtime credential and changing permissions between conversations. Both the HTTP boundary and each tool validate the proof against the current secret and actual loopback peer; invalid or revoked proofs are rejected without legacy fallback. Resource/write grants remain checked on every operation. This header does not authenticate browser APIs.
 
 Full workspace access includes Markdown, TXT and HTML/HTM throughout the connected
 folder, including archives and unselected notes. Hidden/protected directories,
@@ -40,6 +42,17 @@ Markdown/TXT; neither full access nor saving a note expands that selection.
 | Markdown relationships | `vault_links`, `vault_graph` |
 | Templates and diary | `vault_list_templates`, `vault_daily_note` |
 | Synchronize | `vault_reindex` |
+| Feishu account | `feishu_status` |
+| Feishu documents | `feishu_docs_read`, `feishu_docs_write` |
+| Feishu Base records | `feishu_base_read`, `feishu_base_write` |
+
+The current surface contains 28 tools: the original 23 note tools and five optional
+Feishu tools. Configure the external CLI in **Settings → AI connections → Feishu / Lark**,
+then grant Feishu reading/writing independently for local and Tunnel connections.
+These scopes share each connection's dedicated credential; disabling note access does
+not revoke separately granted Feishu access. Legacy clients gain no Feishu privileges.
+See [Feishu setup and tool contract](FEISHU.md). Historical validation counts below
+refer to the builds in which they were recorded.
 
 `vault_index_status` adds `workspace_revision`, supported formats and the caller's
 `capabilities`. `vault_get_note` preserves its retrieval-scoped meaning; use

@@ -22,6 +22,7 @@
 - [Folder organization and indexing scope](VAULT_ORGANIZATION.md)
 - [AI assistant implementation](AI_ASSISTANT.md)
 - [Complete MCP tools, credentials and note workflows](MCP.md)
+- [Feishu / Lark connection, CLI ownership and MCP tools](FEISHU.md)
 - [Local access and privacy boundaries](SECURITY.md)
 - [Architecture and workflow](ARCHITECTURE.md)
 - [Screenshots and public media](MEDIA.md)
@@ -33,6 +34,7 @@ These records describe particular builds and environments. Use the current user 
 以下记录对应特定版本和环境；日常操作以当前使用指南为准，历史结果不代表后续版本已完成同样验收。
 
 - [HTML project checks and browser CI](HTML_PROJECTS.md#targeted-validation)
+- [Feishu Windows Dev settings and live document/Base acceptance](FEISHU_VALIDATION.md)
 - [Desktop acceptance](DESKTOP_VALIDATION.md)
 - [ChatGPT Tunnel acceptance](TUNNEL_VALIDATION.md)
 - [Installer acceptance](INSTALL_VALIDATION.md)

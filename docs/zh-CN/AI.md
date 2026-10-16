@@ -18,7 +18,7 @@
 
 ## 通过 MCP 连接其他客户端
 
-打开 **设置 → AI 连接 → 完整笔记访问（MCP）**，启用本机 AI 读取并复制生成的连接配置。专用凭据仅显示一次。Codex 使用 `http_headers.Authorization`，Cursor 使用 `headers.Authorization`，Claude Code 使用 `type: http` 和 `headers.Authorization`。重新生成或关闭访问后旧凭据立即失效，请勿共享配置。
+打开 **设置 → AI 连接 → MCP 访问权限**，启用本机 AI 读取并复制生成的连接配置。专用凭据仅显示一次。Codex 使用 `http_headers.Authorization`，Cursor 使用 `headers.Authorization`，Claude Code 使用 `type: http` 和 `headers.Authorization`。重新生成凭据或关闭全部资源权限后旧凭据立即失效，请勿共享配置。
 
 需要直接保存时，另行开启 **允许本机 AI 修改笔记**。ChatGPT 沿用已有 Tunnel，分别开启它的“读取全部笔记”和“修改笔记”开关；权限变更后自动重连，请在客户端刷新工具列表。两种连接默认都关闭写入。
 

@@ -16,6 +16,7 @@ export type SettingsLocation={section:SettingsSection,path?:string,targetId?:str
 export type SettingsResult={path:string,directory?:boolean,edit?:boolean,cursor?:number};
 export const settingsEntries:{section:SettingsSection,id:string,title:string,description:string}[]=[
  {section:'connection',id:'mcp',get title(){return t('mcp.title');},get description(){return t('mcp.scope');}},
+ {section:'connection',id:'feishu',get title(){return t('feishu.title');},get description(){return t('feishu.description');}},
  {section:'connection',id:'tunnel',get title(){return t('tunnel.title');},get description(){return t('tunnel.search');}},
  {section:'general',id:'root',get title(){return t("关联目录");},get description(){return t("选择或切换本地知识库文件夹");}},
  {section:'general',id:'homepage',get title(){return t("知识库首页");},get description(){return t("默认首页文件路径");}},
