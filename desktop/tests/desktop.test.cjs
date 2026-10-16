@@ -66,3 +66,25 @@ test('a failed spawn closes cleanly and can be retried', async () => {
     assert.equal(backend.child, null); await backend.stop();
   } finally {fs.rmSync(home, {recursive: true, force: true});}
 });
+
+test('the backend only inherits the dev frontend when explicitly opted in', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'LeafLoom-dev-'));
+  const previous = process.env.LEAFLOOM_DEV_SERVER;
+  process.env.LEAFLOOM_DEV_SERVER = 'http://untrusted.example:5173';
+  try {
+    for (const devServer of [undefined, 'http://127.0.0.1:5173']) {
+      let options;
+      const child = new EventEmitter(); child.stdin = new PassThrough(); child.stdout = new PassThrough();
+      child.stdin.on('data', () => child.emit('close', 0, null));
+      const backend = new Backend({python: '/private/python', home, devServer,
+        spawnProcess: (_, __, value) => {options = value; return child;}});
+      backend.start();
+      assert.equal(options.env.LEAFLOOM_DEV_SERVER, devServer);
+      await backend.stop();
+    }
+  } finally {
+    if (previous === undefined) delete process.env.LEAFLOOM_DEV_SERVER;
+    else process.env.LEAFLOOM_DEV_SERVER = previous;
+    fs.rmSync(home, {recursive: true, force: true});
+  }
+});

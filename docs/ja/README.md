@@ -123,8 +123,8 @@ cd LeafLoom
 ```
 
 1. リポジトリをダウンロードまたはクローンし、書き込み可能なフォルダーに展開します。
-2. Windows 10/11 x64：`Start.cmd` をダブルクリック。 macOS 14 以降の Apple Silicon：リポジトリで `sh Start.sh` を実行。
-3. 初回は専用の実行環境と依存関係を準備して画面を開きます。検索モデルは必要に応じて設定から準備します。Python、Node、Ollama の事前インストールは不要です。
+2. Node 22+（npm を含む）と uv を用意します。Windows 10/11 x64：`Dev.cmd` をダブルクリック。macOS 14+ Apple Silicon：`Dev.command` をダブルクリックするか `sh Dev.sh` を実行。
+3. 初回は専用 Python 環境と依存関係を準備し、フロントエンドの自動更新が有効なソース版デスクトップを開きます。開発設定は `.cache/desktop-dev/` に保存します。検索モデルは設定から必要に応じて準備します。
 4. 言語を選び、架空のデモを試すか自分のフォルダーを接続して、検索範囲を明示的に選びます。
 
 </details>
@@ -147,7 +147,7 @@ cd LeafLoom
 
 **デスクトップアプリ：** LeafLoom を終了し、[Releases](https://github.com/DJ-Huang/LeafLoom/releases/latest) から対応する最新版をインストールして、再び開きます。
 
-**ソースからのインストール：** リポジトリの更新後に `Install.cmd` または `sh Install.sh` を実行してサービスを再起動します。ブラウザーの更新だけではサーバーは更新されません。
+**ソース開発：** リポジトリの更新後は Dev を再起動します。フロントエンドは自動更新されます。Python/Electron の変更後は Dev のトレイ／メニューバーから終了して再起動してください。インストール済みアプリは自身のショートカットとメニューで管理します。
 
 [Contributing](../../CONTRIBUTING.md) · [Changelog](../../CHANGELOG.md) · [Third-party notices](../../THIRD_PARTY_NOTICES.md) · [Media](../../docs/MEDIA.md)
 

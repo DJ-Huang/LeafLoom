@@ -4,6 +4,10 @@
 
 [全部文档](../README.md)
 
+**开发者：** 在源码目录中，Windows 双击 `Dev.cmd`；macOS 14+ Apple 芯片双击 `Dev.command`，也可在终端运行 `sh Dev.sh`。若下载或复制后丢失执行权限，先运行一次 `chmod +x Dev.command Dev.sh`。两端也可运行 `node scripts/dev-desktop.cjs`。需要 Node 22+ 和 uv，首次启动自动安装依赖。桌面端直接运行源码，前端修改后自动更新，无需手动构建。开发配置独立保存在 `.cache/desktop-dev/`，后端默认端口 18081、Vite 端口 5173；可先用示例或虚构目录。修改 Python/Electron 后从托盘退出并重新启动。详见[源码开发](../DESKTOP.md#source-development)。
+
+旧仓库启动入口已移除。安装版通过自己的快捷方式和菜单管理；开发时使用 Dev，通过开发实例自己的托盘／菜单栏退出，或在启动终端按 Ctrl+C。
+
 ## 安装与打开
 
 支持 Windows 10/11 x64，以及 macOS 14+ Apple 芯片。桌面安装器暂不支持 Linux、Intel Mac 和 Windows ARM。

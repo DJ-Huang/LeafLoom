@@ -7,8 +7,8 @@ const path = require('node:path');
 const {localUrl} = require('./policy.cjs');
 
 class Backend extends EventEmitter {
-  constructor({python, home, appPath, spawnProcess = spawn}) {
-    super(); this.python = python; this.home = home; this.appPath = appPath;
+  constructor({python, home, appPath, devServer, spawnProcess = spawn}) {
+    super(); this.python = python; this.home = home; this.appPath = appPath; this.devServer = devServer;
     this.child = null; this.stopping = false; this.ready = null;
     this.spawnProcess = spawnProcess;
   }
@@ -19,6 +19,8 @@ class Backend extends EventEmitter {
     const log = fs.openSync(path.join(logs, 'desktop-backend.log'), 'a');
     const env = {...process.env, VAULT_RAG_HOME: this.home, PYTHONUTF8: '1', PYTHONUNBUFFERED: '1', PYTHONDONTWRITEBYTECODE: '1', TOKENIZERS_PARALLELISM: 'false', NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost'};
     for (const key of ['PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV', 'CONDA_PREFIX']) delete env[key];
+    delete env.LEAFLOOM_DEV_SERVER;
+    if (this.devServer) env.LEAFLOOM_DEV_SERVER = this.devServer;
     // Finder has a minimal PATH; include user CLI installs without invoking a shell.
     const home = require('node:os').homedir();
     const additions = process.platform === 'win32'

@@ -4,6 +4,10 @@
 
 [ドキュメント一覧](../README.md)
 
+**開発者向け：** ソースのルートで、Windows は `Dev.cmd`、macOS 14+ Apple Silicon は `Dev.command` をダブルクリックします。Mac の Terminal では `sh Dev.sh` も使えます。コピーやダウンロードで実行権限が失われた場合は、最初に `chmod +x Dev.command Dev.sh` を実行してください。両環境で `node scripts/dev-desktop.cjs` も利用できます。Node 22+ と uv が必要で、初回は依存関係を自動インストールします。デスクトップをソースから起動し、フロントエンドの変更を自動反映します。開発設定は `.cache/desktop-dev/` に分離され、バックエンドは既定で 18081、Vite は 5173 を使用します。デモや架空のフォルダーで試してください。Python/Electron の変更後はトレイから終了して再起動します。[ソース開発](../DESKTOP.md#source-development)を参照してください。
+
+従来のリポジトリ起動スクリプトは削除しました。インストール済みアプリは自身のショートカットとメニューで管理します。開発中は Dev を使い、そのトレイ／メニューバーから終了するか、起動した Terminal で Ctrl+C を押してください。
+
 ## インストールと起動
 
 Windows 10/11 x64 と、macOS 14 以降の Apple Silicon に対応しています。デスクトップインストーラーは Linux、Intel Mac、Windows ARM に未対応です。

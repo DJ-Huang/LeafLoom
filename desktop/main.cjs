@@ -176,7 +176,7 @@ async function startBackend() {
       ? path.join(process.resourcesPath, 'backend', 'python', process.platform === 'win32' ? 'python.exe' : 'bin/python3')
       : process.env.LEAFLOOM_PYTHON;
     if (!python || !fs.existsSync(python)) throw new Error('Private Python is missing. Build the backend, or set LEAFLOOM_PYTHON to its interpreter.');
-    backend = new Backend({python, home});
+    backend = new Backend({python, home, devServer: app.isPackaged ? undefined : process.env.LEAFLOOM_DEV_SERVER});
     backend.on('failure', fail);
     backend.on('exit', result => {
       tunnelBackendReady = false;

@@ -57,9 +57,19 @@ signing and application notarization; test Gatekeeper on a native Mac release.
 - Login startup is off for new users. Desktop settings and the tray can change it.
   Migration preserves an existing installation's login preference.
 
-The source launchers remain available for development. Once a desktop application
-has registered successfully, Start/Stop/Install forward to it. If the executable
-has been removed, source installation remains available.
+Manage the installed app through its own shortcuts, tray/menu-bar menu and installer. The old repository launchers have been removed; source development uses Dev.
+
+## Source development
+
+Install Node 22+ (with npm) and uv, then double-click **Dev.cmd** on Windows or **Dev.command** on macOS 14+ Apple Silicon, at the repository root. On Mac, you can also run `sh Dev.sh` in Terminal; the Mac entry points include standard Homebrew and uv user locations in PATH. If a downloaded/copied checkout loses execute permissions, run `chmod +x Dev.command Dev.sh` once before double-clicking. Alternatively, run `node scripts/dev-desktop.cjs` on either supported platform. No installer build is required. The first launch needs network access to install the locked Python dependencies and missing npm dependencies; subsequent launches reuse them. After npm lockfile changes, run `npm ci --prefix web` / `npm ci --prefix desktop` for the affected directory.
+
+Use **Dev** for source desktop work with hot updates. Stop Dev through its own tray/menu-bar **Quit** or Ctrl+C in its terminal. Installed applications manage their own startup, shutdown and updates.
+
+The launcher synchronizes Python 3.12 into `.cache/desktop-dev/.venv`, verifies that Python imports this checkout, starts Vite on `127.0.0.1:5173`, then starts Electron from `desktop/`. It uses separate development settings in `.cache/desktop-dev/` and backend port **18081** by default. It does not use the installed application's settings or the repository's `.venv`. The development workspace initially has no connected folder; try the demo or connect a fictional folder. Connecting a real folder still edits the original files.
+
+React, TypeScript and CSS edits update through Vite HMR; some edits trigger a page reload. Save pending work before changes that require reloads. Python and Electron main/preload changes require **Quit** from the tray/menu bar, then relaunch. Closing the window leaves it running in the tray. Quit also stops the owned backend and Vite; Ctrl+C requests the same normal quit. If an unsaved-draft prompt appears, resolve it in the desktop window. Do not force-close the terminal while work is pending. A busy Vite/backend port is reported instead of attaching to another service; stop the previous development session first.
+
+The workspace retains its `app.<installation-id>.localhost` origin. Only an unpackaged Electron run forwards `LEAFLOOM_DEV_SERVER` to its private sidecar. In this explicit mode, the backend fetches Vite's index and module assets without forwarding cookies or tokens; API authentication, CSRF checks and HTML-project routing remain in the backend. Development CSP permits the React preamble and the loopback HMR WebSocket. Packaged runs strip the development variable, and the regular web service never enables it implicitly.
 
 ## Build on the target OS
 

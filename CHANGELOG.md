@@ -6,6 +6,10 @@
 
 - Strengthen ignore rules for private configuration, credentials and local state; anonymize personal paths and private commit emails in repository history while preserving public author names.
 
+- Remove the old repository launchers; manage installed apps directly and use Dev for source development.
+
+- Add `Dev.cmd` (Windows) and `Dev.command` / `Dev.sh` (Mac) for source desktop development with automatic frontend updates, a dedicated Python environment and separate development settings.
+
 - Expand HTTP MCP to 23 tools for full-folder note discovery, Markdown/TXT/HTML editing, properties, folders, link-aware moves, recoverable deletion, history, templates, daily notes and index synchronization.
 - Add separate local/ChatGPT MCP credentials and write switches, defaulting to read-only; preserve legacy retrieval scope and the internal assistant's proposal workflow.
 - Check workspace/file/operation versions, preserve BOM and line endings, and retain external edits during failed move rollback.

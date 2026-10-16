@@ -51,7 +51,7 @@ def run():
         try:
             autostart = migration.begin()
             with instance_lock(config) as native:
-                app = create_app(config)
+                app = create_app(config, dev_server=os.environ.get('LEAFLOOM_DEV_SERVER'))
                 options = {'port': config.data.get('port', 18080)}
                 if sys.platform == 'win32':
                     options['loop'] = 'asyncio:SelectorEventLoop'
