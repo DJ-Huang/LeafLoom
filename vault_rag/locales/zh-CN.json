@@ -986,5 +986,12 @@
   "site.faq_question": "不使用 AI，也能正常使用吗？",
   "site.faq_answer": "可以。阅读、编辑、知识图谱和关键词检索不依赖模型。完成依赖准备后可以离线使用；需要本地语义检索时再准备 BGE-M3。外部 AI 与 ChatGPT 则需要各自的账号、权限和网络。",
   "site.footer_line": "让知识留在本地，让想法自由生长。",
-  "site.feedback": "反馈与建议"
+  "site.feedback": "反馈与建议",
+  "site.nav_about": "关于",
+  "site.about_title": "关于作者 · LeafLoom",
+  "site.about_heading": "你好，我是 DJ。",
+  "site.about_intro": "我是 LeafLoom 的作者。欢迎通过 GitHub 和 X 了解我的项目与近况。",
+  "site.about_github": "查看我的开源项目和代码。",
+  "site.about_x": "查看我的分享与最新动态。",
+  "site.about_back": "返回 LeafLoom 首页"
 }
