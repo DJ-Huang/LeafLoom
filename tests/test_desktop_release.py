@@ -102,7 +102,8 @@ class DesktopReleaseTests(unittest.TestCase):
              patch.object(release, "gh_json", side_effect=api), \
              patch.object(release.subprocess, "run") as upload, \
              patch.object(release, "verify_assets") as verify, \
-             patch.dict(os.environ, {"GITHUB_RUN_ID": "456", "GITHUB_SHA": "fixture-commit"}):
+             patch.dict(os.environ, {"GITHUB_RUN_ID": "456", "GITHUB_SHA": "fixture-commit",
+                                     "GITHUB_STEP_SUMMARY": str(self.root / "summary.md")}):
             release.create_draft("example/repo", "v1.2.3", self.root)
         return calls, upload, verify
 
