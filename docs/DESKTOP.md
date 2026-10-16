@@ -52,14 +52,45 @@ signing and application notarization; test Gatekeeper on a native Mac release.
   chunks and vectors are reused. Model and vector work run in a private serial
   process; the first semantic search can wait for model loading while reading
   and editing remain available. Quit also stops this owned process.
-- Updates are manual: quit, install the new package over the old one, and reopen.
+- Open **Settings → General → App updates** to check the current/latest stable
+  versions. **Download and install** shows percentage and received/total bytes,
+  verifies SHA-256 and quits through the normal draft-protection flow before
+  opening the Windows installer or Mac DMG. Complete the wizard (Mac: drag to
+  Applications), then reopen. Canceling quit leaves **Continue installation**.
+  Failed checks/downloads can be retried; Dev only checks versions.
   App upgrade/uninstall keeps note folders, settings, indexes and model files.
 - Login startup is off for new users. Desktop settings and the tray can change it.
   Migration preserves an existing installation's login preference.
 
-The source launchers remain available for development. Once a desktop application
-has registered successfully, Start/Stop/Install forward to it. If the executable
-has been removed, source installation remains available.
+Manage the installed app through its own shortcuts, tray/menu-bar menu and installer. The old repository launchers have been removed; source development uses Dev.
+
+## Update implementation
+
+`desktop/updater.cjs` queries the public GitHub latest stable release on explicit
+request. It selects only the exact platform/architecture asset from this
+repository and requires its GitHub SHA-256 digest (or the exact filename in
+`SHA256SUMS.txt`). Downloads stream into a private temporary directory beneath
+`<state-home>/desktop-updates/`; size/hash mismatches delete the partial download.
+A second hash check precedes installation. Main-process IPC uses the existing
+trusted workspace/main-frame checks; renderers cannot supply download URLs or
+installer paths. Settings polls status, so reopening it restores active progress.
+Development mode never installs release binaries. Windows starts the NSIS wizard;
+macOS opens the DMG for the normal Applications replacement workflow. Neither
+platform silently overwrites a running application. Network access to GitHub is
+required; interrupted application exits require downloading again. Verified
+installers remain in the state directory until removed by the user.
+
+## Source development
+
+Install Node 22+ (with npm) and uv, then double-click **Dev.cmd** on Windows or **Dev.command** on macOS 14+ Apple Silicon, at the repository root. On Mac, you can also run `sh Dev.sh` in Terminal; the Mac entry points include standard Homebrew and uv user locations in PATH. If a downloaded/copied checkout loses execute permissions, run `chmod +x Dev.command Dev.sh` once before double-clicking. Alternatively, run `node scripts/dev-desktop.cjs` on either supported platform. No installer build is required. The first launch needs network access to install the locked Python dependencies and missing npm dependencies; subsequent launches reuse them. After npm lockfile changes, run `npm ci --prefix web` / `npm ci --prefix desktop` for the affected directory.
+
+Use **Dev** for source desktop work with hot updates. Stop Dev through its own tray/menu-bar **Quit** or Ctrl+C in its terminal. Installed applications manage their own startup, shutdown and updates.
+
+The launcher synchronizes Python 3.12 into `.cache/desktop-dev/.venv`, verifies that Python imports this checkout, starts Vite on `127.0.0.1:5173`, then starts Electron from `desktop/`. Dev and the installed app use the same data-directory resolver: `%LOCALAPPDATA%/VaultRag` on Windows or `~/Library/Application Support/VaultRag` on Mac, including a remembered custom installed location or explicit `--home` / `VAULT_RAG_HOME`. Settings, models, AI/MCP credentials, desktop profile/drafts and the configured backend port are shared; a new configuration defaults to **18080**. Only dependencies and Vite remain development-specific. Quit the running app from the tray before switching modes; the shared single-instance lock prevents a second service. For isolated testing, explicitly set a disposable `VAULT_RAG_HOME`. Normal Dev uses your actual app data.
+
+React, TypeScript and CSS edits update through Vite HMR; some edits trigger a page reload. Save pending work before changes that require reloads. Python and Electron main/preload changes require **Quit** from the tray/menu bar, then relaunch. Closing the window leaves it running in the tray. Quit also stops the owned backend and Vite; Ctrl+C requests the same normal quit. If an unsaved-draft prompt appears, resolve it in the desktop window. Do not force-close the terminal while work is pending. A busy Vite/backend port is reported instead of attaching to another service. If another desktop instance is already running, the existing window is activated; quit it before starting a different mode.
+
+The workspace retains its `app.<installation-id>.localhost` origin. Only an unpackaged Electron run forwards `LEAFLOOM_DEV_SERVER` to its private sidecar. In this explicit mode, the backend fetches Vite's index and module assets without forwarding cookies or tokens; API authentication, CSRF checks and HTML-project routing remain in the backend. Development CSP permits the React preamble and the loopback HMR WebSocket. Packaged runs strip the development variable, and the regular web service never enables it implicitly.
 
 ## Build on the target OS
 
@@ -111,7 +142,8 @@ must be configured in repository secrets.
 
 No signing credentials are checked into the repository. The workflow fails rather
 than treating a missing certificate as a signed release. App Store submission and
-automatic updates are outside this first version.
+unattended background installation are outside this version; updates are initiated
+explicitly from Settings.
 
 ## Data and migration
 
@@ -122,6 +154,7 @@ The successful state location is remembered in the default state's
 `desktop-current-home.json`, so Finder/login launches retain custom state paths;
 an explicit `--home` or `VAULT_RAG_HOME` still takes precedence. Tests redirect
 this small registration file with `LEAFLOOM_REGISTRATION_HOME`.
+Old `.cache/desktop-dev/` settings are retained for recovery and do not override the installed app's configuration. When the shared data directory has no `models/` directory, Dev copies the old model directory through a staging directory, retaining the source and excluding download caches. Existing model directories are never merged or overwritten.
 Original note folders and `.vault-rag` indexes stay in place. Existing browser-profile drafts
 cannot be imported automatically: save browser edits before moving to desktop.
 

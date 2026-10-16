@@ -125,8 +125,8 @@ cd LeafLoom
 ```
 
 1. Download or clone this repository into a writable local folder.
-2. Windows 10/11 x64: double-click `Start.cmd`. macOS 14+ Apple Silicon: run `sh Start.sh` in the repository.
-3. First launch prepares private runtimes and dependencies, then opens the workspace. The local search model is downloaded when explicitly prepared in settings. No preinstalled Python, Node or Ollama is required.
+2. Install Node 22+ (with npm) and uv. Windows 10/11 x64: double-click `Dev.cmd`. macOS 14+ Apple Silicon: double-click `Dev.command` or run `sh Dev.sh`.
+3. First launch prepares a separate Python environment and dependencies, then opens the source desktop with automatic frontend updates. Dev shares the installed app's user settings, models and data. Only development dependencies stay in `.cache/desktop-dev/.venv`. Quit the running app before switching modes. The local search model is prepared only when requested in settings.
 4. Choose a language, try the fictional demo or connect your folder, then explicitly select what to search.
 
 </details>
@@ -149,7 +149,7 @@ The desktop installer supports the platforms above. This is not cloud sync, univ
 
 **Desktop app:** Quit LeafLoom, install the updated package for your platform from [Releases](https://github.com/DJ-Huang/LeafLoom/releases/latest), then reopen it.
 
-**Source installation:** Update the repository, run `Install.cmd` or `sh Install.sh`, and restart the service. Browser reload alone does not update the server.
+**Source development:** Update the repository and relaunch Dev. Frontend edits update automatically; Python/Electron edits require quitting Dev from its tray/menu-bar menu and relaunching. Installed apps are managed through their own shortcuts and menus.
 
 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Third-party notices](THIRD_PARTY_NOTICES.md) · [Media](docs/MEDIA.md)
 

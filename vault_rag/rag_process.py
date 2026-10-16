@@ -74,7 +74,9 @@ class RagProcess:
         try:
             if operation in ('dense','prepare') and any(op=='build' for _,op,_ in self.pending.values()):self.cancel()
             if not self.send({'type':'request','id':identifier,'operation':operation,'config':dict(self.config.data),**args}):raise RuntimeError('RAG worker unavailable')
-            value=pending.get(timeout=600)
+            # Large first-time downloads can exceed ten minutes. The worker's
+            # status stream and exit handling remain live while preparation waits.
+            value=pending.get(timeout=None if operation=='prepare' else 600)
             if value.get('cancelled'):raise RagCancelled('RAG task cancelled')
             if value.get('error'):raise RuntimeError(value['error'])
             return value.get('result')
@@ -112,17 +114,38 @@ class RemoteModel:
     def __init__(self,config,process):
         from vault_rag.embedded_model import EmbeddedModel
         self.available=EmbeddedModel(config.directory);self.process=process
-        self.download_state=None;self.error=None
+        self.download_state=None;self.error=None;self.preparation=None;self.prepare_lock=threading.Lock();self.preparing=False
     @property
     def ready(self):return self.available.status()['prepared']
     @property
     def fingerprint(self):return self.available.status()['fingerprint']
     def refresh_status(self):self.available.refresh_status();return self.status()
     def status(self):
-        return {**self.available.status(),**self.process.model_status,'download':self.process.model_status.get('download') or self.download_state,'error':self.process.model_status.get('error') or self.error}
-    def prepare(self):
-        self.download_state='下载模型中'
-        try:return self.process.request('prepare')
-        except Exception as error:self.error=str(error);raise
-        finally:self.download_state=None;self.refresh_status()
+        worker=self.process.model_status
+        progress=worker.get('preparation')
+        local=self.preparation
+        current=not local or progress and progress.get('started_at',0)>=local['started_at']
+        return {**self.available.status(),**worker,'preparation':progress if current and not self.error else local,
+                'download':self.download_state or worker.get('download'),'error':self.error or (worker.get('error') if current else None)}
+    def begin_prepare(self):
+        with self.prepare_lock:
+            if self.preparing:return False
+            self.preparing=True;self.error=None;self.download_state='下载模型中'
+            self.preparation={'state':'starting','started_at':time.time(),'updated_at':time.time()}
+            return True
+    def prepare(self,reserved=False):
+        if not reserved and not self.begin_prepare():return self.status()
+        try:
+            result=self.process.request('prepare')
+            self.process.model_status=result
+            return result
+        except Exception as error:
+            self.error=str(error)
+            progress=self.process.model_status.get('preparation') or {}
+            if progress.get('started_at',0)<self.preparation['started_at']:progress=self.preparation
+            self.preparation={**progress,'failed_stage':progress.get('failed_stage',progress['state']),'state':'failed','updated_at':time.time()}
+            raise
+        finally:
+            self.download_state=None;self.refresh_status()
+            with self.prepare_lock:self.preparing=False
     def dense(self,query,directory,paths,limit):return self.process.request('dense',query=query,directory=directory,paths=paths,limit=limit)

@@ -19,6 +19,7 @@ export const settingsEntries:{section:SettingsSection,id:string,title:string,des
  {section:'connection',id:'tunnel',get title(){return t('tunnel.title');},get description(){return t('tunnel.search');}},
  {section:'general',id:'root',get title(){return t("关联目录");},get description(){return t("选择或切换本地知识库文件夹");}},
  {section:'general',id:'homepage',get title(){return t("知识库首页");},get description(){return t("默认首页文件路径");}},
+ {section:'general',id:'app-update',get title(){return t('update.title');},get description(){return t('update.search');}},
  {section:'files',id:'create',get title(){return t("新建笔记与目录");},get description(){return t("创建文件、新建目录、文件夹、目标位置");}},
  {section:'files',id:'upload',get title(){return t("上传文件");},get description(){return t("导入本地文件、附件");}},
  {section:'files',id:'template-create',get title(){return t("从模板新建");},get description(){return t("选择模板创建笔记");}},
@@ -35,6 +36,7 @@ export const settingsEntries:{section:SettingsSection,id:string,title:string,des
 export function searchSettings(query:string){
  const words=query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
  return words.length?settingsEntries.filter(item=>{
+  if(item.id==='app-update'&&!window.leafloomDesktop)return false;
   const section=settingsSections.find(section=>section.id===item.section)!;
   const haystack=[section.title,section.description,item.title,item.description].join(' ').toLocaleLowerCase();
   return words.every(word=>haystack.includes(word));

@@ -2,23 +2,15 @@
 const {app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, nativeImage, screen, session, safeStorage} = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
 const {pathToFileURL} = require('node:url');
 const {Backend} = require('./backend.cjs');
 const {TunnelSettings} = require('./tunnel.cjs');
+const {Updater} = require('./updater.cjs');
 const policy = require('./policy.cjs');
 const {strings, resolve} = require('./strings.cjs');
 
 function readJson(file) {try {return JSON.parse(fs.readFileSync(file, 'utf8'));} catch {return null;}}
-const defaultHome = process.platform === 'win32'
-  ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'VaultRag')
-  : path.join(os.homedir(), 'Library', 'Application Support', 'VaultRag');
-const registrationHome = process.env.LEAFLOOM_REGISTRATION_HOME || defaultHome;
-const registered = readJson(path.join(registrationHome, 'desktop-current-home.json'));
-const savedHome = registered?.schema === 1 && typeof registered.home === 'string' && path.isAbsolute(registered.home) && fs.existsSync(path.join(registered.home, 'desktop-install.json')) ? registered.home : null;
-const homeArgument = process.argv.indexOf('--home');
-if (homeArgument >= 0 && (!process.argv[homeArgument + 1] || !path.isAbsolute(process.argv[homeArgument + 1]))) throw new Error('--home requires an absolute state directory');
-const home = path.resolve((homeArgument >= 0 && process.argv[homeArgument + 1]) || process.env.VAULT_RAG_HOME || savedHome || defaultHome);
+const {home, registrationHome} = require('./state-home.cjs').resolveStateHome();
 fs.mkdirSync(path.join(home, 'desktop-ui'), {recursive: true, mode: 0o700});
 app.setPath('userData', path.join(home, 'desktop-ui'));
 app.setAppUserModelId('com.djhuang.leafloom');
@@ -29,6 +21,16 @@ let window, tray, backend, origin = '', lastOrigin = '', workspaceLoaded = false
 const websiteContents = new Set();
 let startupTimer, closeTimer;
 const tunnel = new TunnelSettings(home, safeStorage);
+const updater = new Updater({current: app.getVersion(), platform: process.platform, arch: process.arch, directory: path.join(home, 'desktop-updates'), packaged: app.isPackaged});
+let pendingInstaller = '';
+async function installUpdate() {
+  if (pendingInstaller || quitPending || quitting || updater.state.phase !== 'ready') return updater.status();
+  try {
+    pendingInstaller = await updater.installer();
+    await requestQuit();
+  } catch (error) {pendingInstaller = ''; updater.fail(error); log(error);}
+  return updater.status();
+}
 let tunnelBackendReady = false;
 function configureTunnel() {
   if (!tunnelBackendReady) {
@@ -133,7 +135,13 @@ function createWindow() {
       // Trigger a second unload with a one-use permission instead of relying on
       // an event that expired while the native dialog was awaiting a response.
       allowDiscard = true; quitPending = true; window.close();
-    }}).catch(error => {quitPending = false; log(error);});
+    } else if (pendingInstaller) {
+      pendingInstaller = ''; updater.state.phase = 'ready';
+    }}).catch(error => {
+      quitPending = false;
+      if (pendingInstaller) {pendingInstaller = ''; updater.state.phase = 'ready';}
+      log(error);
+    });
   });
   window.on('close', event => {
     if (!window.isMaximized() && !window.isMinimized()) atomicJson(path.join(home, 'desktop-window.json'), window.getBounds());
@@ -155,6 +163,16 @@ async function finishQuit() {
   if (quitting) return; quitting = true;
   clearTimeout(startupTimer); clearInterval(closeTimer);
   await backend?.stop();
+  if (pendingInstaller) {
+    const file = pendingInstaller; pendingInstaller = '';
+    try {
+      const error = await shell.openPath(file);
+      if (error) throw new Error('update.error.install');
+    } catch (error) {
+      updater.fail(new Error('update.error.install')); log(error); quitting = false; quitPending = false;
+      showWindow(); await startBackend(); return;
+    }
+  }
   tray?.destroy(); app.quit();
 }
 function fail(error) {
@@ -176,7 +194,7 @@ async function startBackend() {
       ? path.join(process.resourcesPath, 'backend', 'python', process.platform === 'win32' ? 'python.exe' : 'bin/python3')
       : process.env.LEAFLOOM_PYTHON;
     if (!python || !fs.existsSync(python)) throw new Error('Private Python is missing. Build the backend, or set LEAFLOOM_PYTHON to its interpreter.');
-    backend = new Backend({python, home});
+    backend = new Backend({python, home, devServer: app.isPackaged ? undefined : process.env.LEAFLOOM_DEV_SERVER});
     backend.on('failure', fail);
     backend.on('exit', result => {
       tunnelBackendReady = false;
@@ -301,6 +319,13 @@ else {
       'tunnel-disconnect': () => {tunnel.disable(); return configureTunnel();},
       'tunnel-clear': () => {tunnel.clear(); return configureTunnel();},
       info: () => ({version: app.getVersion(), platform: process.platform, openAtLogin: loginSettings().openAtLogin, error: failure, text: text()}),
+      'update-status': () => updater.status(),
+      'update-check': () => updater.check(),
+      'update-download': () => {
+        if (updater.download()) void updater.transfer().then(ok => {if (ok && !quitting && !quitPending) return installUpdate();}).catch(error => {updater.fail(error); log(error);});
+        return updater.status();
+      },
+      'update-install': () => installUpdate(),
       'choose-directory': async () => {const result = await dialog.showOpenDialog(window, {properties: ['openDirectory']}); return result.canceled ? {cancelled: true} : {path: result.filePaths[0]};},
       'open-external': async url => {await shell.openExternal(policy.externalUrl(url));},
       'reveal-file': async relative => {

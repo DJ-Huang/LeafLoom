@@ -10,7 +10,7 @@ from vault_rag.html_preview import HtmlPreviews
 from vault_rag.html_projects import HtmlProjects
 from vault_rag.browser_storage import BrowserStorageMigration, migration_script
 from vault_rag.local_dns import LocalDns
-from vault_rag.platform_support import choose_directory, private_file_mode, is_windows
+from vault_rag.platform_support import choose_directory, open_directory, private_file_mode, is_windows
 from vault_rag.http_cache import conditional_file
 from vault_rag.skill_install import install_skill, skill_status
 from vault_rag.ai_service import AiService
@@ -36,7 +36,9 @@ class StaticCompression:
         app=self.compressed if scope['type']=='http' and not ranged and scope.get('path','').startswith('/assets/') else self.app
         await app(scope,receive,send)
 
-def create_app(config=None,runtime=None,*,start_background=True,static_dir=None):
+def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,dev_server=None):
+    from vault_rag.dev_frontend import DevFrontend
+    dev = DevFrontend(dev_server) if dev_server else None
     config=config or LocalConfig()
     if runtime is None:
         from vault_rag.knowledge import Runtime
@@ -105,7 +107,10 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
             return json_response({'error':'目录信息正在更新，请稍后重试'},503)
         foreground=path.startswith('/api/') and path not in ('/api/events','/api/status','/api/activity')
         if foreground:runtime.foreground_begin()
-        try:response=await call_next(request)
+        try:
+            if dev and request.url.hostname==websites.ui_host and request.method in ('GET','HEAD') and dev.asset(path):
+                response=await dev.response(path,request.url.query)
+            else:response=await call_next(request)
         except ConflictError as e:return json_response({'error':str(e),'error_code':'write_conflict','conflict':True},409)
         except FileNotFoundError as e:return json_response({'error':str(e),'error_code':'not_found'},400)
         except UnicodeDecodeError as e:return json_response({'error':str(e),'error_code':'invalid_text_encoding'},400)
@@ -116,6 +121,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         response.headers['Referrer-Policy']='no-referrer'
         if path.startswith('/api/') and path!='/api/media':response.headers.setdefault('Cache-Control','no-store')
         response.headers.setdefault('Content-Security-Policy',"default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob: http: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'")
+        if dev and request.url.hostname==websites.ui_host:
+            response.headers['Content-Security-Policy']=response.headers['Content-Security-Policy'].replace("script-src 'self'", "script-src 'self' 'unsafe-inline'").replace("connect-src 'self'", "connect-src 'self' " + dev.websocket)
         return response
     @app.get('/healthz')
     async def health():return {'ok':True,'service':'vault-rag'}
@@ -347,11 +354,20 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         runtime.request_index(force=True);return {'ok':True,'state':'已排队'}
     @app.post('/api/model-prepare')
     async def prepare():
-        if runtime.model.download_state=='下载模型中':return {'state':'下载中'}
+        if not runtime.model.begin_prepare():return {'state':'下载中'}
+        runtime.publish('status',status=runtime.status())
         def download():
-            try:runtime.model.prepare();runtime.request_index(force=True)
+            try:runtime.model.prepare(reserved=True);runtime.request_index(force=True)
             except Exception:logging.exception('Model preparation failed')
+            finally:runtime.publish('status',status=runtime.status())
         threading.Thread(target=download,daemon=True,name='model-download').start();return {'state':'模型准备已开始'}
+    @app.post('/api/model-directory/open')
+    async def open_model_directory():
+        # The client cannot select an arbitrary local path through this action.
+        directory=runtime.model.available.path
+        try:await asyncio.to_thread(open_directory,directory)
+        except (OSError,subprocess.SubprocessError) as error:return json_response({'error':str(error)},400)
+        return {'ok':True}
     # The SDK owns /mcp; share its single session manager in the root lifespan.
     app.router.routes.extend(mcp_app.routes)
     app.router.routes.extend(ai_app.routes)
@@ -392,10 +408,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None)
         return json_response(await asyncio.to_thread(local_dns.configure,True))
     @app.get('/')
     async def index(request:Request):
-        if not (static/'index.html').is_file():return HTMLResponse('网页尚未构建，请运行前端构建',status_code=503)
+        if not dev and not (static/'index.html').is_file():return HTMLResponse('网页尚未构建，请运行前端构建',status_code=503)
         if request.url.hostname!=websites.ui_host:
             return storage_migration.page()
-        response=HTMLResponse((static/'index.html').read_text(encoding='utf-8'),headers={'Cache-Control':'no-store'});response.set_cookie('vault_session',token,httponly=True,samesite='strict',max_age=365*86400);return response
+        response=await dev.response('/') if dev else HTMLResponse((static/'index.html').read_text(encoding='utf-8'),headers={'Cache-Control':'no-store'})
+        response.set_cookie('vault_session',token,httponly=True,samesite='strict',max_age=365*86400);return response
     return app
 
 def create_server(app, **options):
