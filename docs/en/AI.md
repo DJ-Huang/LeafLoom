@@ -18,15 +18,15 @@ If the note, draft or saved version changed, regenerate or merge manually. LeafL
 
 ## Connect another AI client through MCP
 
-The local HTTP MCP endpoint is `http://127.0.0.1:18080/mcp`, or the port in your private config. Use a bearer token from the private `auth-token` file. Keep it out of commits, screenshots and shared messages.
+Open **Settings → AI connections → Full note access (MCP)**. Enable local AI reading and copy the generated connection configuration. Its dedicated credential is shown once. Use `http_headers.Authorization` in Codex, `headers.Authorization` in Cursor, and `type: http` plus `headers.Authorization` in Claude Code. Regenerating or disabling access revokes the old credential; keep configurations private.
 
-- Codex: configure `url` and `http_headers.Authorization`.
-- Cursor: configure `url` and `headers.Authorization`.
-- Claude Code: use `type: http`, `url` and `headers.Authorization`.
+Enable **Allow local AI to modify notes** separately for direct saves. For ChatGPT, use the existing Tunnel connection and its separate **read all notes** and **modify notes** switches. Permission changes automatically reconnect the Tunnel; refresh the tool list in your client. Writing is off by default for both connections.
 
-The authorization value is `Bearer <LOCAL_TOKEN>`. Use placeholders in shared examples. **Settings → AI integration → Install skill** installs the bundled `wiki-search` instructions; it does not configure MCP for you.
+Full access covers all connected Markdown, TXT and HTML/HTM notes, including archives and notes outside RAG. It supports finding, reading, creating, precise edits, properties, moves, recoverable deletion, history, links, templates and daily notes. RAG still uses only selected eligible Markdown/TXT. HTML is read and edited as source. Existing unauthenticated loopback and legacy bearer connections retain the original five read-only capabilities; the old `auth-token` does not unlock full access.
 
-The tools expose scoped knowledge search, rule search, chunks, full notes and index status. Search scope still controls what can be retrieved. For the complete tool contract, see the source in `vault_rag/web_server.py`.
+Every mutation checks the workspace revision; existing notes also require their read-time version. Moves and deletes first return an impact preview; history and Trash can be previewed and restored. MCP reads saved files, preserves conflicting editor drafts and reports pending indexing separately from successful saves. The browser assistant above keeps its proposal workflow.
+
+**Settings → AI integration → Install skill** installs `wiki-search` instructions and does not configure MCP. See the [complete tool contract](../MCP.md).
 
 ## Troubleshooting
 

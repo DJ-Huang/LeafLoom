@@ -18,13 +18,15 @@
 
 ## 通过 MCP 连接其他客户端
 
-地址为 `http://127.0.0.1:18080/mcp`，或私有配置中的端口。授权值使用 `Bearer <LOCAL_TOKEN>`；令牌来自私有目录的 `auth-token`。不要提交令牌，或放入截图和共享消息。
+打开 **设置 → AI 连接 → 完整笔记访问（MCP）**，启用本机 AI 读取并复制生成的连接配置。专用凭据仅显示一次。Codex 使用 `http_headers.Authorization`，Cursor 使用 `headers.Authorization`，Claude Code 使用 `type: http` 和 `headers.Authorization`。重新生成或关闭访问后旧凭据立即失效，请勿共享配置。
 
-- Codex 使用 `url` 和 `http_headers.Authorization`。
-- Cursor 使用 `url` 和 `headers.Authorization`。
-- Claude Code 使用 `type: http`、`url` 和 `headers.Authorization`。
+需要直接保存时，另行开启 **允许本机 AI 修改笔记**。ChatGPT 沿用已有 Tunnel，分别开启它的“读取全部笔记”和“修改笔记”开关；权限变更后自动重连，请在客户端刷新工具列表。两种连接默认都关闭写入。
 
-**设置 → AI 集成 → 安装技能** 安装 `wiki-search` 指令，不自动配置 MCP。工具提供知识检索、规则检索、证据片段、完整笔记与索引状态；检索仍受已选择范围控制。完整接口见 `vault_rag/web_server.py`。
+完整访问覆盖关联目录内全部 Markdown、TXT、HTML/HTM，包括归档和未勾选 RAG 的笔记。支持查找、分段读取、创建、精确修改、属性、移动、可恢复删除、历史、链接、模板与日记。RAG 仍只使用已选择且符合条件的 Markdown/TXT；HTML 按源码读写。旧的本机免鉴权连接及旧 bearer 凭据继续保留原有五项只读能力，旧 `auth-token` 不能开启完整访问。
+
+所有修改校验知识库版本，已有笔记还需读取时的文件版本。移动、删除先返回影响预览；历史与回收区可先预览再恢复。MCP 读取磁盘版本，界面中冲突的未保存草稿继续保留，并明确区分保存成功与索引待更新。上方网页助手仍使用原有提案流程。
+
+**设置 → AI 集成 → 安装技能** 安装 `wiki-search` 指令，不自动配置 MCP。详见[完整工具契约](../MCP.md)。
 
 CLI 未被发现时，先确认终端可以运行它，再重启服务以获得最新 PATH。登录过期在 CLI 中重新登录。会话恢复失败时保留历史并处理 CLI 状态，不要删除知识笔记来修复对话。
 

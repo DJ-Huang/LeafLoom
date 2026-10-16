@@ -24,7 +24,7 @@ Your files and search indexes live on your computer. Browse, write and search lo
 | **Privacy you control** | Keep files and indexes on your own computer. Choose exactly which folders enter search; no hosted knowledge base is required. |
 | **Markdown + HTML** | Write Markdown with tables and tasks, and open local HTML pages with their styles, images and supported scripts inside the same workspace. |
 | **Answers you can trace** | Use keyword search, Wiki navigation and optional local BGE-M3 semantic retrieval. Follow results back to the original notes. |
-| **AI in your workflow** | Connect MCP clients, install the bundled `wiki-search` Skill, or use AI Chat beside your notes. Review proposed edits before saving. |
+| **AI in your workflow** | Connect MCP clients, install the bundled `wiki-search` Skill, or use AI Chat beside your notes. The built-in chat previews edits; authorized MCP clients can save directly with history. |
 | **Your knowledge in ChatGPT** | Connect the desktop app through its built-in Tunnel client to search and read local notes from a ChatGPT conversation. |
 
 Keep a research library, build a project wiki, collect reading notes, or give your AI assistant a source it can actually cite.
@@ -39,7 +39,7 @@ Keep a research library, build a project wiki, collect reading notes, or give yo
 
 ## Your local knowledge, in ChatGPT
 
-**Bring your own knowledge into the conversation.** Select LeafLoom in a ChatGPT web conversation to search your chosen folders, read notes and follow the sources while you chat. Your LeafLoom computer must be online with the app running. The current connection supports searching and reading; edit notes in LeafLoom.
+**Bring your own knowledge into the conversation.** Select LeafLoom in a ChatGPT web conversation to search your chosen folders, read notes and follow the sources while you chat. Your LeafLoom computer must be online with the app running. Enable full note access and its separate write switch in Settings to let ChatGPT create, edit, organize and recover notes. RAG keeps your selected scope.
 
 [Open ChatGPT](https://chatgpt.com/) · [Add a connection in ChatGPT Plugins](https://chatgpt.com/plugins) · [Official Tunnel setup guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
 
@@ -67,7 +67,7 @@ Use your knowledge where you already work, with source references you can check.
 
 | Connection | How you use it |
 | --- | --- |
-| **MCP** | Connect clients such as Codex, Cursor or Claude Code to the local HTTP MCP endpoint at `http://127.0.0.1:18080/mcp` (default port). Search knowledge, read source notes and inspect index status within your selected scope. |
+| **MCP** | Connect clients such as Codex, Cursor or Claude Code to the local HTTP MCP endpoint at `http://127.0.0.1:18080/mcp` (default port). Enable full access to find, create, edit, organize and recover connected notes. RAG keeps your selected scope; writing starts disabled. |
 | **Skills** | Install the included [`wiki-search` Skill](wiki-search/SKILL.md) from **Settings → AI integration → Install skill**. It guides compatible assistants through retrieval, Wiki navigation and source checking. Configure MCP separately. |
 | **AI Chat** | Connect a supported, signed-in CLI, discuss a note or selection, and open cited sources. Preview suggested changes, accept them into a draft, then save when ready. |
 

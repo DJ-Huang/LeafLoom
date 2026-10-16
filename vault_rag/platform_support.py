@@ -26,6 +26,27 @@ def is_windows() -> bool:
     return sys.platform == 'win32'
 
 
+def move_exclusive(source: Path, destination: Path) -> None:
+    """Rename without replacing a destination created by another process."""
+    if sys.platform == 'win32':
+        os.rename(source, destination)  # Windows rename rejects existing targets.
+        return
+    libc = ctypes.CDLL(None, use_errno=True)
+    if sys.platform == 'darwin':
+        fn = libc.renamex_np
+        fn.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        result = fn(os.fsencode(source), os.fsencode(destination), 0x4)  # RENAME_EXCL
+    elif sys.platform.startswith('linux') and hasattr(libc, 'renameat2'):
+        fn = libc.renameat2
+        fn.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+        result = fn(-100, os.fsencode(source), -100, os.fsencode(destination), 1)  # AT_FDCWD, RENAME_NOREPLACE
+    else:
+        raise OSError('Exclusive rename is unavailable on this platform')
+    if result:
+        number = ctypes.get_errno()
+        raise OSError(number, os.strerror(number), str(destination))
+
+
 def state_directory() -> Path:
     override = os.environ.get('VAULT_RAG_HOME')
     if override:

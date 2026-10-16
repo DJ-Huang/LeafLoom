@@ -95,6 +95,44 @@ class TunnelLifecycleTests(unittest.TestCase):
         while not predicate() and time.monotonic() < deadline: time.sleep(.03)
         self.assertTrue(predicate())
 
+    def test_workspace_discovery_and_calls_receive_private_revocable_credential(self):
+        from vault_rag.mcp_access import McpAccess
+        with tempfile.TemporaryDirectory() as temp:
+            access = McpAccess(LocalConfig(Path(temp) / 'state'))
+            access.configure('tunnel', enabled=True, write=True)
+            launches, probes = [], []
+            popen = subprocess.Popen
+            def launch(args, **kwargs):
+                launches.append((args, dict(kwargs['env'])))
+                health = args[args.index('--health.url-file') + 1]
+                return popen([sys.executable, '-u', '-c', RUNNER, health], **kwargs)
+            def local_request(url, payload=None, *, headers=None):
+                if payload:
+                    probes.append(headers)
+                    return 200, {'result': {}}
+                return request(url)
+            with patch('vault_rag.tunnel.subprocess.Popen', side_effect=launch), patch('vault_rag.tunnel.request', side_effect=local_request):
+                manager = TunnelManager(temp, 19234, lambda *a, **k: None, mcp_access=access)
+                try:
+                    manager.configure({'enabled': True, 'binary': sys.executable,
+                                       'tunnelId': 'tunnel_' + 'a' * 32, 'apiKey': 'fictional-control-key'})
+                    self.wait(lambda: len(launches) == 1 and manager.last_state == ('ready', ''))
+                    args, env = launches[0]
+                    authorization = env['LEAFLOOM_TUNNEL_MCP_AUTHORIZATION']
+                    self.assertEqual(probes[0], {'Authorization': authorization})
+                    self.assertEqual(access.principal(authorization, 'legacy'), 'tunnel')
+                    for flag in ('--mcp.extra-headers', '--mcp.discovery-extra-headers'):
+                        self.assertEqual(args[args.index(flag) + 1], 'Authorization: env:LEAFLOOM_TUNNEL_MCP_AUTHORIZATION')
+                    self.assertNotIn(authorization, repr(args))
+                    access.configure('tunnel', enabled=True, write=False)
+                    with self.assertRaises(PermissionError):access.principal(authorization, 'legacy', loopback=True)
+                    self.wait(lambda: len(launches) == 2 and manager.last_state == ('ready', ''))
+                    manager.configure({'enabled': False})
+                    self.wait(lambda: manager.last_state == ('disabled', ''))
+                    with self.assertRaises(PermissionError):
+                        access.principal(launches[1][1]['LEAFLOOM_TUNNEL_MCP_AUTHORIZATION'], 'legacy', loopback=True)
+                finally:manager.close()
+
     def test_process_reconfiguration_disconnect_and_secret_boundary(self):
         with tempfile.TemporaryDirectory() as temp:
             states, launches, children = [], [], []

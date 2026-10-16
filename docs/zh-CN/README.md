@@ -24,7 +24,7 @@
 | **自己掌控的隐私** | 文件与索引留在本机，检索目录由你选择，无需把知识库托管到云端。 |
 | **Markdown + HTML** | 用 Markdown 记录表格、任务和想法；在同一工作区打开带有样式、图片和受支持脚本的本地 HTML 网页。 |
 | **找得到，也追得回原文** | 结合关键词检索、Wiki 导航与可选的本地 BGE-M3 语义检索，从结果直接回到原始笔记。 |
-| **完整的 AI 工作流** | 接入 MCP 客户端，安装内置 `wiki-search` Skill，或在笔记旁打开 AI Chat；AI 修改先审阅再保存。 |
+| **完整的 AI 工作流** | 接入 MCP 客户端，安装内置 `wiki-search` Skill，或在笔记旁打开 AI Chat；内置对话先审阅，授权后的 MCP 可直接保存并保留历史。 |
 | **ChatGPT 也能用你的知识** | 桌面端内置 Tunnel 客户端，在 ChatGPT 对话中检索、读取本地笔记。 |
 
 整理个人资料、搭建项目 Wiki、积累阅读笔记，或给 AI 助手一份有据可查的知识来源，都可以从自己的文件夹开始。
@@ -39,7 +39,7 @@
 
 ## 在 ChatGPT 中使用本地知识库
 
-**让 ChatGPT 带着你的知识回答。** 在 ChatGPT 网页对话中选择 LeafLoom，即可检索已选择的目录、读取笔记，并沿着来源继续交流。运行 LeafLoom 的电脑需要保持联网、应用保持运行。当前连接支持检索和读取，笔记编辑在 LeafLoom 中完成。
+**让 ChatGPT 带着你的知识回答。** 在 ChatGPT 网页对话中选择 LeafLoom，即可检索已选择的目录、读取笔记，并沿着来源继续交流。运行 LeafLoom 的电脑需要保持联网、应用保持运行。在设置中启用完整笔记访问及独立写入开关后，可让 ChatGPT 创建、编辑、整理和恢复笔记；RAG 继续使用原有勾选范围。
 
 [打开 ChatGPT](https://chatgpt.com/) · [前往 ChatGPT 插件页添加连接](https://chatgpt.com/plugins) · [官方 Tunnel 接入指南](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)
 
@@ -67,7 +67,7 @@ App Key 由操作系统加密保存。连接随应用启动，关闭窗口留在
 
 | 连接方式 | 可以怎么用 |
 | --- | --- |
-| **MCP** | 将 Codex、Cursor、Claude Code 等客户端接入本地 HTTP MCP：`http://127.0.0.1:18080/mcp`（默认端口）。在已选择的范围内检索知识、读取原文、查看索引状态。 |
+| **MCP** | 将 Codex、Cursor、Claude Code 等客户端接入本地 HTTP MCP：`http://127.0.0.1:18080/mcp`（默认端口）。启用完整访问后可查找、创建、编辑、整理和恢复关联笔记；RAG 保持勾选范围，写入默认关闭。 |
 | **Skill** | 在 **设置 → AI 集成 → 安装技能** 中安装内置的 [`wiki-search` Skill](../../wiki-search/SKILL.md)，引导兼容的 AI 助手完成检索、Wiki 导航与来源核对；MCP 连接需另行配置。 |
 | **AI Chat** | 连接受支持、已登录的 CLI，围绕当前笔记或选文对话，打开回答中的引用。先预览修改差异，接受到草稿后再决定何时保存。 |
 
