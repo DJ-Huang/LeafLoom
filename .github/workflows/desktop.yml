@@ -102,7 +102,13 @@ jobs:
         run: npm run dist --prefix desktop -- --win --x64
       - name: Package Mac
         if: runner.os == 'macOS'
-        run: npm run dist --prefix desktop -- --mac --arm64
+        run: |
+          # An empty CSC_LINK is interpreted as a certificate at the current
+          # directory, rather than as absent credentials, by electron-builder.
+          if [ "$LEAFLOOM_UNSIGNED" = 1 ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+          fi
+          npm run dist --prefix desktop -- --mac --arm64
       - name: Check relocated Windows payload
         if: runner.os == 'Windows'
         run: uv run --no-sync python -X utf8 scripts/desktop_smoke.py --python dist/desktop/win-unpacked/resources/backend/python/python.exe
