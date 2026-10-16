@@ -5,6 +5,7 @@ const path = require('node:path');
 const {pathToFileURL} = require('node:url');
 const {Backend} = require('./backend.cjs');
 const {TunnelSettings} = require('./tunnel.cjs');
+const {Updater} = require('./updater.cjs');
 const policy = require('./policy.cjs');
 const {strings, resolve} = require('./strings.cjs');
 
@@ -20,6 +21,16 @@ let window, tray, backend, origin = '', lastOrigin = '', workspaceLoaded = false
 const websiteContents = new Set();
 let startupTimer, closeTimer;
 const tunnel = new TunnelSettings(home, safeStorage);
+const updater = new Updater({current: app.getVersion(), platform: process.platform, arch: process.arch, directory: path.join(home, 'desktop-updates'), packaged: app.isPackaged});
+let pendingInstaller = '';
+async function installUpdate() {
+  if (pendingInstaller || quitPending || quitting || updater.state.phase !== 'ready') return updater.status();
+  try {
+    pendingInstaller = await updater.installer();
+    await requestQuit();
+  } catch (error) {pendingInstaller = ''; updater.fail(error); log(error);}
+  return updater.status();
+}
 let tunnelBackendReady = false;
 function configureTunnel() {
   if (!tunnelBackendReady) {
@@ -124,7 +135,13 @@ function createWindow() {
       // Trigger a second unload with a one-use permission instead of relying on
       // an event that expired while the native dialog was awaiting a response.
       allowDiscard = true; quitPending = true; window.close();
-    }}).catch(error => {quitPending = false; log(error);});
+    } else if (pendingInstaller) {
+      pendingInstaller = ''; updater.state.phase = 'ready';
+    }}).catch(error => {
+      quitPending = false;
+      if (pendingInstaller) {pendingInstaller = ''; updater.state.phase = 'ready';}
+      log(error);
+    });
   });
   window.on('close', event => {
     if (!window.isMaximized() && !window.isMinimized()) atomicJson(path.join(home, 'desktop-window.json'), window.getBounds());
@@ -146,6 +163,16 @@ async function finishQuit() {
   if (quitting) return; quitting = true;
   clearTimeout(startupTimer); clearInterval(closeTimer);
   await backend?.stop();
+  if (pendingInstaller) {
+    const file = pendingInstaller; pendingInstaller = '';
+    try {
+      const error = await shell.openPath(file);
+      if (error) throw new Error('update.error.install');
+    } catch (error) {
+      updater.fail(new Error('update.error.install')); log(error); quitting = false; quitPending = false;
+      showWindow(); await startBackend(); return;
+    }
+  }
   tray?.destroy(); app.quit();
 }
 function fail(error) {
@@ -292,6 +319,13 @@ else {
       'tunnel-disconnect': () => {tunnel.disable(); return configureTunnel();},
       'tunnel-clear': () => {tunnel.clear(); return configureTunnel();},
       info: () => ({version: app.getVersion(), platform: process.platform, openAtLogin: loginSettings().openAtLogin, error: failure, text: text()}),
+      'update-status': () => updater.status(),
+      'update-check': () => updater.check(),
+      'update-download': () => {
+        if (updater.download()) void updater.transfer().then(ok => {if (ok && !quitting && !quitPending) return installUpdate();}).catch(error => {updater.fail(error); log(error);});
+        return updater.status();
+      },
+      'update-install': () => installUpdate(),
       'choose-directory': async () => {const result = await dialog.showOpenDialog(window, {properties: ['openDirectory']}); return result.canceled ? {cancelled: true} : {path: result.filePaths[0]};},
       'open-external': async url => {await shell.openExternal(policy.externalUrl(url));},
       'reveal-file': async relative => {

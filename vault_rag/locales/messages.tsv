@@ -1,4 +1,30 @@
 # Source | English | Japanese. Named placeholders must match.
+update.title|应用更新|App updates|アプリの更新
+update.search|检查更新、当前版本、最新版本、下载安装|Check for updates, current version, latest version, download and install|更新を確認、現在のバージョン、最新バージョン、ダウンロードとインストール
+update.current|当前版本：{version}|Current version: {version}|現在のバージョン：{version}
+update.latest|最新版本：{version}|Latest version: {version}|最新バージョン：{version}
+update.unchecked|最新版本：尚未检查|Latest version: not checked yet|最新バージョン：未確認
+update.check|检查更新|Check for updates|更新を確認
+update.checking|正在检查…|Checking…|確認中…
+update.currentStatus|当前已是最新版本。|You are up to date.|最新バージョンです。
+update.development|开发模式仅检查版本；请更新源码后重新运行 Dev。|Development mode only checks versions. Update the source and restart Dev.|開発モードではバージョン確認のみ行います。ソースを更新して Dev を再起動してください。
+update.download|下载并安装|Download and install|ダウンロードしてインストール
+update.install|继续安装|Continue installation|インストールを続行
+update.windowsHelp|校验下载后会退出应用并打开安装向导。|After verification, the app quits and opens the installer.|ダウンロードの検証後、アプリを終了してインストーラーを開きます。
+update.macHelp|校验下载后会退出应用并打开 DMG，请将新版拖入“应用程序”。|After verification, the app quits and opens the DMG. Drag the new version to Applications.|検証後、アプリを終了して DMG を開きます。新版を「アプリケーション」にドラッグしてください。
+update.progress|正在下载 {percent}% · {received} / {total}|Downloading {percent}% · {received} / {total}|ダウンロード中 {percent}% · {received} / {total}
+update.verifying|正在校验安装包…|Verifying the installer…|インストーラーを検証中…
+update.installing|正在退出应用并打开安装程序…|Quitting the app and opening the installer…|アプリを終了してインストーラーを開いています…
+update.error.connection|无法读取更新状态，请重新打开设置后重试。|Cannot read update status. Reopen Settings and retry.|更新状態を取得できません。設定を開き直して再試行してください。
+update.error.network|更新请求失败，请检查网络后重试。|The update request failed. Check your connection and retry.|更新リクエストに失敗しました。接続を確認して再試行してください。
+update.error.storage|无法保存安装包，请检查磁盘空间和目录写入权限后重试。|Cannot save the installer. Check disk space and folder write permissions, then retry.|インストーラーを保存できません。空き容量とフォルダーの書き込み権限を確認して再試行してください。
+update.error.rate|更新服务暂时限制请求，请稍后重试。|The update service is rate limited. Try again later.|更新サービスのリクエスト制限に達しました。後でもう一度お試しください。
+update.error.release|无法识别正式发布版本，请稍后重新检查。|Cannot read a stable release. Check again later.|正式リリースを確認できません。後でもう一度確認してください。
+update.error.platform|当前系统或架构不支持此更新。|This system or architecture is not supported by this update.|このシステムまたはアーキテクチャは更新に対応していません。
+update.error.asset|最新版本尚未提供当前系统的安装包，请稍后重新检查。|The latest release has no installer for this system yet. Check again later.|最新リリースにはこのシステム用のインストーラーがありません。後でもう一度確認してください。
+update.error.checksum|安装包校验失败或缺少校验信息，未启动安装。请重新检查或下载。|Installer verification failed or checksum information is missing. Installation was not started. Check again or download again.|インストーラーの検証に失敗したか、チェックサムがありません。インストールは開始されていません。再確認または再ダウンロードしてください。
+update.error.check|请先检查更新，再下载安装。|Check for updates before downloading and installing.|先に更新を確認してからダウンロードしてください。
+update.error.install|无法打开安装程序，请重新下载后重试。|Cannot open the installer. Download it again and retry.|インストーラーを開けません。再ダウンロードしてお試しください。
 mcp.connectionTitle|AI 连接|AI connections|AI 連携
 mcp.connectionDescription|管理本机 AI 与 ChatGPT 的笔记访问。|Manage note access for local AI clients and ChatGPT.|ローカル AI と ChatGPT のメモアクセスを管理します。
 mcp.title|完整笔记访问（MCP）|Full note access (MCP)|メモ全体へのアクセス（MCP）

@@ -52,12 +52,33 @@ signing and application notarization; test Gatekeeper on a native Mac release.
   chunks and vectors are reused. Model and vector work run in a private serial
   process; the first semantic search can wait for model loading while reading
   and editing remain available. Quit also stops this owned process.
-- Updates are manual: quit, install the new package over the old one, and reopen.
+- Open **Settings → General → App updates** to check the current/latest stable
+  versions. **Download and install** shows percentage and received/total bytes,
+  verifies SHA-256 and quits through the normal draft-protection flow before
+  opening the Windows installer or Mac DMG. Complete the wizard (Mac: drag to
+  Applications), then reopen. Canceling quit leaves **Continue installation**.
+  Failed checks/downloads can be retried; Dev only checks versions.
   App upgrade/uninstall keeps note folders, settings, indexes and model files.
 - Login startup is off for new users. Desktop settings and the tray can change it.
   Migration preserves an existing installation's login preference.
 
 Manage the installed app through its own shortcuts, tray/menu-bar menu and installer. The old repository launchers have been removed; source development uses Dev.
+
+## Update implementation
+
+`desktop/updater.cjs` queries the public GitHub latest stable release on explicit
+request. It selects only the exact platform/architecture asset from this
+repository and requires its GitHub SHA-256 digest (or the exact filename in
+`SHA256SUMS.txt`). Downloads stream into a private temporary directory beneath
+`<state-home>/desktop-updates/`; size/hash mismatches delete the partial download.
+A second hash check precedes installation. Main-process IPC uses the existing
+trusted workspace/main-frame checks; renderers cannot supply download URLs or
+installer paths. Settings polls status, so reopening it restores active progress.
+Development mode never installs release binaries. Windows starts the NSIS wizard;
+macOS opens the DMG for the normal Applications replacement workflow. Neither
+platform silently overwrites a running application. Network access to GitHub is
+required; interrupted application exits require downloading again. Verified
+installers remain in the state directory until removed by the user.
 
 ## Source development
 
@@ -121,7 +142,8 @@ must be configured in repository secrets.
 
 No signing credentials are checked into the repository. The workflow fails rather
 than treating a missing certificate as a signed release. App Store submission and
-automatic updates are outside this first version.
+unattended background installation are outside this version; updates are initiated
+explicitly from Settings.
 
 ## Data and migration
 

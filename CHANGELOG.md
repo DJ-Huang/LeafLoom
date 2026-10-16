@@ -2,7 +2,9 @@
 
 [English](CHANGELOG.md) · [中文](docs/zh-CN/CHANGELOG.md) · [日本語](docs/ja/CHANGELOG.md)
 
-## Unreleased — 2026-10-16
+## 0.1.2 — 2026-10-16
+
+- Add Settings → General → App updates with current/latest versions, verified installer downloads, a progress bar and installer launch after a normal quit. macOS opens the DMG; source Dev checks versions only.
 
 - Unify Dev and the installed app on the same user data directory, settings, models, AI/MCP credentials, desktop profile and backend port; retain separate development dependencies and safely reuse old Dev models when the shared model directory is absent.
 

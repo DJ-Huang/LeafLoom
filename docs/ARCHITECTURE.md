@@ -23,6 +23,8 @@
 
 Windows `windows_native` 使用当前用户与配置目录区分本地实例，正常退出不按进程名称强制结束其他 Python 程序。`service_control`、旧计划任务／LaunchAgent 和脚本托盘实现仅作为历史安装迁移与内部兼容代码保留；根目录旧服务启动入口已移除。
 
+桌面更新由 `desktop/updater.cjs` 在主进程中处理：固定 GitHub Release 来源、按平台选择安装包、流式下载进度与大小／SHA-256 校验，安装前再次校验。可信工作区通过 IPC 检查版本、读取进度及发起下载安装；正常退出保护草稿后打开安装向导或 DMG。源码 Dev 只检查版本，详见[桌面更新](DESKTOP.md#update-implementation)。
+
 ## 安装与依赖
 
 安装版通过 Release 安装包分发，由应用自身管理启动、退出和更新。构建过程按 `uv.lock` 准备私有 Python 依赖并构建前端；流程见[桌面构建](DESKTOP.md)。源码开发通过 Dev 同步独立 Python 环境，直接运行 Vite，不构建安装包或注册旧服务任务。

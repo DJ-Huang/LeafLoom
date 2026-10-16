@@ -141,3 +141,8 @@
  .settings-modal:has(.has-search-results) .settings-page-heading { display: none; }
 }
 @media (prefers-reduced-motion:reduce) { .spin { animation: none; } }
+.app-update .setting-detail { margin-top: 0; }
+.update-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 8px 0; }
+.update-actions span { color: var(--muted); font-size: 13px; flex: 1; min-width: 180px; }
+.update-progress { display: grid; gap: 8px; padding: 12px 0; font-variant-numeric: tabular-nums; }
+.update-progress progress { width: 100%; height: 12px; accent-color: var(--accent); }
