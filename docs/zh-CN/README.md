@@ -14,9 +14,7 @@
 
 [开始使用](#开始使用) · [连接 ChatGPT](#在-chatgpt-中使用本地知识库) · [MCP、Skill 与 AI Chat](#ai-connections) · [新手指南](GUIDE.md) · [文档目录](../README.md)
 
-**看看 LeafLoom 如何工作（英文演示）：**
-
-https://github.com/user-attachments/assets/56f37418-23cc-4763-af3c-3253fb06f517
+![LeafLoom 欢迎页：选择语言、打开文件夹或体验演示知识库](../../assets/screenshots/zh-CN/01-welcome.png)
 
 ## 给你的知识，一个自己的家
 
@@ -131,9 +129,7 @@ cd LeafLoom
 
 </details>
 
-[📖 新手指南与常见问题](GUIDE.md) · [✨ AI 接入](AI.md) · [▶ 英文宣传短视频](../../assets/promo/leafloom-en.mp4)
-
-[![英文宣传短视频](../../assets/promo/cover.png)](../../assets/promo/leafloom-en.mp4)
+[📖 新手指南与常见问题](GUIDE.md) · [✨ AI 接入](AI.md)
 
 ## 三种语言
 

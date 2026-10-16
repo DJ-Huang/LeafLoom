@@ -14,9 +14,7 @@ Your files and search indexes live on your computer. Browse, write and search lo
 
 [Get started](#get-started) · [Connect ChatGPT](#your-local-knowledge-in-chatgpt) · [MCP, Skills & AI Chat](#ai-connections) · [User guide](docs/en/GUIDE.md) · [Documentation](docs/README.md)
 
-**See LeafLoom in action:**
-
-https://github.com/user-attachments/assets/56f37418-23cc-4763-af3c-3253fb06f517
+![LeafLoom welcome screen: choose a language, open a folder or try the demo](assets/screenshots/en/01-welcome.png)
 
 ## One home for your knowledge
 
@@ -131,7 +129,7 @@ cd LeafLoom
 
 </details>
 
-[📖 User guide and FAQ](docs/en/GUIDE.md) · [✨ AI connections](docs/en/AI.md) · [▶ English promotional video](https://github.com/DJ-Huang/LeafLoom/raw/refs/heads/main/assets/promo/leafloom-en.mp4)
+[📖 User guide and FAQ](docs/en/GUIDE.md) · [✨ AI connections](docs/en/AI.md)
 
 ## Languages
 
