@@ -103,6 +103,10 @@ jobs:
       - name: Package Mac
         if: runner.os == 'macOS'
         run: |
+          # osx-sign scans the full Python/Torch tree concurrently. The hosted
+          # Mac's default descriptor limit is too small for that native payload.
+          sudo sysctl -w kern.maxfiles=524288 kern.maxfilesperproc=262144
+          ulimit -n 65536
           # An empty CSC_LINK is interpreted as a certificate at the current
           # directory, rather than as absent credentials, by electron-builder.
           if [ "$LEAFLOOM_UNSIGNED" = 1 ]; then

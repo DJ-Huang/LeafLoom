@@ -136,6 +136,9 @@ and run `npm start --prefix desktop`. Use a disposable `VAULT_RAG_HOME` for test
 The `LeafLoom desktop packages` GitHub Actions workflow builds Windows x64 on
 `windows-2025` and macOS arm64 on `macos-15`. No local build machine is required.
 The Mac job checks that it is actually running on Apple Silicon.
+Its packaging step raises the disposable runner's open-file limit for the signing
+tool's parallel scan of the embedded Python/Torch tree; local Mac builds with an
+`EMFILE` error need a sufficient open-file limit as well.
 
 1. Update the application version in `pyproject.toml`, `vault_rag/__init__.py`,
    both `web/package.json` and `desktop/package.json`, the root application entries
