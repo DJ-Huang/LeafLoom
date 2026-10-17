@@ -32,7 +32,8 @@ async function main(){
   const launch={headless:true};if(process.env.LEAFLOOM_BROWSER_EXECUTABLE)launch.executablePath=process.env.LEAFLOOM_BROWSER_EXECUTABLE;else launch.channel=process.env.LEAFLOOM_BROWSER_CHANNEL||'chrome';
   browser=await chromium.launch(launch);
   const context=await browser.newContext({viewport:{width:1450,height:1100},locale:'zh-CN'});
-  await context.addInitScript(()=>localStorage.setItem('leafloom-locale','zh-CN'));
+  // Locale belongs to the host UI; aborted isolated child frames have no storage.
+  await context.addInitScript(()=>{if(window===window.top)localStorage.setItem('leafloom-locale','zh-CN');});
   page=await context.newPage();page.setDefaultTimeout(15000);
   page.on('pageerror',error=>pageErrors.push(error.message));
   page.on('request',request=>{if(new URL(request.url()).pathname==='/api/design/projects'&&request.method()==='POST')creationRequests.push(request.postDataJSON());});
