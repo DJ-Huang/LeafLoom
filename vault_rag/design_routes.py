@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from fastapi import APIRouter, Request
+from fastapi.responses import FileResponse
 from vault_rag.local_state import ConflictError
 
 
@@ -25,6 +26,11 @@ def design_router(studio):
                     return documents.project_view(value, body.get('view_page_id'))
                 return value
         return await asyncio.to_thread(execute)
+
+    @router.get('/templates/{template_id}/preview')
+    async def template_preview(template_id: str):
+        from vault_rag.design_templates import template_path
+        return FileResponse(template_path(template_id) / 'preview.jpg', media_type='image/jpeg')
 
     @router.get('/document')
     async def read_document(directory: str, page_id: str | None = None, manifest: bool = False, root: str | None = None, view: bool = False):

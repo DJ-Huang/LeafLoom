@@ -115,6 +115,21 @@ class StudioRuntimeBrowserTests(unittest.TestCase):
         self.page.wait_for_function("events.some(e=>e.type==='studio-error'&&e.nodeId==='custom'&&e.message.includes('custom failure'))")
         self.assertEqual(self.page.evaluate("events.find(e=>e.type==='studio-console'&&e.nodeId==='custom').args"), ["custom log"])
 
+    def test_authored_parent_text_updates_immediately_without_losing_children(self):
+        self.mount([{"id": "parent", "type": "element", "props": {"authored": True, "tag": "p", "text": "Before "},
+                     "children": [{"id": "child", "type": "element", "props": {"authored": True, "tag": "strong", "text": "Child"}}]}])
+        for text in ("After ", "", "Restored "):
+            reused = self.page.evaluate("""text => {
+              const doc=instance.document;doc.pages[0].nodes[0].props.text=text;
+              return instance.update(doc,{mode:'edit',selectedIds:['parent']});
+            }""", text)
+            self.assertFalse(reused)
+            parent = self.page.locator('[data-studio-node="parent"]')
+            self.assertEqual(parent.text_content(), text + "Child")
+            self.assertEqual(parent.locator('[data-studio-node="child"]').text_content(), "Child")
+            self.assertEqual(parent.locator('strong').count(), 1)
+        self.assertEqual(self.page.evaluate("events.filter(e=>e.type==='studio-error')"), [])
+
     def test_inline_text_commits_once_and_escape_cancels(self):
         self.mount([{"id": "label", "type": "text", "style": {"x": 80, "y": 60, "width": 200, "height": 60}, "props": {"text": "Before"}}])
         text = self.page.locator('[data-studio-node="label"] > .studio-content')

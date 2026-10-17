@@ -431,7 +431,7 @@ class DesignDocuments:
         if expected_revision is None or str(expected_revision) != meta['revision']:
             raise ConflictError('Design revision changed; read the current document and retry without overwriting newer changes')
 
-    def create(self, directory: str, name: str, width=720, height=1560):
+    def create(self, directory: str, name: str, width=720, height=1560, *, initial_document=None):
         with self.config.lock, self.files.lock:
             directory, project, path = self._paths(directory)
             if path.exists():
@@ -439,6 +439,10 @@ class DesignDocuments:
             document = {'schemaVersion': 1, 'id': _id(), 'name': str(name).strip() or project.name,
                         'pages': [{'id': _id(), 'name': 'Home', 'group': '', 'width': width, 'height': height, 'nodes': []}],
                         'assets': {}, 'components': {}, 'styles': {}, 'scripts': {}}
+            if initial_document is not None:
+                document = copy.deepcopy(initial_document)
+                document['id'] = _id()
+                document['name'] = str(name).strip() or project.name
             self.validate(document, project)
             atomic_write(path, _json(document))
             self._changed(directory, path)

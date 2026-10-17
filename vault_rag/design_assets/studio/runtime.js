@@ -1014,6 +1014,9 @@
           }
           if (!entry || oldNode.id !== newNode.id || oldNode.type !== newNode.type) return false;
           const oldProps = oldNode.props || {}, newProps = newNode.props || {};
+          // Authored parents render their own text before child elements. Rebuild
+          // that mixed content instead of leaving stale text or replacing children.
+          if (entry.authored && (newNode.children || []).length && oldProps.text !== newProps.text) return false;
           if (!equal(oldProps, newProps) && (['instance', 'page', 'html', 'svg'].includes(oldNode.type) || !equal(oldProps.attributes, newProps.attributes) || oldProps.styleId !== newProps.styleId || oldProps.html !== newProps.html)) return false;
           if (!equal(oldNode.style, newNode.style) || !equal(oldProps, newProps) || oldNode.hidden !== newNode.hidden) changes.push({ entry, oldNode, newNode });
           return inspect(oldNode.children || [], newNode.children || []);

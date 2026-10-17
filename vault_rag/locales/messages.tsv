@@ -1396,3 +1396,17 @@ Some stylesheets could not be read and safely scoped; their styles were omitted.
 site.video_label|LeafLoom 英文演示视频，35 秒|LeafLoom demo video in English, 35 seconds|LeafLoom の英語デモ動画、35 秒
 site.video_caption|真实应用演示，使用虚构示例资料库。35 秒英文视频，含画面内字幕。|The real app, with a fictional demo library. 35-second English video with burned-in captions.|架空のデモライブラリを使った実際のアプリ。字幕付きの 35 秒の英語動画です。
 site.video_link|直接打开视频|Open video directly|動画を直接開く
+
+# Built-in design project templates
+design.template.intro|从空白画板开始，或使用内置模板创建可自由编辑的独立项目。|Start with a blank board or use a built-in template to create your own editable project.|空白のボードから始めるか、内蔵テンプレートで自由に編集できる独立したプロジェクトを作成します。
+design.template.choose|选择起点|Choose a starting point|開始方法を選択
+design.template.blank|空白项目|Blank project|空白のプロジェクト
+design.template.blankDescription|自定义画板尺寸，从头开始设计。|Choose your board size and design from scratch.|ボードのサイズを指定して、最初からデザインします。
+design.template.builtIn|内置模板|Built-in template|内蔵テンプレート
+design.template.formaDescription|精致的创意工作室网站，可直接编辑文字、图片与布局。|A refined creative studio website with editable text, images, and layouts.|テキスト、画像、レイアウトを編集できる、洗練されたクリエイティブスタジオのウェブサイト。
+design.template.formaLayers|4 个可编辑画板 · 328 个图层|4 editable boards · 328 layers|編集可能な 4 ボード・328 レイヤー
+design.template.formaPreview|FORMA 创意工作室网站模板预览|Preview of the FORMA creative studio website template|FORMA クリエイティブスタジオのウェブサイトテンプレートのプレビュー
+design.template.directory|选择存放目录（知识库内）|Choose a folder in your vault|保管庫内の保存先を選択
+请选择新的项目目录；不会覆盖已有文件|Choose a new project directory; existing files will not be overwritten|新しいプロジェクトフォルダーを選択してください。既存ファイルは上書きしません
+未知的内置设计模板|Unknown built-in design template|不明な内蔵デザインテンプレートです
+内置模板需要可视化设计项目|Built-in templates require a managed design project|内蔵テンプレートにはビジュアルデザインプロジェクトが必要です

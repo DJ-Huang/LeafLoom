@@ -1385,5 +1385,17 @@
   "选择父级图层": "Select parent layer",
   "site.video_label": "LeafLoom demo video in English, 35 seconds",
   "site.video_caption": "The real app, with a fictional demo library. 35-second English video with burned-in captions.",
-  "site.video_link": "Open video directly"
+  "site.video_link": "Open video directly",
+  "design.template.intro": "Start with a blank board or use a built-in template to create your own editable project.",
+  "design.template.choose": "Choose a starting point",
+  "design.template.blank": "Blank project",
+  "design.template.blankDescription": "Choose your board size and design from scratch.",
+  "design.template.builtIn": "Built-in template",
+  "design.template.formaDescription": "A refined creative studio website with editable text, images, and layouts.",
+  "design.template.formaLayers": "4 editable boards · 328 layers",
+  "design.template.formaPreview": "Preview of the FORMA creative studio website template",
+  "design.template.directory": "Choose a folder in your vault",
+  "请选择新的项目目录；不会覆盖已有文件": "Choose a new project directory; existing files will not be overwritten",
+  "未知的内置设计模板": "Unknown built-in design template",
+  "内置模板需要可视化设计项目": "Built-in templates require a managed design project"
 }

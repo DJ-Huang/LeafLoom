@@ -280,6 +280,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         body=await request.json()
         if not isinstance(body,dict) or not isinstance(body.get('directory'),str) or not isinstance(body.get('name'),str):
             raise ValueError('创建设计项目需要指定存放目录与项目名称')
+        if body.get('template_id') is not None and not body.get('managed'):
+            raise ValueError('内置模板需要可视化设计项目')
         if body.get('managed') and body.get('root') != str(config.root):
             raise ConflictError('Connected folder changed; reopen Design Studio')
         def create():
@@ -291,7 +293,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
                     workspace_revision=body.get('workspace_revision',design.workspace_revision) if body.get('managed') else body.get('workspace_revision'),
                     project_id=body.get('project_id'), preset=body.get('preset','mobile-portrait'),
                     width=body.get('width'), height=body.get('height'), orientation=body.get('orientation',''),
-                    platforms=body.get('platforms'), initial_screens=body.get('initial_screens'))
+                    platforms=body.get('platforms'), initial_screens=body.get('initial_screens'),
+                    **({'template_id': body.get('template_id')} if body.get('managed') else {}))
         result = await asyncio.to_thread(create)
         return json_response(result)
     @app.post('/api/design/projects/screens')

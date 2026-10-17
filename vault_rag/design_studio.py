@@ -570,12 +570,40 @@ class DesignStudio:
                 'workspace_revision': self.workspace_revision,
             }
 
-    def create_managed_project(self, directory, name, *, workspace_revision=None, **options):
+    def create_managed_project(self, directory, name, *, workspace_revision=None, template_id=None, **options):
         with self.config.lock, self.files.lock:
             self._check_workspace(workspace_revision)
-            result = self.create_project(directory, name, workspace_revision=workspace_revision, **options)
-            document = self.documents.create(directory, name, result['project']['width'], result['project']['height'])
-            self.workspace.install_runtime(directory)
+            initial_document = None
+            if template_id is not None:
+                from vault_rag.design_templates import load_template
+                initial_document = load_template(template_id)
+                # Never scaffold over user files, even an unrelated empty-looking project.
+                directory = relative(directory)
+                if not directory or self.config.path_for(directory, writable=True).exists():
+                    raise ConflictError('请选择新的项目目录；不会覆盖已有文件')
+                self.documents.validate(initial_document)
+                first_page = initial_document['pages'][0]
+                options.update(preset='desktop-web', width=first_page['width'], height=first_page['height'],
+                               initial_screens=[{k: p[k] for k in ('id', 'name', 'width', 'height')} for p in initial_document['pages']])
+            owned_directory = None
+            if initial_document is not None:
+                owned_directory = self.config.path_for(directory, writable=True)
+                owned_directory.parent.mkdir(parents=True, exist_ok=True)
+                # Reserve exclusively, closing the check/create race with another creator.
+                owned_directory.mkdir(exist_ok=False)
+            try:
+                result = self.create_project(directory, name, workspace_revision=workspace_revision, **options)
+                document = self.documents.create(directory, name, result['project']['width'], result['project']['height'],
+                                                 initial_document=initial_document)
+                self.workspace.install_runtime(directory)
+            except Exception:
+                # No workspace transaction exists yet; a failed starter can be retried.
+                if owned_directory is not None and not is_link(owned_directory):
+                    shutil.rmtree(owned_directory)
+                    self.files.changed(directory)
+                raise
+            # Do not remove files if history recording fails: its recovery journal may
+            # already own them. Keep the valid project available for normal recovery.
             self.workspace.record_creation(directory)
             result['project'] = self._project_summary(self.config.path_for(directory), self.config.root)
             result.update(document)

@@ -86,3 +86,7 @@ HTML 按项目作为独立来源的网站运行；桌面窗口和浏览器共用
 安装和实际 Windows 验收步骤见 [SETUP.md](SETUP.md)。
 
 飞书 MCP 改为五个通用入口：状态、CLI 发现、只读执行、写入执行、临时文件传输。能力与风险按已安装 CLI 的 help/schema 动态发现并缓存，不再逐项包装文档或 Base。高风险权限按连接独立保存，默认关闭，执行仍须明确确认。临时文件按凭据代际隔离，在独立命令工作目录内传递；已关联附件导入及其派生产物继续检查笔记读取权限。旧四个业务工具已移除，客户端升级后须刷新工具列表。接口、额度、版本保护和迁移规则见[飞书接入](FEISHU.md)。
+
+### Built-in design starters
+
+`vault_rag/design_templates.py` allowlists packaged starters in `design_assets/templates/`. The new-project UI submits a template ID through the existing rooted managed-project API. FORMA contains four pages and 328 native layers; its artwork is self-contained CSS. Creation validates the document, rejects existing destinations, deep-copies it with a fresh document ID and initializes ordinary project history. Runtime files continue to come from the installed Studio runtime; no template code runs in the management origin. Preview images are served through the authenticated design API.

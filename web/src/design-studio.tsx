@@ -120,6 +120,7 @@ export function DesignStudio({
  const [parentFolder,setParentFolder]=useState('');
  const [folderSlug,setFolderSlug]=useState('NewDesignProject');
  const [projectName,setProjectName]=useState('');
+ const [templateId,setTemplateId]=useState<'blank'|'forma'>('blank');
  const [preset,setPreset]=useState('mobile-portrait');
  const [customWidth,setCustomWidth]=useState(720);
  const [customHeight,setCustomHeight]=useState(1560);
@@ -170,7 +171,7 @@ export function DesignStudio({
    setFolderSlug('UI-Design');
    setProjectName('');
    setCreateError('');
-   setCreateOpen(true);
+   setTemplateId('blank');setCreateOpen(true);
    onClearCreateInFolder?.();
   }
  },[createInFolder,onClearCreateInFolder]);
@@ -365,9 +366,7 @@ export function DesignStudio({
     root,managed:true,
     directory:targetDirectory,
     name:projectName.trim()||folderSlug.trim()||targetDirectory.split('/').pop(),
-    preset,
-    width:customWidth,
-    height:customHeight,
+    ...(templateId==='forma'?{template_id:'forma'}:{preset,width:customWidth,height:customHeight}),
    });
    setCreateOpen(false);
    notify(t('已创建设计项目：')+res.project.name);
@@ -447,7 +446,7 @@ export function DesignStudio({
       ))}
      </select>
     )}
-    <button type="button" className="primary" onClick={()=>{setParentFolder(initialFolder||'');setFolderSlug('NewDesignProject');setProjectName('');setCreateError('');setCreateOpen(true);}}>
+    <button type="button" className="primary" onClick={()=>{setParentFolder(initialFolder||'');setFolderSlug('NewDesignProject');setProjectName('');setCreateError('');setTemplateId('blank');setCreateOpen(true);}}>
      <Plus size={15}/>{t('新建设计项目')}
     </button>
     {selectedProject&&!selectedProject.managed&&(
@@ -499,7 +498,7 @@ export function DesignStudio({
    )}
   </div>}
 
-  {showHome&&<DesignProjects root={root} projects={projects} onOpen={directory=>{setSelectedDir(directory);setShowHome(false);}} onCreate={()=>{setParentFolder(initialFolder||'');setFolderSlug('NewDesignProject');setProjectName('');setCreateError('');setCreateOpen(true);}} reload={()=>loadProjects()} notify={notify}/>}
+  {showHome&&<DesignProjects root={root} projects={projects} onOpen={directory=>{setSelectedDir(directory);setShowHome(false);}} onCreate={()=>{setParentFolder(initialFolder||'');setFolderSlug('NewDesignProject');setProjectName('');setCreateError('');setTemplateId('blank');setCreateOpen(true);}} reload={()=>loadProjects()} notify={notify}/>}
   {!showHome&&selectedProject?.managed&&<DesignWorkbench key={root+'::'+selectedProject.directory} root={root} directory={selectedProject.directory} displayName={selectedProject.name} notify={notify} onBack={()=>setShowHome(true)} onOpenNote={onOpenNote}/>}
 
   {!showHome&&!selectedProject?.managed&&(frameBusy||error)&&(
@@ -514,7 +513,7 @@ export function DesignStudio({
     <Palette size={38}/>
     <h2>{t('在知识库中开启类 Figma 网页与 UI 设计')}</h2>
     <p>{t('选择知识库中的任意目录创建设计项目。每个项目包含多画板、可拖拽/缩放/旋转的图层树、组件契约与素材清单，并支持 AI/MCP 直接协同编辑。')}</p>
-    <button className="primary" onClick={()=>{setParentFolder(initialFolder||'');setCreateOpen(true);}}>
+    <button className="primary" onClick={()=>{setParentFolder(initialFolder||'');setTemplateId('blank');setCreateOpen(true);}}>
      <Plus size={16}/>{t('在知识库中新建设计项目')}
     </button>
    </div>
@@ -536,10 +535,25 @@ export function DesignStudio({
    <Modal title={t('在知识库中新建设计项目')} wide onClose={()=>{if(!creating)setCreateOpen(false);}}>
     <form onSubmit={submitCreateProject}>
      <div className="pad design-create-form">
-      <p className="hint">{t('选择知识库内的目标文件夹，LeafLoom 将在该位置生成符合 1.1.0 规范的设计项目（含多画板、图层编辑引擎、项目契约与 Wiki 索引）。')}</p>
+      <p className="hint">{t('design.template.intro')}</p>
+      <fieldset className="design-template-picker" disabled={creating}>
+       <legend>{t('design.template.choose')}</legend>
+       <div className="design-template-options">
+        <label data-template-id="blank" className={'design-template-card'+(templateId==='blank'?' selected':'')}>
+         <input type="radio" name="design-template" value="blank" checked={templateId==='blank'} onChange={()=>setTemplateId('blank')}/>
+         <span className="design-template-art design-template-blank" aria-hidden="true"><span><Plus size={28}/></span></span>
+         <span className="design-template-copy"><strong>{t('design.template.blank')}</strong><span>{t('design.template.blankDescription')}</span></span>
+        </label>
+        <label data-template-id="forma" className={'design-template-card'+(templateId==='forma'?' selected':'')}>
+         <input type="radio" name="design-template" value="forma" checked={templateId==='forma'} onChange={()=>setTemplateId('forma')}/>
+         <span className="design-template-art design-template-forma"><img src="/api/design/templates/forma/preview" alt={t('design.template.formaPreview')}/></span>
+         <span className="design-template-copy"><strong>FORMA <small>{t('design.template.builtIn')}</small></strong><span>{t('design.template.formaDescription')}</span><span className="design-template-meta"><Layers size={13} aria-hidden="true"/>{t('design.template.formaLayers')}</span></span>
+        </label>
+       </div>
+      </fieldset>
       <div className="design-folder-picker">
        <div className="design-folder-picker-header">
-        <strong>{t('1. 选择存放目录（知识库内）')}</strong>
+        <strong>{t('design.template.directory')}</strong>
         <button type="button" className={'design-root-btn'+(parentFolder===''?' selected':'')} onClick={()=>setParentFolder('')}>
          <Folder size={14}/>{t('知识库根目录 /')}
         </button>
@@ -582,7 +596,7 @@ export function DesignStudio({
        <code>{targetDirectory||'/'}</code>
       </div>
 
-      <div className="design-form-grid">
+      {templateId==='blank'&&<div className="design-form-grid">
        <label className="setting-field">
         {t('画板尺寸预设')}
         <select
@@ -607,7 +621,7 @@ export function DesignStudio({
          <input type="number" min={120} max={7680} value={customHeight} onChange={e=>setCustomHeight(Number(e.target.value)||1560)}/>
         </label>
        </div>
-      </div>
+      </div>}
 
       {createError&&<p className="error" role="alert"><Diagnostic message={createError}/></p>}
      </div>

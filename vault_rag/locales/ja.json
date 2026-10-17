@@ -1385,5 +1385,17 @@
   "选择父级图层": "親レイヤーを選択",
   "site.video_label": "LeafLoom の英語デモ動画、35 秒",
   "site.video_caption": "架空のデモライブラリを使った実際のアプリ。字幕付きの 35 秒の英語動画です。",
-  "site.video_link": "動画を直接開く"
+  "site.video_link": "動画を直接開く",
+  "design.template.intro": "空白のボードから始めるか、内蔵テンプレートで自由に編集できる独立したプロジェクトを作成します。",
+  "design.template.choose": "開始方法を選択",
+  "design.template.blank": "空白のプロジェクト",
+  "design.template.blankDescription": "ボードのサイズを指定して、最初からデザインします。",
+  "design.template.builtIn": "内蔵テンプレート",
+  "design.template.formaDescription": "テキスト、画像、レイアウトを編集できる、洗練されたクリエイティブスタジオのウェブサイト。",
+  "design.template.formaLayers": "編集可能な 4 ボード・328 レイヤー",
+  "design.template.formaPreview": "FORMA クリエイティブスタジオのウェブサイトテンプレートのプレビュー",
+  "design.template.directory": "保管庫内の保存先を選択",
+  "请选择新的项目目录；不会覆盖已有文件": "新しいプロジェクトフォルダーを選択してください。既存ファイルは上書きしません",
+  "未知的内置设计模板": "不明な内蔵デザインテンプレートです",
+  "内置模板需要可视化设计项目": "内蔵テンプレートにはビジュアルデザインプロジェクトが必要です"
 }

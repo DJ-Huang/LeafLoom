@@ -98,6 +98,50 @@ async function buildBlankWorkflow({page,request,info,png,checks}){
  fs.writeFileSync(path.join(evidence,'blank-workflow-document.json'),JSON.stringify((await read()).document,null,2));
  checks.push('blank-workflow-export-download');
 }
+async function buildFormaWorkflow({page,request,info,checks}){
+ const read=()=>request('design/document?directory=FormaWorkflow');
+ const allNodes=document=>{const walk=items=>items.flatMap(node=>[node,...walk(node.children||[])]);return document.pages.flatMap(value=>walk(value.nodes));};
+ const home=()=>page.locator('.design-home-heading').getByRole('button',{name:'新建设计项目',exact:true});
+ await page.locator('.dw-toolbar').getByRole('button',{name:'返回项目',exact:true}).click();await home().click();
+ const dialog=page.getByRole('dialog');
+ await dialog.locator('[data-template-id="forma"]').click();
+ assert.equal(await dialog.locator('input[name="design-template"][value="forma"]').isChecked(),true);
+ const preview=dialog.locator('[data-template-id="forma"] img');await preview.waitFor();
+ await page.waitForFunction(()=>{const image=document.querySelector('[data-template-id="forma"] img');return image?.complete&&image.naturalWidth>0;});
+ await dialog.getByLabel('项目文件夹名称（英文或中文目录名）',{exact:true}).fill('FormaWorkflow');
+ await dialog.getByLabel('项目显示名称',{exact:true}).fill('My FORMA Studio');
+ const evidence=path.join(root,'.cache/studio-qa');fs.mkdirSync(evidence,{recursive:true});
+ await page.screenshot({path:path.join(evidence,'forma-template-picker.png'),fullPage:true});
+ const createdEvent=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/design/projects'&&response.request().method()==='POST');
+ await dialog.getByRole('button',{name:'创建并打开设计工作台',exact:true}).click();
+ const created=await createdEvent;assert.ok(created.ok(),await created.text());
+ assert.equal(created.request().postDataJSON().template_id,'forma');
+ await page.locator('.dw-toolbar strong').filter({hasText:'My FORMA Studio'}).waitFor();
+ let value=await read();assert.equal(value.document.pages.length,4);assert.equal(allNodes(value.document).length,328);assert.equal(value.document.name,'My FORMA Studio');
+ assert.equal(await page.locator('.dw-page-list>button').count(),4);
+ const title=allNodes(value.document).find(node=>node.props?.text==='Independent design studio / Est. 2026');assert.ok(title);
+ const studio=()=>page.frameLocator('.dw-runtime');
+ await studio().locator('[data-studio-select-id="'+title.id+'"]').click();
+ await page.locator('.dw-inspector>.dw-tabs').getByRole('button',{name:'设计',exact:true}).click();
+ const text=page.locator('.dw-inspector').getByLabel('文字内容',{exact:true});await text.waitFor();
+ const savedEvent=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/design/operations'&&response.request().method()==='POST');
+ await text.fill('Designed by our studio');await text.blur();const saved=await savedEvent;assert.ok(saved.ok(),await saved.text());
+ await page.locator('.dw-save-status').filter({hasText:'已保存'}).waitFor();
+ await page.locator('.dw-toolbar').getByRole('button',{name:'返回项目',exact:true}).click();
+ await page.locator('.design-project-title').getByText('My FORMA Studio',{exact:true}).click();
+ await studio().locator('[data-studio-select-id="'+title.id+'"]').filter({hasText:'Designed by our studio'}).waitFor();
+ value=await read();assert.equal(allNodes(value.document).find(node=>node.id===title.id).props.text,'Designed by our studio');
+ await page.screenshot({path:path.join(evidence,'forma-template-edited.png'),fullPage:true});
+ checks.push('forma-picker-preview-four-pages-328-editable-layers-and-reopen');
+ await page.locator('.dw-toolbar').getByRole('button',{name:'返回项目',exact:true}).click();await home().click();
+ await dialog.locator('[data-template-id="forma"]').click();
+ await dialog.getByLabel('项目文件夹名称（英文或中文目录名）',{exact:true}).fill('FormaWorkflow');
+ await dialog.getByLabel('项目显示名称',{exact:true}).fill('Do not overwrite');
+ const rejectedEvent=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/design/projects'&&response.request().method()==='POST');
+ await dialog.getByRole('button',{name:'创建并打开设计工作台',exact:true}).click();assert.equal((await rejectedEvent).status(),409);
+ await dialog.getByRole('alert').waitFor();assert.deepEqual((await read()).document,value.document);
+ checks.push('forma-existing-directory-error-preserves-original');
+}
 async function main(){
  const temp=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'leafloom-studio-browser-'))),port=await freePort();
  const log=fs.openSync(path.join(temp,'server.log'),'a');
@@ -221,6 +265,7 @@ async function main(){
   checks.push('isolated-project-export-download');
   fs.mkdirSync(path.join(root,'.cache/studio-qa'),{recursive:true});await page.screenshot({path:path.join(root,'.cache/studio-qa/workbench.png'),fullPage:true});
   await buildBlankWorkflow({page,request,info,png,checks});
+  await buildFormaWorkflow({page,request,info,checks});
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({ok:true,checks,temp},null,2));
  }catch(error){if(page)try{await page.screenshot({path:path.join(temp,'failure.png'),fullPage:true});fs.writeFileSync(path.join(temp,'failure.html'),await page.content());}catch{}console.error('Studio browser fixture retained at '+temp);throw error;}
