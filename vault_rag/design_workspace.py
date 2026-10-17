@@ -66,6 +66,8 @@ class DesignWorkspace:
     def __init__(self, studio, documents):
         self.studio, self.documents = studio, documents
         self.config, self.files, self.runtime = studio.config, studio.files, studio.runtime
+        from vault_rag.design_publishing import DesignPublisher
+        self.publisher = DesignPublisher(self)
 
     def _state(self, *parts):
         return self.files.state_path('design-studio', *parts)
@@ -719,6 +721,21 @@ class DesignWorkspace:
                 return self.library()
             self._validate_revision(before, expected_revision)
             document = self.documents.read(directory)['document']
+            # Library entries are portable source snapshots. Project-scoped keys
+            # must never attach themselves to an unrelated destination binding.
+            # The resolver copies, so neither source nor locale data is modified.
+            from vault_rag.design_bindings import resolve_document
+            document = resolve_document(document)
+            def strip_links(props):
+                props.pop('bindingKey', None)
+                overrides = props.get('overrides', {})
+                for override in overrides.values() if isinstance(overrides, dict) else ():
+                    if isinstance(override, dict) and isinstance(override.get('props'), dict):
+                        strip_links(override['props'])
+            for nodes in ([page['nodes'] for page in document['pages']] +
+                          [[component['node']] for component in document['components'].values()]):
+                for node in _walk(nodes):
+                    strip_links(node.get('props', {}))
             table = {'component': 'components', 'asset': 'assets', 'style': 'styles', 'script': 'scripts'}.get(kind)
             if not table or item_id not in document.get(table, {}):
                 raise ValueError('Library source not found')

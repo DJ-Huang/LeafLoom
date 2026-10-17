@@ -83,6 +83,53 @@ def design_router(studio):
         body = await request.json(); guard(body)
         return await run(body, workspace.export, body['directory'])
 
+    @router.post('/publish/preflight')
+    async def publishing_preflight(request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, workspace.publisher.preflight, body)
+
+    @router.post('/publish')
+    async def publish(request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, workspace.publisher.start, body)
+
+    @router.get('/publish/{job_id}')
+    async def publishing_status(job_id: str, root: str):
+        body = {'root': root}; guard(body)
+        return await run(body, workspace.publisher.get, job_id)
+
+    @router.post('/publish/{job_id}/retry')
+    async def publishing_retry(job_id: str, request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, workspace.publisher.retry, job_id)
+
+    @router.get('/publish/{job_id}/download')
+    async def publishing_download(job_id: str, root: str):
+        body = {'root': root}; guard(body)
+        path, mime, name = await run(body, workspace.publisher.download, job_id)
+        return FileResponse(path, media_type=mime, filename=name)
+
+    @router.get('/publish/{job_id}/native-manifest')
+    async def publishing_native_manifest(job_id: str):
+        return await run({'root': str(studio.config.root)}, workspace.publisher.native_manifest, job_id)
+
+    @router.post('/publish/{job_id}/native-failure')
+    async def publishing_native_failure(job_id: str, request: Request):
+        body = await request.json()
+        return await run({'root': str(studio.config.root)}, workspace.publisher.native_failure, job_id, body.get('error'))
+
+    @router.post('/publish/{job_id}/native-result')
+    async def publishing_native_result(job_id: str, request: Request):
+        chunks, size = [], 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > 97 * 1024 * 1024:
+                raise ValueError('Publication result exceeds the request limit')
+            chunks.append(chunk)
+        import json
+        body = json.loads(b''.join(chunks))
+        return await run({'root': str(studio.config.root)}, workspace.publisher.native_result, job_id, body)
+
     @router.get('/workspace')
     async def workspace_state():
         return await asyncio.to_thread(workspace.state)

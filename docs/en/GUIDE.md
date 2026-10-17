@@ -187,3 +187,23 @@ There are no external dependencies or automatic endless effects. Preset motion h
 ## Switch between editing and preview
 
 Choose **Preview** at the top of the workbench to play the current page’s animation, scripts and navigation without exporting a ZIP. The workbench commits active text input and waits for pending saves first. If saving fails, your changes remain queued and editing stays open with retry guidance, rather than showing stale content. Preview hides layers, properties, selection outlines and handles. Use **Preview page** to switch existing artboards, including desktop/mobile layouts included in a template, and **Replay** to restart the current page. **Edit** or **Back to editing** restores the page, selected layers and canvas position from before preview.
+
+## Reuse content and publish page variants
+
+In Design Studio, open the inspector's **Data** tab. Bind a text, button or image
+to a stable key, create a language or general variant, and edit its values. Images
+share existing asset IDs. Source changes mark older translations for review;
+variant layout overrides adjust text boxes and page dimensions without replacing
+the source. These edits use normal save, undo and conflict recovery.
+
+Open **Batch publish**, select pages and variants, check the explicit dimensions,
+and run the output check. Export PNG images in a ZIP or one multi-page PDF. The
+current-canvas check locates overflow and font/resource risks. Prefer editing the
+content or box; bounded text fitting only runs when explicitly clicked and obeys
+a minimum font size and reduction limit. Glyph/fallback detection is not a full
+font audit. Failed export items can be retried from the same saved snapshot.
+Desktop uses its built-in renderer; web/headless hosting needs the optional
+publishing dependencies. Interactive preview and the original HTML ZIP export
+remain available. See [publishing details](../DESIGN_STUDIO.md#bound-content-variants-and-static-publishing).
+
+Bindings and variants belong to their project. Shared-library component publication freezes source content and removes its project binding links; imported components can be bound to keys in the destination project.

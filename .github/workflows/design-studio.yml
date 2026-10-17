@@ -7,6 +7,12 @@ on:
       - 'vault_rag/design*'
       - 'vault_rag/design_assets/**'
       - 'web/src/design*'
+      - 'desktop/design-publisher.cjs'
+      - 'desktop/main.cjs'
+      - 'desktop/preload.cjs'
+      - 'desktop/tests/*publishing*'
+      - 'pyproject.toml'
+      - 'uv.lock'
       - 'tests/*design*'
       - 'tests/studio_*'
       - 'tests/test_studio*'
@@ -16,6 +22,12 @@ on:
       - 'vault_rag/design*'
       - 'vault_rag/design_assets/**'
       - 'web/src/design*'
+      - 'desktop/design-publisher.cjs'
+      - 'desktop/main.cjs'
+      - 'desktop/preload.cjs'
+      - 'desktop/tests/*publishing*'
+      - 'pyproject.toml'
+      - 'uv.lock'
       - 'tests/*design*'
       - 'tests/studio_*'
       - 'tests/test_studio*'
@@ -50,6 +62,8 @@ jobs:
         run: |
           node tests/test_design_project_drafts.cjs
           node tests/test_studio_navigation.cjs
+          node tests/test_studio_projection.cjs
+          npm test --prefix desktop
       - name: Install isolated test browser
         run: |
           uv pip install --python .venv/bin/python playwright==1.58.0
@@ -57,10 +71,16 @@ jobs:
       - name: Portable runtime browser contracts
         run: |
           .venv/bin/python tests/studio_runtime_browser.py
+          .venv/bin/python tests/studio_preflight_browser.py
+          LEAFLOOM_PUBLISH_BROWSER_TESTS=1 .venv/bin/python -m unittest discover -s tests -p test_design_publishing.py
           .venv/bin/python tests/studio_html_import_browser.py
           .venv/bin/python tests/studio_migration_interactions_browser.py
       - name: Install Chrome for full-stack acceptance
         run: npx --yes playwright@1.64.0 install --with-deps chrome
+      - name: Native Electron publishing acceptance
+        run: |
+          npm rebuild electron --prefix desktop
+          LEAFLOOM_TEST_PYTHON=.venv/bin/python xvfb-run -a desktop/node_modules/.bin/electron tests/studio_native_publishing.cjs
       - name: Workbench editing, navigation and recovery
         run: node tests/studio_workbench_browser.cjs
       - name: Render comparison evidence

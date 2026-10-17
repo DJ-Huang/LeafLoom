@@ -47,3 +47,9 @@ body { background: #e8eaef; }
 .studio-guide-horizontal { left: 0; right: 0; height: 1px; }
 .studio-reorder-guide { position: absolute; background: #5279f4; pointer-events: none; }
 .studio-reordering { opacity: .55 !important; }
+
+/* Static publishing is a page-sized, untransformed, motion-free surface. */
+.studio-static { background: transparent; }
+.studio-static .studio-stage { left: 0; top: 0; box-shadow: none; }
+.studio-static .studio-canvas-chrome { display: none; }
+.studio-static *, .studio-static *::before, .studio-static *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }

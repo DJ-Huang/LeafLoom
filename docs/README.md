@@ -22,6 +22,7 @@
 - [Desktop installation and source development setup](SETUP.md)
 - [HTML project folders, sessions, storage migration and Safari compatibility](HTML_PROJECTS.md)
 - [Design Studio workflows, portable documents, scripts and validation boundaries](DESIGN_STUDIO.md)
+- [Bound design content, language variants and static publishing](DESIGN_STUDIO.md#bound-content-variants-and-static-publishing)
 - [Folder organization and indexing scope](VAULT_ORGANIZATION.md)
 - [AI assistant implementation](AI_ASSISTANT.md)
 - [Complete MCP tools, credentials and note workflows](MCP.md)

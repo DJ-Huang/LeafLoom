@@ -49,6 +49,29 @@ class DesignWorkspaceTests(unittest.TestCase):
     def manage(self, action, operation_id, **options):
         return self.workspace.manage(self.directory, action, self.workspace.state()['revision'], operation_id, **options)
 
+    def test_library_binding_snapshot_is_portable_without_cross_project_links(self):
+        commands = [
+            {'type': 'component.create', 'component': {'id': 'bound-card', 'name': 'Bound card', 'node': {'id': 'bound-title', 'type': 'text', 'props': {'text': 'Source'}}}},
+            {'type': 'binding.set', 'key': 'campaign.title', 'kind': 'text', 'value': 'Source'},
+            {'type': 'node.bind', 'page_id': 'component:bound-card', 'node_id': 'bound-title', 'key': 'campaign.title'},
+            {'type': 'variant.set', 'variant': {'id': 'ja', 'values': {'campaign.title': {'value': '翻訳', 'sourceRevision': 1}}}},
+        ]
+        source = self.docs.apply(self.directory, commands, self.project['revision'], 'bind-library-source')
+        state = self.workspace.publish(self.directory, 'component', 'bound-card', self.workspace.state()['revision'], 'publish-bound-card')
+        item_id = state['items'][0]['id']
+        published = self.workspace._load()['library'][item_id]
+        self.assertEqual(published['value']['node']['props'], {'text': 'Source'})
+        self.assertEqual(self.docs.read(self.directory)['document'], source['document'])
+        fresh = self.create('Projects/Fresh')
+        imported = self.workspace.import_library('Projects/Fresh', item_id, fresh['revision'], 'import-bound-fresh')['document']
+        imported_node = next(iter(imported['components'].values()))['node']
+        self.assertEqual(imported_node['props'], {'text': 'Source'})
+        collision = self.create('Projects/Collision')
+        collision = self.docs.apply('Projects/Collision', [{'type': 'binding.set', 'key': 'campaign.title', 'kind': 'text', 'value': 'Unrelated destination'}], collision['revision'], 'collision-binding')
+        imported = self.workspace.import_library('Projects/Collision', item_id, collision['revision'], 'import-bound-collision')['document']
+        self.assertEqual(imported['bindings']['campaign.title']['value'], 'Unrelated destination')
+        self.assertEqual(next(iter(imported['components'].values()))['node']['props'], {'text': 'Source'})
+
     def test_metadata_history_uses_deltas_and_receipts_survive_branching(self):
         revision = self.workspace.state()['revision']
         changed = self.manage('rename', 'rename-pets', value='A new name')

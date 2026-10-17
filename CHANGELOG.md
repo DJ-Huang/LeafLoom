@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Add stable text/image data bindings, reviewable language/general variants, per-variant layout overrides, text/resource preflight and bounded fitting, plus selected-page/variant PNG ZIP and multi-page PDF publishing with progress and retry. Preserve interactive HTML export and undo/conflict protection.
+
 - Add an explicit Edit / Preview switch with a distraction-free interactive canvas, page picker and replay. Wait for the latest edits to save before preview, retain failed saves, and restore the original editing page, selection and camera on return.
 
 - Add the playable Motion Playground built-in template with editable native animation and JavaScript examples, a touch layout and in-project guide. Respect live reduced-motion settings, support focus/touch hover feedback, and avoid accumulating animations on repeated interaction.

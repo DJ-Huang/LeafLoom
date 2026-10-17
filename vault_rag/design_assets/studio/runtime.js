@@ -123,6 +123,31 @@
     return sources;
   }
 
+  // Match design_bindings.resolve_document: projections never replace source data.
+  function projectDocument(document, variantId) {
+    const result = clone(document);
+    const variant = variantId ? (document.variants || {})[variantId] : {};
+    if (!variant) throw new Error('Unknown variant: ' + variantId);
+    function walk(nodes) {
+      (nodes || []).forEach(node => {
+        const key = node.props && node.props.bindingKey;
+        if (key != null) {
+          const binding = (document.bindings || {})[key];
+          if (!binding) throw new Error('Missing binding: ' + key);
+          const override = (variant.values || {})[key];
+          const value = override && Object.prototype.hasOwnProperty.call(override, 'value') ? override.value : binding.value;
+          node.props[binding.kind === 'image' ? 'assetId' : 'text'] = value;
+          if (binding.kind === 'image') delete node.props.src;
+        }
+        if ((variant.layout || {})[node.id]) node.style = Object.assign({}, node.style, variant.layout[node.id]);
+        walk(node.children);
+      });
+    }
+    result.pages.forEach(page => { walk(page.nodes); Object.assign(page, (variant.pageLayout || {})[page.id] || {}); });
+    Object.values(result.components || {}).forEach(component => { if (component.node) walk([component.node]); });
+    return result;
+  }
+
   function mount(root, document, options) {
     if (!root || !root.ownerDocument) throw new Error('Studio requires a DOM root.');
     if (!document || !Array.isArray(document.pages)) throw new Error('Invalid Studio document.');
@@ -131,7 +156,10 @@
     const settings = Object.assign({ mode: 'preview', selectedIds: [] }, options || {});
     const base = resourceUrl(settings.assetBase || './', win.location.href);
     const emit = (type, payload) => { if (typeof settings.onMessage === 'function') settings.onMessage(Object.assign({ type }, payload || {})); };
-    let model = clone(document);
+    let canonical = clone(document);
+    let variantId = settings.variantId || null;
+    let readOnly = !!settings.readOnly || !!variantId;
+    let model = !settings.alreadyResolved && (variantId || Object.keys(canonical.bindings || {}).length) ? projectDocument(canonical, variantId) : canonical;
     let currentPageId = settings.pageId || (model.pages[0] && model.pages[0].id);
     let mode = settings.mode;
     let selected = new Set(settings.selectedIds || []);
@@ -450,9 +478,15 @@
 
     function customHtml(html, css) {
       html = materialize(html);
-      const policy = mode === 'edit' ? '<meta http-equiv="Content-Security-Policy" content="script-src &apos;none&apos;; object-src &apos;none&apos;">' : '';
+      if (mode === 'static') {
+        const parsed = new win.DOMParser().parseFromString(String(html), 'text/html');
+        parsed.querySelectorAll('*').forEach(el => { if (el.style) { el.style.setProperty('animation', 'none', 'important'); el.style.setProperty('transition', 'none', 'important'); } });
+        html = '<!doctype html>' + parsed.documentElement.outerHTML;
+      }
+      const policy = mode !== 'preview' ? '<meta http-equiv="Content-Security-Policy" content="script-src &apos;none&apos;; object-src &apos;none&apos;">' : '';
       const logger = mode === 'preview' ? '<script>(()=>{const send=(type,data)=>parent.postMessage(Object.assign({type},data),"*");addEventListener("error",e=>send("studio-custom-error",{message:e.message,line:e.lineno}));addEventListener("unhandledrejection",e=>send("studio-custom-error",{message:String(e.reason&&e.reason.message||e.reason)}));for(const level of ["log","info","warn","error","debug"]){const original=console[level];console[level]=(...args)=>{send("studio-custom-console",{level,args:args.map(value=>{try{return typeof value==="string"?value:JSON.stringify(value)}catch(_){return String(value)}})});original.apply(console,args)}}})();<\/script>' : '';
-      const head = '<meta charset="utf-8">' + policy + '<base href="' + escaped(base) + '"><style>html,body{margin:0;width:100%;height:100%;box-sizing:border-box}*{box-sizing:inherit}' + materialize(String(css || '')).replace(/<\/style/gi, '<\\/style') + '</style>' + logger;
+      const staticStyle = mode === 'static' ? '<style>*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}</style>' : '';
+      const head = '<meta charset="utf-8">' + policy + '<base href="' + escaped(base) + '"><style>html,body{margin:0;width:100%;height:100%;box-sizing:border-box}*{box-sizing:inherit}' + materialize(String(css || '')).replace(/<\/style/gi, '<\\/style') + '</style>' + staticStyle + logger;
       if (/<html[\s>]/i.test(html)) return /<head(?:\s[^>]*)?>/i.test(html) ? String(html).replace(/<head(?:\s[^>]*)?>/i, value => value + head) : String(html).replace(/<html(?:\s[^>]*)?>/i, value => value + '<head>' + head + '</head>');
       return '<!doctype html><html><head>' + head + '</head><body>' + materialize(html) + '</body></html>';
     }
@@ -557,7 +591,7 @@
         if (!entry) return;
         entry.wrapper.classList.toggle('studio-selected', next.has(id));
         [...entry.wrapper.children].filter(child => child.classList.contains('studio-handle')).forEach(child => child.remove());
-        if (next.has(id) && next.size === 1 && !entry.authored && !isLocked(entry)) handles.forEach(handle => {
+        if (!readOnly && next.has(id) && next.size === 1 && !entry.authored && !isLocked(entry)) handles.forEach(handle => {
           const grip = doc.createElement('span'); grip.className = 'studio-handle'; grip.dataset.handle = handle; entry.wrapper.appendChild(grip);
         });
       });
@@ -571,7 +605,7 @@
       if (notify) emit('studio-selection', { ids: [...selected] });
     }
 
-    const cameraKey = () => JSON.stringify([model.id, currentPageId, mode]);
+    const cameraKey = () => JSON.stringify([model.id, currentPageId, mode, variantId]);
     const camera = () => cameras.get(cameraKey());
     const clampZoom = value => Math.min(8, Math.max(.03, value));
 
@@ -583,9 +617,12 @@
     function applyCamera() {
       const page = model.pages.find(item => item.id === currentPageId), view = camera();
       if (!page || !view || disposed) return;
+      if (mode === 'static') { view.zoom = 1; view.x = 0; view.y = 0; }
       zoom = view.zoom;
       stage.style.width = Math.max(1, finite(page.width, 1280)) + 'px';
       stage.style.height = Math.max(1, finite(page.height, 720)) + 'px';
+      viewport.style.width = mode === 'static' ? stage.style.width : '';
+      viewport.style.height = mode === 'static' ? stage.style.height : '';
       stage.style.transform = 'translate(' + (-view.x * zoom) + 'px,' + (-view.y * zoom) + 'px) scale(' + zoom + ')';
       viewport.style.backgroundPosition = (viewport.clientWidth / 2 - view.x * zoom) + 'px ' + (viewport.clientHeight / 2 - view.y * zoom) + 'px';
       syncSelectionBox();
@@ -677,10 +714,12 @@
       releasePreview();
       editable = new Map(); authoredTexts = new Map(); renderedEntries = []; decorated = new Set();
       stage.replaceChildren();
+      stage.style.removeProperty('animation'); stage.style.removeProperty('transition');
       htmlFrames.clear();
       hovered = null;
       viewport.classList.toggle('studio-editing', mode === 'edit');
       viewport.classList.toggle('studio-previewing', mode === 'preview');
+      viewport.classList.toggle('studio-static', mode === 'static');
       syncTool();
       const page = model.pages.find(item => item.id === currentPageId);
       if (!page) { placeholder(stage, 'Page not found'); return; }
@@ -692,6 +731,7 @@
       const scope = makeScope('page_' + page.id, page.nodes, page.authoredContext);
       pageStyles(page, stage, scope);
       renderNodes(page.nodes, pageRoot(page, stage, scope), scope, new Set(['page:' + page.id]), null, false, renderedEntries);
+      freezeStaticMotion();
       select([...selected], false);
       restoreCamera();
       if (mode === 'preview') {
@@ -757,7 +797,7 @@
 
     function syncSelectionBox(bounds, origin) {
       if (!bounds) {
-        const entries = mode === 'edit' ? topEntries(undefined, selected.size === 1) : [];
+        const entries = !readOnly && mode === 'edit' ? topEntries(undefined, selected.size === 1) : [];
         bounds = entries.length > 1 || entries.length === 1 && entries[0].authored ? boundsOf(entries.map(entry => entry.wrapper.getBoundingClientRect())) : null;
       }
       if (!bounds || !bounds.width || !bounds.height) { if (selectionBox) selectionBox.remove(); selectionBox = null; return; }
@@ -793,7 +833,7 @@
     }
 
     function action(name) {
-      if (mode !== 'edit' || textEdit || gesture || marquee || panGesture) return false;
+      if (readOnly || mode !== 'edit' || textEdit || gesture || marquee || panGesture) return false;
       const direction = /^nudge-(left|right|up|down)(-large)?$/.exec(name);
       if (direction) { const distance = direction[2] ? 10 : 1; return nudge(direction[1] === 'left' ? -distance : direction[1] === 'right' ? distance : 0, direction[1] === 'up' ? -distance : direction[1] === 'down' ? distance : 0); }
       const targets = topEntries().map(snapshot).filter(target => target.rect.width && target.rect.height);
@@ -822,7 +862,7 @@
     }
 
     function nudge(dx, dy) {
-      if (gesture || marquee || panGesture) return;
+      if (readOnly || gesture || marquee || panGesture) return;
       const targets = topEntries().map(snapshot);
       targets.forEach(target => { target.patch = movePatch(target, dx * zoom, dy * zoom); });
       return commitTargets(targets, 'Nudge elements');
@@ -939,7 +979,7 @@
         const next = new Set(selected); next.has(entry.node.id) ? next.delete(entry.node.id) : next.add(entry.node.id); select([...next], true);
         if (!selected.has(entry.node.id)) return;
       } else if (!groupHandle && !selected.has(entry.node.id)) select([entry.node.id], true);
-      if (isLocked(entry)) return;
+      if (readOnly || isLocked(entry)) return;
       if (!handle && inFlow(entry)) { startReorder(event, entry); return; }
       const entries = groupHandle || !handle ? topEntries(undefined, groupHandle && selected.size === 1) : [entry];
       if (!entries.length) return;
@@ -1094,7 +1134,7 @@
     }
 
     function doubleClick(event) {
-      if (mode !== 'edit' || tool === 'hand' || spaceDown) return;
+      if (readOnly || mode !== 'edit' || tool === 'hand' || spaceDown) return;
       const wrapper = event.target.closest('[data-studio-select-id]');
       const entry = wrapper && editable.get(wrapper.dataset.studioSelectId);
       if (!entry || isLocked(entry) || (entry.node.children || []).length || !(entry.node.type === 'text' || entry.node.type === 'button' || entry.authored && entry.node.props && entry.node.props.text != null)) return;
@@ -1331,14 +1371,18 @@
 
     function update(nextDocument, nextOptions) {
       const next = nextOptions || {};
+      const nextVariantId = Object.prototype.hasOwnProperty.call(next, 'variantId') ? next.variantId || null : variantId;
+      const nextCanonical = clone(nextDocument);
+      nextDocument = !settings.alreadyResolved && (nextVariantId || Object.keys(nextCanonical.bindings || {}).length) ? projectDocument(nextCanonical, nextVariantId) : nextCanonical;
+      const nextReadOnly = Object.prototype.hasOwnProperty.call(next, 'readOnly') ? !!next.readOnly || !!nextVariantId : !!nextVariantId || readOnly && variantId === nextVariantId;
       const nextPageId = next.pageId || currentPageId;
       const nextMode = next.mode || mode;
       const oldPage = model.pages.find(page => page.id === currentPageId);
       const newPage = nextDocument.pages.find(page => page.id === nextPageId);
       const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
       const metadata = page => { const value = Object.assign({}, page); delete value.nodes; return value; };
-      let reusable = model.id === nextDocument.id && mode === 'edit' && nextMode === 'edit' && currentPageId === nextPageId && oldPage && newPage && equal(metadata(oldPage), metadata(newPage));
-      if (reusable) reusable = ['assets', 'components', 'styles', 'scripts'].every(key => equal(model[key], nextDocument[key]));
+      let reusable = variantId === nextVariantId && readOnly === nextReadOnly && model.id === nextDocument.id && mode === 'edit' && nextMode === 'edit' && currentPageId === nextPageId && oldPage && newPage && equal(metadata(oldPage), metadata(newPage));
+      if (reusable) reusable = ['assets', 'components', 'styles', 'scripts', 'bindings', 'variants'].every(key => equal(model[key], nextDocument[key]));
       const changes = [];
       function inspect(before, after) {
         if (!Array.isArray(before) || !Array.isArray(after) || before.length !== after.length) return false;
@@ -1362,8 +1406,10 @@
       }
       if (reusable) reusable = inspect(oldPage.nodes || [], newPage.nodes || []);
       cancelGesture();
+      generation += 1;
       if (nextDocument.id !== model.id) cameras.clear();
-      model = clone(nextDocument); currentPageId = nextPageId; mode = nextMode;
+      canonical = nextCanonical; variantId = nextVariantId; readOnly = nextReadOnly;
+      model = nextDocument; currentPageId = nextPageId; mode = nextMode;
       if (mode === 'edit') navigationContext = {};
       previewNodeId = next.previewNodeId || null;
       if (!reusable) { redraw(); if (next.selectedIds) select(next.selectedIds, false); return false; }
@@ -1388,6 +1434,145 @@
       relink(model.pages.find(page => page.id === currentPageId).nodes);
       select(next.selectedIds || [...selected], false);
       return true;
+    }
+
+    // Browser layout is authoritative for overflow. FontFaceSet is NOT a glyph
+    // coverage API: report risks and limits, never claim that fallback proves coverage.
+    function textEntries() {
+      return renderedEntries.filter(entry => {
+        const el = entry.visual;
+        return !entry.node.hidden && el && el.getClientRects().length && win.getComputedStyle(el).visibility !== 'hidden' &&
+          (['text', 'button'].includes(entry.node.type) || entry.authored && [...el.childNodes].some(child => child.nodeType === 3 && child.textContent.trim()));
+      });
+    }
+
+    function textMeasurements(el) {
+      const style = win.getComputedStyle(el);
+      return { clientWidth: el.clientWidth, clientHeight: el.clientHeight, scrollWidth: el.scrollWidth, scrollHeight: el.scrollHeight, fontSize: parseFloat(style.fontSize), fontFamily: style.fontFamily, overflowX: el.scrollWidth > el.clientWidth + 1, overflowY: el.scrollHeight > el.clientHeight + 1 };
+    }
+
+    async function settleFonts() {
+      if (!doc.fonts) return false;
+      let timer;
+      try {
+        return await Promise.race([doc.fonts.ready.then(() => true), new Promise(resolve => { timer = win.setTimeout(() => resolve(false), 2500); })]);
+      } finally { win.clearTimeout(timer); }
+    }
+
+    async function preflight() {
+      const pageId = currentPageId, token = generation;
+      const fontsReady = await settleFonts();
+      if (disposed || token !== generation || pageId !== currentPageId) throw new Error('Page changed during preflight. Run the check again.');
+      const issues = [];
+      const add = (nodeId, kind, message, measurements, severity) => issues.push({ nodeId, pageId, code: kind, kind, severity: severity || 'warning', message, measurements: measurements || {} });
+      textEntries().forEach(entry => {
+        const el = entry.visual, metrics = textMeasurements(el), style = win.getComputedStyle(el);
+        const text = entry.authored ? [...el.childNodes].filter(child => child.nodeType === 3).map(child => child.textContent).join('') : el.textContent;
+        if (metrics.overflowX || metrics.overflowY) add(entry.node.id, 'text-overflow', 'Text exceeds its measured box. Enlarge the box, shorten the copy, or explicitly request a bounded font-size suggestion.', metrics);
+        let fontLoaded = fontsReady;
+        try { fontLoaded = fontsReady && doc.fonts.check(style.fontStyle + ' ' + style.fontWeight + ' ' + style.fontSize + ' ' + style.fontFamily, text); } catch (_) { fontLoaded = false; }
+        if (!fontLoaded) add(entry.node.id, 'font-load', 'A requested font is unavailable, still loading, or could not be checked; fallback may change layout.', metrics);
+        if (/[^\u0000-\u007f]/u.test(text)) add(entry.node.id, 'missing-glyph-risk', text.includes('\ufffd') ? 'Text contains a replacement character. Verify the source text and font coverage.' : 'Non-ASCII text may use fallback fonts. Browser APIs cannot verify every glyph; visually review multilingual text and emoji.', metrics);
+      });
+      renderedEntries.filter(entry => entry.node.type === 'html' && !entry.node.hidden).forEach(entry => add(entry.node.id, 'uninspected-html', 'Sandboxed custom HTML is not inspected for text overflow or font coverage. Review its exported appearance.'));
+      return { pageId, issues, limitations: ['Checks cover visible text on the current rendered page only.', 'Overflow uses DOM scroll dimensions with a 1px tolerance; transforms, clipping by ancestors, rich inline layout, and pseudo-elements need visual review.', 'Font loading checks cannot prove installed-font availability or per-glyph coverage. Missing-glyph findings are risks, not a definitive glyph audit.'] };
+    }
+
+    function freezeStaticMotion() {
+      if (mode !== 'static') return;
+      [stage, ...stage.querySelectorAll('*')].forEach(el => {
+        el.style.setProperty('animation', 'none', 'important');
+        el.style.setProperty('transition', 'none', 'important');
+        if (typeof el.pauseAnimations === 'function') { el.pauseAnimations(); el.setCurrentTime(0); }
+      });
+      // Includes pseudo-element CSS animations that authored !important rules
+      // could otherwise leave running despite the static stylesheet.
+      if (stage.getAnimations) stage.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
+    }
+
+    async function readyForStatic(options) {
+      if (mode !== 'static') throw new Error('Resource readiness is available only in static mode.');
+      const opts = options || {}, pageId = currentPageId, token = generation;
+      const timeoutMs = Math.max(100, Math.min(30000, finite(opts.timeoutMs, 15000)));
+      const maxResources = Math.max(1, Math.min(1024, Math.floor(finite(opts.maxResources, 512))));
+      const elements = [stage, ...stage.querySelectorAll('*')];
+      if (elements.length > 10000) throw new Error('Static resource inspection exceeds the 10000-element limit.');
+      freezeStaticMotion();
+      let timer;
+      const resourceUrls = new Set();
+      const images = elements.filter(el => el.tagName === 'IMG');
+      const properties = ['background-image', 'border-image-source', 'mask-image', '-webkit-mask-image', 'list-style-image', 'content'];
+      const unescapeCss = value => value.replace(/\\([0-9a-f]{1,6})\s?|\\([^\r\n])/gi, (_, hex, literal) => hex ? String.fromCodePoint(Math.min(parseInt(hex, 16) || 0xfffd, 0x10ffff)) : literal);
+      const collect = style => properties.forEach(property => {
+        const value = style.getPropertyValue(property);
+        const pattern = /url\(\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^)]*))\s*\)/gi;
+        let match;
+        while ((match = pattern.exec(value))) {
+          const path = unescapeCss(match[1] == null ? match[2] == null ? match[3].trim() : match[2] : match[1]);
+          if (path && !path.startsWith('#')) resourceUrls.add(path);
+          if (resourceUrls.size + images.length > maxResources) throw new Error('Static image resources exceed the configured limit (' + maxResources + ').');
+        }
+      });
+      if (images.length > maxResources) throw new Error('Static image resources exceed the configured limit (' + maxResources + ').');
+      elements.forEach(el => { collect(win.getComputedStyle(el)); collect(win.getComputedStyle(el, '::before')); collect(win.getComputedStyle(el, '::after')); });
+      const decode = async image => {
+        image.loading = 'eager';
+        if (typeof image.decode === 'function') await image.decode();
+        else if (!image.complete) await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = () => reject(new Error('Static image could not load.')); });
+        if (!image.naturalWidth || !image.naturalHeight) throw new Error('Static image could not decode.');
+      };
+      const loaders = [...resourceUrls].map(url => { const image = new win.Image(); image.src = url; return image; });
+      try {
+        await Promise.race([
+          (async () => {
+            await Promise.all([doc.fonts ? doc.fonts.ready : Promise.reject(new Error('Font readiness API is unavailable.')), ...images.concat(loaders).map(decode)]);
+            if ([...doc.fonts].some(font => font.status === 'error' || font.status === 'loading')) throw new Error('A document font failed to load or is still loading.');
+            await new Promise(resolve => win.requestAnimationFrame(() => win.requestAnimationFrame(resolve)));
+          })(),
+          new Promise((_, reject) => { timer = win.setTimeout(() => reject(new Error('Static resources did not settle within ' + timeoutMs + 'ms.')), timeoutMs); })
+        ]);
+        if (disposed || generation !== token || pageId !== currentPageId) throw new Error('Page changed during static resource readiness.');
+        freezeStaticMotion();
+        return { pageId, resources: images.length + resourceUrls.size, limitations: ['Sandboxed HTML and nested document resources cannot be inspected by this helper.', 'Animated image formats must be rejected or flattened by the export backend.'] };
+      } finally { win.clearTimeout(timer); }
+    }
+
+    async function fitText(nodeId, options) {
+      const opts = options || {}, pageId = currentPageId, token = generation;
+      const result = { nodeId, pageId, patch: null, warnings: [], measurements: null };
+      if (!Number.isFinite(opts.minFontSize) || opts.minFontSize < 12) { result.warnings.push('Specify a readable minimum font size of at least 12px.'); return result; }
+      const fontsReady = await settleFonts();
+      if (disposed || token !== generation || pageId !== currentPageId) { result.warnings.push('Page changed while checking fonts. Retry on the current page.'); return result; }
+      const entry = editable.get(nodeId);
+      if (!entry || !textEntries().includes(entry) || entry.visual.children.length) { result.warnings.push('Fit suggestions support visible, editable plain-text nodes only. Resize or edit rich text manually.'); return result; }
+      if (!fontsReady) { result.warnings.push('Fonts have not settled; no reliable size suggestion is available.'); return result; }
+      const el = entry.visual, style = win.getComputedStyle(el), before = textMeasurements(el);
+      try { if (!doc.fonts.check(style.fontStyle + ' ' + style.fontWeight + ' ' + style.fontSize + ' ' + style.fontFamily, el.textContent)) { result.warnings.push('A requested font is not loaded. Retry after fixing font availability.'); return result; } } catch (_) { result.warnings.push('Font availability could not be checked.'); return result; }
+      result.measurements = { before };
+      if (!before.overflowX && !before.overflowY) { result.warnings.push('Text already fits; no change is needed.'); return result; }
+      const reduction = Number.isFinite(opts.maxReduction) ? Math.max(0, Math.min(.5, opts.maxReduction)) : .2;
+      const min = Math.max(opts.minFontSize, before.fontSize * (1 - reduction));
+      const max = Math.min(before.fontSize, Number.isFinite(opts.maxFontSize) ? opts.maxFontSize : before.fontSize);
+      if (min > max || !before.clientWidth || !before.clientHeight) { result.warnings.push('No readable fit range is available. Enlarge the box or shorten the copy.'); return result; }
+      // Measure a detached visual copy: no authored DOM or document mutation,
+      // no text truncation, no implicit change to line-height/spacing/box size.
+      const probe = doc.createElement('div');
+      for (const key of style) probe.style.setProperty(key, style.getPropertyValue(key));
+      probe.textContent = el.textContent;
+      Object.assign(probe.style, { position: 'fixed', left: '-100000px', top: '0', visibility: 'hidden', display: 'block', transform: 'none', translate: 'none', rotate: 'none', scale: 'none', animation: 'none', transition: 'none', width: el.offsetWidth + 'px', height: el.offsetHeight + 'px', boxSizing: 'border-box', minWidth: '0', minHeight: '0', maxWidth: 'none', maxHeight: 'none' });
+      doc.body.appendChild(probe);
+      try {
+        const fits = size => { probe.style.fontSize = size + 'px'; const m = textMeasurements(probe); return !m.overflowX && !m.overflowY; };
+        if (!fits(min)) { result.warnings.push('Text still overflows at the bounded readable minimum. Enlarge the box or shorten the copy.'); return result; }
+        let low = min, high = max;
+        for (let index = 0; index < 10; index += 1) { const middle = (low + high) / 2; if (fits(middle)) low = middle; else high = middle; }
+        const size = Math.max(min, Math.floor(low * 100) / 100);
+        fits(size);
+        result.patch = { style: { fontSize: size } };
+        result.measurements.after = textMeasurements(probe);
+        result.warnings.push('Suggestion only: review and apply explicitly. Font fallback, ancestor clipping, and responsive layout can still affect the result.');
+        return result;
+      } finally { probe.remove(); }
     }
 
     function navigate(pageId, context) {
@@ -1463,7 +1648,7 @@
       else if (modifier && key === 'y') action = 'redo';
       else if (modifier && key === 'd') action = 'duplicate';
       else if (key === 'delete' || key === 'backspace') action = 'delete';
-      if (action) { event.preventDefault(); emit('studio-shortcut', { action }); }
+      if (action) { event.preventDefault(); if (!readOnly) emit('studio-shortcut', { action }); }
     };
     const keyUp = event => { if (event.key === ' ') { spaceDown = false; syncTool(); } };
     const blur = () => { spaceDown = false; cancelGesture(); syncTool(); };
@@ -1489,13 +1674,13 @@
     redraw();
     return {
       version: VERSION,
-      update,
+      update, preflight, fitText, readyForStatic,
       preparePreview: () => { finishTextEdit(false); cancelGesture(); },
       select: ids => select(ids, false), action, fit, fitSelection, setZoom, setTool,
       get camera() { return Object.assign({}, camera(), { tool }); },
-      setMode: (next, nodeId) => { mode = next === 'preview' ? 'preview' : 'edit'; if (mode === 'edit') navigationContext = {}; previewNodeId = nodeId || null; redraw(); },
+      setMode: (next, nodeId) => { mode = ['preview', 'static'].includes(next) ? next : 'edit'; if (mode === 'edit') navigationContext = {}; previewNodeId = nodeId || null; redraw(); },
       navigate, openOverlay,
-      get document() { return clone(model); },
+      get document() { return clone(canonical); },
       get debugStats() {
         const work = [...gestureWork].sort((a, b) => a - b);
         return Object.assign({ renderedNodes: renderedEntries.length, objectUrls: urls.length, previewGroups: cleanup.length, handles: stage.querySelectorAll('.studio-handle').length, gestureWorkSamples: work.length, gestureWorkP95Ms: work.length ? work[Math.ceil(work.length * .95) - 1] : 0, gestureWorkMaxMs: work.length ? work[work.length - 1] : 0 }, tracked);
@@ -1525,10 +1710,15 @@
       const data = event.data;
       try {
         if (data.type === 'studio-init') {
-          if (instance) instance.update(data.document, { pageId: data.pageId, mode: data.mode || 'edit', selectedIds: data.selectedIds, previewNodeId: data.previewNodeId });
-          else instance = mount(root, data.document, { pageId: data.pageId, mode: data.mode || 'edit', assetBase: data.assetBase || global.location.origin + '/', selectedIds: data.selectedIds, previewNodeId: data.previewNodeId, onMessage: send });
+          if (instance) instance.update(data.document, { pageId: data.pageId, mode: data.mode || 'edit', selectedIds: data.selectedIds, previewNodeId: data.previewNodeId, variantId: data.variantId, readOnly: data.readOnly });
+          else instance = mount(root, data.document, { pageId: data.pageId, mode: data.mode || 'edit', assetBase: data.assetBase || global.location.origin + '/', selectedIds: data.selectedIds, previewNodeId: data.previewNodeId, variantId: data.variantId, readOnly: data.readOnly, onMessage: send });
           send({ type: 'studio-rendered', pageId: data.pageId });
         } else if (instance && data.type === 'studio-prepare-preview') { instance.preparePreview(); send({ type: 'studio-preview-prepared', requestId: data.requestId }); }
+        else if (instance && data.type === 'studio-preflight') {
+          instance.preflight().then(result => send(Object.assign({ type: 'studio-preflight-result', requestId: data.requestId }, result))).catch(error => send({ type: 'studio-preflight-result', requestId: data.requestId, issues: [], error: error.message }));
+        } else if (instance && data.type === 'studio-fit-text') {
+          instance.fitText(data.nodeId, data).then(result => send(Object.assign({ type: 'studio-fit-text-result', requestId: data.requestId }, result))).catch(error => send({ type: 'studio-fit-text-result', requestId: data.requestId, nodeId: data.nodeId, patch: null, warnings: [error.message] }));
+        }
         else if (instance && data.type === 'studio-select') instance.select(data.ids);
         else if (instance && data.type === 'studio-mode') instance.setMode(data.mode, data.previewNodeId);
         else if (instance && data.type === 'studio-fit') data.selection ? instance.fitSelection() : instance.fit();
@@ -1544,7 +1734,7 @@
     return { dispose: () => { global.removeEventListener('message', listener); if (instance) instance.dispose(); } };
   }
 
-  global.LeafLoomStudio = Object.freeze({ version: VERSION, mount, bridge, resourceUrl, presetFrames, animationOptions, loggerFor: id => moduleLoggers.get(id) || global.console });
+  global.LeafLoomStudio = Object.freeze({ version: VERSION, mount, bridge, resourceUrl, presetFrames, animationOptions, projectDocument, loggerFor: id => moduleLoggers.get(id) || global.console });
   if (global.document) {
     const boot = () => {
       const root = global.document.getElementById('studio-root');

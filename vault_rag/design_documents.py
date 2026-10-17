@@ -22,6 +22,8 @@ from typing import Any
 
 from vault_rag.local_state import ConflictError, atomic_write, relative
 from vault_rag.design_references import AssetReferences, rewrite_script
+from vault_rag.design_bindings import (binding_command, validate_bindings, prune_deleted_layouts,
+                                       duplicate_layouts, image_binding_references, replace_binding_asset)
 
 
 DOCUMENT_PATH = 'Design/studio/project.json'
@@ -582,6 +584,10 @@ class DesignDocuments:
                 for asset_id in asset_index.process(resource, context=context)[0]:
                     name = resource.get('name', resource_id) if isinstance(resource, dict) else resource_id
                     references[asset_id].append({'page_id': '', 'page_name': name, 'node_id': resource_id, 'node_name': name})
+        for asset_id, binding_key, variant_id in image_binding_references(document):
+            name = binding_key + (' (' + variant_id + ')' if variant_id else '')
+            references[asset_id].append({'page_id': '', 'page_name': name, 'node_id': '', 'node_name': name,
+                                         'binding_key': binding_key, 'variant_id': variant_id})
         index = {'references': references, 'node_counts': node_counts, 'dependencies': dependencies}
         self._view_indexes[key] = index
         self._view_indexes.move_to_end(key)
@@ -696,6 +702,7 @@ class DesignDocuments:
                         self._command(after, command)
                 except (KeyError, TypeError, AttributeError) as exc:
                     raise ValueError('Malformed design command: missing or invalid arguments') from exc
+                prune_deleted_layouts(document, after)
                 self.validate(after, project)
                 self._commit(db, path, document, after, meta, operation_id, fingerprint, str(label or commands[0].get('type', 'Edit')))
                 self._changed(directory, path)
@@ -824,6 +831,8 @@ class DesignDocuments:
         if not isinstance(command, dict):
             raise ValueError('Every command must be an object')
         kind = command.get('type')
+        if binding_command(document, command):
+            return
         if kind == 'document.replace':
             replacement = copy.deepcopy(command.get('document'))
             if not isinstance(replacement, dict) or replacement.get('id') != document['id']:
@@ -886,6 +895,7 @@ class DesignDocuments:
             mapping = {item['id']: _id() for item in _walk(page['nodes'])}
             mapping[command['page_id']] = page['id']
             page['nodes'] = [_fresh_node(node, mapping) for node in page['nodes']]
+            duplicate_layouts(document, mapping)
             _remap_script(page.get('script'), mapping)
             # A normal duplicate is an independent snapshot, rather than a
             # second owner of the source's contextual render dependencies.
@@ -913,6 +923,13 @@ class DesignDocuments:
             node.setdefault('props', {})
             self._insert(self._children(document, command['page_id'], command.get('parent_id')), node, command.get('index'))
         elif kind == 'node.update':
+            target = self._node(document, command['page_id'], command['node_id'])[2]
+            binding = document.get('bindings', {}).get(target.get('props', {}).get('bindingKey'))
+            props = command.get('patch', {}).get('props', {})
+            if binding and isinstance(props, dict) and props.get('bindingKey', target.get('props', {}).get('bindingKey')) is not None:
+                fields = ('text',) if binding['kind'] == 'text' else ('assetId', 'src')
+                if any(field in props and props[field] != target.get('props', {}).get(field) for field in fields):
+                    raise ValueError('Edit the stable binding source or unbind this element before changing bound content')
             _merge(self._node(document, command['page_id'], command['node_id'])[2], command.get('patch', {}), immutable=('id', 'children'))
         elif kind == 'node.replace':
             items, index, _ = self._node(document, command['page_id'], command['node_id'])
@@ -926,7 +943,9 @@ class DesignDocuments:
         elif kind == 'node.duplicate':
             items, index, node = self._node(document, command['page_id'], command['node_id'])
             target = self._children(document, command['page_id'], command.get('parent_id')) if 'parent_id' in command else items
-            self._insert(target, _fresh_node(node), command.get('index', index + 1 if target is items else None))
+            mapping = {item['id']: _id() for item in _walk([node])}
+            self._insert(target, _fresh_node(node, mapping), command.get('index', index + 1 if target is items else None))
+            duplicate_layouts(document, mapping)
         elif kind == 'node.move':
             items, index, node = self._node(document, command['page_id'], command['node_id'])
             if command.get('parent_id') in {item['id'] for item in _walk([node])}:
@@ -1128,11 +1147,19 @@ class DesignDocuments:
                     if not isinstance(patch, dict):
                         raise ValueError('Element overrides must be property patches')
                     _merge(child, {key: value for key, value in patch.items() if key in ('style', 'props')})
+                    binding = document.get('bindings', {}).get(child.get('props', {}).get('bindingKey'))
+                    if binding and child['props'].get('text' if binding['kind'] == 'text' else 'assetId') != binding['value']:
+                        # A detached instance keeps its explicit local content;
+                        # do not silently overwrite it with a shared source.
+                        child['props'].pop('bindingKey', None)
             source.setdefault('style', {}).update(resolve_style(document, node))
             for key in ('script', 'animation', 'hidden', 'locked'):
                 if key in node:
                     source[key] = copy.deepcopy(node[key])
-            items[index] = _fresh_node(source, root_id=node['id'])
+            mapping = {item['id']: _id() for item in _walk([source])}
+            mapping[source['id']] = node['id']
+            items[index] = _fresh_node(source, mapping)
+            duplicate_layouts(document, mapping)
         elif kind == 'asset.register':
             asset = copy.deepcopy(command.get('asset', {}))
             asset.setdefault('id', _id())
@@ -1153,6 +1180,7 @@ class DesignDocuments:
             for table, context in (('styles', 'style'), ('scripts', 'script')):
                 for resource in document[table].values():
                     used.update(references.process(resource, context=context)[0])
+            used.update(asset_id for asset_id, _, _ in image_binding_references(document))
             if command['asset_id'] in used:
                 raise ValueError('Referenced asset is still used by elements, CSS or scripts; replace or remove its references before deleting')
             if document['assets'].pop(command['asset_id'], None) is None:
@@ -1164,6 +1192,15 @@ class DesignDocuments:
             scopes = [page for page in document['pages'] if not command.get('page_id') or page['id'] == command['page_id']]
             if not command.get('page_id'):
                 scopes += list(document['components'].values())
+            if command.get('page_id') or command.get('node_ids'):
+                for scope in scopes:
+                    scoped_nodes = scope.get('nodes', [scope['node']] if 'node' in scope else [])
+                    for node in _walk(scoped_nodes):
+                        if command.get('node_ids') and node['id'] not in command['node_ids']:
+                            continue
+                        binding = document.get('bindings', {}).get(node.get('props', {}).get('bindingKey'))
+                        if binding and binding['kind'] == 'image' and binding['value'] == command['asset_id']:
+                            raise ValueError('Use the stable image binding source or unbind before a scoped asset replacement')
             options = {'old_id': command['asset_id'], 'new_id': command['replacement_id']}
             for scope in scopes:
                 if command.get('node_ids'):
@@ -1174,6 +1211,7 @@ class DesignDocuments:
                 else:
                     references.process(scope, **options)
             if not command.get('page_id') and not command.get('node_ids'):
+                replace_binding_asset(document, command['asset_id'], command['replacement_id'])
                 for table, context in (('styles', 'style'), ('scripts', 'script')):
                     for resource_id, resource in document[table].items():
                         document[table][resource_id] = references.process(resource, context=context, **options)[1]
@@ -1416,4 +1454,5 @@ class DesignDocuments:
 
         for key in edges:
             visit(key)
+        validate_bindings(document)
         return document

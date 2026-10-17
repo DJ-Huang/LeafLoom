@@ -481,3 +481,66 @@ The existing CI browser entry points include
 They cover nested/zoomed canvas geometry, layout and gesture cancellation,
 content-sized cards, component reset/undo/reopen, FORMA rebranding, and a real
 concurrent-revision save conflict. Evidence is written to `.cache/studio-qa/`.
+
+## Bound content, variants and static publishing
+
+**Data** in the inspector connects text, buttons and images to stable data keys.
+A key identifies content rather than a layer's display name or position. Several
+layers can share one key. Image values reference the existing asset registry;
+variants do not duplicate artwork bytes. Create a variant for a language, audience
+or channel, optionally set a locale tag and a scalar JSON context, then edit its
+values and layout overrides. Unspecified values inherit the source. Changing a
+source value increments its revision and marks existing variant values as needing
+review; acknowledging a translation records the current source revision.
+
+The source and its variants remain one versioned document. Binding edits and
+variant edits use the existing atomic command batches, optimistic revision checks,
+recoverable queue and persistent undo/redo. A rendering projection must never be
+saved over the source. A failed save must be resolved before publishing. The
+32 MiB document limit still applies; this is not an unlimited spreadsheet or an
+automatic translation service.
+
+**Batch publish** selects pages and source/variant combinations in an explicit
+order. PNG output is a ZIP with one image per combination; PDF output is one
+multi-page document. Review page dimensions and PNG scale before starting.
+Publishing captures a saved revision, disables scripts and animation in its static
+renderer, waits for assets and fonts, and reports per-item progress and failures.
+Retry uses the same frozen job snapshot; make a new job to include later edits.
+The existing **Export** action still produces the interactive HTML ZIP.
+
+Run **Check current canvas** to inspect text overflow and resource risks. A result
+can locate its element. Prefer shortening content or increasing the text box.
+Explicit text fitting is bounded by the chosen minimum font size and maximum
+reduction; it never silently shrinks arbitrarily. Font availability and missing
+glyph checks are risk indicators, not a complete typographic audit: fallback
+fonts, shaping, ligatures, color emoji, custom HTML frames and visually clipped
+content can require manual review. Review representative exported pages in every
+language, especially after font changes.
+
+Desktop publishing uses Electron's installed renderer in a separate sandboxed
+window. It does not download another browser at startup. Browser/headless servers
+can install the optional `publish` extra and Playwright Chromium explicitly;
+without a renderer the UI reports the missing capability. Static publishing
+permits only the frozen project resources. External resources must be imported
+into the project rather than granting the renderer wider network or file access.
+
+For a source checkout used as a web/headless server, explicitly prepare publishing
+with `uv sync --extra publish --locked` and
+`uv run --extra publish python -m playwright install chromium`. System Chromium
+can also be used when installed. These commands are optional for desktop users;
+Electron is already the desktop renderer. PDF assembly uses the lightweight
+bundled `pypdf` dependency. No browser installation is attempted by a normal
+publish request. Publication jobs are session-scoped; restart loses their status,
+so start a new job after restarting the service. Limits include 64 combinations,
+8192 pixels per design dimension, 1–4× PNG scale, 32 million pixels per item and
+128 million per batch; large projects should be split into smaller batches.
+
+Bindings and variants are project-scoped. Publishing a component to the shared library freezes its source content and removes project binding links; imported components can be bound to keys in their destination project.
+
+Static publishing currently rejects embedded HTML frames and animated image
+resources (SVG SMIL, GIF, APNG and animated WebP) rather than capturing an
+unpredictable frame. The current check conservatively examines registered image
+assets, including unused ones. Use PNG/JPEG/static SVG artwork or a separate
+static-output project; the original interactive preview and HTML ZIP preserve
+these media. Missing-glyph warnings still require visual proofing. These limits
+are explicit errors, not silently omitted layers.

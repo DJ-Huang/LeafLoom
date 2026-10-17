@@ -90,3 +90,22 @@ HTML 按项目作为独立来源的网站运行；桌面窗口和浏览器共用
 ### Built-in design starters
 
 `vault_rag/design_templates.py` allowlists packaged starters in `design_assets/templates/`. The new-project UI submits a template ID through the existing rooted managed-project API. FORMA contains four pages and 328 native layers; its artwork is self-contained CSS. Creation validates the document, rejects existing destinations, deep-copies it with a fresh document ID and initializes ordinary project history. Runtime files continue to come from the installed Studio runtime; no template code runs in the management origin. Preview images are served through the authenticated design API.
+
+### Design binding projections and offline publication
+
+`design_bindings.py` validates stable text/image content keys and lightweight
+variant deltas, resolves a detached rendering projection, and participates in
+`DesignDocuments` atomic operations and durable undo. Canonical source nodes stay
+consistent with their bindings. Layout override references are pruned when their
+nodes are deleted. Assets remain shared by registry ID; source/variant image
+references participate in replacement and deletion checks.
+
+`design_publishing.py` snapshots a saved revision and registered asset bytes into
+bounded jobs. Desktop's trusted main-frame IPC accepts only a job ID; it fetches
+the authenticated manifest and renders it in an ephemeral sandboxed Electron
+session with an in-memory resource allowlist, denied permissions, no preload and
+no external network/filesystem access. Authored scripts and animation are disabled
+only for static output. Headless publication uses an optional Playwright renderer
+with the same offline boundary. The backend validates native output dimensions
+and combines PDF pages or PNG files in selected order. Progress and retries are
+job-scoped and retain accepted results and the frozen revision.
