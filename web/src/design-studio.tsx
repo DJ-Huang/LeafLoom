@@ -125,6 +125,8 @@ export function DesignStudio({
  const [customWidth,setCustomWidth]=useState(720);
  const [customHeight,setCustomHeight]=useState(1560);
  const [creating,setCreating]=useState(false);
+ const createPending=useRef(false);
+ const createFolderHintId=React.useId();
  const [createError,setCreateError]=useState('');
 
  const [screenModalOpen,setScreenModalOpen]=useState(false);
@@ -356,10 +358,13 @@ export function DesignStudio({
 
  const targetDirectory=[parentFolder.trim(),folderSlug.trim()].filter(Boolean).join('/');
 
- const submitCreateProject=async(event:React.FormEvent)=>{
-  event.preventDefault();
-  if(creating)return;
-  if(!targetDirectory){setCreateError(t('请输入或选择知识库内的项目目录路径'));return;}
+ const validFolderName=!!folderSlug.trim()&&!/[\\/]/.test(folderSlug.trim())&&!['.','..'].includes(folderSlug.trim());
+
+ // Only explicit activation of Create may write; directory browsing and implicit
+ // form submission (including Enter in a text field) must remain read-only.
+ const submitCreateProject=async(event:React.MouseEvent<HTMLButtonElement>)=>{
+  if(createPending.current||!validFolderName||!event.currentTarget.form?.reportValidity())return;
+  createPending.current=true;
   setCreating(true);setCreateError('');
   try{
    const res=await api<{project:DesignProjectSummary}>('design/projects',{
@@ -377,6 +382,7 @@ export function DesignStudio({
   }catch(e){
    setCreateError((e as Error).message);
   }finally{
+   createPending.current=false;
    setCreating(false);
   }
  };
@@ -533,8 +539,8 @@ export function DesignStudio({
 
   {createOpen&&(
    <Modal title={t('在知识库中新建设计项目')} wide onClose={()=>{if(!creating)setCreateOpen(false);}}>
-    <form onSubmit={submitCreateProject}>
-     <div className="pad design-create-form">
+    <form onSubmit={event=>event.preventDefault()} aria-busy={creating}>
+     <fieldset className="pad design-create-form" disabled={creating}>
       <p className="hint">{t('design.template.intro')}</p>
       <fieldset className="design-template-picker" disabled={creating}>
        <legend>{t('design.template.choose')}</legend>
@@ -553,7 +559,7 @@ export function DesignStudio({
       </fieldset>
       <div className="design-folder-picker">
        <div className="design-folder-picker-header">
-        <strong>{t('design.template.directory')}</strong>
+        <strong>{t('design.create.parent')}</strong>
         <button type="button" className={'design-root-btn'+(parentFolder===''?' selected':'')} onClick={()=>setParentFolder('')}>
          <Folder size={14}/>{t('知识库根目录 /')}
         </button>
@@ -571,12 +577,20 @@ export function DesignStudio({
        </div>
       </div>
 
+      <div className="design-target-preview" aria-live="polite">
+       <span>{t('design.create.selectedParent')}</span>
+       <code>{parentFolder?'/'+parentFolder:'/'}</code>
+      </div>
+      <p className="hint">{t('design.create.browseHint')}</p>
+
       <div className="design-form-grid">
        <label className="setting-field">
         {t('项目文件夹名称（英文或中文目录名）')}
         <input
          required
          value={folderSlug}
+         aria-invalid={!validFolderName}
+         aria-describedby={!validFolderName?createFolderHintId:undefined}
          placeholder="例如：萌宠安家 或 cozy-ui"
          onChange={e=>setFolderSlug(e.target.value)}
         />
@@ -591,9 +605,9 @@ export function DesignStudio({
        </label>
       </div>
 
-      <div className="design-target-preview">
+      <div className="design-target-preview" aria-live="polite">
        <span>{t('完整生成路径：')}</span>
-       <code>{targetDirectory||'/'}</code>
+       <code>{'/'+targetDirectory}</code>
       </div>
 
       {templateId==='blank'&&<div className="design-form-grid">
@@ -623,11 +637,12 @@ export function DesignStudio({
        </div>
       </div>}
 
+      {!validFolderName&&<p id={createFolderHintId} className="error">{t('design.create.folderNameHint')}</p>}
       {createError&&<p className="error" role="alert"><Diagnostic message={createError}/></p>}
-     </div>
+     </fieldset>
      <footer className="modal-footer">
       <button type="button" disabled={creating} onClick={()=>setCreateOpen(false)}>{t('取消')}</button>
-      <button className="primary" disabled={creating}>{creating?t('正在创建…'):t('创建并打开设计工作台')}</button>
+      <button type="button" className="primary" disabled={creating||!validFolderName} onClick={submitCreateProject}>{creating?t('正在创建…'):t('创建并打开设计工作台')}</button>
      </footer>
     </form>
    </Modal>

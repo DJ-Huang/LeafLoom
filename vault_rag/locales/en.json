@@ -1397,5 +1397,9 @@
   "design.template.directory": "Choose a folder in your vault",
   "请选择新的项目目录；不会覆盖已有文件": "Choose a new project directory; existing files will not be overwritten",
   "未知的内置设计模板": "Unknown built-in design template",
-  "内置模板需要可视化设计项目": "Built-in templates require a managed design project"
+  "内置模板需要可视化设计项目": "Built-in templates require a managed design project",
+  "design.create.parent": "Choose a parent folder",
+  "design.create.selectedParent": "Selected parent (within vault):",
+  "design.create.browseHint": "Click folders to select or expand them without creating anything. Review the new folder name and template, then choose Create and open Design Studio.",
+  "design.create.folderNameHint": "Enter one new folder name, without / or \\, and do not use the names “.” or “..”."
 }

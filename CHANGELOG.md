@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Fix directory browsing accidentally submitting Design Studio creation. Require explicit creation, show parent and target paths, validate folder names and guard repeated clicks for blank and FORMA projects.
+
 - Add the built-in FORMA editorial studio template to new design projects with a preview, four editable artboards and 328 layers. Each creation gets independent document history, bundled artwork and overwrite protection.
 
 - Improve Design Studio navigation with persistent pan/zoom, Select and Hand tools, fit-to-page/selection, collapsible layers, selection breadcrumbs and grouped inspector sections. Show canvas connection failures with retry. Preserve more HTML document context, mixed text and responsive resources during conversion; keep original source and isolated preview boundaries.

@@ -5,6 +5,8 @@ const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),net=
 const {spawn}=require('node:child_process');
 const {chromium}=require('../desktop/node_modules/playwright-core');
 const root=path.resolve(__dirname,'..');
+// Verify read-only directory selection before the full canvas acceptance flow.
+require('node:child_process').execFileSync(process.execPath,[path.join(__dirname,'studio_create_browser.cjs')],{stdio:'inherit'});
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function freePort(){const server=net.createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port;await new Promise(resolve=>server.close(resolve));return port;}
 async function buildBlankWorkflow({page,request,info,png,checks}){

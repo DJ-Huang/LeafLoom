@@ -1410,3 +1410,8 @@ design.template.directory|选择存放目录（知识库内）|Choose a folder i
 请选择新的项目目录；不会覆盖已有文件|Choose a new project directory; existing files will not be overwritten|新しいプロジェクトフォルダーを選択してください。既存ファイルは上書きしません
 未知的内置设计模板|Unknown built-in design template|不明な内蔵デザインテンプレートです
 内置模板需要可视化设计项目|Built-in templates require a managed design project|内蔵テンプレートにはビジュアルデザインプロジェクトが必要です
+
+design.create.parent|选择父目录|Choose a parent folder|親フォルダーを選択
+design.create.selectedParent|已选父目录（知识库内）：|Selected parent (within vault):|選択した親フォルダー（保管庫内）：
+design.create.browseHint|点击目录仅选择或展开，不会创建项目。确认下方新文件夹名称和模板后，点击“创建并打开设计工作台”。|Click folders to select or expand them without creating anything. Review the new folder name and template, then choose Create and open Design Studio.|フォルダーをクリックしても選択・展開のみで、作成は行いません。新しいフォルダー名とテンプレートを確認してから作成ボタンを押してください。
+design.create.folderNameHint|请输入单个新文件夹名称，不可使用 /、\、. 或 ..。|Enter one new folder name, without / or \, and do not use the names “.” or “..”.|新しいフォルダー名を入力してください。/、\、.、.. は使用できません。

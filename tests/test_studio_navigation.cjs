@@ -43,3 +43,6 @@ instance.setZoom(3);const samePage=instance.document;samePage.id='same-page-new-
 instance.setZoom(1);const previous=instance.camera;viewport.listeners.wheel({ctrlKey:true,deltaY:-20,clientX:700,clientY:400,preventDefault(){}});assert.ok(instance.camera.zoom>1);assert.ok(Math.abs(instance.camera.x+100/instance.camera.zoom-(previous.x+100))<1e-8);
 instance.dispose();assert.equal(target.children.length,0);
 console.log('Studio layer collapse, per-page camera, pan, zoom, resize and update contracts passed.');
+
+// Keep creation regressions in the established CI contract entry point.
+require('node:child_process').execFileSync(process.execPath,[path.join(__dirname,'test_studio_create.cjs')],{stdio:'inherit'});
