@@ -300,6 +300,5 @@ if __name__ == "__main__":
     import subprocess
     import sys
     result = unittest.main(exit=False).result
-    if not result.wasSuccessful():
-        raise SystemExit(1)
-    subprocess.run([sys.executable, str(Path(__file__).with_name("studio_canvas_polish_browser.py"))], check=True)
+    canvas = subprocess.run([sys.executable, str(Path(__file__).with_name("studio_canvas_polish_browser.py"))], check=False)
+    raise SystemExit(0 if result.wasSuccessful() and canvas.returncode == 0 else 1)

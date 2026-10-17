@@ -895,8 +895,8 @@
       const parent = entry.wrapper.parentElement, style = win.getComputedStyle(parent);
       const horizontal = style.display.includes('grid') ? !style.gridAutoFlow.startsWith('column') : !style.flexDirection.startsWith('column');
       const siblings = location.nodes.map(node => editable.get(node.id)).filter(item => item && item !== entry && !item.node.hidden && item.wrapper.parentElement === parent).map(item => ({ entry: item, rect: item.wrapper.getBoundingClientRect() }));
-      gesture = { pointerId: event.pointerId, capture: viewport, x: event.clientX, y: event.clientY, dx: 0, dy: 0, reorder: true, targets: [snapshot(entry)], location, siblings, horizontal, reverse: /reverse$/.test(style.flexDirection) !== (horizontal && style.direction === 'rtl'), convert: deltaConverter(parent), parentMatrix: globalMatrix(parent), origin: viewport.getBoundingClientRect(), dropIndex: location.index };
-      viewport.classList.add('studio-dragging'); entry.wrapper.classList.add('studio-reordering'); viewport.setPointerCapture(event.pointerId);
+      gesture = { pointerId: event.pointerId, capture: entry.wrapper, x: event.clientX, y: event.clientY, dx: 0, dy: 0, reorder: true, targets: [snapshot(entry)], location, siblings, horizontal, reverse: /reverse$/.test(style.flexDirection) !== (horizontal && style.direction === 'rtl'), convert: deltaConverter(parent), parentMatrix: globalMatrix(parent), origin: viewport.getBoundingClientRect(), dropIndex: location.index };
+      viewport.classList.add('studio-dragging'); entry.wrapper.classList.add('studio-reordering'); entry.wrapper.setPointerCapture(event.pointerId);
     }
 
     function updateReorder(g) {
@@ -944,7 +944,7 @@
       const entries = groupHandle || !handle ? topEntries(undefined, groupHandle && selected.size === 1) : [entry];
       if (!entries.length) return;
       const targets = entries.map(snapshot), bounds = boundsOf(targets.map(target => target.rect));
-      gesture = { pointerId: event.pointerId, capture: viewport, x: event.clientX, y: event.clientY, dx: 0, dy: 0, handle, group: groupHandle, targets, bounds, origin: viewport.getBoundingClientRect(), snaps: handle ? null : snapCandidates(entries), altKey: event.altKey, shiftKey: event.shiftKey };
+      gesture = { pointerId: event.pointerId, capture: groupHandle ? viewport : entry.wrapper, x: event.clientX, y: event.clientY, dx: 0, dy: 0, handle, group: groupHandle, targets, bounds, origin: viewport.getBoundingClientRect(), snaps: handle ? null : snapCandidates(entries), altKey: event.altKey, shiftKey: event.shiftKey };
       if (!handle) {
         gesture.snapLines = {};
         ['x', 'y'].forEach(axis => { const line = doc.createElement('div'); line.className = 'studio-snap-guide ' + (axis === 'x' ? 'studio-guide-vertical' : 'studio-guide-horizontal'); line.style.opacity = '0'; line.style.left = '0'; line.style.top = '0'; chrome.appendChild(line); gesture.snapLines[axis] = line; });
@@ -952,7 +952,9 @@
       gestureWork.length = 0;
       viewport.classList.add('studio-dragging');
       if (!handle) entries.forEach(item => { item.wrapper.style.willChange = 'translate'; });
-      viewport.setPointerCapture(event.pointerId);
+      // Keep click/dblclick targeting the node: capturing on the viewport
+      // retargets synthesized mouse clicks and prevents inline text editing.
+      gesture.capture.setPointerCapture(event.pointerId);
     }
 
     function groupResizePatch(target, g, box) {

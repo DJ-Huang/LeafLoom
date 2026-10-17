@@ -197,6 +197,21 @@ class StudioCanvasPolishTests(unittest.TestCase):
             self.assertAlmostEqual(self.rect(key)["width"], rect["width"], delta=.02)
             self.assertAlmostEqual(self.rect(key)["left"], rect["left"], delta=.02)
 
+    def test_flow_text_doubleclick_keeps_node_target_and_does_not_reorder(self):
+        for authored in (False, True):
+            with self.subTest(authored=authored):
+                child = {"id": "label", "type": "element" if authored else "text", "style": {"width": 140, "height": 50}, "props": {"text": "Before", **({"authored": True, "tag": "div"} if authored else {})}}
+                self.mount([{"id": "row", "type": "container", "style": {"x": 100, "y": 100, "width": 400, "height": 100, "display": "flex", "gap": 20}, "children": [child, shape("sibling", width=80, height=50)]}])
+                text = self.page.locator('[data-studio-node="label"]' + ('' if authored else ' > .studio-content'))
+                text.dblclick()
+                self.assertEqual(text.get_attribute("contenteditable"), "plaintext-only")
+                self.page.keyboard.insert_text("After")
+                self.page.keyboard.press("Enter")
+                self.assertEqual(text.inner_text(), "After")
+                self.assertEqual(len(self.commits()), 1)
+                self.assertEqual(self.commits()[0]["commands"][0]["type"], "node.update")
+                self.assertEqual(self.commits()[0]["commands"][0]["patch"]["props"]["text"], "After")
+
     def test_flow_drag_reorders_row_column_and_wrap_without_absolute_offsets(self):
         for direction, wrap in (("row", "nowrap"), ("column", "nowrap"), ("row", "wrap")):
             with self.subTest(direction=direction, wrap=wrap):
