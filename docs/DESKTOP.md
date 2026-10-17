@@ -101,6 +101,12 @@ Electron, including in a compatible Linux development environment. This is a
 source-development entry point, not a supported Linux desktop installation.
 Normal Windows/Mac Dev and installed-app launches are unchanged.
 
+Normal launches keep the existing configured port (default `18080`); the UI,
+file API and `/mcp` remain on that one backend. This launcher alone defaults to
+`36229` in its separate state directory. It does not rewrite the installed app's
+port, credentials or tunnel settings, and merging this support does not require
+changing an existing `http://127.0.0.1:18080/mcp` client address.
+
 Install Node 22+ (with npm), uv and Python 3.12+, then run these commands from the
 repository root. On a fresh checkout, create the static directory before editable
 Python installation; Vite supplies the frontend, so a production build is not

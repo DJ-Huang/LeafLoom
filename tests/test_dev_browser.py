@@ -178,4 +178,59 @@ class BrowserOriginTests(unittest.TestCase):
             self.assertTrue(app.state.websites.ui_origin.startswith('http://app.'))
 
 
+class NormalStartupCompatibilityTests(unittest.TestCase):
+    def test_existing_18080_ui_api_mcp_and_credentials_stay_together(self):
+        self.assertEqual(LocalConfig.defaults()['port'], 18080)
+        self.assertEqual(launcher.parser().parse_args(['--home', 'unused']).port, 36229)
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory) / 'installed'
+            config = LocalConfig(home)
+            config.save({'homepage': 'existing-home.md'})
+            static = Path(directory) / 'static'; static.mkdir()
+            (static / 'index.html').write_text('<h1>Application</h1>')
+            initial = create_app(config, Runtime(config), start_background=False)
+            token = (home / 'auth-token').read_text().strip()
+            before = {name: (home / name).read_bytes() for name in ('config.json', 'auth-token')}
+            with self.assertRaisesRegex(ValueError, 'unmarked'):
+                launcher.prepare_config(home, 36229, loopback_ui=True)
+            self.assertFalse((home / launcher.MARKER).exists())
+            init = {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {
+                'protocolVersion': '2025-06-18', 'capabilities': {},
+                'clientInfo': {'name': 'compatibility-test', 'version': '1'}}}
+            headers = {'Accept': 'application/json, text/event-stream'}
+            for dev_server in (None, 'http://127.0.0.1:5173'):
+                with self.subTest(dev_server=dev_server):
+                    app = create_app(config, Runtime(config), start_background=False,
+                                     static_dir=static, dev_server=dev_server)
+                    origin = app.state.websites.ui_origin
+                    self.assertEqual(origin, initial.state.websites.ui_origin)
+                    self.assertTrue(origin.startswith('http://app.'))
+                    self.assertTrue(origin.endswith(':18080'))
+                    with TestClient(app, base_url=origin, client=('127.0.0.1', 12345)) as client:
+                        self.assertEqual(client.get('/api/session').status_code, 401)
+                        async def frontend(_self, path, query=''):
+                            return Response('<h1>Development UI</h1>', media_type='text/html')
+                        with patch.object(DevFrontend, 'response', frontend):
+                            self.assertEqual(client.get('/').status_code, 200)
+                        session = client.get('/api/session').json()
+                        self.assertEqual(session['config']['port'], 18080)
+                        self.assertEqual(session['ui_url'], origin + '/')
+                        mcp_url = 'http://127.0.0.1:18080/mcp'
+                        response = client.post(mcp_url, json=init, headers=headers)
+                        self.assertEqual(response.status_code, 200)
+                        self.assertIn('serverInfo', response.json()['result'])
+                        self.assertEqual(client.post(mcp_url, json=init, headers={
+                            **headers, 'Authorization': 'Bearer invalid'}).status_code, 401)
+                    remote_app = create_app(config, Runtime(config), start_background=False,
+                                            static_dir=static, dev_server=dev_server)
+                    with TestClient(remote_app, base_url='http://127.0.0.1:18080',
+                                    client=('198.51.100.42', 12345)) as client:
+                        client.cookies.set('vault_session', token)
+                        self.assertEqual(client.post('/mcp', json=init, headers=headers).status_code, 401)
+                        self.assertEqual(client.post('/mcp', json=init, headers={
+                            **headers, 'Authorization': 'Bearer ' + token}).status_code, 200)
+                    for name, content in before.items():
+                        self.assertEqual((home / name).read_bytes(), content)
+
+
 if __name__ == '__main__':unittest.main()
