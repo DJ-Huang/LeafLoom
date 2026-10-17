@@ -176,7 +176,7 @@ module.exports = async function motionWorkflows({page, request, info, checks}) {
     await until(page, () => node(id).getAttribute('class'), value => value.includes('studio-selected'), 'Layer selection should reach ' + id);
   };
   const stop = async () => {
-    await toolbar().getByRole('button', {name: '停止预览', exact: true}).click();
+    await toolbar().getByRole('button', {name: '编辑', exact: true}).click();
     await until(page, () => canvas().locator('.studio-stage').evaluate(el => el.getAnimations({subtree: true}).length), count => count === 0, 'Stopping preview releases active effects');
   };
 
@@ -244,7 +244,7 @@ module.exports = async function motionWorkflows({page, request, info, checks}) {
   await page.screenshot({path: path.join(evidence, 'motion-edited-reopened.png'), fullPage: true});
   checks.push('motion-animation-and-script-props-edited-saved-reopened');
 
-  await toolbar().getByRole('button', {name: '交互预览', exact: true}).click();
+  await toolbar().getByRole('button', {name: '预览', exact: true}).click();
   await until(page, () => effects(node('motion-stagger-1')), values => values.length === 1, 'Appear animation should start in preview');
   for (const index of [1, 2, 3]) {
     const [effect] = await effects(node('motion-stagger-' + index));

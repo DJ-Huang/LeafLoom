@@ -198,3 +198,18 @@
 @media(max-width:1250px){.dw-inspector{width:270px;min-width:245px}.dw-sidebar{width:206px;min-width:185px}.dw-toolbar-group strong{max-width:160px}.dw-toolbar-group button{font-size:11px}.dw-inspector-scroll{padding:0 13px 22px}}
 @media(max-width:1000px){.dw-inspector{width:250px;min-width:230px}.dw-sidebar{width:185px;min-width:170px}.dw-toolbar{gap:5px}.dw-toolbar-group+.dw-toolbar-group{padding-left:7px}.dw-toolbar-group strong{max-width:130px}.dw-save-status{font-size:10px}.dw-dimension{grid-template-columns:minmax(0,1fr) 72px}.dw-fidelity-grid{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.design-workbench button{transition:none}}
+
+/* Preview is the same isolated runtime, with editing chrome out of the way. */
+.dw-mode-switch{display:flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sidebar)}
+.design-workbench .dw-mode-switch>button{min-width:66px;border:0;background:transparent;color:var(--muted);padding:5px 12px}
+.design-workbench .dw-mode-switch>button.active{background:var(--paper);color:var(--accent);box-shadow:0 1px 4px #0002}
+.dw-preview-toolbar,.dw-preview-status{display:flex;align-items:center;gap:12px;padding:10px 16px;flex-wrap:wrap;border-bottom:1px solid var(--line);background:var(--sidebar);font-size:11px}
+.dw-preview-toolbar>span{color:var(--muted)}
+.dw-preview-toolbar>select{max-width:360px;min-width:160px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--accent)}
+.dw-preview-toolbar>button:last-child{margin-left:auto}
+.dw-preview-status[role=alert]{color:#8b4b16;background:#fff3df}
+.is-preview .dw-sidebar,.is-preview .dw-inspector,.is-preview .dw-breadcrumbs,.is-preview .dw-tools{display:none}
+.is-preview .dw-canvas-heading>span>button{display:none}
+.is-preview .dw-body{overflow:hidden}
+
+.is-preview .dw-authoring-actions>button:not(:last-child){display:none}

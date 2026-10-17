@@ -81,13 +81,13 @@ async function buildBlankWorkflow({page,request,info,png,checks}){
  await mutate(()=>page.getByRole('dialog').getByRole('button',{name:'应用修改',exact:true}).click());
  checks.push('blank-workflow-character-animation-and-button-script');
 
- await page.locator('.dw-toolbar').getByRole('button',{name:'交互预览',exact:true}).click();
+ await page.locator('.dw-toolbar').getByRole('button',{name:'预览',exact:true}).click();
  await studio().getByRole('button',{name:'开始游戏',exact:true}).click();await studio().getByRole('button',{name:'返回首页',exact:true}).waitFor();
  assert.ok(await studio().locator('[data-studio-node]').evaluateAll(nodes=>nodes.some(node=>node.getAnimations().length||node.querySelector('.studio-content')?.getAnimations().length)));
  await studio().getByRole('button',{name:'返回首页',exact:true}).click();await studio().getByRole('button',{name:'查看图鉴',exact:true}).click();await studio().getByRole('button',{name:'图鉴返回',exact:true}).click();
  await studio().getByRole('button',{name:'打开设置',exact:true}).click();await studio().locator('.studio-overlay').getByRole('button',{name:'关闭',exact:true}).waitFor();
  assert.match(await page.locator('.dw-canvas-heading').innerText(),/首页/);await studio().locator('.studio-overlay').getByRole('button',{name:'关闭',exact:true}).click();await studio().locator('.studio-overlay').waitFor({state:'detached'});
- await page.locator('.dw-toolbar').getByRole('button',{name:'停止预览',exact:true}).click();
+ await page.locator('.dw-toolbar').getByRole('button',{name:'编辑',exact:true}).click();
  checks.push('blank-workflow-home-game-gallery-settings-navigation');
  await page.locator('.dw-toolbar').getByRole('button',{name:'历史',exact:true}).click();
  const historyDialog=page.getByRole('dialog'),historyRows=historyDialog.locator('.dw-history>div');
@@ -229,10 +229,10 @@ async function main(){
   await page.getByRole('button',{name:'编辑脚本和源码',exact:true}).click();
   await page.getByRole('dialog').getByLabel('JavaScript 模块',{exact:true}).fill("export function mount(ctx) { ctx.el.dataset.playing='yes'; ctx.console.log('mounted'); ctx.on('click', () => ctx.navigate('game')); return () => { delete ctx.el.dataset.playing; }; }");
   await page.getByRole('dialog').getByRole('button',{name:'应用修改',exact:true}).click();await page.locator('.dw-save-status').filter({hasText:'已保存'}).waitFor();
-  await page.locator('.dw-toolbar').getByRole('button',{name:'交互预览',exact:true}).click();
+  await page.locator('.dw-toolbar').getByRole('button',{name:'预览',exact:true}).click();
   await studio().locator('[data-playing="yes"]').waitFor();await page.locator('.dw-console').filter({hasText:'mounted'}).waitFor();
   await studio().locator('[data-playing="yes"]').click();await studio().locator('[data-studio-select-id="game-title"], [data-studio-node="game-title"]').waitFor();assert.ok(lazyPageRequests>0);
-  await page.locator('.dw-toolbar').getByRole('button',{name:'停止预览',exact:true}).click();await studio().locator('[data-playing="yes"]').waitFor({state:'detached'});
+  await page.locator('.dw-toolbar').getByRole('button',{name:'编辑',exact:true}).click();await studio().locator('[data-playing="yes"]').waitFor({state:'detached'});
   await page.locator('.dw-page-list').getByRole('button',{name:/^Home/}).click();await page.locator('.dw-layer-select').filter({hasText:'标题'}).click();
   checks.push('on-demand-page-navigation-and-preview-bridge');
   // Saving a script invalidates cached pages, so the overlay must request its
@@ -241,9 +241,9 @@ async function main(){
   await page.getByRole('button',{name:'编辑脚本和源码',exact:true}).click();
   const scriptInput=page.getByRole('dialog').getByLabel('JavaScript 模块',{exact:true});await scriptInput.fill((await scriptInput.inputValue()).replace("ctx.navigate('game')","ctx.open('game')"));
   await page.getByRole('dialog').getByRole('button',{name:'应用修改',exact:true}).click();await page.locator('.dw-save-status').filter({hasText:'已保存'}).waitFor();
-  await page.locator('.dw-toolbar').getByRole('button',{name:'交互预览',exact:true}).click();await studio().locator('[data-playing="yes"]').click();
+  await page.locator('.dw-toolbar').getByRole('button',{name:'预览',exact:true}).click();await studio().locator('[data-playing="yes"]').click();
   await studio().locator('.studio-overlay [data-studio-node="game-title"]').waitFor();assert.match(await page.locator('.dw-canvas-heading').innerText(),/Home/);
-  await page.locator('.dw-toolbar').getByRole('button',{name:'停止预览',exact:true}).click();await studio().locator('.studio-overlay').waitFor({state:'detached'});
+  await page.locator('.dw-toolbar').getByRole('button',{name:'编辑',exact:true}).click();await studio().locator('.studio-overlay').waitFor({state:'detached'});
   checks.push('on-demand-overlay-keeps-host-page-and-cleans-up');
   checks.push('animation-and-custom-script-preview-cleanup');
   // A persisted operation survives a renderer restart. The failed request stays
@@ -270,6 +270,7 @@ async function main(){
   await buildFormaWorkflow({page,request,info,checks});
   await require('./studio_polish_workflows.cjs')({page,request,info,checks});
   await require('./studio_motion_workflows.cjs')({page,request,info,checks});
+  await require('./studio_preview_workflows.cjs')({page,request,info,checks});
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({ok:true,checks,temp},null,2));
  }catch(error){if(page)try{const evidence=path.join(root,'.cache/studio-qa');fs.mkdirSync(evidence,{recursive:true});await page.screenshot({path:path.join(evidence,'workbench-failure.png'),fullPage:true});fs.writeFileSync(path.join(temp,'failure.html'),await page.content());fs.writeFileSync(path.join(evidence,'workbench-failure.json'),JSON.stringify({message:error.message,checks,errors},null,2));}catch{}console.error('Studio browser fixture retained at '+temp);throw error;}

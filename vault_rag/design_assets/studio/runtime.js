@@ -1402,6 +1402,7 @@
     }
 
     function openOverlay(pageId) {
+      if (mode !== 'preview') return null;
       const page = model.pages.find(item => item.id === pageId);
       if (!page) { report('Page not found: ' + pageId); return null; }
       if (page.loaded === false) { emit('studio-load-page', { pageId, action: 'open' }); return null; }
@@ -1448,7 +1449,7 @@
     };
     const keyDown = event => {
       if (textEdit && (event.key === 'Escape' || event.key === 'Enter' && !event.shiftKey)) { event.preventDefault(); finishTextEdit(event.key === 'Escape'); viewport.focus({ preventScroll: true }); return; }
-      if (event.key === 'Escape') { cancelGesture(); if (mode === 'edit') select([], true); else closeOverlay(); return; }
+      if (event.key === 'Escape') { cancelGesture(); if (mode === 'edit') select([], true); else if (overlayStop) closeOverlay(); else emit('studio-exit-preview', {}); return; }
       if (mode !== 'edit' || event.target.isContentEditable || event.target.closest('input, textarea')) return;
       const key = event.key.toLowerCase(), modifier = event.metaKey || event.ctrlKey;
       if (!modifier && !event.altKey && ['arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(key)) { event.preventDefault(); const amount = event.shiftKey ? 10 : 1; nudge(key === 'arrowleft' ? -amount : key === 'arrowright' ? amount : 0, key === 'arrowup' ? -amount : key === 'arrowdown' ? amount : 0); return; }
@@ -1489,6 +1490,7 @@
     return {
       version: VERSION,
       update,
+      preparePreview: () => { finishTextEdit(false); cancelGesture(); },
       select: ids => select(ids, false), action, fit, fitSelection, setZoom, setTool,
       get camera() { return Object.assign({}, camera(), { tool }); },
       setMode: (next, nodeId) => { mode = next === 'preview' ? 'preview' : 'edit'; if (mode === 'edit') navigationContext = {}; previewNodeId = nodeId || null; redraw(); },
@@ -1526,7 +1528,8 @@
           if (instance) instance.update(data.document, { pageId: data.pageId, mode: data.mode || 'edit', selectedIds: data.selectedIds, previewNodeId: data.previewNodeId });
           else instance = mount(root, data.document, { pageId: data.pageId, mode: data.mode || 'edit', assetBase: data.assetBase || global.location.origin + '/', selectedIds: data.selectedIds, previewNodeId: data.previewNodeId, onMessage: send });
           send({ type: 'studio-rendered', pageId: data.pageId });
-        } else if (instance && data.type === 'studio-select') instance.select(data.ids);
+        } else if (instance && data.type === 'studio-prepare-preview') { instance.preparePreview(); send({ type: 'studio-preview-prepared', requestId: data.requestId }); }
+        else if (instance && data.type === 'studio-select') instance.select(data.ids);
         else if (instance && data.type === 'studio-mode') instance.setMode(data.mode, data.previewNodeId);
         else if (instance && data.type === 'studio-fit') data.selection ? instance.fitSelection() : instance.fit();
         else if (instance && data.type === 'studio-zoom') instance.setZoom(data.zoom);

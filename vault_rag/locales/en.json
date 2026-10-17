@@ -1579,5 +1579,12 @@
   "区块间距": "Section spacing",
   "卡片间距": "Card spacing",
   "design.template.motionDescription": "A playable motion lab: entrance, hover, click feedback and interactive scripts, editable layer by layer.",
-  "design.template.motionModes": "Editor animations + JavaScript · Ready to play"
+  "design.template.motionModes": "Editor animations + JavaScript · Ready to play",
+  "编辑与预览": "Edit and preview",
+  "预览页面": "Preview page",
+  "重播": "Replay",
+  "返回编辑": "Back to editing",
+  "正在保存最新修改，完成后进入预览…": "Saving your latest changes before preview…",
+  "当前修改尚未保存，预览未启动；请重试保存后再预览": "Your changes are not saved yet. Retry saving, then open preview.",
+  "预览": "Preview"
 }
