@@ -107,6 +107,7 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
     assets_dir.mkdir(exist_ok=True)
     shutil.copy2(ROOT / "assets/brand/logo.svg", assets_dir / "logo.svg")
     shutil.copy2(ROOT / "assets/promo/cover.png", assets_dir / "cover.png")
+    shutil.copy2(ROOT / "assets/promo/leafloom-en.mp4", assets_dir / "leafloom-en.mp4")
     for lang, (_, route, og_locale) in LANGUAGES.items():
         catalog = json.loads((ROOT / f"vault_rag/locales/{lang}.json").read_text(encoding="utf-8"))
         values = {key.removeprefix("site."): escape(text, quote=True) for key, text in catalog.items() if key.startswith("site.")}
