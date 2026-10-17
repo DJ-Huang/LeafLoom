@@ -20,6 +20,10 @@ module.exports = async function professionalWorkflows({page, request, info, chec
   const toolbar = () => page.locator('.dw-toolbar');
   const canvas = () => page.frameLocator('.dw-runtime');
   const dialog = () => page.getByRole('dialog');
+  const polishedScreenshot = async filename => {
+    await page.locator('.toast').waitFor({state: 'hidden', timeout: 15000});
+    await page.screenshot({path: path.join(evidence, filename), fullPage: true});
+  };
 
   await toolbar().getByRole('button', {name: '返回项目', exact: true}).click();
   await page.locator('.design-home-heading').getByRole('button', {name: '新建设计项目', exact: true}).click();
@@ -57,6 +61,8 @@ module.exports = async function professionalWorkflows({page, request, info, chec
   assert.equal(saved.document.bindings['atelier.hero'].value, edited);
   checks.push('professional-template-real-editable-content-saved-and-reopened');
 
+  await canvas().locator('[data-studio-select-id="' + title.id + '"]').click();
+  await page.locator('.dw-inspector>.dw-tabs').getByRole('button', {name: '设计', exact: true}).click();
   const originalViewport = page.viewportSize();
   for (const viewport of [{width: 1560, height: 1050, label: 'desktop'}, {width: 1024, height: 820, label: 'narrow'}]) {
     await page.setViewportSize({width: viewport.width, height: viewport.height});
@@ -69,13 +75,40 @@ module.exports = async function professionalWorkflows({page, request, info, chec
       })};
     });
     report.viewports.push({...viewport, ...geometry}); saveReport();
-    await page.screenshot({path: path.join(evidence, 'professional-editor-' + viewport.label + '.png'), fullPage: true});
+    await polishedScreenshot('professional-editor-' + viewport.label + '.png');
     assert.ok(geometry.documentWidth <= geometry.windowWidth + 1, JSON.stringify(geometry));
     for (const region of geometry.regions) {
       assert.ok(region.left >= -1 && region.right <= viewport.width + 1, JSON.stringify(region));
       assert.ok(region.width > 100 && region.height > 20, JSON.stringify(region));
     }
   }
+  const panelToggle = page.getByTestId('studio-toggle-panels');
+  const selectedIds = () => canvas().locator('.studio-selected').evaluateAll(elements => elements.map(element => element.getAttribute('data-studio-select-id') || element.getAttribute('data-studio-node')).filter(Boolean).sort());
+  const selectedBefore = await selectedIds();
+  assert.ok(selectedBefore.includes(title.id), 'The selected editable headline is present before changing panel visibility');
+  const pageBefore = await page.locator('.dw-page-list>button.active').innerText();
+  const canvasWidthBefore = await page.locator('.dw-canvas').evaluate(element => element.getBoundingClientRect().width);
+  await panelToggle.click();
+  await page.locator('.dw-sidebar').waitFor({state: 'hidden'});
+  await page.locator('.dw-inspector').waitFor({state: 'hidden'});
+  assert.equal(await panelToggle.getAttribute('aria-pressed'), 'true');
+  assert.equal(await panelToggle.isVisible(), true);
+  assert.equal(await page.getByTestId('studio-batch-publish').isVisible(), true);
+  assert.equal(await page.getByTestId('studio-mode-preview').isVisible(), true);
+  const canvasWidthFocused = await page.locator('.dw-canvas').evaluate(element => element.getBoundingClientRect().width);
+  assert.ok(canvasWidthFocused > canvasWidthBefore + 100, 'Hiding panels gives meaningful canvas room');
+  assert.deepEqual(await selectedIds(), selectedBefore);
+  await polishedScreenshot('professional-editor-focus.png');
+  await panelToggle.click();
+  await page.locator('.dw-sidebar').waitFor({state: 'visible'});
+  await page.locator('.dw-inspector').waitFor({state: 'visible'});
+  assert.equal(await panelToggle.getAttribute('aria-pressed'), 'false');
+  assert.deepEqual(await selectedIds(), selectedBefore);
+  assert.equal(await page.locator('.dw-page-list>button.active').innerText(), pageBefore);
+  const canvasWidthRestored = await page.locator('.dw-canvas').evaluate(element => element.getBoundingClientRect().width);
+  assert.ok(Math.abs(canvasWidthRestored - canvasWidthBefore) <= 1);
+  report.focusMode = {canvasWidthBefore, canvasWidthFocused, canvasWidthRestored, selectedIds: selectedBefore, page: pageBefore}; saveReport();
+  checks.push('professional-editor-narrow-focus-mode-preserves-page-and-selection');
   await page.setViewportSize(originalViewport);
   checks.push('professional-editor-desktop-and-narrow-no-page-overflow');
 
@@ -93,7 +126,7 @@ module.exports = async function professionalWorkflows({page, request, info, chec
   await page.keyboard.press('Enter'); await dialog().waitFor();
   assert.equal(await dialog().getByLabel('输出格式', {exact: true}).inputValue(), 'pdf');
   for (const item of saved.document.pages) assert.equal(await dialog().getByTestId('publish-page-' + item.id).isChecked(), true);
-  await page.screenshot({path: path.join(evidence, 'professional-publish-configuration.png'), fullPage: true});
+  await polishedScreenshot('professional-publish-configuration.png');
   checks.push('professional-publishing-keyboard-focus-escape-reopen-preserves-selection');
 
   await dialog().getByTestId('publish-check').click();
@@ -119,7 +152,7 @@ module.exports = async function professionalWorkflows({page, request, info, chec
   await results.first().locator('summary').click();
   assert.equal(await results.first().evaluate(element => element.open), true);
   await results.first().locator('summary').click();
-  await page.screenshot({path: path.join(evidence, 'professional-publish-completed.png'), fullPage: true});
+  await polishedScreenshot('professional-publish-completed.png');
   await page.keyboard.press('Escape'); await dialog().waitFor({state: 'detached'});
   checks.push('professional-showcase-real-pdf-text-page-count-and-size');
 
@@ -146,7 +179,6 @@ module.exports = async function professionalWorkflows({page, request, info, chec
       const contentGeometry = await output.locator('.studio-stage').evaluate(stage => ({width: stage.clientWidth, height: stage.clientHeight, scrollWidth: stage.scrollWidth, scrollHeight: stage.scrollHeight, roots: [...stage.querySelectorAll('.atelier')].map(element => ({height: element.getBoundingClientRect().height, scrollHeight: element.scrollHeight}))}));
       report.exports.push({pageId: item.id, variantId, preflight, contentGeometry}); saveReport();
       await output.screenshot({path: path.join(evidence, 'professional-showcase-' + exportLabel + '.png'), fullPage: true});
-      assert.deepEqual(preflight.issues.filter(issue => ['text-overflow', 'text_overflow'].includes(issue.code || issue.kind)), [], 'Exported text must fit its editable boxes on ' + exportLabel);
       const outside = await output.locator('.studio-stage').evaluate(stage => {
         const bounds = stage.getBoundingClientRect(), walker = document.createTreeWalker(stage, NodeFilter.SHOW_TEXT), problems = [];
         let node;
@@ -160,8 +192,16 @@ module.exports = async function professionalWorkflows({page, request, info, chec
         return problems;
       });
       report.exports[report.exports.length - 1].textOutsidePage = outside; saveReport();
-      assert.deepEqual(outside, [], 'Actual exported glyph bounds stay inside the artboard on ' + exportLabel);
     }
   } finally { await output.close(); }
+  // Capture all twelve outcomes before failing so one bad headline cannot hide
+  // another locale's evidence. This retains both original zero-overflow contracts.
+  assert.equal(report.exports.length, saved.document.pages.length * 4);
+  const failures = report.exports.flatMap(result => {
+    const textOverflow = result.preflight.issues.filter(issue => ['text-overflow', 'text_overflow'].includes(issue.code || issue.kind));
+    return textOverflow.length || result.textOutsidePage.length ? [{pageId: result.pageId, variantId: result.variantId, textOverflow, textOutsidePage: result.textOutsidePage}] : [];
+  });
+  report.exportFailures = failures; saveReport();
+  assert.deepEqual(failures, [], 'Every source/locale export must fit its text boxes and keep actual glyph bounds inside the artboard');
   checks.push('professional-showcase-html-real-runtime-all-page-text-bounds');
 };

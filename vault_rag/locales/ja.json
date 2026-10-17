@@ -1686,5 +1686,7 @@
   "页面操作": "ページ操作",
   "design.template.atelierDescription": "造形的なアートワークと多言語レイアウトを備えた照明のキャンペーン。",
   "design.template.atelierLayers": "3 アートボード · EN / 中文 / 日本語",
-  "design.template.atelierPreview": "ATELIER 照明キャンペーンのプレビュー"
+  "design.template.atelierPreview": "ATELIER 照明キャンペーンのプレビュー",
+  "隐藏面板": "パネルを非表示",
+  "显示面板": "パネルを表示"
 }

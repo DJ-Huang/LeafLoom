@@ -315,3 +315,9 @@
 .dw-section-label,.dw-inline-details>summary,.dw-check,.dw-range-field,.dw-component-source,.dw-override-target>summary{font-size:11px}
 .dw-field-error,.dw-style-title small,.dw-override-target>summary>small,.dw-breadcrumbs small,.dw-component small{font-size:10px}
 .dw-zoom-controls select{font-size:12px;width:66px}
+
+/* Explicit canvas focus keeps panel state mounted and leaves the restore control visible. */
+.design-workbench.is-canvas-focused>.dw-body>.dw-sidebar,
+.design-workbench.is-canvas-focused>.dw-body>.dw-inspector{display:none}
+.design-workbench .dw-panel-toggle{margin-right:4px;border:1px solid var(--dw-subtle-line);border-radius:6px}
+.design-workbench .dw-panel-toggle[aria-pressed=true]{background:var(--dw-selection);color:var(--dw-focus);border-color:color-mix(in srgb,var(--dw-focus) 25%,var(--line))}
