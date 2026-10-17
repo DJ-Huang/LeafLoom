@@ -362,6 +362,7 @@ td { line-height: 1.6; }
 .design-badge { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--ink); padding-right: 4px; }
 .design-project-select { max-width: 320px; font-size: 12px; padding: 5px 8px; border-radius: 5px; border: 1px solid var(--line); background: white; }
 .design-studio-frame { display: block; width: 100%; flex: 1; min-height: 0; border: 0; background: #f4efe6; }
+.design-create-modal .modal-footer { position: sticky; bottom: 0; z-index: 1; background: var(--paper); }
 .design-create-form { margin: 0; border: 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 .design-folder-picker { border: 1px solid var(--line); border-radius: 6px; background: var(--sidebar); overflow: hidden; }
 .design-folder-picker-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 12px; }

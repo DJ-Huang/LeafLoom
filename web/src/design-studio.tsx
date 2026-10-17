@@ -538,7 +538,7 @@ export function DesignStudio({
   )}
 
   {createOpen&&(
-   <Modal title={t('在知识库中新建设计项目')} wide onClose={()=>{if(!creating)setCreateOpen(false);}}>
+   <Modal title={t('在知识库中新建设计项目')} wide className="design-create-modal" onClose={()=>{if(!creating)setCreateOpen(false);}}>
     <form onSubmit={event=>event.preventDefault()} aria-busy={creating}>
      <fieldset className="pad design-create-form" disabled={creating}>
       <p className="hint">{t('design.template.intro')}</p>

@@ -13,6 +13,11 @@ function snapshot(directory){const result={};function visit(folder){for(const it
 async function main(){
  const temp=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'leafloom-studio-create-'))),port=await freePort();
  fs.mkdirSync(evidence,{recursive:true});
+ // The disposable server scans once and disables its filesystem watcher. Seed
+ // navigation fixtures before startup so its complete catalog includes them.
+ const fixtureVault=path.join(temp,'vault');
+ for(const folder of ['Projects/BranchA/Deep','Projects/BranchB','Other'])fs.mkdirSync(path.join(fixtureVault,folder),{recursive:true});
+ fs.writeFileSync(path.join(fixtureVault,'Projects/retain.txt'),'User files must remain unchanged.\n');
  const log=fs.openSync(path.join(temp,'server.log'),'a');
  const server=spawn(process.env.LEAFLOOM_PYTHON||path.join(root,'.venv/bin/python'),[path.join(__dirname,'html_projects_server.py'),'--directory',temp,'--port',String(port)],{cwd:root,stdio:['ignore',log,log]});fs.closeSync(log);
  let browser,page;const checks=[],pageErrors=[],creationRequests=[];
@@ -20,9 +25,9 @@ async function main(){
   let started=false;for(let attempt=0;attempt<150;attempt++){try{if((await fetch('http://127.0.0.1:'+port+'/healthz')).ok){started=true;break;}}catch{}await sleep(100);}assert.ok(started,'Disposable service did not start; inspect '+path.join(temp,'server.log'));
   const info=JSON.parse(fs.readFileSync(path.join(temp,'info.json'))),token=fs.readFileSync(path.join(info.state,'auth-token'),'utf8').trim();
   const request=async(endpoint,body)=>{const response=await fetch(info.url+'/api/'+endpoint,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const value=await response.json();assert.ok(response.ok,JSON.stringify(value));return value;};
-  for(const folder of ['Projects/BranchA/Deep','Projects/BranchB','Other'])fs.mkdirSync(path.join(info.root,folder),{recursive:true});
-  fs.writeFileSync(path.join(info.root,'Projects/retain.txt'),'User files must remain unchanged.\n');
   await request('design/projects',{root:info.root,managed:true,directory:'ExistingStudio',name:'Existing studio',width:800,height:600});
+  assert.ok((await request('tree')).some(entry=>entry.path==='Projects'&&entry.directory),'Seeded Projects folder must be visible in the catalog');
+  assert.ok((await request('tree?path=Projects%2FBranchA')).some(entry=>entry.path==='Projects/BranchA/Deep'&&entry.directory),'Seeded nested folders must be visible in the catalog');
   const existingBefore=snapshot(path.join(info.root,'ExistingStudio'));
   const launch={headless:true};if(process.env.LEAFLOOM_BROWSER_EXECUTABLE)launch.executablePath=process.env.LEAFLOOM_BROWSER_EXECUTABLE;else launch.channel=process.env.LEAFLOOM_BROWSER_CHANNEL||'chrome';
   browser=await chromium.launch(launch);
