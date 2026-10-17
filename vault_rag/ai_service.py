@@ -37,6 +37,9 @@ class AiService:
         '已有笔记必须先读取或使用本轮提供的当前草稿，以其 base_hash 为基础。新笔记使用 create=true。'
         '默认保留 YAML frontmatter、已有 ID 和引用链接，除非用户明确要求修改这些内容。'
         '明确区分已有证据、推断与未验证内容。'
+        '设计工作台引用使用 design_document 读取当前版本和稳定 ID；用户要求修改设计时，'
+        '使用 design_operations 一次提交该指令的全部修改，直接应用并保留一个撤销步骤。'
+        '设计脚本使用 mount(ctx)，运行状态不等于保存的设计内容；设计修改不使用 propose_note。'
     )
 
     def __init__(self, config, runtime, *, adapter_factory=CliAdapter):
@@ -192,6 +195,15 @@ class AiService:
             if not isinstance(item, dict) or not isinstance(item.get('text'), str):
                 raise ValueError('笔记上下文格式无效')
             path = relative(item.get('path', ''))
+            if item.get('kind') == 'design' and item is not current:
+                if item.get('root') != self.root():
+                    raise ConflictError('知识库已切换，请重新添加引用')
+                suffix = '/Design/studio/project.json' if path.endswith('/Design/studio/project.json') else '/Design/project-spec.json'
+                if not path.endswith(suffix) or not self.config.path_for(path).is_file() or len(item['text']) > MAX_CONTEXT:
+                    raise ValueError('Invalid Design Studio reference')
+                normalized.append({'kind': 'design', 'path': path, 'directory': path[:-len(suffix)], 'root': self.root(),
+                                   'label': str(item.get('label', 'Design Studio'))[:200], 'text': item['text']})
+                continue
             if not path or Path(path).suffix.lower() not in ('.md', '.txt'):
                 raise ValueError('AI 上下文仅支持 Markdown 和文本笔记')
             self.config.path_for(path)

@@ -234,7 +234,8 @@ class AiTests(unittest.IsolatedAsyncioTestCase):
         from vault_rag.web_server import create_app
         runtime = SimpleNamespace(files=self.files, knowledge=self.runtime.knowledge,
             catalog=SimpleNamespace(root=str(self.config.root), version=1),
-            events=SimpleNamespace(instance='test-ai'), start=lambda: None, stop=lambda: None)
+            events=SimpleNamespace(instance='test-ai'), start=lambda: None, stop=lambda: None,
+            foreground_begin=lambda: None, foreground_end=lambda: None)
         app = create_app(self.config, runtime, start_background=False)
         def exchange():
             with TestClient(app, base_url='http://127.0.0.1:18080') as client:
@@ -329,6 +330,8 @@ class ProtocolTests(unittest.IsolatedAsyncioTestCase):
         adapter.active = self.conversation
         params = {'sessionId': 'original', 'options': [{'kind': 'allow_once', 'optionId': 'yes'}],
                   'toolCall': {'name': 'vault-ai__propose_note'}}
+        self.assertEqual((await adapter.server_request('session/request_permission', params))['outcome']['outcome'], 'selected')
+        params['toolCall']['name'] = 'vault-ai__design_operations'
         self.assertEqual((await adapter.server_request('session/request_permission', params))['outcome']['outcome'], 'selected')
         params['toolCall']['name'] = 'run_shell_command'
         self.assertEqual((await adapter.server_request('session/request_permission', params))['outcome']['outcome'], 'cancelled')

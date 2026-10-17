@@ -50,7 +50,11 @@ The service returns original file bytes without script injection, URL rewriting,
 opaque-origin sandboxing or charset replacement. A same-origin viewer shell
 reports navigation to the shared UI and handles refresh/back/forward. It carries
 no file-write or desktop authority. Local subresources use same-origin CORP;
-frame ancestors are restricted to the project itself and the workspace.
+frame ancestors are restricted to the project itself and the workspace. Design
+projects using the `GameDesignLayers` engine can load `/__leafloom__/design/layer_review.js`
+and `/__leafloom__/design/layer_review.css` on the project origin (falling back
+to relative files under `file://`) and communicate layer transform saves or AI
+layer references through the viewer shell's structured `postMessage` bridge.
 
 Saved project origins survive service restarts. Browser and App storage remain
 independent; this feature does not synchronize cookies or page data between them.

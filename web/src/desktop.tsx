@@ -11,6 +11,7 @@ declare global {
   leafloomPrepareQuit?:()=>Promise<void>;
   leafloomDesktop?:{
    appInfo:()=>Promise<DesktopInfo>;
+   publishDesign:(jobId:string)=>Promise<unknown>;
    updateStatus:()=>Promise<UpdateInfo>;
    checkUpdate:()=>Promise<UpdateInfo>;
    downloadUpdate:()=>Promise<UpdateInfo>;

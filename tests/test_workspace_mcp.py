@@ -114,7 +114,14 @@ class WorkspaceMcpTests(unittest.TestCase):
 
     def test_discovery_scopes_and_structured_errors(self):
         tools = {t['name']: t for t in self.request('tools/list').json()['result']['tools']}
-        self.assertEqual(len(tools), 28)
+        self.assertEqual(len(tools), 34)
+        self.assertTrue({
+            'design_list_projects', 'design_get_project', 'design_create_project',
+            'design_upsert_screen', 'design_update_layers', 'design_check_project',
+            'feishu_status', 'feishu_cli_inspect', 'feishu_cli_read',
+            'feishu_cli_write', 'feishu_files',
+        }.issubset(tools))
+        self.assertTrue(tools['design_list_projects']['annotations']['readOnlyHint'])
         self.assertTrue(tools['vault_find_notes']['annotations']['readOnlyHint'])
         self.assertTrue(tools['vault_delete']['annotations']['destructiveHint'])
         self.assertNotIn('ctx', tools['vault_read_note']['inputSchema']['properties'])
