@@ -1564,5 +1564,18 @@
   "表单结构保留，但脚本或用户更改的值不保留": "Form markup is retained; script or user-edited values are not",
   "SVG 外部对象内容已省略": "SVG foreignObject contents are omitted",
   "已登记的素材引用保持不变": "Registered asset references are retained",
-  "按上下文变化的画面保存为关联页面": "Context-dependent screens are saved as linked pages"
+  "按上下文变化的画面保存为关联页面": "Context-dependent screens are saved as linked pages",
+  "页面底色": "Page background",
+  "主要文字": "Primary text",
+  "品牌强调色": "Brand accent",
+  "分隔线颜色": "Divider color",
+  "次要文字": "Secondary text",
+  "页脚底色": "Footer background",
+  "无衬线字体": "Sans-serif font",
+  "衬线字体": "Serif font",
+  "等宽字体": "Monospace font",
+  "桌面页边距": "Desktop gutter",
+  "手机页边距": "Mobile gutter",
+  "区块间距": "Section spacing",
+  "卡片间距": "Card spacing"
 }

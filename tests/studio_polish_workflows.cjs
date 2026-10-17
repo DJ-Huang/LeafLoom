@@ -27,6 +27,7 @@ module.exports=async function polishWorkflows({page,request,info,checks}){
  let forma=await read('FormaWorkflow');assert.equal(forma.document.styles['forma-brand-palette'].style['--forma-accent'],'#245fb3');
  assert.equal(forma.document.metadata.branding.brand,'northstar');
  const brandValue=await canvas().locator('[data-studio-select-id="home-n1"]').first().evaluate(el=>getComputedStyle(el).getPropertyValue('--forma-accent').trim());assert.equal(brandValue,'#245fb3');
+ await page.locator('.toast').waitFor({state:'hidden'});
  await page.screenshot({path:path.join(evidence,'polish-forma-rebranded.png'),fullPage:true});
  await page.locator('.dw-toolbar').getByRole('button',{name:'返回项目',exact:true}).click();await page.locator('.design-project-title').getByText('My FORMA Studio',{exact:true}).click();
  await canvas().locator('[data-studio-select-id="home-n3"]').filter({hasText:'northstar'}).waitFor();

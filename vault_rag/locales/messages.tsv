@@ -1578,3 +1578,16 @@ Shadow DOM 未转换为可编辑图层|Shadow DOM is not converted to editable l
 SVG 外部对象内容已省略|SVG foreignObject contents are omitted|SVG foreignObject の内容は省略
 已登记的素材引用保持不变|Registered asset references are retained|登録済み素材の参照を保持
 按上下文变化的画面保存为关联页面|Context-dependent screens are saved as linked pages|コンテキスト依存の画面を関連ページとして保存
+页面底色|Page background|ページの背景
+主要文字|Primary text|主な文字
+品牌强调色|Brand accent|ブランドのアクセント
+分隔线颜色|Divider color|区切り線の色
+次要文字|Secondary text|補助文字
+页脚底色|Footer background|フッターの背景
+无衬线字体|Sans-serif font|サンセリフ体
+衬线字体|Serif font|セリフ体
+等宽字体|Monospace font|等幅フォント
+桌面页边距|Desktop gutter|デスクトップ余白
+手机页边距|Mobile gutter|モバイル余白
+区块间距|Section spacing|セクション間隔
+卡片间距|Card spacing|カード間隔
