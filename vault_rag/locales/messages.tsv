@@ -1045,3 +1045,7 @@ site.about_intro|我是 LeafLoom 的作者。欢迎通过 GitHub 和 X 了解我
 site.about_github|查看我的开源项目和代码。|Explore my open-source projects and code.|オープンソースのプロジェクトとコードをご覧ください。
 site.about_x|查看我的分享与最新动态。|Follow my posts and latest updates.|投稿や最新情報をご覧ください。
 site.about_back|返回 LeafLoom 首页|Back to LeafLoom|LeafLoom のホームへ
+
+site.video_label|LeafLoom 英文演示视频，35 秒|LeafLoom demo video in English, 35 seconds|LeafLoom の英語デモ動画、35 秒
+site.video_caption|真实应用演示，使用虚构示例资料库。35 秒英文视频，含画面内字幕。|The real app, with a fictional demo library. 35-second English video with burned-in captions.|架空のデモライブラリを使った実際のアプリ。字幕付きの 35 秒の英語動画です。
+site.video_link|直接打开视频|Open video directly|動画を直接開く

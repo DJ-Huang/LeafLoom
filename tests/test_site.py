@@ -53,6 +53,12 @@ class WebsiteTests(unittest.TestCase):
                 self.assertIn("LeafLoom-1.2.3-windows-x64-setup.exe", content)
                 self.assertIn("LeafLoom-1.2.3-macos-arm64.dmg", content)
                 self.assertIn('aria-current="page"', content)
+                self.assertIn('<video class="hero-shot" controls playsinline preload="none"', content)
+                self.assertIn(f'poster="/LeafLoom/assets/{lang}/showcase-markdown.png"', content)
+                self.assertIn('<source src="/LeafLoom/assets/leafloom-en.mp4" type="video/mp4">', content)
+                self.assertNotIn("autoplay", content)
+                self.assertEqual((output / "assets/leafloom-en.mp4").read_bytes(),
+                                 (ROOT / "assets/promo/leafloom-en.mp4").read_bytes())
                 for reference in page.references:
                     parsed = urlsplit(reference)
                     if parsed.scheme or parsed.netloc:

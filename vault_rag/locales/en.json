@@ -1037,5 +1037,8 @@
   "site.about_intro": "I’m the creator of LeafLoom. Find my projects and updates on GitHub and X.",
   "site.about_github": "Explore my open-source projects and code.",
   "site.about_x": "Follow my posts and latest updates.",
-  "site.about_back": "Back to LeafLoom"
+  "site.about_back": "Back to LeafLoom",
+  "site.video_label": "LeafLoom demo video in English, 35 seconds",
+  "site.video_caption": "The real app, with a fictional demo library. 35-second English video with burned-in captions.",
+  "site.video_link": "Open video directly"
 }

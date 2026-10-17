@@ -1037,5 +1037,8 @@
   "site.about_intro": "我是 LeafLoom 的作者。欢迎通过 GitHub 和 X 了解我的项目与近况。",
   "site.about_github": "查看我的开源项目和代码。",
   "site.about_x": "查看我的分享与最新动态。",
-  "site.about_back": "返回 LeafLoom 首页"
+  "site.about_back": "返回 LeafLoom 首页",
+  "site.video_label": "LeafLoom 英文演示视频，35 秒",
+  "site.video_caption": "真实应用演示，使用虚构示例资料库。35 秒英文视频，含画面内字幕。",
+  "site.video_link": "直接打开视频"
 }

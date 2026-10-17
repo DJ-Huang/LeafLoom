@@ -14,7 +14,13 @@ python -m unittest discover -s tests -p test_site.py -v
 python scripts/build_site.py
 ```
 
-Output is `dist/site/`, ignored by Git. The build copies only selected brand assets and public screenshots; it does not copy the repository or runtime state. Screenshots come from `assets/screenshots/{en,zh-CN,ja}/`, with the public-media constraints in [MEDIA.md](MEDIA.md). AI demo labels must remain visible.
+Output is `dist/site/`, ignored by Git. The build copies only selected brand assets, public screenshots and the existing public English demo MP4; it does not copy the repository or runtime state. Screenshots come from `assets/screenshots/{en,zh-CN,ja}/`, with the public-media constraints in [MEDIA.md](MEDIA.md). AI demo labels must remain visible.
+
+The homepage serves `assets/promo/leafloom-en.mp4` from the same Pages origin with native controls, inline playback, no autoplay and no video preload. Localized hero screenshots remain the posters; all languages label the video as English and provide a direct link. The MP4 already includes burned-in English captions. Video changes also trigger the Pages workflow.
+
+中文：三语首页通过同源 MP4 播放现有英文演示视频，保留各语言截图封面和直达链接，不自动播放或预加载视频。
+
+日本語：3 言語のトップページで既存の英語デモを同一オリジンの MP4 として再生し、各言語のポスターと直接リンクを提供します。自動再生や動画の事前読み込みは行いません。
 
 To preview with the production `/LeafLoom/` prefix:
 

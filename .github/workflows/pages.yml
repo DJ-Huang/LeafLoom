@@ -11,6 +11,7 @@ on:
       - 'assets/brand/**'
       - 'assets/screenshots/**'
       - 'assets/promo/cover.png'
+      - 'assets/promo/leafloom-en.mp4'
       - 'tests/test_site.py'
       - '.github/workflows/pages.yml'
   pull_request:
@@ -23,6 +24,7 @@ on:
       - 'assets/brand/**'
       - 'assets/screenshots/**'
       - 'assets/promo/cover.png'
+      - 'assets/promo/leafloom-en.mp4'
       - 'tests/test_site.py'
       - '.github/workflows/pages.yml'
   release:

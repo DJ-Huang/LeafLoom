@@ -1037,5 +1037,8 @@
   "site.about_intro": "LeafLoom の作者です。GitHub と X でプロジェクトや近況をご覧いただけます。",
   "site.about_github": "オープンソースのプロジェクトとコードをご覧ください。",
   "site.about_x": "投稿や最新情報をご覧ください。",
-  "site.about_back": "LeafLoom のホームへ"
+  "site.about_back": "LeafLoom のホームへ",
+  "site.video_label": "LeafLoom の英語デモ動画、35 秒",
+  "site.video_caption": "架空のデモライブラリを使った実際のアプリ。字幕付きの 35 秒の英語動画です。",
+  "site.video_link": "動画を直接開く"
 }
