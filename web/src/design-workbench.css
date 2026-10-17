@@ -213,3 +213,105 @@
 .is-preview .dw-body{overflow:hidden}
 
 .is-preview .dw-authoring-actions>button:not(:last-child){display:none}
+
+/* Workbench hierarchy: document identity → editing tools → delivery actions.
+   Keep these tokens local so authored pages and the host theme stay independent. */
+.design-workbench{container-type:inline-size;container-name:studio-workbench;--dw-focus:#356f64;--dw-selection:color-mix(in srgb,var(--dw-focus) 10%,var(--paper));--dw-control-bg:color-mix(in srgb,var(--sidebar) 65%,var(--paper));--dw-subtle-line:color-mix(in srgb,var(--line) 65%,transparent)}
+.dw-toolbar{gap:14px;min-height:60px;padding:10px 16px;box-sizing:border-box;flex-wrap:wrap}
+.dw-toolbar .dw-project-identity{gap:8px;margin:0;min-width:0}
+.dw-project-identity strong{font-size:13px;font-weight:650;letter-spacing:-.2px;max-width:200px;white-space:nowrap}
+.dw-toolbar-group+.dw-toolbar-group{border-color:var(--dw-subtle-line);padding-left:12px}
+.dw-toolbar .dw-tools{padding:3px;gap:2px;border:1px solid var(--dw-subtle-line);border-radius:8px;background:var(--dw-control-bg)}
+.design-workbench .dw-tools>button{width:30px;height:30px;border-radius:5px}
+.design-workbench .dw-tools>button.active{background:var(--paper);color:var(--dw-focus);box-shadow:0 1px 3px #00000012}
+.dw-mode-switch{border:0;background:var(--dw-control-bg);padding:3px;gap:2px;border-radius:8px}
+.design-workbench .dw-mode-switch>button{min-width:60px;padding:5px 10px;font-size:12px}
+.design-workbench .dw-mode-switch>button.active{box-shadow:0 1px 3px #00000012}
+.dw-authoring-actions{gap:3px}
+.design-workbench .dw-history-action{border:0;background:transparent;color:var(--muted);padding:5px 7px}
+.design-workbench .dw-history-action:hover{background:var(--hover);color:var(--accent)}
+.design-workbench .dw-insert-action{margin-left:7px;background:var(--dw-selection);border:1px solid transparent;color:var(--dw-focus);font-weight:600;padding:6px 10px}
+.design-workbench .dw-insert-action:hover{border-color:color-mix(in srgb,var(--dw-focus) 25%,transparent)}
+.dw-delivery-actions{display:flex;align-items:center;gap:8px;order:2;margin-left:0}
+.design-workbench .dw-delivery-actions>button{padding:7px 12px;border-radius:7px;min-height:34px;font-size:12px}
+.design-workbench .dw-publish-action{background:var(--dw-focus);border:1px solid var(--dw-focus);color:#fff;font-weight:600;box-shadow:0 1px 2px #0000000d}
+.design-workbench .dw-publish-action:hover:not(:disabled){background:color-mix(in srgb,var(--dw-focus) 85%,#000)}
+.dw-save-status{order:1;margin-left:auto;padding:4px 0;background:transparent;font-size:11px;gap:4px}
+.dw-save-status.is-pending,.dw-save-status.is-error{padding:4px 7px}
+.dw-tabs{height:44px;min-height:44px;padding:0 12px;gap:14px;background:color-mix(in srgb,var(--paper) 94%,var(--sidebar))}
+.dw-tabs button{font-size:12px;font-weight:500;padding:10px 0}
+.design-workbench .dw-tabs button.active{color:var(--dw-focus);border-bottom-color:var(--dw-focus)}
+.dw-sidebar{width:238px;min-width:210px}
+.dw-sidebar>.dw-pane-heading{padding:10px 13px 6px;font-size:11px;letter-spacing:.035em;color:var(--muted);font-weight:600}
+.dw-page-list{padding:0 8px 12px;max-height:250px;border-bottom-color:var(--dw-subtle-line)}
+.dw-page-group{padding:7px 7px 4px;font-size:10px;line-height:1.6;font-weight:500;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.02em}
+.dw-page-list>button{min-height:34px;gap:7px;padding:6px 8px;margin:2px 0;border-radius:6px;font-size:12px}
+.dw-page-list>button>svg{flex-shrink:0;color:var(--muted)}
+.dw-page-list>button>span{flex:1;min-width:0;white-space:nowrap}
+.dw-page-list>button>small{font-size:10px;letter-spacing:-.2px;opacity:.85}
+.dw-page-list>button.active{background:var(--dw-selection);font-weight:500}
+.dw-page-list>button.active>svg{color:var(--dw-focus)}
+.dw-layer{padding-right:6px}
+.design-workbench .dw-layer-select{font-size:12px}
+.dw-layer-actions{max-width:0;overflow:hidden;transition:max-width .12s ease,opacity .12s ease}
+.dw-layer:hover .dw-layer-actions,.dw-layer:focus-within .dw-layer-actions,.dw-layer.selected .dw-layer-actions,.dw-layer.hidden-layer .dw-layer-actions{max-width:48px}
+.dw-layer.selected{border-color:transparent;box-shadow:inset 2px 0 var(--dw-focus)}
+.dw-canvas{min-width:100px}
+.dw-canvas-heading{height:44px;box-sizing:border-box;background:color-mix(in srgb,var(--paper) 94%,var(--sidebar));font-size:11px}
+.dw-canvas-heading small{font-size:10px}
+.dw-zoom-controls{border-color:var(--dw-subtle-line);border-radius:6px}
+.dw-inspector{width:280px;min-width:252px}
+.dw-inspector-scroll{padding:0 16px 24px;scrollbar-width:thin}
+.dw-inspector-section{padding:13px 0;border-bottom-color:var(--dw-subtle-line)}
+.dw-inspector .dw-inspector-section h4{font-size:12px;line-height:1.6;font-weight:600}
+.dw-panel>summary{min-height:24px;gap:5px}
+.dw-panel>summary:before{width:4px;height:4px;opacity:.45}
+.dw-panel:not([open])>summary{color:var(--muted)}
+.dw-panel-content{padding-top:7px}
+.dw-node-identity{position:relative;padding-top:4px}
+.dw-node-identity .dw-field{margin-top:2px}
+.dw-node-identity .dw-object-kind{font-size:10px;background:transparent;padding:0;color:var(--muted)}
+.dw-field{font-size:11px;line-height:1.5;gap:5px;margin:9px 0}
+.dw-field :is(input,select,textarea){min-height:31px;font-size:12px;padding:6px 8px;border:1px solid var(--dw-subtle-line);background:var(--dw-control-bg);border-radius:6px}
+.dw-field :is(input,select,textarea):hover{border-color:var(--line)}
+.dw-field :is(input,select,textarea):focus{background:var(--paper);border-color:var(--dw-focus)}
+.dw-grid{gap:0 8px}
+.dw-page-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:3px 0}
+.design-workbench .dw-page-actions>button{font-size:11px;padding:6px;min-height:31px;border-color:var(--dw-subtle-line);background:transparent}
+.design-workbench .dw-destructive-action:hover:not(:disabled){background:#b44c3510;color:#b44c35;border-color:#b44c3540}
+.dw-page-start{margin-top:18px;padding:13px;background:var(--dw-control-bg);border:1px solid var(--dw-subtle-line);border-radius:8px}
+.design-workbench .dw-page-insert{width:100%;justify-content:flex-start;background:transparent;border:0;padding:0;min-height:27px;color:var(--dw-focus);font-size:12px;font-weight:600}
+.dw-page-start .dw-hint{font-size:11px;line-height:1.8;margin:7px 0 0}
+.dw-breadcrumbs{border-top-color:var(--dw-subtle-line);height:29px;min-height:29px}
+.dw-node-actions{border-bottom-color:var(--dw-subtle-line)}
+.is-preview .dw-authoring-actions{display:none}
+@media(max-width:1250px){.dw-toolbar{gap:9px;padding:9px 12px}.dw-project-identity strong{max-width:160px}.dw-sidebar{width:216px;min-width:195px}.dw-inspector{width:264px;min-width:245px}.dw-tabs{gap:12px}.dw-toolbar .dw-history-action span{display:none}.dw-delivery-actions{gap:6px}.dw-save-status{font-size:10px}}
+@media(max-width:1000px){.dw-toolbar{gap:7px}.dw-project-identity strong{max-width:135px}.dw-sidebar{width:195px;min-width:180px}.dw-inspector{width:246px;min-width:228px}.dw-inspector-scroll{padding:0 12px 20px}.dw-mode-switch>button{min-width:50px}.dw-toolbar-group+.dw-toolbar-group{padding-left:7px}.dw-tabs{gap:10px}.dw-delivery-actions{margin-left:auto}.dw-save-status{order:3;margin-left:0;font-size:10px}.dw-save-status.is-pending,.dw-save-status.is-error{flex-basis:100%;justify-content:flex-end}.dw-page-list>button>small{font-size:10px}}
+@media(max-width:760px){.dw-toolbar .dw-project-identity{flex:1;order:0}.dw-mode-switch{order:0}.dw-toolbar-group.dw-tools,.dw-toolbar-group.dw-authoring-actions{order:1}.dw-delivery-actions{order:2}.dw-sidebar{width:190px;min-width:190px}.dw-inspector{width:246px;min-width:246px}.dw-toolbar-group+.dw-toolbar-group{border-left:0}.dw-project-identity strong{max-width:190px}}
+@media(prefers-reduced-motion:reduce){.dw-layer-actions{transition:none}}
+
+/* Respond to the actual workbench width, including the host navigation rail. */
+@container studio-workbench (max-width:900px){
+ .dw-toolbar{gap:8px;padding:9px 12px}
+ .dw-toolbar-group{max-width:100%;min-width:0}
+ .dw-project-identity strong{max-width:155px}
+ .dw-sidebar{width:196px;min-width:184px}
+ .dw-inspector{width:252px;min-width:236px}
+ .dw-inspector-scroll{padding:0 12px 20px}
+ .dw-tabs{gap:10px;padding:0 10px}
+ .dw-canvas{min-width:100px}
+ .dw-canvas-heading{height:auto;min-height:44px;flex-wrap:wrap;padding:6px 9px;gap:5px}
+ .dw-canvas-heading>span{max-width:100%}
+ .dw-canvas-controls{max-width:100%;flex-wrap:wrap}
+ .dw-toolbar .dw-history-action span{display:none}
+ .dw-delivery-actions{margin-left:auto}
+ .dw-page-list>button{gap:5px}
+ .dw-page-list>button>small{font-size:10px}
+ .dw-breadcrumbs small{display:none}
+}
+/* Retain legibility at every density: 12px controls, 11px labels, 10px metadata. */
+.design-workbench .dw-toolbar button,.design-workbench .dw-sidebar button,.design-workbench .dw-inspector button{font-size:12px}
+.design-workbench .dw-style-title,.design-workbench .dw-style-detach,.design-workbench .dw-style-heading>button:last-child,.design-workbench .dw-section-label button,.design-workbench .dw-reset{font-size:12px}
+.dw-section-label,.dw-inline-details>summary,.dw-check,.dw-range-field,.dw-component-source,.dw-override-target>summary{font-size:11px}
+.dw-field-error,.dw-style-title small,.dw-override-target>summary>small,.dw-breadcrumbs small,.dw-component small{font-size:10px}
+.dw-zoom-controls select{font-size:12px;width:66px}

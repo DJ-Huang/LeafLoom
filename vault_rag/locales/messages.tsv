@@ -1693,3 +1693,14 @@ Text already fits; no change is needed.|文字已适配，无需修改。|Text a
 No readable fit range is available. Enlarge the box or shorten the copy.|没有符合可读要求的适配范围，请扩大文本框或精简内容。|No readable fit range is available. Enlarge the box or shorten the copy.|読みやすさを保つフィット範囲がありません。枠を広げるか内容を短くしてください。
 Text still overflows at the bounded readable minimum. Enlarge the box or shorten the copy.|文字在允许的最小可读字号下仍然溢出，请扩大文本框或精简内容。|Text still overflows at the bounded readable minimum. Enlarge the box or shorten the copy.|最小文字サイズでも文字がはみ出します。枠を広げるか内容を短くしてください。
 Suggestion only: review and apply explicitly. Font fallback, ancestor clipping, and responsive layout can still affect the result.|此为建议，请检查后明确应用。回退字体、父级裁切和响应式布局仍可能影响结果。|Suggestion only: review and apply explicitly. Font fallback, ancestor clipping, and responsive layout can still affect the result.|提案のみです。確認して明示的に適用してください。代替フォント、親の切り抜き、レスポンシブ配置が結果に影響する場合があります。
+
+design.publish.prepare|为每个版本，准备好交付。|Every version, ready to deliver.|すべてのバージョンを、届ける準備。
+design.publish.summary|输出摘要|Output summary|出力の概要
+design.publish.outputs|个输出|outputs|件の出力
+design.publish.fitSettings|文字适配设置与检查说明|Text fitting settings & check details|文字調整設定とチェックの詳細
+design.publish.review|查看提示|Review notes|注記を確認
+design.publish.checkLimits|检查范围与限制|Check scope & limitations|チェックの範囲と制限
+页面操作|Page actions|ページ操作
+design.template.atelierDescription|编辑式灯具品牌营销模板，含雕塑感图形与多语言版式。|An editorial lighting campaign with sculptural artwork and multilingual layouts.|造形的なアートワークと多言語レイアウトを備えた照明のキャンペーン。
+design.template.atelierLayers|3 个画板 · EN / 中文 / 日本語|3 artboards · EN / 中文 / 日本語|3 アートボード · EN / 中文 / 日本語
+design.template.atelierPreview|ATELIER 灯具营销模板预览|ATELIER lighting campaign preview|ATELIER 照明キャンペーンのプレビュー

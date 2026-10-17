@@ -120,7 +120,7 @@ export function DesignStudio({
  const [parentFolder,setParentFolder]=useState('');
  const [folderSlug,setFolderSlug]=useState('NewDesignProject');
  const [projectName,setProjectName]=useState('');
- const [templateId,setTemplateId]=useState<'blank'|'forma'|'motion'>('blank');
+ const [templateId,setTemplateId]=useState<'blank'|'forma'|'motion'|'atelier'>('blank');
  const [preset,setPreset]=useState('mobile-portrait');
  const [customWidth,setCustomWidth]=useState(720);
  const [customHeight,setCustomHeight]=useState(1560);
@@ -554,6 +554,11 @@ export function DesignStudio({
          <input type="radio" name="design-template" value="forma" checked={templateId==='forma'} onChange={()=>setTemplateId('forma')}/>
          <span className="design-template-art design-template-forma"><img src="/api/design/templates/forma/preview" alt={t('design.template.formaPreview')}/></span>
          <span className="design-template-copy"><strong>FORMA <small>{t('design.template.builtIn')}</small></strong><span>{t('design.template.formaDescription')}</span><span className="design-template-meta"><Layers size={13} aria-hidden="true"/>{t('design.template.formaLayers')}</span></span>
+        </label>
+        <label data-template-id="atelier" className={'design-template-card'+(templateId==='atelier'?' selected':'')}>
+         <input type="radio" name="design-template" value="atelier" checked={templateId==='atelier'} onChange={()=>setTemplateId('atelier')}/>
+         <span className="design-template-art design-template-atelier"><img src="/api/design/templates/atelier/preview" alt={t('design.template.atelierPreview')}/></span>
+         <span className="design-template-copy"><strong>ATELIER <small>{t('design.template.builtIn')}</small></strong><span>{t('design.template.atelierDescription')}</span><span className="design-template-meta"><Layers size={13} aria-hidden="true"/>{t('design.template.atelierLayers')}</span></span>
         </label>
         <label data-template-id="motion" className={'design-template-card'+(templateId==='motion'?' selected':'')}>
          <input type="radio" name="design-template" value="motion" checked={templateId==='motion'} onChange={()=>setTemplateId('motion')}/>

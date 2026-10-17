@@ -1676,5 +1676,15 @@
   "Text already fits; no change is needed.": "Text already fits; no change is needed.",
   "No readable fit range is available. Enlarge the box or shorten the copy.": "No readable fit range is available. Enlarge the box or shorten the copy.",
   "Text still overflows at the bounded readable minimum. Enlarge the box or shorten the copy.": "Text still overflows at the bounded readable minimum. Enlarge the box or shorten the copy.",
-  "Suggestion only: review and apply explicitly. Font fallback, ancestor clipping, and responsive layout can still affect the result.": "Suggestion only: review and apply explicitly. Font fallback, ancestor clipping, and responsive layout can still affect the result."
+  "Suggestion only: review and apply explicitly. Font fallback, ancestor clipping, and responsive layout can still affect the result.": "Suggestion only: review and apply explicitly. Font fallback, ancestor clipping, and responsive layout can still affect the result.",
+  "design.publish.prepare": "Every version, ready to deliver.",
+  "design.publish.summary": "Output summary",
+  "design.publish.outputs": "outputs",
+  "design.publish.fitSettings": "Text fitting settings & check details",
+  "design.publish.review": "Review notes",
+  "design.publish.checkLimits": "Check scope & limitations",
+  "页面操作": "Page actions",
+  "design.template.atelierDescription": "An editorial lighting campaign with sculptural artwork and multilingual layouts.",
+  "design.template.atelierLayers": "3 artboards · EN / 中文 / 日本語",
+  "design.template.atelierPreview": "ATELIER lighting campaign preview"
 }

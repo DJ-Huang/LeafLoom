@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Refine the Design Studio workbench hierarchy, group page actions, and introduce a focused publishing workspace with persistent actions and expandable results. Add the editable ATELIER lighting campaign with three artboards and complete English/Chinese/Japanese variants.
+
 - Add stable text/image data bindings, reviewable language/general variants, per-variant layout overrides, text/resource preflight and bounded fitting, plus selected-page/variant PNG ZIP and multi-page PDF publishing with progress and retry. Preserve interactive HTML export and undo/conflict protection.
 
 - Add an explicit Edit / Preview switch with a distraction-free interactive canvas, page picker and replay. Wait for the latest edits to save before preview, retain failed saves, and restore the original editing page, selection and camera on return.

@@ -1,1 +1,89 @@
-.dw-publishing{padding:18px;max-height:78vh;overflow:auto}.dw-publishing fieldset,.dw-publishing-data{border:0;padding:0;margin:0;min-width:0}.dw-publish-columns{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:14px}.dw-publish-columns section{min-width:0}.dw-publish-columns .dw-check{display:flex;gap:8px;margin:8px 0}.dw-publish-columns small{opacity:.65}.dw-publish-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.dw-binding-entry{border-top:1px solid var(--border,#ddd);padding:12px 0;overflow-wrap:anywhere}.dw-binding-entry>small{display:block;white-space:pre-wrap;max-height:100px;overflow:auto;margin:6px 0}.dw-publish-warning{color:var(--warning-text,#9a6100);font-size:12px}.dw-publish-preflight,.dw-publish-job{border-top:1px solid var(--border,#ddd);padding-top:12px;margin-top:16px}.dw-publish-issue{display:flex;align-items:center;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--border,#ddd);padding:8px 0}.dw-publish-issue>span{flex:1;min-width:200px}.dw-publish-job progress{display:block;width:100%;margin:12px 0}.dw-publish-job>div{padding:6px 0;overflow-wrap:anywhere}.dw-publishing details{margin:10px 0}.dw-publishing details ol{max-height:180px;overflow:auto}.dw-publishing-data .dw-field input,.dw-publishing-data .dw-field select{min-width:0;max-width:100%}@media(max-width:640px){.dw-publish-columns{grid-template-columns:1fr}}
+/* Publishing is a review workspace: configuration first, a persistent action bar,
+   compact results, and diagnostics available without dominating the artifact. */
+.dw-publish-modal.modal{width:1040px;max-height:min(90vh,920px);overflow:hidden;color:var(--accent);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;border-radius:14px}
+.dw-publish-modal.modal[open]{display:flex;flex-direction:column}
+.dw-publish-modal>header{flex-shrink:0;padding:19px 24px}
+.dw-publish-modal>header h2{font-size:16px;letter-spacing:-.3px}
+.dw-publishing{padding:24px;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;font-size:12px;line-height:1.6;background:color-mix(in srgb,var(--sidebar) 45%,var(--paper))}
+.dw-publish-modal :is(button,input,select,textarea){font:inherit}
+.dw-publish-modal button{min-height:34px;border-radius:7px}
+.dw-publish-modal :is(button,a,input,select,summary):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.dw-publish-modal button:disabled{opacity:.45;cursor:not-allowed}
+.dw-publishing fieldset,.dw-publishing-data{border:0;padding:0;margin:0;min-width:0}
+.dw-publish-intro{display:flex;gap:14px;align-items:flex-start;margin-bottom:24px}
+.dw-publish-intro strong{font-size:17px;letter-spacing:-.4px;font-weight:600}
+.dw-publish-intro p{max-width:650px;margin:4px 0 0;font-size:12px;color:var(--muted);line-height:1.7}
+.dw-publish-emblem{display:grid;place-items:center;width:44px;height:44px;flex-shrink:0;background:var(--paper);border:1px solid var(--line);border-radius:12px;color:var(--accent)}
+.dw-publish-workspace{display:grid;grid-template-columns:minmax(0,1fr) 228px;gap:20px;align-items:start}
+.dw-publish-config{min-width:0}
+.dw-publish-columns{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.dw-publish-columns section{min-width:0}
+.dw-publish-card{border:1px solid var(--line);border-radius:10px;padding:16px;background:var(--paper);min-width:0}
+.dw-publish-card-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.dw-publish-card-title h3,.dw-publish-card>h3,.dw-publish-job h3{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;margin:0}
+.dw-publish-card-title h3 svg,.dw-publish-card>h3 svg{color:var(--muted);flex-shrink:0}
+.dw-publish-card-title>button{font-size:11px;min-height:26px;padding:3px 7px;background:transparent;border:0;color:var(--muted)}
+.dw-publish-card-title>small{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dw-publish-options{max-height:210px;overflow:auto;margin:-2px -6px;padding:2px 6px}
+.dw-publish-options .dw-check{display:flex;align-items:center;gap:9px;font-size:12px;border-radius:6px;padding:8px;margin:3px -2px;cursor:pointer;color:var(--accent)}
+.dw-publish-options .dw-check:hover{background:var(--hover)}
+.dw-publish-options .dw-check.selected{background:color-mix(in srgb,var(--accent) 6%,var(--paper))}
+.dw-publish-options .dw-check>span{min-width:0;overflow-wrap:anywhere}
+.dw-publish-options input{width:14px;height:14px;flex-shrink:0;accent-color:var(--accent)}
+.dw-publish-options small{font-size:10px;white-space:nowrap;margin-left:auto;color:var(--muted)}
+.dw-publish-format>.dw-publish-columns{margin:8px 0 0}
+.dw-publish-disclosure{border-top:1px solid var(--line);padding-top:10px;margin-top:12px}
+.dw-publish-disclosure>summary{font-size:11px;color:var(--muted);cursor:pointer;min-height:22px}
+.dw-publish-disclosure ol{max-height:170px;overflow:auto;padding-left:22px;font-size:11px}
+.dw-publish-disclosure li{padding:3px 0}
+.dw-publish-preflight{margin-top:16px}
+.dw-publish-preflight>.dw-hint{margin:0 0 8px}
+.dw-publish-issue{display:flex;align-items:center;flex-wrap:wrap;gap:6px;border-top:1px solid var(--line);padding:10px 0;font-size:11px}
+.dw-publish-issue>span{flex:1;min-width:min(100%,240px);line-height:1.7}
+.dw-publish-issue button{font-size:11px;min-height:28px;padding:4px 8px}
+.dw-publish-summary{position:sticky;top:0;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:20px}
+.dw-publish-eyebrow{font-size:11px;font-weight:600;color:var(--muted)}
+.dw-publish-total{display:flex;gap:9px;align-items:baseline;margin:10px 0 20px}
+.dw-publish-total strong{font-size:44px;letter-spacing:-2px;line-height:1.2;font-weight:600;font-variant-numeric:tabular-nums}
+.dw-publish-total>span{font-size:12px;color:var(--muted)}
+.dw-publish-summary dl{margin:0;padding-top:12px;border-top:1px solid var(--line)}
+.dw-publish-summary dl>div{display:flex;justify-content:space-between;gap:10px;margin:8px 0;font-size:11px}
+.dw-publish-summary dt{color:var(--muted)}
+.dw-publish-summary dd{margin:0;font-weight:500;font-variant-numeric:tabular-nums}
+.dw-publish-check-result{margin-top:16px;border-top:1px solid var(--line);padding-top:14px;font-size:11px}
+.dw-publish-check-result>strong{display:flex;gap:6px;align-items:center}
+.dw-publish-check-result.is-ready{color:var(--accent)}
+.dw-publish-warning{color:var(--warning-text,#936008);font-size:11px;overflow-wrap:anywhere}
+.dw-publish-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.dw-publish-job{border:1px solid var(--line);padding:18px;margin-top:20px;border-radius:10px;background:var(--paper)}
+.dw-publish-job h3>span{color:var(--muted);font-weight:400;font-size:11px}
+.dw-publish-job progress{display:block;width:100%;height:5px;border:0;border-radius:3px;overflow:hidden;margin:14px 0 18px;accent-color:var(--accent)}
+.dw-publish-job progress::-webkit-progress-bar{background:var(--hover)}
+.dw-publish-job progress::-webkit-progress-value{background:var(--accent)}
+.dw-publish-results{max-height:280px;overflow:auto}
+.dw-publish-result{border-top:1px solid var(--line);padding:0}
+.dw-publish-result>summary{display:flex;align-items:center;gap:12px;list-style:none;cursor:pointer;padding:11px 0;font-size:12px}
+.dw-publish-result>summary::-webkit-details-marker{display:none}
+.dw-publish-result>summary:before{content:'›';color:var(--muted);font-size:16px;transition:transform .12s}
+.dw-publish-result[open]>summary:before{transform:rotate(90deg)}
+.dw-publish-result>summary>span:first-of-type{flex:1;min-width:0;overflow-wrap:anywhere}
+.dw-publish-result>summary small{font-size:10px}
+.dw-publish-result>summary>span>small{display:block;color:var(--muted);margin-top:1px}
+.dw-publish-result>div{padding:0 12px 10px 20px;overflow-wrap:anywhere}
+.dw-publish-status{font-size:10px;white-space:nowrap;background:var(--sidebar);color:var(--muted);padding:3px 8px;border-radius:5px}
+.dw-publish-status.is-completed{background:color-mix(in srgb,var(--accent) 8%,var(--paper));color:var(--accent)}
+.dw-publish-status.is-failed,.dw-publish-status.is-partial{color:#9e482a;background:#f9eae2}
+.dw-publish-download{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;margin-top:14px;background:var(--accent);color:var(--paper)!important;border-radius:7px;text-decoration:none;font-weight:500}
+.dw-publish-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 24px;border-top:1px solid var(--line);background:var(--paper);flex-shrink:0;font-size:12px}
+.dw-publish-footer>span{font-weight:600;font-variant-numeric:tabular-nums}
+.dw-publish-footer>span>span{font-weight:400;color:var(--muted)}
+.dw-publish-footer button{padding:8px 14px;font-size:12px}
+.dw-binding-entry{border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:12px;overflow-wrap:anywhere;background:var(--paper)}
+.dw-binding-entry>strong{font-size:11px;font-weight:600}
+.dw-binding-entry>small{display:block;white-space:pre-wrap;max-height:80px;overflow:auto;margin:6px 0;font-size:10px;color:var(--muted)}
+.dw-binding-entry .dw-publish-actions{justify-content:flex-end}
+.dw-binding-entry .dw-publish-actions>button{font-size:10px;min-height:25px}
+.dw-publishing-data .dw-field input,.dw-publishing-data .dw-field select{min-width:0;max-width:100%}
+@media(max-width:800px){.dw-publish-workspace{grid-template-columns:1fr}.dw-publish-summary{position:static;display:block;padding:14px}.dw-publish-summary .dw-publish-total,.dw-publish-summary dl,.dw-publish-summary>.dw-hint{display:none}.dw-publish-summary .dw-publish-check-result{margin-top:8px;padding-top:8px}.dw-publish-modal.modal{max-width:calc(100vw - 20px)}.dw-publishing{padding:18px}.dw-publish-footer{padding:12px 18px}.dw-publish-intro{margin-bottom:18px}}
+@media(max-width:520px){.dw-publish-columns{grid-template-columns:1fr}.dw-publish-footer{gap:8px;flex-wrap:wrap}.dw-publish-footer .dw-publish-actions{flex:1;justify-content:flex-end}.dw-publish-footer button{font-size:11px;padding:7px 9px}.dw-publish-options{max-height:150px}.dw-publish-emblem{display:none}.dw-publish-result>summary{gap:8px}.dw-publish-result>summary>.dw-publish-warning{display:none}}
+@media(prefers-reduced-motion:reduce){.dw-publish-result>summary:before{transition:none}}

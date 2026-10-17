@@ -1676,5 +1676,15 @@
   "Text already fits; no change is needed.": "文字はすでに収まっています。変更は不要です。",
   "No readable fit range is available. Enlarge the box or shorten the copy.": "読みやすさを保つフィット範囲がありません。枠を広げるか内容を短くしてください。",
   "Text still overflows at the bounded readable minimum. Enlarge the box or shorten the copy.": "最小文字サイズでも文字がはみ出します。枠を広げるか内容を短くしてください。",
-  "Suggestion only: review and apply explicitly. Font fallback, ancestor clipping, and responsive layout can still affect the result.": "提案のみです。確認して明示的に適用してください。代替フォント、親の切り抜き、レスポンシブ配置が結果に影響する場合があります。"
+  "Suggestion only: review and apply explicitly. Font fallback, ancestor clipping, and responsive layout can still affect the result.": "提案のみです。確認して明示的に適用してください。代替フォント、親の切り抜き、レスポンシブ配置が結果に影響する場合があります。",
+  "design.publish.prepare": "すべてのバージョンを、届ける準備。",
+  "design.publish.summary": "出力の概要",
+  "design.publish.outputs": "件の出力",
+  "design.publish.fitSettings": "文字調整設定とチェックの詳細",
+  "design.publish.review": "注記を確認",
+  "design.publish.checkLimits": "チェックの範囲と制限",
+  "页面操作": "ページ操作",
+  "design.template.atelierDescription": "造形的なアートワークと多言語レイアウトを備えた照明のキャンペーン。",
+  "design.template.atelierLayers": "3 アートボード · EN / 中文 / 日本語",
+  "design.template.atelierPreview": "ATELIER 照明キャンペーンのプレビュー"
 }

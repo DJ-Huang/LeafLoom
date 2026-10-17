@@ -70,6 +70,7 @@ module.exports=async function publishingWorkflows({page,request,info,checks}){
  await dialog.getByTestId('publish-check').click();await dialog.getByText('发布检查通过',{exact:true}).waitFor({timeout:30000});
  const fake={job_id:'test-transient-ui',status:'failed',format:'png',completed:0,total:1,items:[{id:'test-item',page_id:'page-1',variant_id:'en',status:'failed',error:'Synthetic transient renderer interruption'}]};
  await page.route('**/api/design/publish',route=>route.request().method()==='POST'?route.fulfill({json:fake}):route.continue());await dialog.getByTestId('publish-start').click();await dialog.getByText(fake.items[0].error,{exact:true}).waitFor();
+ assert.equal(await dialog.locator('details.dw-publish-result').first().evaluate(element=>element.open),true,'Failed-item diagnostics open automatically');
  let retryBody;await page.route('**/api/design/publish/test-transient-ui/retry',route=>{retryBody=route.request().postDataJSON();return route.fulfill({json:{...fake,status:'completed',completed:1,items:[{...fake.items[0],status:'completed',error:undefined}]}});});
  await dialog.getByRole('button',{name:'重试失败项',exact:true}).click();await dialog.locator('progress').evaluate(el=>new Promise(resolve=>{const tick=()=>el.value===1?resolve():requestAnimationFrame(tick);tick();}));assert.equal(retryBody.root,info.root);assert.equal(retryBody.expected_revision,undefined);
  await page.unroute('**/api/design/publish');await page.unroute('**/api/design/publish/test-transient-ui/retry');checks.push('publishing-simulated-transient-status-and-frozen-retry-ui');
@@ -92,6 +93,8 @@ module.exports=async function publishingWorkflows({page,request,info,checks}){
  };
  await startReal('png');const zip=await download('publishing-5x3.zip','png');
  const pngResult=JSON.parse(execFileSync(python,['-c',"import sys,json,zipfile,struct;z=zipfile.ZipFile(sys.argv[1]);names=[n for n in z.namelist() if n.endswith('.png')];print(json.dumps([{'name':n,'size':struct.unpack('>II',z.read(n)[16:24])} for n in names]))",zip],{encoding:'utf8'}));assert.equal(pngResult.length,15);assert.ok(pngResult.every(item=>item.size[0]===720&&item.size[1]===900));
+ assert.equal(await dialog.locator('details.dw-publish-result').count(),15);assert.equal(await dialog.locator('details.dw-publish-result').evaluateAll(items=>items.every(item=>!item.open)),true,'Successful output details are collapsed, not removed');
+ await dialog.locator('details.dw-publish-result').first().locator('summary').click();assert.equal(await dialog.locator('details.dw-publish-result').first().evaluate(element=>element.open),true);await dialog.locator('details.dw-publish-result').first().locator('summary').click();
  await page.screenshot({path:path.join(evidence,'publishing-5x3-completed.png'),fullPage:true});await closePublish();await openPublish();assert.equal(await page.getByRole('dialog').getByRole('link',{name:'下载发布文件',exact:true}).count(),1);
  checks.push('publishing-real-15-png-dimensions-and-modal-reopen');
  fs.writeFileSync(path.join(evidence,'publishing-report.json'),JSON.stringify({png:pngResult,timings,fit:{beforeFit,afterFit},checks:checks.filter(item=>item.startsWith('publishing-'))},null,2));

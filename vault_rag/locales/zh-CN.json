@@ -1676,5 +1676,15 @@
   "Text already fits; no change is needed.": "文字已适配，无需修改。",
   "No readable fit range is available. Enlarge the box or shorten the copy.": "没有符合可读要求的适配范围，请扩大文本框或精简内容。",
   "Text still overflows at the bounded readable minimum. Enlarge the box or shorten the copy.": "文字在允许的最小可读字号下仍然溢出，请扩大文本框或精简内容。",
-  "Suggestion only: review and apply explicitly. Font fallback, ancestor clipping, and responsive layout can still affect the result.": "此为建议，请检查后明确应用。回退字体、父级裁切和响应式布局仍可能影响结果。"
+  "Suggestion only: review and apply explicitly. Font fallback, ancestor clipping, and responsive layout can still affect the result.": "此为建议，请检查后明确应用。回退字体、父级裁切和响应式布局仍可能影响结果。",
+  "design.publish.prepare": "为每个版本，准备好交付。",
+  "design.publish.summary": "输出摘要",
+  "design.publish.outputs": "个输出",
+  "design.publish.fitSettings": "文字适配设置与检查说明",
+  "design.publish.review": "查看提示",
+  "design.publish.checkLimits": "检查范围与限制",
+  "页面操作": "页面操作",
+  "design.template.atelierDescription": "编辑式灯具品牌营销模板，含雕塑感图形与多语言版式。",
+  "design.template.atelierLayers": "3 个画板 · EN / 中文 / 日本語",
+  "design.template.atelierPreview": "ATELIER 灯具营销模板预览"
 }

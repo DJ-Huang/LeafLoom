@@ -56,6 +56,12 @@ jobs:
       - run: npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
       - run: npm run build --prefix web
       - run: uv sync --locked --no-dev
+      - name: Install isolated test browser
+        run: |
+          uv pip install --python .venv/bin/python playwright==1.58.0
+          .venv/bin/python -m playwright install --with-deps chromium
+      - name: Render the packaged editorial preview and source evidence
+        run: .venv/bin/python tests/studio_atelier_preview.py
       - name: Versioning, migration, export and boundary contracts
         run: uv run --no-sync python -m unittest discover -s tests -p 'test_design*.py'
       - name: Project draft contracts
@@ -64,10 +70,6 @@ jobs:
           node tests/test_studio_navigation.cjs
           node tests/test_studio_projection.cjs
           npm test --prefix desktop
-      - name: Install isolated test browser
-        run: |
-          uv pip install --python .venv/bin/python playwright==1.58.0
-          .venv/bin/python -m playwright install --with-deps chromium
       - name: Portable runtime browser contracts
         run: |
           .venv/bin/python tests/studio_runtime_browser.py
