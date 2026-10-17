@@ -27,7 +27,7 @@ function cropPosition(value:any):[number,number]{const positions=String(value||'
 
 export function DesignInspector({nodes,document,pageId,disabled,isMaster,onPatch,onCommand,onResourceCommand,onChooseImage,onEditComponent,onCreateComponent,onSource,structure}:Props){
   const styles=useMemo(()=>new Map(nodes.map(node=>[node.id,resolveInspectorStyle(node,document)])),[nodes,document.styles]);
-  const first=nodes[0],single=nodes.length===1,allText=nodes.every(node=>['text','button'].includes(node.type)||typeof node.props.text==='string'),allImages=nodes.every(node=>node.type==='image'),allContainers=nodes.every(node=>node.type==='container'||!!node.children?.length),hasLocked=nodes.some(node=>node.locked);
+  const first=nodes[0],single=nodes.length===1,allText=nodes.every(node=>['text','button'].includes(node.type)||typeof node.props.text==='string'),allImages=nodes.every(node=>node.type==='image'),allContainers=nodes.every(node=>node.type==='container'||node.type==='button'||!!node.children?.length),hasLocked=nodes.some(node=>node.locked);
   const value=(key:string,fallback?:any)=>commonValue(nodes,node=>styles.get(node.id)?.[key]??fallback);
   const prop=(key:string,fallback?:any)=>commonValue(nodes,node=>node.props[key]??fallback);
   const patchStyle=(patch:Record<string,any>)=>onPatch({style:patch},t('修改样式'));

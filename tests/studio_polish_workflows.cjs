@@ -40,18 +40,24 @@ module.exports=async function polishWorkflows({page,request,info,checks}){
  await dialog.getByLabel('项目文件夹名称（英文或中文目录名）',{exact:true}).fill('PolishCard');await dialog.getByLabel('项目显示名称',{exact:true}).fill('Northstar Card');
  await dialog.getByLabel('画板宽度 (px)',{exact:true}).fill('800');await dialog.getByLabel('画板高度 (px)',{exact:true}).fill('700');
  await dialog.getByRole('button',{name:'创建并打开设计工作台',exact:true}).click();await page.locator('.dw-toolbar strong').filter({hasText:'Northstar Card'}).waitFor();
- await insert('容器');await field('名称','Northstar card');await field('宽度',360);await select('inspector-layout','column');await select('inspector-height-mode','hug');
+ await insert('容器');await field('名称','Northstar card');await field('宽度',360);await select('inspector-layout','column');await select('inspector-height-mode','hug');await field('间距',16);
  for(const side of ['top','right','bottom','left'])await testField('inspector-padding-'+side,24);
  await field('填充颜色','#edf3fd');
  await insert('文字');await field('名称','Card heading');await field('文字内容','A thoughtful place for your next big idea');await select('inspector-width-mode','fill');await select('inspector-height-mode','hug');await select('inspector-font-weight','700');await testField('inspector-line-height',1.3);await testField('inspector-letter-spacing',0.3);
  let saved=await read();const card=saved.document.pages[0].nodes[0],heading=card.children.find(n=>n.name==='Card heading');assert.ok(heading);assert.equal(heading.style.widthMode,'fill');assert.equal(heading.style.heightMode,'hug');
  const cardId=card.id;
  await layer('Northstar card');await insert('按钮');await field('名称','Card action');await field('文字内容','Explore the collection');await select('inspector-width-mode','fill');await select('inspector-height-mode','hug');
+ for(const side of ['top','bottom'])await testField('inspector-padding-'+side,14);for(const side of ['left','right'])await testField('inspector-padding-'+side,16);
  await layer('Card heading');await page.locator('.dw-layer-select').filter({hasText:'Card action'}).click({modifiers:['Shift']});
  assert.equal(await page.getByTestId('inspector-font-weight').inputValue(),'__mixed__');
  await testField('inspector-text-color','#183a58');
  saved=await read();assert.ok(saved.document.pages[0].nodes[0].children.every(child=>child.style.color==='#183a58'));
  checks.push('polish-multiselection-mixed-values-and-common-property-edit');
+ await layer('Card action');await testField('inspector-text-color','#ffffff');
+ const buttonId=(await read()).document.pages[0].nodes[0].children.find(node=>node.name==='Card action').id;
+ const button=canvas().locator('[data-studio-select-id="'+buttonId+'"]').first();await button.waitFor();
+ assert.ok(await button.evaluate(el=>el.offsetHeight)>=40,'Hug button includes its visual padding');
+ assert.ok(await button.evaluate(el=>{const content=el.querySelector('.studio-content')||el;return content.scrollHeight<=content.clientHeight+1;}),'Button text fits its content-sized box');
  await layer('Northstar card');
  const bounds=async()=>canvas().locator('[data-studio-select-id="'+cardId+'"]').first().boundingBox();
  const before=await bounds();assert.ok(before.height>80);
@@ -59,6 +65,8 @@ module.exports=async function polishWorkflows({page,request,info,checks}){
  await canvas().locator('[data-studio-select-id="'+heading.id+'"]').filter({hasText:'with enough room'}).waitFor();
  let after;for(let attempt=0;attempt<50;attempt++){after=await bounds();if(after.height>before.height)break;await page.waitForTimeout(100);}assert.ok(after.height>before.height,'Hug card grows with a longer title');
  await layer('Northstar card');await field('宽度',260);for(let attempt=0;attempt<50;attempt++){if(await canvas().locator('[data-studio-select-id="'+cardId+'"]').first().evaluate(el=>el.offsetWidth)===260)break;await page.waitForTimeout(100);}assert.equal(await canvas().locator('[data-studio-select-id="'+cardId+'"]').first().evaluate(el=>el.offsetWidth),260);const narrow=await bounds();assert.ok(narrow.height>=after.height,'Narrow card remains content-sized');
+ assert.ok(await button.evaluate(el=>{const content=el.querySelector('.studio-content')||el;return content.scrollHeight<=content.clientHeight+1&&content.scrollWidth<=content.clientWidth+1;}),'Narrow hug button text remains unclipped');
+ await page.locator('.toast').waitFor({state:'hidden'});
  await page.screenshot({path:path.join(evidence,'polish-card-responsive.png'),fullPage:true});
  checks.push('polish-blank-card-visual-layout-typography-long-content');
  // Creating a reusable component preserves the authored child identities.
