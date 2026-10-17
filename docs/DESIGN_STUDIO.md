@@ -424,3 +424,60 @@ real-project performance acceptance. Run the Chrome comparison with
 There is no multiplayer collaboration, multitrack animation timeline or promise
 of complete Figma feature parity. The current editing model is intended to
 grow without replacing portable HTML or bypassing project version checks.
+
+## Visual editing and reusable design styles
+
+The inspector exposes fixed/hug/fill dimensions (`style.widthMode` and
+`style.heightMode`), row/column/grid, wrap, axis alignment, per-side padding and
+min/max dimensions. The renderer interprets these modes consistently in edit,
+preview and portable export. A fill axis needs available parent layout space;
+a hugging parent and filling child on the same axis do not create a definite
+size. Free-positioned children do not contribute intrinsic layout size. Use
+flow children for content-sized cards, and verify text at the intended width.
+
+Marquee selection, snapping guides, arrow-key nudging, six-way alignment,
+equal-gap distribution and multi-selection scaling use rendered geometry.
+Position deltas are converted through the parent transform, including zoom and
+nested rotation/scale. Flow children can be reordered inside their existing
+parent; alignment and free movement should not be used to fight auto layout.
+Holding Alt while dragging bypasses snapping. Cancelled gestures restore the
+previous visual state and do not create history entries.
+
+Named shared styles use `{id, name, kind, style}`, where kind is `color`,
+`typography` or `spacing`. `props.styleIds` is an ordered list; the older
+`props.styleId` remains readable. Shared values merge before local overrides.
+`style.apply` links a style and clears conflicting local values for its kind;
+`style.detach` preserves the resolved appearance while removing that reference.
+Updating a linked definition refreshes all references, including templates and
+export. FORMA's named palette, font-family and layout styles use CSS custom
+properties, so one brand change reaches all four artboards without flattening
+the original DOM. `project.rebrand` updates explicitly bound brand/contact
+content; it does not search-and-replace arbitrary user text.
+
+`component.override` merges a props/style patch for a source node within one
+instance. `component.reset_override` removes one property, one source-node
+patch, or all overrides. Master edits update inherited values; overrides stay
+local until reset. Override references are validated, and detach bakes the
+resolved appearance into independent nodes. The panel exposes content, colors,
+images, button disabled state and an authored state value where present; it is
+not a full visual state-machine or arbitrary JavaScript editor.
+
+Conversion reports distinguish retained DOM/styles/assets, recognized behavior
+converted into declarative actions, and unsupported runtime behavior. Unreadable
+cross-origin CSS, original event listeners, closures and live state cannot be
+promised to survive conversion. Original source is retained separately. The
+HTML round-trip browser contract exports a real ZIP, reopens its generated
+index and compares edited typography/layout against the editor renderer.
+
+Save recovery includes a readable pending-operation summary and a downloadable
+recovery record. Keep that record private: it may contain project content.
+Retry preserves the original operation ID and revision; deliberate reapply
+against a newer revision is a distinct conflict-resolution choice. Discarding
+pending edits asks for confirmation. These controls are not multiplayer merge
+or remote backup.
+
+The existing CI browser entry points include
+`tests/studio_canvas_polish_browser.py` and `tests/studio_polish_workflows.cjs`.
+They cover nested/zoomed canvas geometry, layout and gesture cancellation,
+content-sized cards, component reset/undo/reopen, FORMA rebranding, and a real
+concurrent-revision save conflict. Evidence is written to `.cache/studio-qa/`.

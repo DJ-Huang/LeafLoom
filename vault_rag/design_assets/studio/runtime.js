@@ -5,7 +5,8 @@
   const VERSION = 1;
   const handles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
   const unitless = new Set(['opacity', 'zIndex', 'fontWeight', 'lineHeight', 'flex', 'flexGrow', 'flexShrink', 'order', 'aspectRatio', 'scale', 'zoom', 'columnCount', 'gridColumn', 'gridColumnStart', 'gridColumnEnd', 'gridRow', 'gridRowStart', 'gridRowEnd', 'animationIterationCount', 'fillOpacity', 'strokeOpacity', 'strokeMiterlimit', 'fontSizeAdjust', 'lineClamp']);
-  const layoutKeys = new Set(['x', 'y', 'width', 'height', 'rotate', 'scaleX', 'scaleY', 'transform', 'transformOrigin', 'position', 'left', 'top', 'right', 'bottom', 'zIndex', 'opacity', 'layout']);
+  const layoutKeys = new Set(['x', 'y', 'width', 'height', 'rotate', 'scaleX', 'scaleY', 'transform', 'transformOrigin', 'position', 'left', 'top', 'right', 'bottom', 'zIndex', 'opacity', 'layout', 'widthMode', 'heightMode', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight']);
+  const outerKeys = new Set(['flex', 'flexGrow', 'flexShrink', 'flexBasis', 'alignSelf', 'order', 'margin', 'marginLeft', 'marginTop', 'marginRight', 'marginBottom', 'justifySelf', 'placeSelf', 'gridColumn', 'gridRow', 'gridArea', 'gridColumnStart', 'gridColumnEnd', 'gridRowStart', 'gridRowEnd']);
   const blockedKeys = new Set(['__proto__', 'prototype', 'constructor']);
   const moduleLoggers = new Map();
   let loggerSequence = 0;
@@ -143,6 +144,8 @@
     let spaceDown = false;
     let panGesture = null;
     let gesture = null;
+    let marquee = null;
+    let selectionBox = null;
     let textEdit = null;
     let gestureFrame = 0;
     const gestureWork = [];
@@ -165,6 +168,9 @@
     const stage = doc.createElement('div');
     stage.className = 'studio-stage';
     viewport.appendChild(stage);
+    const chrome = doc.createElement('div');
+    chrome.className = 'studio-canvas-chrome';
+    viewport.appendChild(chrome);
     root.replaceChildren(viewport);
 
     function report(error, nodeId, lineOffset) {
@@ -187,13 +193,40 @@
     function materialize(value) { return typeof value === 'string' ? value.replace(/__STUDIO_ASSET__\//g, base) : value; }
 
     function resolvedStyle(node) {
-      const shared = node.props && node.props.styleId && model.styles && model.styles[node.props.styleId];
-      return Object.assign({}, shared && (shared.style || shared), node.style);
+      const props = node.props || {};
+      const ids = [props.styleId, ...(Array.isArray(props.styleIds) ? props.styleIds : [])].filter(Boolean);
+      const result = {};
+      ids.forEach(id => { const shared = model.styles && model.styles[id]; if (shared) Object.assign(result, shared.style || shared); });
+      return Object.assign(result, node.style);
+    }
+
+    function applySizing(entry, s) {
+      const el = entry.wrapper;
+      const flow = entry.flow || entry.authored && inFlow(entry);
+      const parent = flow && el.parentElement && win.getComputedStyle(el.parentElement);
+      const flex = flow && parent && parent.display.includes('flex');
+      const row = flex && !parent.flexDirection.startsWith('column');
+      ['minWidth', 'maxWidth', 'minHeight', 'maxHeight'].forEach(key => { if (!entry.authored || s[key] != null) el.style[key] = s[key] == null ? '' : cssValue(key, s[key]); });
+      outerKeys.forEach(key => { if (!entry.authored || s[key] != null) el.style[key] = s[key] == null ? '' : cssValue(key, s[key]); });
+      if (flow && !entry.authored && s.flexShrink == null) el.style.flexShrink = '0';
+      ['width', 'height'].forEach(axis => {
+        const mode = s[axis + 'Mode'];
+        const main = flex && (axis === 'width' ? row : !row);
+        if (mode === 'hug') el.style[axis] = 'max-content';
+        else if (mode === 'fill') {
+          el.style[axis] = main ? '0px' : flow ? 'auto' : '100%';
+          if (main) { el.style.flexGrow = '1'; el.style.flexShrink = '1'; el.style.flexBasis = '0px'; }
+          else if (flow) { if (parent && parent.display.includes('grid') && axis === 'width') el.style.justifySelf = 'stretch'; else el.style.alignSelf = 'stretch'; }
+          if (!entry.authored && s[axis === 'width' ? 'minWidth' : 'minHeight'] == null) el.style[axis === 'width' ? 'minWidth' : 'minHeight'] = '0px';
+        }
+        if (!entry.authored) entry.visual.style[axis] = mode === 'hug' ? 'auto' : '100%';
+      });
     }
 
     function applyLayout(entry, style) {
       const el = entry.wrapper;
       const s = style || {};
+      if (!entry.authored) entry.flow = entry.layoutFlow && !['absolute', 'fixed'].includes(s.position);
       if (entry.authored) {
         el.style.cssText = entry.authoredCss || '';
         ['width', 'height', 'position', 'left', 'top', 'right', 'bottom', 'zIndex', 'opacity', 'transformOrigin'].forEach(key => {
@@ -205,9 +238,12 @@
         if (s.scaleX != null || s.scaleY != null) el.style.scale = finite(s.scaleX, 1) + ' ' + finite(s.scaleY, 1);
         if (s.transform != null) el.style.transform = s.transform;
         contentStyle(el, s);
+        ['minWidth', 'maxWidth', 'minHeight', 'maxHeight'].forEach(key => { if (s[key] != null) el.style[key] = cssValue(key, s[key]); });
+        if (s.widthMode || s.heightMode) applySizing(entry, s);
         scopeAnimationNames(el.style, entry.scope.keyframes);
         return;
       }
+      el.style.right = ''; el.style.bottom = '';
       el.style.position = s.position || (entry.flow ? 'relative' : 'absolute');
       el.style.left = cssValue('left', s.x == null ? s.left == null ? 0 : s.left : s.x);
       el.style.top = cssValue('top', s.y == null ? s.top == null ? 0 : s.top : s.y);
@@ -219,18 +255,36 @@
       el.style.transform = 'rotate(' + finite(s.rotate, 0) + 'deg) scale(' + finite(s.scaleX, 1) + ',' + finite(s.scaleY, 1) + ')' + (s.transform ? ' ' + s.transform : '');
       if (s.right != null && s.x == null && s.left == null) { el.style.left = 'auto'; el.style.right = cssValue('right', s.right); }
       if (s.bottom != null && s.y == null && s.top == null) { el.style.top = 'auto'; el.style.bottom = cssValue('bottom', s.bottom); }
-      if (entry.flow) { el.style.flexShrink = '0'; el.style.left = ''; el.style.top = ''; }
+      if (entry.flow) { el.style.left = ''; el.style.top = ''; }
+      applySizing(entry, s);
     }
 
     function contentStyle(el, style) {
       Object.entries(style || {}).forEach(([key, value]) => {
-        if (layoutKeys.has(key) || blockedKeys.has(key) || value == null || typeof value === 'object') return;
+        if (layoutKeys.has(key) || el.classList.contains('studio-content') && outerKeys.has(key) || blockedKeys.has(key) || value == null || typeof value === 'object') return;
         try { if (key.startsWith('--')) el.style.setProperty(key, String(materialize(value))); else el.style[key] = cssValue(key, materialize(value)); } catch (_) { /* Ignore unsupported CSS properties. */ }
       });
       if (style && ['row', 'column', 'grid'].includes(style.layout)) {
         el.style.display = style.layout === 'grid' ? 'grid' : 'flex';
         if (style.layout !== 'grid') el.style.flexDirection = style.layout;
       }
+    }
+
+    function presentationProps(entry) {
+      const props = entry.node.props || {}, attributes = entry.authored && props.attributes || {};
+      const state = props.state == null ? attributes['data-state'] : props.state;
+      const disabled = props.disabled == null ? Object.prototype.hasOwnProperty.call(attributes, 'disabled') || attributes['aria-disabled'] === 'true' : !!props.disabled;
+      [entry.wrapper, entry.visual].forEach(el => {
+        if (state == null || state === '') el.removeAttribute('data-state'); else el.dataset.state = String(state);
+        if (disabled) el.dataset.studioDisabled = 'true'; else el.removeAttribute('data-studio-disabled');
+      });
+      const el = entry.visual;
+      if ('disabled' in el) el.disabled = disabled;
+      if (props.disabled != null) el.setAttribute('aria-disabled', String(disabled));
+      else if (attributes['aria-disabled'] != null) el.setAttribute('aria-disabled', attributes['aria-disabled']);
+      else el.removeAttribute('aria-disabled');
+      const image = entry.authored && el.tagName.toLowerCase() === 'img' ? el : entry.node.type === 'image' || entry.node.type === 'svg' ? el.querySelector('img') : null;
+      if (image) image.alt = String(props.alt == null ? attributes.alt || entry.node.name || '' : props.alt);
     }
 
     function placeholder(el, message) { el.classList.add('studio-missing'); el.textContent = message; }
@@ -367,8 +421,9 @@
       const entry = { node, wrapper: el, visual: el, scope, flow: false, authored: true, authoredCss: el.style.cssText, editable: ownerId == null, ownerId: ownerId || node.id };
       scope.refs.set(node.id, entry); entries.push(entry);
       if (ownerId == null) { el.dataset.studioSelectId = node.id; editable.set(node.id, entry); }
+      parent.appendChild(el);
       const style = resolvedStyle(node);
-      applyLayout(entry, style); contentStyle(el, style);
+      applyLayout(entry, style);
       if (node.hidden) el.style.display = 'none';
       if (props.assetId && tag === 'img') el.setAttribute('src', asset(props.assetId));
       else if (props.src && tag === 'img') el.setAttribute('src', resourceUrl(props.src, base));
@@ -388,8 +443,8 @@
         });
         [...svg.documentElement.childNodes].forEach(child => el.appendChild(doc.importNode(child, true)));
       }
-      parent.appendChild(el);
       renderNodes(node.children, el, scope, chain, ownerId, false, entries);
+      presentationProps(entry);
       return entry;
     }
 
@@ -415,20 +470,20 @@
       visual.className = 'studio-content';
       wrapper.id = scope.prefix + '__' + node.id;
       wrapper.dataset.studioNode = node.id;
-      const entry = { node, wrapper, visual, scope, flow, locked: !!node.locked, editable: ownerId == null, ownerId: ownerId || node.id };
+      const entry = { node, wrapper, visual, scope, flow, layoutFlow: flow, locked: !!node.locked, editable: ownerId == null, ownerId: ownerId || node.id };
       entries.push(entry);
       scope.refs.set(node.id, entry);
       if (ownerId == null) {
         wrapper.dataset.studioSelectId = node.id;
         editable.set(node.id, entry);
       }
+      wrapper.appendChild(visual);
+      parent.appendChild(wrapper);
       const style = resolvedStyle(node);
       applyLayout(entry, style);
       contentStyle(visual, style);
       scopeAnimationNames(visual.style, scope.keyframes);
       wrapper.hidden = !!node.hidden;
-      wrapper.appendChild(visual);
-      parent.appendChild(wrapper);
       const props = node.props || {};
       if (node.type === 'text' || node.type === 'button') {
         visual.textContent = props.text == null ? node.type === 'button' ? 'Button' : 'Text' : String(props.text);
@@ -472,20 +527,26 @@
         else if (chain.has(key)) placeholder(visual, 'Cyclic component nesting');
         else {
           const componentRoot = clone(component.node);
+          const rawOverrides = props.overrides || {};
+          const componentIds = new Set();
+          const collectIds = item => { componentIds.add(item.id); (item.children || []).forEach(collectIds); }; collectIds(componentRoot);
+          const keyed = Object.entries(rawOverrides).some(([id, value]) => componentIds.has(id) || value && typeof value === 'object' && (value.style || value.props));
+          const overrides = keyed ? rawOverrides : { [componentRoot.id]: { props: rawOverrides } };
           function override(item) {
-            const patch = props.overrides && props.overrides[item.id];
+            const patch = overrides[item.id];
             if (patch) { item.style = Object.assign({}, item.style, patch.style); item.props = Object.assign({}, item.props, patch.props); }
             (item.children || []).forEach(override);
           }
           override(componentRoot);
-          componentRoot.style = Object.assign({}, componentRoot.style, { x: 0, y: 0, width: '100%', height: '100%' });
+          componentRoot.style = Object.assign({}, componentRoot.style, { x: 0, y: 0, position: 'relative', width: '100%', height: '100%', widthMode: style.widthMode === 'hug' ? 'hug' : 'fixed', heightMode: style.heightMode === 'hug' ? 'hug' : 'fixed' });
           const childScope = makeScope(wrapper.id + '__instance', [componentRoot]);
           childScope.keyframes = scope.keyframes;
-          renderNode(componentRoot, visual, childScope, new Set([...chain, key]), ownerId || node.id, false, entries);
+          renderNode(componentRoot, visual, childScope, new Set([...chain, key]), ownerId || node.id, true, entries);
         }
       }
       const s = style;
       renderNodes(node.children, visual, scope, chain, ownerId, s.layout && s.layout !== 'free' || s.display === 'flex' || s.display === 'grid', entries);
+      presentationProps(entry);
       return entry;
     }
 
@@ -501,6 +562,7 @@
         });
       });
       decorated = new Set(next);
+      syncSelectionBox();
     }
 
     function select(ids, notify) {
@@ -526,6 +588,7 @@
       stage.style.height = Math.max(1, finite(page.height, 720)) + 'px';
       stage.style.transform = 'translate(' + (-view.x * zoom) + 'px,' + (-view.y * zoom) + 'px) scale(' + zoom + ')';
       viewport.style.backgroundPosition = (viewport.clientWidth / 2 - view.x * zoom) + 'px ' + (viewport.clientHeight / 2 - view.y * zoom) + 'px';
+      syncSelectionBox();
       cameraChanged();
     }
 
@@ -586,7 +649,7 @@
     }
 
     function wheel(event) {
-      if (mode !== 'edit' || textEdit || gesture || panGesture) return;
+      if (mode !== 'edit' || textEdit || gesture || marquee || panGesture) return;
       event.preventDefault();
       if (event.ctrlKey || event.metaKey) setZoom(zoom * Math.exp(-event.deltaY * .01), { x: event.clientX, y: event.clientY });
       else {
@@ -639,7 +702,7 @@
 
     // Compute once at gesture start. Translation cancels when converting a delta;
     // every parent rotation/scale, including canvas zoom, remains in the inverse.
-    function deltaConverter(element) {
+    function globalMatrix(element) {
       let matrix = new win.DOMMatrix();
       for (let current = element; current && current !== doc.documentElement; current = current.parentElement) {
         const computed = win.getComputedStyle(current);
@@ -651,7 +714,11 @@
         if (computed.transform && computed.transform !== 'none') local = local.multiply(new win.DOMMatrix(computed.transform));
         matrix = local.multiply(matrix);
       }
-      const inverse = matrix.inverse();
+      return matrix;
+    }
+
+    function deltaConverter(element) {
+      const inverse = globalMatrix(element).inverse();
       return (x, y) => ({ x: inverse.a * x + inverse.c * y, y: inverse.b * x + inverse.d * y });
     }
 
@@ -663,8 +730,195 @@
       return false;
     }
 
+    function inFlow(entry) {
+      if (entry.flow) return true;
+      if (!entry.authored) return false;
+      const position = win.getComputedStyle(entry.wrapper).position;
+      const parent = entry.wrapper.parentElement && win.getComputedStyle(entry.wrapper.parentElement);
+      return parent && /flex|grid/.test(parent.display) && !['absolute', 'fixed'].includes(position);
+    }
+
+    function topEntries(ids, includeFlow) {
+      const entries = [...(ids || selected)].map(id => editable.get(id)).filter(entry => entry && !entry.node.hidden && !isLocked(entry) && (includeFlow || !inFlow(entry)));
+      return entries.filter(entry => !entries.some(other => other !== entry && other.wrapper.contains(entry.wrapper)));
+    }
+
+    function boundsOf(rects) {
+      if (!rects.length) return null;
+      const left = Math.min(...rects.map(rect => rect.left)), right = Math.max(...rects.map(rect => rect.right));
+      const top = Math.min(...rects.map(rect => rect.top)), bottom = Math.max(...rects.map(rect => rect.bottom));
+      return { left, right, top, bottom, width: right - left, height: bottom - top };
+    }
+
+    function positionChrome(el, bounds, origin) {
+      const base = origin || viewport.getBoundingClientRect();
+      Object.assign(el.style, { left: (bounds.left - base.left) + 'px', top: (bounds.top - base.top) + 'px', width: Math.max(0, bounds.width) + 'px', height: Math.max(0, bounds.height) + 'px' });
+    }
+
+    function syncSelectionBox(bounds, origin) {
+      if (!bounds) {
+        const entries = mode === 'edit' ? topEntries(undefined, selected.size === 1) : [];
+        bounds = entries.length > 1 || entries.length === 1 && entries[0].authored ? boundsOf(entries.map(entry => entry.wrapper.getBoundingClientRect())) : null;
+      }
+      if (!bounds || !bounds.width || !bounds.height) { if (selectionBox) selectionBox.remove(); selectionBox = null; return; }
+      if (!selectionBox) {
+        selectionBox = doc.createElement('div'); selectionBox.className = 'studio-selection-box';
+        handles.forEach(handle => { const grip = doc.createElement('span'); grip.className = 'studio-handle'; grip.dataset.handle = handle; grip.dataset.groupHandle = 'true'; selectionBox.appendChild(grip); });
+        chrome.appendChild(selectionBox);
+      }
+      positionChrome(selectionBox, bounds, origin);
+    }
+
+    function snapshot(entry) {
+      const original = clone(resolvedStyle(entry.node)), computed = win.getComputedStyle(entry.wrapper);
+      return { entry, original, rect: entry.wrapper.getBoundingClientRect(), startX: finite(original.x, entry.authored ? 0 : entry.wrapper.offsetLeft), startY: finite(original.y, entry.authored ? 0 : entry.wrapper.offsetTop), convert: deltaConverter(entry.wrapper.parentElement), ownConvert: deltaConverter(entry.wrapper), parentMatrix: globalMatrix(entry.wrapper.parentElement), matrix: globalMatrix(entry.wrapper), width: finite(entry.wrapper.offsetWidth, parseFloat(computed.width) || 1), height: finite(entry.wrapper.offsetHeight, parseFloat(computed.height) || 1), origin: computed.transformOrigin.split(/\s+/).map(parseFloat), display: computed.display, patch: null };
+    }
+
+    function commitTargets(targets, label) {
+      const commands = targets.filter(target => target.patch && Object.values(target.patch).every(value => typeof value !== 'number' || Number.isFinite(value))).map(target => {
+        Object.assign(target.entry.node.style || (target.entry.node.style = {}), target.patch);
+        target.entry.wrapper.style.willChange = '';
+        if (!target.entry.authored) target.entry.wrapper.style.translate = '';
+        applyLayout(target.entry, Object.assign({}, target.original, target.patch));
+        return { type: 'node.update', page_id: currentPageId, node_id: target.entry.node.id, patch: { style: target.patch } };
+      });
+      syncSelectionBox();
+      if (commands.length) emit('studio-commit', { commands, label });
+      return commands.length > 0;
+    }
+
+    function movePatch(target, dx, dy) {
+      const delta = target.convert(dx, dy);
+      return { x: rounded(target.startX + delta.x), y: rounded(target.startY + delta.y) };
+    }
+
+    function action(name) {
+      if (mode !== 'edit' || textEdit || gesture || marquee || panGesture) return false;
+      const direction = /^nudge-(left|right|up|down)(-large)?$/.exec(name);
+      if (direction) { const distance = direction[2] ? 10 : 1; return nudge(direction[1] === 'left' ? -distance : direction[1] === 'right' ? distance : 0, direction[1] === 'up' ? -distance : direction[1] === 'down' ? distance : 0); }
+      const targets = topEntries().map(snapshot).filter(target => target.rect.width && target.rect.height);
+      const bounds = boundsOf(targets.map(target => target.rect));
+      if (!bounds) return false;
+      if (/^align-(left|right|top|bottom|center|middle)$/.test(name)) {
+        if (targets.length < 2) return false;
+        targets.forEach(target => {
+          const r = target.rect;
+          const dx = name === 'align-left' ? bounds.left - r.left : name === 'align-right' ? bounds.right - r.right : name === 'align-center' ? (bounds.left + bounds.right - r.left - r.right) / 2 : 0;
+          const dy = name === 'align-top' ? bounds.top - r.top : name === 'align-bottom' ? bounds.bottom - r.bottom : name === 'align-middle' ? (bounds.top + bounds.bottom - r.top - r.bottom) / 2 : 0;
+          if (Math.abs(dx) > .001 || Math.abs(dy) > .001) target.patch = movePatch(target, dx, dy);
+        });
+        return commitTargets(targets, 'Align elements');
+      }
+      if (name === 'distribute-horizontal' || name === 'distribute-vertical') {
+        if (targets.length < 3) return false;
+        const horizontal = name === 'distribute-horizontal', start = horizontal ? 'left' : 'top', end = horizontal ? 'right' : 'bottom', size = horizontal ? 'width' : 'height';
+        targets.sort((a, b) => a.rect[start] - b.rect[start] || a.rect[end] - b.rect[end]);
+        const gap = (targets[targets.length - 1].rect[end] - targets[0].rect[start] - targets.reduce((sum, target) => sum + target.rect[size], 0)) / (targets.length - 1);
+        let cursor = targets[0].rect[end] + gap;
+        targets.slice(1, -1).forEach(target => { const delta = cursor - target.rect[start]; if (Math.abs(delta) > .001) target.patch = movePatch(target, horizontal ? delta : 0, horizontal ? 0 : delta); cursor += target.rect[size] + gap; });
+        return commitTargets(targets, 'Distribute elements');
+      }
+      return false;
+    }
+
+    function nudge(dx, dy) {
+      if (gesture || marquee || panGesture) return;
+      const targets = topEntries().map(snapshot);
+      targets.forEach(target => { target.patch = movePatch(target, dx * zoom, dy * zoom); });
+      return commitTargets(targets, 'Nudge elements');
+    }
+
+    function clearGuides() { chrome.querySelectorAll('.studio-snap-guide,.studio-reorder-guide').forEach(el => el.remove()); }
+
+    function snapCandidates(entries) {
+      const rects = [stage.getBoundingClientRect()];
+      editable.forEach(entry => {
+        if (entry.node.hidden || entries.some(other => other === entry || other.wrapper.contains(entry.wrapper) || entry.wrapper.contains(other.wrapper))) return;
+        const rect = entry.wrapper.getBoundingClientRect(); if (rect.width && rect.height) rects.push(rect);
+      });
+      return { x: rects.flatMap(r => [r.left, (r.left + r.right) / 2, r.right]), y: rects.flatMap(r => [r.top, (r.top + r.bottom) / 2, r.bottom]) };
+    }
+
+    function snappedDelta(g) {
+      if (g.snapLines) Object.values(g.snapLines).forEach(line => { line.style.opacity = '0'; });
+      if (g.altKey || !g.snaps) return { x: g.dx, y: g.dy };
+      const rect = g.bounds, result = { x: g.dx, y: g.dy };
+      ['x', 'y'].forEach(axis => {
+        const horizontal = axis === 'x';
+        const values = horizontal ? [rect.left, (rect.left + rect.right) / 2, rect.right] : [rect.top, (rect.top + rect.bottom) / 2, rect.bottom];
+        let best = 6, correction = 0, guide = null;
+        values.forEach(value => g.snaps[axis].forEach(candidate => { const delta = candidate - value - result[axis]; if (Math.abs(delta) < best) { best = Math.abs(delta); correction = delta; guide = candidate; } }));
+        result[axis] += correction;
+        if (guide != null && g.snapLines) { const line = g.snapLines[axis]; line.style.transform = (horizontal ? 'translateX(' : 'translateY(') + (guide - (horizontal ? g.origin.left : g.origin.top)) + 'px)'; line.style.opacity = '1'; }
+      });
+      return result;
+    }
+
+    function startMarquee(event) {
+      const origin = viewport.getBoundingClientRect(), initial = event.shiftKey ? [...selected] : [];
+      const candidates = [];
+      editable.forEach(entry => { if (!entry.node.hidden && !isLocked(entry)) { const rect = entry.wrapper.getBoundingClientRect(); if (rect.width && rect.height) candidates.push({ id: entry.node.id, rect }); } });
+      const box = doc.createElement('div'); box.className = 'studio-marquee'; chrome.appendChild(box);
+      marquee = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, initial, candidates, box, origin };
+      positionChrome(box, { left: event.clientX, top: event.clientY, width: 0, height: 0 }, origin);
+      viewport.setPointerCapture(event.pointerId);
+      if (!event.shiftKey) select([], true);
+    }
+
+    function updateMarquee(event) {
+      const m = marquee, rect = { left: Math.min(m.x, event.clientX), top: Math.min(m.y, event.clientY), right: Math.max(m.x, event.clientX), bottom: Math.max(m.y, event.clientY) };
+      rect.width = rect.right - rect.left; rect.height = rect.bottom - rect.top;
+      positionChrome(m.box, rect, m.origin);
+      const ids = new Set(m.initial);
+      if (rect.width > 2 || rect.height > 2) m.candidates.forEach(item => { if (item.rect.left >= rect.left && item.rect.right <= rect.right && item.rect.top >= rect.top && item.rect.bottom <= rect.bottom) ids.add(item.id); });
+      if (ids.size !== selected.size || [...ids].some(id => !selected.has(id))) select([...ids], true);
+    }
+
+    function finishMarquee(cancel) {
+      if (!marquee) return;
+      const m = marquee; marquee = null; m.box.remove();
+      if (cancel) select(m.initial, true);
+      if (viewport.hasPointerCapture(m.pointerId)) viewport.releasePointerCapture(m.pointerId);
+    }
+
+    function nodeLocation(id, nodes, parentId) {
+      for (let index = 0; index < nodes.length; index += 1) {
+        if (nodes[index].id === id) return { nodes, index, parentId: parentId || null };
+        const found = nodeLocation(id, nodes[index].children || [], nodes[index].id); if (found) return found;
+      }
+      return null;
+    }
+
+    function startReorder(event, entry) {
+      const page = model.pages.find(item => item.id === currentPageId), location = nodeLocation(entry.node.id, page.nodes || []);
+      if (!location) return;
+      const parent = entry.wrapper.parentElement, style = win.getComputedStyle(parent);
+      const horizontal = style.display.includes('grid') ? !style.gridAutoFlow.startsWith('column') : !style.flexDirection.startsWith('column');
+      const siblings = location.nodes.map(node => editable.get(node.id)).filter(item => item && item !== entry && !item.node.hidden && item.wrapper.parentElement === parent).map(item => ({ entry: item, rect: item.wrapper.getBoundingClientRect() }));
+      gesture = { pointerId: event.pointerId, capture: viewport, x: event.clientX, y: event.clientY, dx: 0, dy: 0, reorder: true, targets: [snapshot(entry)], location, siblings, horizontal, reverse: /reverse$/.test(style.flexDirection) !== (horizontal && style.direction === 'rtl'), convert: deltaConverter(parent), parentMatrix: globalMatrix(parent), origin: viewport.getBoundingClientRect(), dropIndex: location.index };
+      viewport.classList.add('studio-dragging'); entry.wrapper.classList.add('studio-reordering'); viewport.setPointerCapture(event.pointerId);
+    }
+
+    function updateReorder(g) {
+      clearGuides();
+      const x = g.x + g.dx, y = g.y + g.dy;
+      let nearest = null, distance = Infinity;
+      g.siblings.forEach(item => { const r = item.rect, dx = x - (r.left + r.right) / 2, dy = y - (r.top + r.bottom) / 2, value = dx * dx + dy * dy; if (value < distance) { distance = value; nearest = item; } });
+      if (!nearest) return;
+      const r = nearest.rect, relative = g.convert(x - (r.left + r.right) / 2, y - (r.top + r.bottom) / 2);
+      const after = (g.horizontal ? relative.x > 0 : relative.y > 0) !== g.reverse;
+      const remaining = g.location.nodes.filter(node => node.id !== g.targets[0].entry.node.id);
+      g.dropIndex = remaining.findIndex(node => node.id === nearest.entry.node.id) + (after ? 1 : 0);
+      const line = doc.createElement('div'); line.className = 'studio-reorder-guide';
+      const axisX = g.horizontal ? g.parentMatrix.a : g.parentMatrix.c, axisY = g.horizontal ? g.parentMatrix.b : g.parentMatrix.d;
+      const screenHorizontal = Math.abs(axisX) >= Math.abs(axisY), positive = screenHorizontal ? axisX >= 0 : axisY >= 0;
+      const farEdge = (after !== g.reverse) === positive;
+      positionChrome(line, screenHorizontal ? { left: (farEdge ? r.right : r.left) - 1, top: r.top, width: 2, height: r.height } : { left: r.left, top: (farEdge ? r.bottom : r.top) - 1, width: r.width, height: 2 }, g.origin);
+      chrome.appendChild(line);
+    }
+
     function pointerDown(event) {
-      if (mode !== 'edit' || ![0, 1].includes(event.button) || gesture || panGesture) return;
+      if (mode !== 'edit' || ![0, 1].includes(event.button) || gesture || marquee || panGesture) return;
       if (event.button === 1 || tool === 'hand' || spaceDown) {
         event.preventDefault(); finishTextEdit(false); viewport.focus({ preventScroll: true });
         const view = camera(); if (!view) return;
@@ -674,29 +928,49 @@
       if (textEdit && textEdit.entry.visual.contains(event.target)) return;
       if (textEdit) finishTextEdit(false);
       viewport.focus({ preventScroll: true });
+      const groupHandle = event.target.dataset.groupHandle === 'true';
       const wrapper = event.target.closest('[data-studio-select-id]');
-      if (!wrapper || !stage.contains(wrapper)) { select([], true); return; }
-      const entry = editable.get(wrapper.dataset.studioSelectId);
+      if (!groupHandle && (!wrapper || !stage.contains(wrapper))) { event.preventDefault(); startMarquee(event); return; }
+      const entry = groupHandle ? topEntries(undefined, selected.size === 1)[0] : editable.get(wrapper.dataset.studioSelectId);
       if (!entry) return;
       event.preventDefault();
       const handle = event.target.dataset.handle || null;
       if (event.shiftKey && !handle) {
         const next = new Set(selected); next.has(entry.node.id) ? next.delete(entry.node.id) : next.add(entry.node.id); select([...next], true);
         if (!selected.has(entry.node.id)) return;
-      } else if (!selected.has(entry.node.id)) select([entry.node.id], true);
+      } else if (!groupHandle && !selected.has(entry.node.id)) select([entry.node.id], true);
       if (isLocked(entry)) return;
-      const targets = (handle ? [entry] : [...selected].map(id => editable.get(id))).filter(item => item && !isLocked(item) && !item.flow);
-      // A selected descendant follows its selected ancestor naturally.
-      const top = targets.filter(item => !targets.some(other => other !== item && other.wrapper.contains(item.wrapper)));
-      if (!top.length) return;
-      gesture = { pointerId: event.pointerId, capture: entry.wrapper, x: event.clientX, y: event.clientY, dx: 0, dy: 0, handle, targets: top.map(item => {
-        const original = clone(resolvedStyle(item.node));
-        return { entry: item, original, startX: finite(original.x, item.authored ? 0 : item.wrapper.offsetLeft), startY: finite(original.y, item.authored ? 0 : item.wrapper.offsetTop), convert: deltaConverter(handle ? item.wrapper : item.wrapper.parentElement), width: item.wrapper.offsetWidth, height: item.wrapper.offsetHeight, patch: null };
-      }) };
+      if (!handle && inFlow(entry)) { startReorder(event, entry); return; }
+      const entries = groupHandle || !handle ? topEntries(undefined, groupHandle && selected.size === 1) : [entry];
+      if (!entries.length) return;
+      const targets = entries.map(snapshot), bounds = boundsOf(targets.map(target => target.rect));
+      gesture = { pointerId: event.pointerId, capture: viewport, x: event.clientX, y: event.clientY, dx: 0, dy: 0, handle, group: groupHandle, targets, bounds, origin: viewport.getBoundingClientRect(), snaps: handle ? null : snapCandidates(entries), altKey: event.altKey, shiftKey: event.shiftKey };
+      if (!handle) {
+        gesture.snapLines = {};
+        ['x', 'y'].forEach(axis => { const line = doc.createElement('div'); line.className = 'studio-snap-guide ' + (axis === 'x' ? 'studio-guide-vertical' : 'studio-guide-horizontal'); line.style.opacity = '0'; line.style.left = '0'; line.style.top = '0'; chrome.appendChild(line); gesture.snapLines[axis] = line; });
+      }
       gestureWork.length = 0;
       viewport.classList.add('studio-dragging');
-      if (!handle) top.forEach(item => { item.wrapper.style.willChange = 'translate'; });
-      gesture.capture.setPointerCapture(event.pointerId);
+      if (!handle) entries.forEach(item => { item.wrapper.style.willChange = 'translate'; });
+      viewport.setPointerCapture(event.pointerId);
+    }
+
+    function groupResizePatch(target, g, box) {
+      const sx = box.width / Math.max(.01, g.bounds.width), sy = box.height / Math.max(.01, g.bounds.height);
+      const m = target.matrix, w = target.width, h = target.height;
+      const originX = target.rect.left - Math.min(0, m.a * w, m.c * h, m.a * w + m.c * h);
+      const originY = target.rect.top - Math.min(0, m.b * w, m.d * h, m.b * w + m.d * h);
+      const dx = box.left + (originX - g.bounds.left) * sx - originX;
+      const dy = box.top + (originY - g.bounds.top) * sy - originY;
+      const local = target.parentMatrix.inverse().multiply(new win.DOMMatrix().scale(sx, sy)).multiply(m).scale(1 / sx, 1 / sy);
+      const previous = target.parentMatrix.inverse().multiply(m);
+      const origin = target.origin;
+      const position = movePatch(target, dx, dy);
+      // Resetting transform-origin requires retaining its old positional effect.
+      position.x = rounded(position.x + (origin[0] || 0) * (1 - previous.a) - (origin[1] || 0) * previous.c + previous.e);
+      position.y = rounded(position.y - (origin[0] || 0) * previous.b + (origin[1] || 0) * (1 - previous.d) + previous.f);
+      if (target.entry.authored && target.display === 'inline') position.display = 'inline-block';
+      return Object.assign(position, { width: rounded(Math.max(1, w * sx)), height: rounded(Math.max(1, h * sy)), widthMode: 'fixed', heightMode: 'fixed', rotate: 0, scaleX: 1, scaleY: 1, transformOrigin: '0 0', transform: 'matrix(' + [local.a, local.b, local.c, local.d, 0, 0].map(value => Math.round(value * 1e8) / 1e8).join(',') + ')' });
     }
 
     function updateGesture() {
@@ -704,38 +978,55 @@
       if (!gesture) return;
       const workStarted = win.performance.now();
       const g = gesture;
+      if (g.reorder) { updateReorder(g); return; }
+      const snapped = g.handle ? { x: g.dx, y: g.dy } : snappedDelta(g);
+      let groupBounds = null;
+      if (g.group) {
+        const west = g.handle.includes('w'), north = g.handle.includes('n'), horizontal = /[we]/.test(g.handle), vertical = /[ns]/.test(g.handle);
+        let width = Math.max(1, g.bounds.width + (horizontal ? g.dx * (west ? -1 : 1) : 0));
+        let height = Math.max(1, g.bounds.height + (vertical ? g.dy * (north ? -1 : 1) : 0));
+        if (g.shiftKey || g.targets.some(target => target.entry.node.props && target.entry.node.props.lockAspectRatio)) {
+          if (!horizontal || vertical && Math.abs(g.dy) > Math.abs(g.dx)) width = g.bounds.width * height / g.bounds.height;
+          else height = g.bounds.height * width / g.bounds.width;
+        }
+        groupBounds = { left: g.bounds.left + (west ? g.bounds.width - width : 0), top: g.bounds.top + (north ? g.bounds.height - height : 0), width, height };
+      }
       g.targets.forEach(target => {
-        const delta = target.convert(g.dx, g.dy);
         const s = target.original;
         let patch;
-        if (!g.handle) { patch = target.patch || {}; patch.x = rounded(target.startX + delta.x); patch.y = rounded(target.startY + delta.y); }
+        if (!g.handle) patch = movePatch(target, snapped.x, snapped.y);
+        else if (g.group) patch = groupResizePatch(target, g, groupBounds);
         else {
+          const delta = target.ownConvert(g.dx, g.dy);
           const west = g.handle.includes('w'), north = g.handle.includes('n');
-          const dw = g.handle.includes('w') || g.handle.includes('e') ? delta.x * (west ? -1 : 1) : 0;
-          const dh = g.handle.includes('n') || g.handle.includes('s') ? delta.y * (north ? -1 : 1) : 0;
+          const dw = /[we]/.test(g.handle) ? delta.x * (west ? -1 : 1) : 0;
+          const dh = /[ns]/.test(g.handle) ? delta.y * (north ? -1 : 1) : 0;
           let width = Math.max(1, target.width + dw), height = Math.max(1, target.height + dh);
-          if (target.entry.node.props && target.entry.node.props.lockAspectRatio) {
+          if (g.shiftKey || target.entry.node.props && target.entry.node.props.lockAspectRatio) {
             const ratio = target.width / Math.max(1, target.height);
             if (g.handle === 'n' || g.handle === 's' || Math.abs(dh) > Math.abs(dw)) width = height * ratio;
             else height = width / ratio;
           }
           const offsetX = west ? target.width - width : 0, offsetY = north ? target.height - height : 0;
-          const radians = finite(s.rotate, 0) * Math.PI / 180;
-          const tx = offsetX * finite(s.scaleX, 1), ty = offsetY * finite(s.scaleY, 1);
-          patch = { width: rounded(width), height: rounded(height), x: rounded(finite(s.x, 0) + tx * Math.cos(radians) - ty * Math.sin(radians)), y: rounded(finite(s.y, 0) + tx * Math.sin(radians) + ty * Math.cos(radians)) };
+          const shift = target.convert(target.matrix.a * offsetX + target.matrix.c * offsetY, target.matrix.b * offsetX + target.matrix.d * offsetY);
+          const local = target.parentMatrix.inverse().multiply(target.matrix), origin = target.origin;
+          const originX = (origin[0] || 0) * (1 - local.a) - (origin[1] || 0) * local.c;
+          const originY = -(origin[0] || 0) * local.b + (origin[1] || 0) * (1 - local.d);
+          patch = { width: rounded(width), height: rounded(height), widthMode: 'fixed', heightMode: 'fixed', transformOrigin: '0 0', x: rounded(target.startX + shift.x + originX), y: rounded(target.startY + shift.y + originY) };
         }
         target.patch = patch;
         if (!g.handle) {
-          const left = target.entry.authored ? 0 : target.startX;
-          const top = target.entry.authored ? 0 : target.startY;
+          const left = target.entry.authored ? 0 : target.startX, top = target.entry.authored ? 0 : target.startY;
           target.entry.wrapper.style.translate = (patch.x - left) + 'px ' + (patch.y - top) + 'px';
         } else applyLayout(target.entry, Object.assign({}, s, patch));
       });
+      if (selectionBox) syncSelectionBox(groupBounds || { left: g.bounds.left + snapped.x, top: g.bounds.top + snapped.y, width: g.bounds.width, height: g.bounds.height }, g.origin);
       if (gestureWork.length === 240) gestureWork.shift();
       gestureWork.push(win.performance.now() - workStarted);
     }
 
     function pointerMove(event) {
+      if (marquee && event.pointerId === marquee.pointerId) { updateMarquee(event); return; }
       if (panGesture && event.pointerId === panGesture.pointerId) {
         const view = camera();
         view.x = panGesture.centerX - (event.clientX - panGesture.x) / zoom;
@@ -743,39 +1034,47 @@
         view.automatic = false; applyCamera(); return;
       }
       if (!gesture || event.pointerId !== gesture.pointerId) return;
-      gesture.dx = event.clientX - gesture.x; gesture.dy = event.clientY - gesture.y;
+      gesture.dx = event.clientX - gesture.x; gesture.dy = event.clientY - gesture.y; gesture.altKey = event.altKey; gesture.shiftKey = event.shiftKey;
       if (!gestureFrame) gestureFrame = win.requestAnimationFrame(updateGesture);
     }
 
+    function resetTargets(targets) {
+      targets.forEach(target => { target.entry.wrapper.style.willChange = ''; target.entry.wrapper.classList.remove('studio-reordering'); if (!target.entry.authored) target.entry.wrapper.style.translate = ''; applyLayout(target.entry, target.original); });
+    }
+
     function cancelGesture() {
-      finishPan();
+      finishPan(); finishMarquee(true); clearGuides();
       if (!gesture) return;
       if (gestureFrame) win.cancelAnimationFrame(gestureFrame);
       gestureFrame = 0;
+      const completed = gesture; gesture = null;
       viewport.classList.remove('studio-dragging');
-      gesture.targets.forEach(target => { target.entry.wrapper.style.willChange = ''; if (!target.entry.authored) target.entry.wrapper.style.translate = ''; applyLayout(target.entry, target.original); });
-      if (gesture.capture.hasPointerCapture(gesture.pointerId)) gesture.capture.releasePointerCapture(gesture.pointerId);
-      gesture = null;
+      resetTargets(completed.targets);
+      if (completed.capture.hasPointerCapture(completed.pointerId)) completed.capture.releasePointerCapture(completed.pointerId);
+      syncSelectionBox();
     }
 
     function pointerUp(event) {
+      if (marquee && event.pointerId === marquee.pointerId) { updateMarquee(event); finishMarquee(false); return; }
       if (panGesture && event.pointerId === panGesture.pointerId) { finishPan(); return; }
       if (!gesture || event.pointerId !== gesture.pointerId) return;
       if (gestureFrame) win.cancelAnimationFrame(gestureFrame);
       updateGesture();
-      const completed = gesture;
-      gesture = null;
-      viewport.classList.remove('studio-dragging');
+      const completed = gesture; gesture = null;
+      viewport.classList.remove('studio-dragging'); clearGuides();
       if (completed.capture.hasPointerCapture(completed.pointerId)) completed.capture.releasePointerCapture(completed.pointerId);
-      if (Math.hypot(completed.dx, completed.dy) < 2) { completed.targets.forEach(target => { target.entry.wrapper.style.willChange = ''; if (!target.entry.authored) target.entry.wrapper.style.translate = ''; applyLayout(target.entry, target.original); }); return; }
-      const commands = completed.targets.map(target => {
-        Object.assign(target.entry.node.style || (target.entry.node.style = {}), target.patch);
-        target.entry.wrapper.style.willChange = '';
-        if (!target.entry.authored) target.entry.wrapper.style.translate = '';
-        applyLayout(target.entry, Object.assign({}, target.original, target.patch));
-        return { type: 'node.update', page_id: currentPageId, node_id: target.entry.node.id, patch: { style: target.patch } };
-      });
-      emit('studio-commit', { commands, label: completed.handle ? 'Resize elements' : 'Move elements' });
+      if (Math.hypot(completed.dx, completed.dy) < 2) { resetTargets(completed.targets); syncSelectionBox(); return; }
+      if (completed.reorder) {
+        resetTargets(completed.targets);
+        if (completed.dropIndex !== completed.location.index) {
+          const node = completed.location.nodes.splice(completed.location.index, 1)[0];
+          completed.location.nodes.splice(completed.dropIndex, 0, node);
+          const command = { type: 'node.move', page_id: currentPageId, node_id: node.id, parent_id: completed.location.parentId, index: completed.dropIndex };
+          redraw(); emit('studio-commit', { commands: [command], label: 'Reorder elements' });
+        }
+        return;
+      }
+      commitTargets(completed.targets, completed.handle ? 'Resize elements' : 'Move elements');
     }
 
     function finishTextEdit(cancel) {
@@ -1014,10 +1313,11 @@
           }
           if (!entry || oldNode.id !== newNode.id || oldNode.type !== newNode.type) return false;
           const oldProps = oldNode.props || {}, newProps = newNode.props || {};
+          if (['layout', 'display', 'flexDirection'].some(key => (oldNode.style || {})[key] !== (newNode.style || {})[key])) return false;
           // Authored parents render their own text before child elements. Rebuild
           // that mixed content instead of leaving stale text or replacing children.
           if (entry.authored && (newNode.children || []).length && oldProps.text !== newProps.text) return false;
-          if (!equal(oldProps, newProps) && (['instance', 'page', 'html', 'svg'].includes(oldNode.type) || !equal(oldProps.attributes, newProps.attributes) || oldProps.styleId !== newProps.styleId || oldProps.html !== newProps.html)) return false;
+          if (!equal(oldProps, newProps) && (['instance', 'page', 'html', 'svg'].includes(oldNode.type) || !equal(oldProps.attributes, newProps.attributes) || oldProps.styleId !== newProps.styleId || !equal(oldProps.styleIds, newProps.styleIds) || oldProps.html !== newProps.html)) return false;
           if (!equal(oldNode.style, newNode.style) || !equal(oldProps, newProps) || oldNode.hidden !== newNode.hidden) changes.push({ entry, oldNode, newNode });
           return inspect(oldNode.children || [], newNode.children || []);
         });
@@ -1035,15 +1335,16 @@
         const oldStyle = resolvedStyle(oldNode), newStyle = resolvedStyle(newNode);
         Object.keys(oldStyle).forEach(key => { if (!(key in newStyle) && !layoutKeys.has(key)) entry.visual.style.removeProperty(key.replace(/[A-Z]/g, match => '-' + match.toLowerCase())); });
         entry.node = newNode;
-        applyLayout(entry, newStyle); contentStyle(entry.visual, newStyle);
+        applyLayout(entry, newStyle); if (!entry.authored) contentStyle(entry.visual, newStyle);
         if (entry.authored && newNode.hidden) entry.wrapper.style.display = 'none';
         else entry.wrapper.hidden = !!newNode.hidden;
         if ((!textEdit || textEdit.entry !== entry) && (['text', 'button'].includes(newNode.type) || entry.authored && !(newNode.children || []).length && props.text != null)) entry.visual.textContent = String(props.text || '');
         if (newNode.type === 'image') {
           let image = entry.authored ? entry.visual : entry.visual.querySelector('img');
           if (!image && !entry.authored) { image = doc.createElement('img'); entry.visual.replaceChildren(image); entry.visual.classList.remove('studio-missing'); }
-          if (image) { image.src = props.assetId ? asset(props.assetId) : resourceUrl(props.src, base); image.style.objectFit = props.fit || props.objectFit || newStyle.objectFit || 'contain'; image.style.objectPosition = props.objectPosition || 'center'; }
+          if (image) { image.src = props.assetId ? asset(props.assetId) : resourceUrl(props.src || props.path, base); image.style.objectFit = props.fit || props.objectFit || newStyle.objectFit || 'contain'; image.style.objectPosition = props.objectPosition || 'center'; }
         }
+        presentationProps(entry);
       });
       function relink(nodes) { (nodes || []).forEach(node => { const entry = editable.get(node.id); if (entry) entry.node = node; relink(node.children); }); }
       relink(model.pages.find(page => page.id === currentPageId).nodes);
@@ -1096,7 +1397,7 @@
       else if (event.data.type === 'studio-custom-console') emit('studio-console', { nodeId, level: event.data.level, args: event.data.args });
     };
     const hoverOver = event => {
-      if (mode !== 'edit' || gesture || panGesture || tool === 'hand' || spaceDown) return;
+      if (mode !== 'edit' || gesture || marquee || panGesture || tool === 'hand' || spaceDown) return;
       const next = event.target.closest('[data-studio-select-id]');
       if (next === hovered) return;
       if (hovered) hovered.classList.remove('studio-hovered');
@@ -1112,6 +1413,7 @@
       if (event.key === 'Escape') { cancelGesture(); if (mode === 'edit') select([], true); else closeOverlay(); return; }
       if (mode !== 'edit' || event.target.isContentEditable || event.target.closest('input, textarea')) return;
       const key = event.key.toLowerCase(), modifier = event.metaKey || event.ctrlKey;
+      if (!modifier && !event.altKey && ['arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(key)) { event.preventDefault(); const amount = event.shiftKey ? 10 : 1; nudge(key === 'arrowleft' ? -amount : key === 'arrowright' ? amount : 0, key === 'arrowup' ? -amount : key === 'arrowdown' ? amount : 0); return; }
       if (key === ' ' && !modifier) { event.preventDefault(); spaceDown = true; syncTool(); return; }
       if (!modifier && !event.altKey && ['v', 'h'].includes(key)) { event.preventDefault(); setTool(key === 'h' ? 'hand' : 'select'); return; }
       if (event.shiftKey && event.code === 'Digit1') { event.preventDefault(); fit(); return; }
@@ -1126,6 +1428,10 @@
     };
     const keyUp = event => { if (event.key === ' ') { spaceDown = false; syncTool(); } };
     const blur = () => { spaceDown = false; cancelGesture(); syncTool(); };
+    const disabledActivation = event => {
+      if (mode === 'preview' && event.target instanceof win.Element && event.target.closest('[data-studio-disabled=\"true\"]') && (event.type !== 'keydown' || event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); event.stopImmediatePropagation(); }
+    };
+    ['click', 'dblclick', 'keydown'].forEach(type => viewport.addEventListener(type, disabledActivation, true));
     viewport.addEventListener('wheel', wheel, { passive: false });
     viewport.addEventListener('pointerdown', pointerDown);
     viewport.addEventListener('pointermove', pointerMove);
@@ -1145,7 +1451,7 @@
     return {
       version: VERSION,
       update,
-      select: ids => select(ids, false), fit, fitSelection, setZoom, setTool,
+      select: ids => select(ids, false), action, fit, fitSelection, setZoom, setTool,
       get camera() { return Object.assign({}, camera(), { tool }); },
       setMode: (next, nodeId) => { mode = next === 'preview' ? 'preview' : 'edit'; if (mode === 'edit') navigationContext = {}; previewNodeId = nodeId || null; redraw(); },
       navigate, openOverlay,
@@ -1186,6 +1492,7 @@
         else if (instance && data.type === 'studio-mode') instance.setMode(data.mode, data.previewNodeId);
         else if (instance && data.type === 'studio-fit') data.selection ? instance.fitSelection() : instance.fit();
         else if (instance && data.type === 'studio-zoom') instance.setZoom(data.zoom);
+        else if (instance && data.type === 'studio-action') instance.action(data.action);
         else if (instance && data.type === 'studio-tool') instance.setTool(data.tool);
         else if (instance && data.type === 'studio-navigate') instance.navigate(data.pageId);
         else if (instance && data.type === 'studio-open') instance.openOverlay(data.pageId);

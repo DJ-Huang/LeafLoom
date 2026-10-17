@@ -565,9 +565,55 @@ class DesignWorkspace:
             raise ValueError('Extra capture pages must be declared context variants of a source artboard')
         doc['pages'] = pages
         doc['migration']['status'] = 'converted'
-        doc['migration']['report'] = {'pages': len(pages), 'source_pages': len(expected_ids), 'context_variants': len(variants),
-                                       'nodes': sum(1 for p in pages for _ in _walk(p['nodes'])),
-                                       'method': 'authored DOM/CSS; original scripts retained in copied source'}
+        report = {'pages': len(pages), 'source_pages': len(expected_ids), 'context_variants': len(variants),
+                  'nodes': sum(1 for p in pages for _ in _walk(p['nodes'])),
+                  'method': 'authored DOM/CSS; original scripts retained in copied source',
+                  'retained': [{'kind': 'source_copy', 'count': 1, 'description': 'Original HTML, CSS, scripts and assets remain in the project copy; the source project was not changed'},
+                               {'kind': 'assets', 'count': len(doc['assets']), 'description': 'Registered asset references retained'}],
+                  'converted': [], 'unsupported': [], 'warnings': []}
+        if variants:
+            report['converted'].append({'kind': 'context_variants', 'count': len(variants),
+                                        'description': 'Context-dependent screens captured as linked page variants'})
+        for page in pages:
+            metadata = page.get('migration', {})
+            captured = metadata.get('report', {})
+            if not isinstance(captured, dict):
+                raise ValueError('Capture report must be an object')
+            # Older clients still get an accurate basic report from their
+            # retained interaction metadata, rather than a false "all kept".
+            if not captured:
+                interactions = metadata.get('interactions', {})
+                captured = {'retained': [{'kind': 'authored_nodes', 'count': sum(1 for _ in _walk(page['nodes'])),
+                                         'description': 'Editable authored DOM layers and readable CSS'}], 'converted': [], 'unsupported': []}
+                for field, kind, description in (
+                        ('navigation', 'navigation', 'Declarative page links converted to managed navigation'),
+                        ('switches', 'switches', 'Recognized switches converted to editable scripts')):
+                    if interactions.get(field):
+                        captured['converted'].append({'kind': kind, 'count': interactions[field], 'description': description})
+                if interactions.get('scriptSources'):
+                    captured['unsupported'].append({'kind': 'script_runtime', 'count': len(interactions['scriptSources']),
+                                                     'description': 'Original scripts are kept in the source copy; arbitrary runtime behavior is not replayed'})
+                if interactions.get('inlineHandlers'):
+                    captured['unsupported'].append({'kind': 'inline_handlers', 'count': interactions['inlineHandlers'],
+                                                     'description': 'Inline event handlers were omitted'})
+                if metadata.get('unavailableStylesheets'):
+                    captured['unsupported'].append({'kind': 'unreadable_stylesheets', 'count': len(metadata['unavailableStylesheets']),
+                                                     'description': 'Unreadable stylesheets were omitted'})
+            for category in ('retained', 'converted', 'unsupported'):
+                items = captured.get(category, [])
+                if not isinstance(items, list):
+                    raise ValueError('Capture report categories must be arrays')
+                for item in items:
+                    if (not isinstance(item, dict) or not isinstance(item.get('kind'), str)
+                            or not isinstance(item.get('description'), str) or isinstance(item.get('count'), bool)
+                            or not isinstance(item.get('count'), int) or item['count'] < 0):
+                        raise ValueError('Capture report entries require kind, description and a nonnegative count')
+                    report[category].append({**copy.deepcopy(item), 'page_id': page['id'], 'page_name': page.get('name', page['id'])})
+            for warning in metadata.get('warnings', []):
+                if isinstance(warning, str) and warning not in report['warnings']:
+                    report['warnings'].append(warning)
+        report['fidelity'] = 'review_required' if report['unsupported'] or report['warnings'] else 'converted'
+        doc['migration']['report'] = report
         return self.documents.apply(directory, [{'type': 'document.replace', 'document': doc}], expected_revision, operation_id,
                                     label='Import legacy pages')
 
@@ -628,6 +674,9 @@ class DesignWorkspace:
                 for key, child in value.items():
                     if key in typed and isinstance(child, str) and child:
                         add(typed[key], child)
+                    elif key == 'styleIds' and isinstance(child, list):
+                        for style_id in child:
+                            add('style', style_id)
                     else:
                         if key in ('src', 'href', 'xlink:href', 'poster') and isinstance(child, str):
                             asset_reference(child, module_path)
@@ -783,6 +832,8 @@ class DesignWorkspace:
                     for key, child in value.items():
                         if key in typed and isinstance(child, str):
                             result[key] = maps[typed[key]].get(child, child)
+                        elif key == 'styleIds' and isinstance(child, list):
+                            result[key] = [maps['style'].get(style_id, style_id) for style_id in child]
                         elif key == 'id' and isinstance(child, str):
                             result[key] = ids.get(child, child)
                         elif key == 'overrides' and isinstance(child, dict):

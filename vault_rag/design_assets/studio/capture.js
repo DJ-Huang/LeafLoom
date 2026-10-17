@@ -40,6 +40,7 @@
   const sourceContext=new URL(frame.contentWindow.location.href).searchParams.get('source')||(kind==='help'?'pause':'home');
   const interactions={navigation:0,switches:0,inlineHandlers:0,scriptSources:[...source.scripts].map(script=>script.src?resource(script.src,base):'inline')};
   const css=[],unavailableStylesheets=[];
+  const captureCounts={nodes:0,stylesheets:0,canvas:0,embeddedDocuments:0,shadowRoots:0,liveFormState:0,svgForeignObjects:0};
   const media=(text,condition)=>condition&&condition!=='all'?'@media '+condition+'{\n'+text+'\n}':text;
   function stylesheet(sheet,seen=new Set()){
    if(sheet.disabled||seen.has(sheet))return '';
@@ -49,6 +50,7 @@
     // report; never inject an unscoped remote @import into the studio runtime.
     if(sheet.href)unavailableStylesheets.push(sheet.href);return '';
    }
+   captureCounts.stylesheets+=1;
    return rules.map(rule=>{
     if(rule.type!==3)return urls(rule.cssText,sheet.href||base);
     if(!rule.styleSheet){if(rule.href)unavailableStylesheets.push(rule.href);return '';}
@@ -70,12 +72,23 @@
    return attrs;
   }
   function node(element){
-   if(element.nodeType===3){if(!element.textContent)return null;return {id:crypto.randomUUID(),type:'text',name:'Text',props:{authored:true,textNode:true,text:element.textContent},style:{},children:[]};}
+   if(element.nodeType===3){if(!element.textContent)return null;captureCounts.nodes+=1;return {id:crypto.randomUUID(),type:'text',name:'Text',props:{authored:true,textNode:true,text:element.textContent},style:{},children:[]};}
    if(element.nodeType!==1||['SCRIPT','STYLE','LINK','NOSCRIPT','META','BASE'].includes(element.tagName))return null;
+   captureCounts.nodes+=1;
+   if(element.tagName==='CANVAS')captureCounts.canvas+=1;
+   if(['IFRAME','OBJECT','EMBED'].includes(element.tagName))captureCounts.embeddedDocuments+=1;
+   if(element.shadowRoot)captureCounts.shadowRoots+=1;
+   if(element.matches('input,textarea')&&(element.value!==element.defaultValue||'checked' in element&&element.checked!==element.defaultChecked))captureCounts.liveFormState+=1;
+   if(element.tagName==='SELECT'){
+    const options=[...element.options],defaults=options.filter(option=>option.defaultSelected);
+    if(!element.multiple&&!defaults.length&&options.length)defaults.push(options[0]);
+    if(options.some(option=>option.selected!==defaults.includes(option)))captureCounts.liveFormState+=1;
+   }
    const attrs=attributes(element);
    const tag=element.localName;
    const result={id:crypto.randomUUID(),type:tag==='img'?'image':tag==='button'?'button':tag==='svg'?'svg':element.children.length?'element':'text',name:element.getAttribute('data-layer-name')||element.getAttribute('aria-label')||element.getAttribute('alt')||element.id||tag,props:{authored:true,tag,attributes:attrs},style:{},children:[]};
    if(tag==='svg'){
+    captureCounts.svgForeignObjects+=element.querySelectorAll('foreignObject').length;
     // Rewrite DOM attribute values before serializing. Rewriting raw markup
     // would inject url("...") quotes into a quoted SVG attribute and invalidate
     // the entire board, including its paths, clips and gradient definitions.
@@ -116,6 +129,22 @@
   if(interactions.inlineHandlers)warnings.push(interactions.inlineHandlers+' inline event attributes were omitted; port custom behavior with mount(ctx).');
   if(interactions.scriptSources.length)warnings.push('Original script files are retained in the copied source; arbitrary event listeners, closures and runtime state are not replayed. Declarative page links and recognized switch controls were adapted.');
   const migration={source:'Design/UI/Site/screen.html?id='+encodeURIComponent(sourceId)+(board.contextSource?'&source='+encodeURIComponent(sourceContext):''),interactions,warnings};
+  const report=migration.report={retained:[
+   {kind:'authored_nodes',count:captureCounts.nodes,description:'Editable DOM hierarchy, text, attributes, SVG and resource references'},
+   {kind:'stylesheets',count:captureCounts.stylesheets,description:'Readable CSS rules, scoped to this artboard'}
+  ],converted:[],unsupported:[]};
+  if(interactions.navigation)report.converted.push({kind:'navigation',count:interactions.navigation,description:'Declarative page links converted to managed navigation'});
+  if(interactions.switches)report.converted.push({kind:'switches',count:interactions.switches,description:'Recognized switches converted to editable mount(ctx) scripts'});
+  const unsupported=(kind,count,description,sources)=>{if(count){const item={kind,count,description};if(sources)item.sources=sources;report.unsupported.push(item);}};
+  unsupported('script_runtime',interactions.scriptSources.length,'Original scripts are kept in the source copy; event listeners, closures and live runtime state are not replayed',interactions.scriptSources);
+  unsupported('inline_handlers',interactions.inlineHandlers,'Inline event handlers were omitted; re-create behavior with mount(ctx)');
+  unsupported('unreadable_stylesheets',new Set(unavailableStylesheets).size,'Cross-origin or unreadable stylesheets could not be safely scoped and were omitted',[...new Set(unavailableStylesheets)]);
+  unsupported('canvas_bitmap',captureCounts.canvas,'Canvas elements retain their layout but their drawn bitmap and WebGL state are not captured');
+  unsupported('embedded_documents',captureCounts.embeddedDocuments,'Embedded iframe, object and embed content is replaced by inert containers');
+  unsupported('shadow_dom',captureCounts.shadowRoots,'Shadow DOM contents are not converted into editable layers');
+  unsupported('live_form_state',captureCounts.liveFormState,'Form markup is retained; values changed by scripts or user input are not restored');
+  unsupported('svg_foreign_object',captureCounts.svgForeignObjects,'SVG foreignObject content is omitted by the isolated runtime');
+  for(const item of report.unsupported)if(!['script_runtime','inline_handlers','unreadable_stylesheets'].includes(item.kind))warnings.push(item.description+' ('+item.count+').');
   if(unavailableStylesheets.length)migration.unavailableStylesheets=[...new Set(unavailableStylesheets)];
   if(board.contextSource)migration.contextSource=board.contextSource;
   if(kind==='settings'&&root.querySelector('.settings-modal')||kind==='help'&&root.querySelector('.help-modal'))migration.contextDefaults={settingsFrom:sourceContext};

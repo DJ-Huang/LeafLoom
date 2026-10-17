@@ -211,5 +211,74 @@ class HtmlImportBrowserTests(unittest.TestCase):
         self.assertEqual(page.evaluate("events.filter(e=>e.type==='studio-error')"), [])
 
 
+    def test_html_edit_export_reopen_uses_the_portable_renderer(self):
+        """A real ZIP, not just a second mount of the in-memory import."""
+        import copy
+        import mimetypes
+        import shutil
+        import zipfile
+        from unittest.mock import patch
+        from test_design_workspace import DesignWorkspaceTests
+
+        pages = self.capture('''<!doctype html><html><head><style>
+          #artboard{width:360px;padding:24px;box-sizing:border-box;background:#eef3fa}
+          h1{font:700 28px/1.3 Arial;margin:0 0 12px}p{font:16px/1.5 Arial;margin:0}
+          </style></head><body><section id="artboard"><h1>A studio story</h1><p>Original copy</p></section>
+          <script>window.originalOnly = true</script></body></html>''')
+        page = self.fixture.page
+        self.fixture.mount([], pages=pages)
+        nodes = pages[0]["nodes"]
+        def walk(items):
+            for item in items:
+                yield item
+                yield from walk(item.get("children", []))
+        heading = next(item for item in walk(nodes) if item.get("props", {}).get("tag") == "h1")
+        changed = copy.deepcopy(pages)
+        target = next(item for item in walk(changed[0]["nodes"]) if item["id"] == heading["id"])
+        target["props"]["text"] = "An edited brand story with a longer heading"
+        target["style"].update({"color":"#3355aa", "letterSpacing":0.5})
+        page.evaluate("pages=>{const doc=instance.document;doc.pages=pages;instance.update(doc,{mode:'edit'});instance.setZoom(1);}", changed)
+        edited = page.locator("h1.studio-authored")
+        expected = edited.evaluate("el=>({text:el.textContent,color:getComputedStyle(el).color,width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height})")
+        self.assertEqual(expected["text"], target["props"]["text"])
+        fixture = DesignWorkspaceTests()
+        fixture.setUp()
+        context = None
+        try:
+            document = fixture.project["document"]
+            document["pages"] = changed
+            fixture.docs.apply(fixture.directory, [{"type":"document.replace", "document":document}], fixture.project["revision"], "import-edit", "Import and edit HTML")
+            with patch.object(fixture.workspace, "session", return_value={"origin":"http://localhost:1000", "id":"export-fixture"}):
+                exported = fixture.workspace.export(fixture.directory)
+            evidence = Path(__file__).resolve().parents[1] / ".cache/studio-qa"
+            evidence.mkdir(parents=True, exist_ok=True)
+            bundle = fixture.root / exported["path"]
+            shutil.copyfile(bundle, evidence / "polish-import-edited.zip")
+            with zipfile.ZipFile(bundle) as archive:
+                files = {name:archive.read(name) for name in archive.namelist()}
+            context = self.fixture.browser.new_context(viewport={"width":800,"height":600})
+            def serve(route):
+                name = urlparse(route.request.url).path.lstrip('/') or 'index.html'
+                if name not in files:
+                    route.fulfill(status=404,body='missing')
+                else:
+                    route.fulfill(body=files[name], content_type=mimetypes.guess_type(name)[0] or 'application/octet-stream')
+            context.route('https://export.test/**', serve)
+            exported_page = context.new_page()
+            exported_page.goto('https://export.test/index.html')
+            actual = exported_page.locator('h1.studio-authored')
+            actual.wait_for()
+            exported_page.evaluate('LeafLoomStudioInstance.setZoom(1)')
+            actual_values = actual.evaluate("el=>({text:el.textContent,color:getComputedStyle(el).color,width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height})")
+            self.assertEqual(actual_values, expected)
+            self.assertIsNone(exported_page.evaluate('window.originalOnly'))
+            exported_page.screenshot(path=str(evidence / 'polish-html-export-reopened.png'))
+            (evidence / 'polish-html-roundtrip.json').write_text(json.dumps({"edited":expected,"exported":actual_values},indent=2))
+        finally:
+            if context:
+                context.close()
+            fixture.tearDown()
+
+
 if __name__ == "__main__":
     unittest.main()

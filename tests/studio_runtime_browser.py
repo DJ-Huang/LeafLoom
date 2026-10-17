@@ -296,4 +296,10 @@ class StudioRuntimeBrowserTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    # Keep the existing CI entry point while extending its renderer contracts.
+    import subprocess
+    import sys
+    result = unittest.main(exit=False).result
+    if not result.wasSuccessful():
+        raise SystemExit(1)
+    subprocess.run([sys.executable, str(Path(__file__).with_name("studio_canvas_polish_browser.py"))], check=True)

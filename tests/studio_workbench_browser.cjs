@@ -156,7 +156,7 @@ async function main(){
   await request('design/projects',{root:info.root,managed:true,directory:'Studio',name:'Browser Studio',width:800,height:600});
   let saved=await request('design/document?directory=Studio');const initialPage=saved.document.pages[0].id;
   saved=await request('design/operations',{root:info.root,directory:'Studio',expected_revision:saved.revision,operation_id:'fixture-content',label:'Fixture',commands:[{type:'node.create',page_id:initialPage,node:{id:'fixture-title',type:'text',name:'标题',style:{x:400,y:40,width:300,height:60,fontSize:30,color:'#123456'},props:{text:'游戏首页'},children:[]}},{type:'node.create',page_id:initialPage,node:{id:'raw-parent',type:'container',name:'原始文本父级',style:{x:40,y:100,width:250,height:80},props:{},children:[{id:'raw-text',type:'text',name:'原始文本',style:{},props:{authored:true,textNode:true,text:'Original raw text'},children:[]}]}},{type:'page.create',page:{id:'game',name:'游戏页面',width:800,height:600,nodes:[{id:'game-title',type:'text',name:'游戏标题',style:{x:40,y:40,width:300,height:60},props:{text:'游戏页面内容'},children:[]}]}}]});
-  browser=await chromium.launch({headless:true,channel:process.env.LEAFLOOM_BROWSER_CHANNEL||'chrome'});
+  browser=await chromium.launch({headless:true,...(process.env.LEAFLOOM_BROWSER_EXECUTABLE?{executablePath:process.env.LEAFLOOM_BROWSER_EXECUTABLE}:{channel:process.env.LEAFLOOM_BROWSER_CHANNEL||'chrome'})});
   const context=await browser.newContext({viewport:{width:1560,height:1050},locale:'zh-CN',acceptDownloads:true});
   await context.addInitScript(()=>localStorage.setItem('leafloom-locale','zh-CN'));
   page=await context.newPage();page.on('request',request=>{const url=new URL(request.url());if(url.pathname==='/api/design/document'&&url.searchParams.get('view')==='true'&&url.searchParams.get('page_id')==='game')lazyPageRequests++;});page.on('pageerror',error=>errors.push(error.message));
@@ -268,6 +268,7 @@ async function main(){
   fs.mkdirSync(path.join(root,'.cache/studio-qa'),{recursive:true});await page.screenshot({path:path.join(root,'.cache/studio-qa/workbench.png'),fullPage:true});
   await buildBlankWorkflow({page,request,info,png,checks});
   await buildFormaWorkflow({page,request,info,checks});
+  await require('./studio_polish_workflows.cjs')({page,request,info,checks});
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({ok:true,checks,temp},null,2));
  }catch(error){if(page)try{await page.screenshot({path:path.join(temp,'failure.png'),fullPage:true});fs.writeFileSync(path.join(temp,'failure.html'),await page.content());}catch{}console.error('Studio browser fixture retained at '+temp);throw error;}

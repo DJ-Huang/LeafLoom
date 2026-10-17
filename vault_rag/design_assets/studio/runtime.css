@@ -35,3 +35,15 @@ body { background: #e8eaef; }
 .studio-editing.studio-hand, .studio-editing.studio-hand .studio-node, .studio-editing.studio-hand .studio-handle { cursor: grab; }
 .studio-editing.studio-panning, .studio-editing.studio-panning .studio-node, .studio-editing.studio-panning .studio-handle { cursor: grabbing; }
 .studio-hand .studio-handle { pointer-events: none; }
+
+/* Editor chrome stays in viewport pixels, outside the transformed/exported scene. */
+.studio-canvas-chrome { position: absolute; inset: 0; pointer-events: none; z-index: 2147483646; overflow: hidden; }
+.studio-previewing .studio-canvas-chrome { display: none; }
+.studio-selection-box { position: absolute; border: 1px solid #5279f4; pointer-events: none; }
+.studio-editing .studio-selection-box > .studio-handle { display: block; }
+.studio-marquee { position: absolute; border: 1px solid #5279f4; background: #5279f41c; pointer-events: none; }
+.studio-snap-guide { position: absolute; pointer-events: none; background: #d04fc3; }
+.studio-guide-vertical { top: 0; bottom: 0; width: 1px; }
+.studio-guide-horizontal { left: 0; right: 0; height: 1px; }
+.studio-reorder-guide { position: absolute; background: #5279f4; pointer-events: none; }
+.studio-reordering { opacity: .55 !important; }

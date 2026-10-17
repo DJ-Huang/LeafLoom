@@ -28,6 +28,39 @@ DOCUMENT_PATH = 'Design/studio/project.json'
 NODE_TYPES = {'container', 'text', 'image', 'button', 'shape', 'svg', 'html', 'page', 'instance', 'element'}
 MAX_DOCUMENT_BYTES = 32 * 1024 * 1024
 MAX_ASSET_BYTES = 128 * 1024 * 1024
+STYLE_KINDS = {'color', 'typography', 'spacing'}
+STYLE_KEYS = {
+    'color': {'color', 'background', 'backgroundColor', 'backgroundImage', 'borderColor', 'fill', 'stroke'},
+    'typography': {'font', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing',
+                   'textTransform', 'textDecoration', 'textAlign', 'wordSpacing'},
+    'spacing': {'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'gap', 'rowGap', 'columnGap', 'borderRadius'},
+}
+
+
+def style_ids(node):
+    """Legacy single style first, then ordered independently linked styles."""
+    props = node.get('props', {})
+    return list(dict.fromkeys(([props['styleId']] if props.get('styleId') else []) + props.get('styleIds', [])))
+
+
+def resolve_style(document, node):
+    result = {}
+    for key in style_ids(node):
+        shared = document.get('styles', {}).get(key, {})
+        result.update(shared.get('style', shared))
+    result.update(node.get('style', {}))
+    return copy.deepcopy(result)
+
+
+def component_overrides(component, instance):
+    """Normalize the original flat root-props form without losing user content."""
+    overrides = copy.deepcopy(instance.get('props', {}).get('overrides', {}))
+    if not isinstance(overrides, dict):
+        raise ValueError('Component overrides must be an object')
+    known = {node['id'] for node in _walk([component['node']])}
+    keyed = any(key in known for key in overrides) or all(
+        isinstance(value, dict) and set(value) <= {'style', 'props'} for value in overrides.values())
+    return overrides if keyed else {component['node']['id']: {'props': overrides}}
 
 
 def _id() -> str:
@@ -488,6 +521,22 @@ class DesignDocuments:
 
         def inspect(nodes, page_id, page_name, component_id=None, base_path=''):
             found_pages, found_components, count = set(), set(), 0
+            def override_dependencies(component, instance, depth=0):
+                if depth > 100:
+                    return
+                targets = {item['id']: item for item in _walk([component['node']])}
+                for target_id, patch in component_overrides(component, instance).items():
+                    if not isinstance(patch, dict) or not isinstance(patch.get('props'), dict):
+                        continue
+                    props = patch['props']
+                    if props.get('pageId'):
+                        found_pages.add(props['pageId'])
+                    if props.get('componentId'):
+                        found_components.add(props['componentId'])
+                    effective = {**targets.get(target_id, {}).get('props', {}), **props}
+                    nested = document['components'].get(effective.get('componentId'))
+                    if nested and isinstance(effective.get('overrides'), dict):
+                        override_dependencies(nested, {'props': effective}, depth + 1)
             for node in _walk(nodes):
                 count += 1
                 props = node.get('props', {})
@@ -495,6 +544,9 @@ class DesignDocuments:
                     found_pages.add(props['pageId'])
                 if node['type'] == 'instance' and props.get('componentId'):
                     found_components.add(props['componentId'])
+                    component = document['components'].get(props['componentId'])
+                    if component:
+                        override_dependencies(component, node)
                 reference = {'page_id': page_id, 'page_name': page_name, 'node_id': node['id'], 'node_name': node.get('name') or node['id']}
                 if component_id is not None:
                     reference['component_id'] = component_id
@@ -786,6 +838,31 @@ class DesignDocuments:
             if set(patch) - {'name', 'description', 'cover', 'tags', 'favorite', 'archived', 'folder'}:
                 raise ValueError('Use structural commands to edit project content')
             _merge(document, patch)
+        elif kind == 'project.rebrand':
+            metadata = document.get('metadata', {})
+            if metadata.get('template') != 'forma':
+                raise ValueError('This project does not have editable template branding')
+            brand = command.get('brand')
+            if not isinstance(brand, str) or not brand.strip() or len(brand) > 80:
+                raise ValueError('Brand name must contain 1 to 80 characters')
+            branding = metadata.setdefault('branding', {})
+            branding['brand'] = brand.strip()
+            if 'contact' in command:
+                contact = command['contact']
+                if not isinstance(contact, str) or len(contact) > 160:
+                    raise ValueError('Contact caption must contain at most 160 characters')
+                branding['contact'] = contact.strip()
+            groups = [page['nodes'] for page in document['pages']] + [[component['node']] for component in document['components'].values()]
+            for group in groups:
+                for node in _walk(group):
+                    props = node.get('props', {})
+                    binding = props.get('templateText', {})
+                    if not isinstance(binding, dict) or binding.get('field') not in branding:
+                        continue
+                    text = branding[binding['field']]
+                    if binding.get('uppercase'):
+                        text = text.upper()
+                    props['text'] = str(binding.get('prefix', '')) + text + str(binding.get('suffix', ''))
         elif kind == 'page.create':
             page = copy.deepcopy(command.get('page', {}))
             page.setdefault('id', _id())
@@ -936,10 +1013,9 @@ class DesignDocuments:
             if not isinstance(component_id, str) or not component_id or component_id in document['components']:
                 raise ValueError('Component identity must be new and nonempty')
             master = _fresh_node(source)
-            shared = document['styles'].get(source.get('props', {}).get('styleId'), {})
-            resolved = dict(shared.get('style', shared) if isinstance(shared, dict) else {})
-            resolved.update(source.get('style', {}))
-            geometry = {'x', 'y', 'width', 'height', 'rotate', 'scaleX', 'scaleY', 'transform', 'transformOrigin',
+            resolved = resolve_style(document, source)
+            geometry = {'x', 'y', 'width', 'height', 'widthMode', 'heightMode', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
+                        'flexGrow', 'flexShrink', 'flexBasis', 'alignSelf', 'rotate', 'scaleX', 'scaleY', 'transform', 'transformOrigin',
                         'position', 'left', 'top', 'right', 'bottom', 'zIndex', 'opacity'}
             instance = {'id': source['id'], 'name': source.get('name', 'Instance'), 'type': 'instance',
                         'style': {key: copy.deepcopy(value) for key, value in resolved.items() if key in geometry},
@@ -967,7 +1043,8 @@ class DesignDocuments:
             page = {'id': page_id, 'nodes': [copy.deepcopy(component['node'])]}
             transient = {**document, 'pages': [page]}
             for nested in commands:
-                if not isinstance(nested, dict) or not (str(nested.get('type', '')).startswith('node.') or nested.get('type') == 'component.detach'):
+                if not isinstance(nested, dict) or not (str(nested.get('type', '')).startswith('node.') or nested.get('type') in (
+                        'component.detach', 'component.override', 'component.reset_override', 'style.apply', 'style.detach')):
                     raise ValueError('Component edits accept only element commands and nested instance detachment')
                 if nested.get('type') in ('node.delete', 'node.duplicate', 'node.move', 'node.ungroup') and nested.get('node_id') == root_id:
                     raise ValueError('A main component must retain its single root; insert and edit content inside the root')
@@ -990,6 +1067,52 @@ class DesignDocuments:
         elif kind == 'component.delete':
             if document['components'].pop(command['component_id'], None) is None:
                 raise ValueError('Unknown component')
+        elif kind in ('component.override', 'component.reset_override'):
+            _, _, instance = self._node(document, command['page_id'], command['node_id'])
+            if instance['type'] != 'instance':
+                raise ValueError('Only a component instance can have overrides')
+            component = document['components'].get(instance.get('props', {}).get('componentId'))
+            if not component:
+                raise ValueError('Unknown component')
+            overrides = component_overrides(component, instance)
+            target_id = command.get('target_id')
+            if kind == 'component.override':
+                if not _find([component['node']], target_id):
+                    raise ValueError('Override target must belong to the main component')
+                patch = command.get('patch')
+                if not isinstance(patch, dict) or not patch or set(patch) - {'style', 'props'}:
+                    raise ValueError('Component overrides accept style and props property patches')
+                if any(value is not None and not isinstance(value, dict) for value in patch.values()):
+                    raise ValueError('Component override style and props must be objects')
+                target = overrides.setdefault(target_id, {})
+                _merge(target, patch)
+            elif target_id is None:
+                if command.get('section') or command.get('property'):
+                    raise ValueError('Choose an override target before resetting a property')
+                overrides = {}
+            else:
+                if not _find([component['node']], target_id) and target_id not in overrides:
+                    raise ValueError('Unknown component override target')
+                section, prop = command.get('section'), command.get('property')
+                if section is not None and section not in ('style', 'props'):
+                    raise ValueError('Override section must be style or props')
+                if prop is not None and (not section or not isinstance(prop, str) or not prop):
+                    raise ValueError('Resetting an override property requires a section and property name')
+                if not section:
+                    overrides.pop(target_id, None)
+                elif prop is None:
+                    overrides.get(target_id, {}).pop(section, None)
+                else:
+                    overrides.get(target_id, {}).get(section, {}).pop(prop, None)
+            # An absent entry means inherit. Never persist a null "override"
+            # that would erase a main-component property during rendering.
+            overrides = {key: {section: value for section, value in patch.items() if value}
+                         for key, patch in overrides.items()}
+            overrides = {key: patch for key, patch in overrides.items() if patch}
+            if overrides:
+                instance.setdefault('props', {})['overrides'] = overrides
+            else:
+                instance.setdefault('props', {}).pop('overrides', None)
         elif kind == 'component.detach':
             items, index, node = self._node(document, command['page_id'], command['node_id'])
             if node['type'] != 'instance':
@@ -998,21 +1121,14 @@ class DesignDocuments:
             if component is None:
                 raise ValueError('Unknown component')
             source = copy.deepcopy(component['node'])
-            overrides = node.get('props', {}).get('overrides', {})
-            if not isinstance(overrides, dict):
-                raise ValueError('Component overrides must be an object')
-            known = {item['id'] for item in _walk([source])}
-            keyed = any(key in known for key in overrides)
-            if keyed:
-                for child in _walk([source]):
-                    patch = overrides.get(child['id'])
-                    if patch is not None:
-                        if not isinstance(patch, dict):
-                            raise ValueError('Element overrides must be property patches')
-                        _merge(child, {key: value for key, value in patch.items() if key in ('style', 'props')})
-            source.setdefault('style', {}).update(node.get('style', {}))
-            if not keyed:
-                source.setdefault('props', {}).update(overrides)
+            overrides = component_overrides(component, node)
+            for child in _walk([source]):
+                patch = overrides.get(child['id'])
+                if patch is not None:
+                    if not isinstance(patch, dict):
+                        raise ValueError('Element overrides must be property patches')
+                    _merge(child, {key: value for key, value in patch.items() if key in ('style', 'props')})
+            source.setdefault('style', {}).update(resolve_style(document, node))
             for key in ('script', 'animation', 'hidden', 'locked'):
                 if key in node:
                     source[key] = copy.deepcopy(node[key])
@@ -1061,11 +1177,56 @@ class DesignDocuments:
                 for table, context in (('styles', 'style'), ('scripts', 'script')):
                     for resource_id, resource in document[table].items():
                         document[table][resource_id] = references.process(resource, context=context, **options)[1]
+        elif kind in ('style.apply', 'style.detach'):
+            style_id = command.get('style_id')
+            resource = document['styles'].get(style_id)
+            if not isinstance(resource, dict):
+                raise ValueError('Unknown shared style')
+            selected = command.get('node_ids', [command['node_id']] if command.get('node_id') else [])
+            if not isinstance(selected, list) or not selected or len(selected) > 10000 or any(not isinstance(value, str) for value in selected):
+                raise ValueError('Choose at least one element for a shared style')
+            for node_id in dict.fromkeys(selected):
+                _, _, node = self._node(document, command['page_id'], node_id)
+                before = resolve_style(document, node)
+                linked = style_ids(node)
+                props = node.setdefault('props', {})
+                if kind == 'style.apply':
+                    category = resource.get('kind')
+                    values = resource.get('style', resource)
+                    removed = [key for key in linked if key == style_id or category in STYLE_KINDS and document['styles'][key].get('kind') == category]
+                    linked = [key for key in linked if key not in removed] + [style_id]
+                    clear = set(values) | STYLE_KEYS.get(category, set())
+                    for key in removed:
+                        previous = document['styles'][key]
+                        clear.update(previous.get('style', previous))
+                    for key in clear:
+                        node.setdefault('style', {}).pop(key, None)
+                        # Removing a theme must not leave authored var() uses
+                        # undefined. Keep unmatched custom tokens at their
+                        # current values while the replacement supplies its own.
+                        if key.startswith('--') and key not in values and key in before:
+                            node['style'][key] = before[key]
+                else:
+                    linked = [key for key in linked if key != style_id]
+                props.pop('styleId', None)
+                if linked:
+                    props['styleIds'] = linked
+                else:
+                    props.pop('styleIds', None)
+                if kind == 'style.detach':
+                    after = resolve_style(document, node)
+                    # Freeze only values that actually depended on this style;
+                    # independent typography/spacing references remain live.
+                    for key, value in before.items():
+                        if key not in after or after[key] != value:
+                            node.setdefault('style', {})[key] = value
         elif kind in ('style.create', 'script.create'):
             resource_kind = kind.split('.')[0]
             resource = copy.deepcopy(command.get(resource_kind, {}))
             if not isinstance(resource, dict):
                 raise ValueError('A shared style or script must be an object')
+            if resource_kind == 'style' and 'kind' in resource and resource['kind'] not in STYLE_KINDS:
+                raise ValueError('Shared style kind must be color, typography or spacing')
             resource.setdefault('id', _id())
             resource.setdefault('name', resource_kind.title())
             resource.setdefault('style' if resource_kind == 'style' else 'source', {} if resource_kind == 'style' else 'export function mount(ctx) {}')
@@ -1084,6 +1245,8 @@ class DesignDocuments:
             else:
                 if not isinstance(table[resource_id], dict):
                     raise ValueError('Convert this legacy resource to a structured object before updating')
+                if resource_kind == 'style' and command.get('patch', {}).get('kind') not in (None, *STYLE_KINDS):
+                    raise ValueError('Shared style kind must be color, typography or spacing')
                 _merge(table[resource_id], command.get('patch', {}))
         else:
             raise ValueError(f'Unknown design command: {kind}')
@@ -1133,6 +1296,55 @@ class DesignDocuments:
             if not isinstance(component, dict) or component.get('id') != key or not isinstance(component.get('node'), dict):
                 raise ValueError('Component requires a matching identity and root node')
             edges['c:' + key] = set()
+        for key, resource in document['styles'].items():
+            if not isinstance(resource, dict):
+                raise ValueError('A shared style must be an object')
+            if 'id' in resource and resource['id'] != key:
+                raise ValueError('Shared style identity must match its key')
+            if 'style' in resource and not isinstance(resource['style'], dict):
+                raise ValueError('Shared style properties must be an object')
+            # Older portable resources may carry their own category labels.
+            # Keep them readable; newly authored categories use STYLE_KINDS.
+            if 'kind' in resource and not isinstance(resource['kind'], str):
+                raise ValueError('Shared style kind must be text')
+
+        def linked_styles(props):
+            if props.get('styleId') and props['styleId'] not in document['styles']:
+                raise ValueError('Referenced shared style does not exist')
+            if 'styleIds' in props:
+                linked = props['styleIds']
+                if not isinstance(linked, list) or len(linked) > 64 or any(not isinstance(value, str) or not value for value in linked):
+                    raise ValueError('Shared style references must be an array of at most 64 identities')
+                if len(set(linked)) != len(linked) or any(value not in document['styles'] for value in linked):
+                    raise ValueError('Referenced shared styles must exist and be distinct')
+
+        def override_references(props, owner, depth=0, target=None):
+            if depth > 100:
+                raise ValueError('Component override nesting exceeds the supported depth')
+            linked_styles(props)
+            for field, table, prefix in (('assetId', 'assets', None), ('scriptId', 'scripts', None),
+                                         ('componentId', 'components', 'c:'), ('pageId', None, 'p:'), ('navigateTo', None, None)):
+                key = props.get(field)
+                if key:
+                    if not isinstance(key, str) or key not in (document[table] if table else page_ids):
+                        raise ValueError('Component override references a missing resource')
+                    if prefix and (field != 'pageId' or (target or {}).get('type') == 'page'):
+                        edges[owner].add(prefix + key)
+            effective = {**(target or {}).get('props', {}), **props}
+            nested = effective.get('overrides')
+            if nested is not None:
+                if not isinstance(nested, dict):
+                    raise ValueError('Component overrides must be an object')
+                component = document['components'].get(effective.get('componentId'))
+                if component is None:
+                    raise ValueError('Nested overrides require an existing component target')
+                targets = {item['id']: item for item in _walk([component['node']])}
+                for target_id, patch in component_overrides(component, {'props': effective}).items():
+                    if not isinstance(patch, dict) or set(patch) - {'style', 'props'}:
+                        raise ValueError('Element overrides must be style and props property patches')
+                    if any(not isinstance(value, dict) for value in patch.values()):
+                        raise ValueError('Component override style and props must be objects')
+                    override_references(patch.get('props', {}), owner, depth + 1, targets.get(target_id))
 
         def nodes(values, owner, depth=0):
             if depth > 100 or not isinstance(values, list):
@@ -1173,8 +1385,16 @@ class DesignDocuments:
                 module_id = node.get('script', {}).get('moduleId') or props.get('scriptId')
                 if module_id and module_id not in document['scripts']:
                     raise ValueError('Referenced script module does not exist')
-                if props.get('styleId') and props['styleId'] not in document['styles']:
-                    raise ValueError('Referenced shared style does not exist')
+                linked_styles(props)
+                if node['type'] == 'instance' and 'overrides' in props:
+                    component = document['components'][component_id]
+                    targets = {item['id']: item for item in _walk([component['node']])}
+                    for target_id, patch in component_overrides(component, node).items():
+                        if not isinstance(patch, dict) or set(patch) - {'style', 'props'}:
+                            raise ValueError('Element overrides must be style and props property patches')
+                        if any(not isinstance(value, dict) for value in patch.values()):
+                            raise ValueError('Component override style and props must be objects')
+                        override_references(patch.get('props', {}), owner, target=targets.get(target_id))
                 nodes(node.get('children', []), owner, depth + 1)
 
         for page in pages:
