@@ -1382,5 +1382,8 @@
   "Some stylesheets could not be read and safely scoped; their styles were omitted. Original references are retained in the copied source and migration report.": "部分样式表无法读取并安全限定作用范围，已省略其样式。原始引用保留在副本源码和迁移报告中。",
   "原始文本没有独立边界。请选择父级图层调整布局和文字样式。": "原始文本没有独立边界。请选择父级图层调整布局和文字样式。",
   "原始文本的布局和文字样式由源页面控制。": "原始文本的布局和文字样式由源页面控制。",
-  "选择父级图层": "选择父级图层"
+  "选择父级图层": "选择父级图层",
+  "site.video_label": "LeafLoom 英文演示视频，35 秒",
+  "site.video_caption": "真实应用演示，使用虚构示例资料库。35 秒英文视频，含画面内字幕。",
+  "site.video_link": "直接打开视频"
 }

@@ -4,3 +4,5 @@
 @media(prefers-reduced-motion:reduce){:root{scroll-behavior:auto}.button{transition:none}.button:hover{transform:none}}
 
 .header nav{flex-wrap:wrap}.about-main{min-height:65vh}.about-profiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;max-width:800px;margin:40px auto;text-align:left}.profile-card{display:block;border:1px solid var(--line);border-radius:12px;padding:30px;background:#eef0e5;overflow-wrap:anywhere}.profile-card:hover{border-color:var(--green);text-decoration:none}.profile-card h2{font-size:32px;margin:18px 0}.profile-card p{color:var(--muted);font-size:14px;line-height:1.8}.about-main .hero{padding-bottom:70px}@media(max-width:680px){.about-profiles{grid-template-columns:1fr;gap:16px}.profile-card{padding:24px}}
+
+video.hero-shot{display:block;width:100%;height:auto;background:#17241e}video:focus-visible{outline:3px solid #b5803e;outline-offset:5px}

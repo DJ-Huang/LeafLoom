@@ -1382,5 +1382,8 @@
   "Some stylesheets could not be read and safely scoped; their styles were omitted. Original references are retained in the copied source and migration report.": "Some stylesheets could not be read and safely scoped; their styles were omitted. Original references are retained in the copied source and migration report.",
   "原始文本没有独立边界。请选择父级图层调整布局和文字样式。": "Native text has no independent bounds. Select its parent layer to change layout and typography.",
   "原始文本的布局和文字样式由源页面控制。": "Native text layout and typography are controlled by the source page.",
-  "选择父级图层": "Select parent layer"
+  "选择父级图层": "Select parent layer",
+  "site.video_label": "LeafLoom demo video in English, 35 seconds",
+  "site.video_caption": "The real app, with a fictional demo library. 35-second English video with burned-in captions.",
+  "site.video_link": "Open video directly"
 }

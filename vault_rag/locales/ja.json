@@ -1382,5 +1382,8 @@
   "Some stylesheets could not be read and safely scoped; their styles were omitted. Original references are retained in the copied source and migration report.": "一部のスタイルシートを読み込んで安全にスコープ化できなかったため、省略しました。元の参照はコピーされたソースと移行レポートに保持されています。",
   "原始文本没有独立边界。请选择父级图层调整布局和文字样式。": "ネイティブテキストには独立した境界がありません。親レイヤーを選択してレイアウトや文字組みを変更してください。",
   "原始文本的布局和文字样式由源页面控制。": "ネイティブテキストのレイアウトと文字組みは元のページで制御されます。",
-  "选择父级图层": "親レイヤーを選択"
+  "选择父级图层": "親レイヤーを選択",
+  "site.video_label": "LeafLoom の英語デモ動画、35 秒",
+  "site.video_caption": "架空のデモライブラリを使った実際のアプリ。字幕付きの 35 秒の英語動画です。",
+  "site.video_link": "動画を直接開く"
 }

@@ -1393,3 +1393,6 @@ Some stylesheets could not be read and safely scoped; their styles were omitted.
 原始文本没有独立边界。请选择父级图层调整布局和文字样式。|Native text has no independent bounds. Select its parent layer to change layout and typography.|ネイティブテキストには独立した境界がありません。親レイヤーを選択してレイアウトや文字組みを変更してください。
 原始文本的布局和文字样式由源页面控制。|Native text layout and typography are controlled by the source page.|ネイティブテキストのレイアウトと文字組みは元のページで制御されます。
 选择父级图层|Select parent layer|親レイヤーを選択
+site.video_label|LeafLoom 英文演示视频，35 秒|LeafLoom demo video in English, 35 seconds|LeafLoom の英語デモ動画、35 秒
+site.video_caption|真实应用演示，使用虚构示例资料库。35 秒英文视频，含画面内字幕。|The real app, with a fictional demo library. 35-second English video with burned-in captions.|架空のデモライブラリを使った実際のアプリ。字幕付きの 35 秒の英語動画です。
+site.video_link|直接打开视频|Open video directly|動画を直接開く

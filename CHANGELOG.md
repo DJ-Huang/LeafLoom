@@ -9,6 +9,7 @@
 - Add permanent deletion and emptying to the design project recycle bin with confirmation, revision checks and resumable cleanup. Remove affected project recovery records while preserving unrelated history and shared libraries.
 
 - Show a restart diagnostic when a newer project homepage meets an older backend. Disable management actions until workspace state loads, expose retry, and prevent delete from silently doing nothing.
+- Add the existing English demo video to all three website homepages with native playback controls, localized screenshot posters and a direct video link.
 
 - Add an optional browser developer launcher with an explicitly isolated state directory and Vite frontend. Opt-in `--loopback-ui` uses literal `localhost` for managed-browser compatibility while preserving authentication and separate HTML-project origins; project previews may still be affected. Normal desktop launches and supported installer platforms are unchanged.
 
