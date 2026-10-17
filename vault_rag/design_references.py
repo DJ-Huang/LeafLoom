@@ -74,7 +74,48 @@ def rewrite_script(source, resolve):
 
 CSS = re.compile(r'''/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?P<url>url\(\s*(?P<quote>['"]?)(?P<path>(?:\\.|[^'"\\)])*?)(?P=quote)\s*\))''', re.I)
 TAG = re.compile(r'''<!--[\s\S]*?-->|<(?:"[^"]*"|'[^']*'|[^'">])*>''')
-ATTRIBUTE = re.compile(r'''\b(?P<name>src|href|poster|srcset|style)\s*=\s*(?P<quote>['"])(?P<value>[\s\S]*?)(?P=quote)''', re.I)
+ATTRIBUTE = re.compile(r'''\b(?P<name>src|href|xlink:href|poster|srcset|imagesrcset|style)\s*=\s*(?P<quote>['"])(?P<value>[\s\S]*?)(?P=quote)''', re.I)
+
+
+def _srcset_spans(value):
+    """Yield URL spans; commas inside URL tokens are not separators.
+
+    Keep offsets so replacement preserves the author's whitespace, candidate
+    descriptors and data URLs byte-for-byte. The same parser feeds exports.
+    """
+    index, length = 0, len(value)
+    whitespace = '\t\n\f\r '
+    while index < length:
+        while index < length and value[index] in whitespace + ',':
+            index += 1
+        start = index
+        while index < length and value[index] not in whitespace:
+            index += 1
+        end = index
+        if end == start:
+            break
+        if value[end - 1] == ',':
+            while end > start and value[end - 1] == ',':
+                end -= 1
+        else:
+            depth = 0
+            while index < length:
+                char = value[index]
+                if char == '(':
+                    depth += 1
+                elif char == ')':
+                    depth = max(0, depth - 1)
+                elif char == ',' and not depth:
+                    index += 1
+                    break
+                index += 1
+        if end > start:
+            yield start, end
+
+
+def srcset_urls(value):
+    for start, end in _srcset_spans(value):
+        yield value[start:end]
 
 
 class AssetReferences:
@@ -165,9 +206,14 @@ class AssetReferences:
             return text
 
         def srcset(text, base):
-            if text.lstrip().startswith('data:'):
-                return text
-            return ','.join(re.sub(r'^(\s*)(\S+)', lambda match: match[1] + path_value(match[2], base), part) for part in text.split(','))
+            edits = []
+            for start, end in _srcset_spans(text):
+                changed = path_value(text[start:end], base)
+                if changed != text[start:end]:
+                    edits.append((start, end, changed))
+            for start, end, changed in reversed(edits):
+                text = text[:start] + changed + text[end:]
+            return text
 
         def html(text, base):
             def tag(match):
@@ -176,7 +222,7 @@ class AssetReferences:
                     return original
                 def attribute(item):
                     name, raw = item['name'].lower(), item['value']
-                    changed = css(raw, base) if name == 'style' else srcset(raw, base) if name == 'srcset' else path_value(raw, base)
+                    changed = css(raw, base) if name == 'style' else srcset(raw, base) if name in ('srcset', 'imagesrcset') else path_value(raw, base)
                     start, end = item.span('value')
                     return item[0][:start - item.start()] + changed + item[0][end - item.start():]
                 return ATTRIBUTE.sub(attribute, original)
@@ -192,9 +238,9 @@ class AssetReferences:
                         if child == old_id and new_id:
                             item[key] = new_id
                     elif isinstance(child, str):
-                        if key in ('src', 'href', 'poster'):
+                        if key in ('src', 'href', 'xlink:href', 'poster'):
                             item[key] = path_value(child, local_base)
-                        elif key == 'srcset':
+                        elif key in ('srcset', 'imagesrcset'):
                             item[key] = srcset(child, local_base)
                         elif key == 'source':
                             item[key] = script(child)

@@ -8,29 +8,71 @@
  let running=false;
  const rendererSources=new Map();
  const resource=(value,base)=>{
-  if(!value||/^(?:data:|blob:|#)/.test(value))return value;
+  if(!value||/^(?:data:|blob:|#)/i.test(value.trim()))return value;
   try{const url=new URL(value,base);return url.origin===location.origin?'__STUDIO_ASSET__/'+url.pathname.replace(/^\//,'')+url.search+url.hash:url.href;}catch{return value;}
  };
  const urls=(css,base)=>String(css).replace(/url\(\s*(['"]?)(.*?)\1\s*\)/g,(_m,_q,value)=>'url("'+resource(value,base).replaceAll('"','%22')+'")');
+ // A URL token may contain commas (notably a data URL). Only trailing
+ // commas and commas after the descriptors delimit srcset candidates.
+ const srcset=(value,base)=>{
+  const candidates=[];let index=0;
+  while(index<value.length){
+   while(index<value.length&&/[\t\n\f\r ,]/.test(value[index]))index++;
+   const start=index;while(index<value.length&&!/[\t\n\f\r ]/.test(value[index]))index++;
+   let url=value.slice(start,index),descriptors='';
+   if(!url)break;
+   if(/,$/.test(url))url=url.replace(/,+$/,'');
+   else{
+    const descriptorStart=index;let depth=0;
+    while(index<value.length){const char=value[index];if(char==='(')depth++;else if(char===')')depth=Math.max(0,depth-1);else if(char===','&&!depth)break;index++;}
+    descriptors=value.slice(descriptorStart,index).trim();if(value[index]===',')index++;
+   }
+   if(url)candidates.push(resource(url,base)+(descriptors?' '+descriptors:''));
+  }
+  return candidates.join(', ');
+ };
  function capturePage(board){
-  const source=frame.contentDocument,base=frame.contentWindow.location.href;
+  const source=frame.contentDocument,base=source.baseURI;
   const root=source.querySelector('#artboard')||source.body;
   const sourceId=board.contextSource?.pageId||board.id;
   const definition=Array.isArray(frame.contentWindow.boards)?frame.contentWindow.boards.find(item=>item.id===sourceId):null;
   const kind=definition?.kind||board.kind||'';
-  const sourceContext=new URL(base).searchParams.get('source')||(kind==='help'?'pause':'home');
+  const sourceContext=new URL(frame.contentWindow.location.href).searchParams.get('source')||(kind==='help'?'pause':'home');
   const interactions={navigation:0,switches:0,inlineHandlers:0,scriptSources:[...source.scripts].map(script=>script.src?resource(script.src,base):'inline')};
-  const css=[];
-  for(const sheet of source.styleSheets){try{css.push(urls([...sheet.cssRules].map(rule=>rule.cssText).join('\n'),sheet.href||base));}catch{/* Keep inaccessible external stylesheet reference. */if(sheet.href)css.push('@import url("'+sheet.href+'");');}}
-  function node(element){
-   if(element.nodeType===3){if(!element.textContent)return null;return {id:crypto.randomUUID(),type:'text',name:'Text',props:{authored:true,tag:'span',text:element.textContent,attributes:{style:'display:contents'}},style:{},children:[]};}
-   if(element.nodeType!==1||['SCRIPT','STYLE','LINK','NOSCRIPT','META'].includes(element.tagName))return null;
+  const css=[],unavailableStylesheets=[];
+  const media=(text,condition)=>condition&&condition!=='all'?'@media '+condition+'{\n'+text+'\n}':text;
+  function stylesheet(sheet,seen=new Set()){
+   if(sheet.disabled||seen.has(sheet))return '';
+   seen=new Set(seen).add(sheet);
+   let rules;try{rules=[...sheet.cssRules];}catch{
+    // An unreadable sheet cannot be safely scoped. Keep its location in the
+    // report; never inject an unscoped remote @import into the studio runtime.
+    if(sheet.href)unavailableStylesheets.push(sheet.href);return '';
+   }
+   return rules.map(rule=>{
+    if(rule.type!==3)return urls(rule.cssText,sheet.href||base);
+    if(!rule.styleSheet){if(rule.href)unavailableStylesheets.push(rule.href);return '';}
+    let text=stylesheet(rule.styleSheet,seen);
+    text=media(text,rule.media.mediaText);
+    if(rule.supportsText)text='@supports ('+rule.supportsText+'){\n'+text+'\n}';
+    if(rule.layerName!=null)text='@layer'+(rule.layerName?' '+rule.layerName:'')+'{\n'+text+'\n}';
+    return text;
+   }).join('\n');
+  }
+  for(const sheet of source.styleSheets){if(!sheet.disabled)css.push(media(stylesheet(sheet),sheet.media.mediaText));}
+  function attributes(element){
    const attrs={};
    for(const attribute of element.attributes){
     if(/^on/i.test(attribute.name)){interactions.inlineHandlers+=1;continue;}
     if(attribute.name.startsWith('data-gdl'))continue;
-    attrs[attribute.name]=attribute.name==='style'?urls(attribute.value,base):['src','href','xlink:href','poster'].includes(attribute.name)?resource(attribute.value,base):attribute.value;
+    attrs[attribute.name]=attribute.name==='style'?urls(attribute.value,base):attribute.name==='srcset'||attribute.name==='imagesrcset'?srcset(attribute.value,base):['src','href','xlink:href','poster'].includes(attribute.name)?resource(attribute.value,base):attribute.value;
    }
+   return attrs;
+  }
+  function node(element){
+   if(element.nodeType===3){if(!element.textContent)return null;return {id:crypto.randomUUID(),type:'text',name:'Text',props:{authored:true,textNode:true,text:element.textContent},style:{},children:[]};}
+   if(element.nodeType!==1||['SCRIPT','STYLE','LINK','NOSCRIPT','META','BASE'].includes(element.tagName))return null;
+   const attrs=attributes(element);
    const tag=element.localName;
    const result={id:crypto.randomUUID(),type:tag==='img'?'image':tag==='button'?'button':tag==='svg'?'svg':element.children.length?'element':'text',name:element.getAttribute('data-layer-name')||element.getAttribute('aria-label')||element.getAttribute('alt')||element.id||tag,props:{authored:true,tag,attributes:attrs},style:{},children:[]};
    if(tag==='svg'){
@@ -64,16 +106,20 @@
    }
    return result;
   }
-  const result=node(root);
+  const authoredContext={version:1,root:root===source.body?'body':'artboard',html:{attributes:attributes(source.documentElement)},body:{attributes:attributes(source.body)},ancestors:[]};
+  for(let ancestor=root.parentElement;ancestor&&ancestor!==source.body&&ancestor!==source.documentElement;ancestor=ancestor.parentElement)authoredContext.ancestors.unshift({tag:ancestor.localName,attributes:attributes(ancestor)});
+  const nodes=root===source.body?[...root.childNodes].map(node).filter(Boolean):[node(root)].filter(Boolean);
   // The review adapter may split native text while loading; capture the normal
   // prototype DOM instead, preserving artboard hierarchy and classes.
   const warnings=[];
+  if(unavailableStylesheets.length)warnings.push('Some stylesheets could not be read and safely scoped; their styles were omitted. Original references are retained in the copied source and migration report.');
   if(interactions.inlineHandlers)warnings.push(interactions.inlineHandlers+' inline event attributes were omitted; port custom behavior with mount(ctx).');
   if(interactions.scriptSources.length)warnings.push('Original script files are retained in the copied source; arbitrary event listeners, closures and runtime state are not replayed. Declarative page links and recognized switch controls were adapted.');
   const migration={source:'Design/UI/Site/screen.html?id='+encodeURIComponent(sourceId)+(board.contextSource?'&source='+encodeURIComponent(sourceContext):''),interactions,warnings};
+  if(unavailableStylesheets.length)migration.unavailableStylesheets=[...new Set(unavailableStylesheets)];
   if(board.contextSource)migration.contextSource=board.contextSource;
   if(kind==='settings'&&root.querySelector('.settings-modal')||kind==='help'&&root.querySelector('.help-modal'))migration.contextDefaults={settingsFrom:sourceContext};
-  return {id:board.id,name:board.name,group:board.group||'',width:board.width||720,height:board.height||1560,css:css.join('\n'),nodes:result?[result]:[],migration};
+  return {id:board.id,name:board.name,group:board.group||'',width:board.width||720,height:board.height||1560,css:css.join('\n'),nodes,authoredContext,migration};
  }
  async function convert(data){
   if(running)return;running=true;

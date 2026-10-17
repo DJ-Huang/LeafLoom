@@ -9,7 +9,7 @@ import zipfile
 from unittest.mock import patch
 
 from vault_rag.design_documents import DesignDocuments
-from vault_rag.design_workspace import DesignWorkspace, _walk
+from vault_rag.design_workspace import DesignWorkspace, _walk, _srcset_urls
 from vault_rag.local_state import ConflictError, Files, LocalConfig
 
 
@@ -319,6 +319,59 @@ class DesignWorkspaceTests(unittest.TestCase):
         self.assertEqual(after['revision'], before['revision'])
         self.assertEqual(after['document']['name'], 'Pet Home')
         self.assertEqual(self.docs.history(self.directory)['total'], 0)
+
+    def test_responsive_url_tokens_keep_data_and_filename_commas(self):
+        value = 'data:image/svg+xml,%3Csvg%3E,%3C/svg%3E 1x, images/high.png 2x, images/wide,version2.png 640w, images/last.png,'
+        self.assertEqual(list(_srcset_urls(value)), ['data:image/svg+xml,%3Csvg%3E,%3C/svg%3E', 'images/high.png', 'images/wide,version2.png', 'images/last.png'])
+
+    def test_export_keeps_responsive_markup_css_imports_and_project_root_urls(self):
+        document = copy.deepcopy(self.project['document'])
+        resources = {
+            'media/small.png': b'small', 'media/high.png': b'high',
+            'media/wide,version2.png': b'wide', 'media/fallback.png': b'fallback',
+            'media/poster.png': b'poster', 'media/vector.svg': b'<svg/>',
+            'styles/main.css': b'@import "nested/colors.css"; .hero { background:url(/media/poster.png) }',
+            'styles/nested/colors.css': b'.icon { background:url(__STUDIO_ASSET__/media/vector.svg) }',
+        }
+        for name, content in resources.items():
+            path = self.root / self.directory / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        (self.root / self.directory / 'media/unreferenced.png').write_bytes(b'private unrelated data')
+        source = 'data:image/png;base64,AAAA 1x, __STUDIO_ASSET__/media/high.png 2x'
+        document['pages'][0].update(css='@import "styles/main.css";', nodes=[{
+            'id': 'responsive', 'type': 'element', 'props': {'authored': True, 'tag': 'picture'}, 'children': [
+                {'id': 'responsive-source', 'type': 'element', 'props': {'authored': True, 'tag': 'source', 'attributes': {'srcset': '__STUDIO_ASSET__/media/small.png 320w, __STUDIO_ASSET__/media/wide,version2.png 640w'}}},
+                {'id': 'responsive-image', 'type': 'image', 'props': {'authored': True, 'tag': 'img', 'src': '__STUDIO_ASSET__/media/fallback.png', 'attributes': {'srcset': source}}},
+                {'id': 'responsive-html', 'type': 'html', 'props': {'html': '<video poster="/media/poster.png"></video><svg><use xlink:href="/media/vector.svg#icon"/></svg><img srcset="media/small.png 1x, media/high.png 2x">'}},
+            ]}])
+        document['pages'][0]['authoredContext'] = {'version': 1, 'html': {'attributes': {'class': 'dark'}}, 'body': {'attributes': {'style': 'background:url(__STUDIO_ASSET__/media/poster.png)'}}, 'ancestors': []}
+        self.docs.apply(self.directory, [{'type': 'document.replace', 'document': document}], self.project['revision'], 'prepare-responsive-export')
+        source_path = self.root / self.directory / 'Design/studio/project.json'
+        source_bytes = source_path.read_bytes()
+        with patch.object(self.workspace, 'session', return_value={'origin': 'http://localhost:1000', 'id': 'session'}):
+            exported = self.workspace.export(self.directory)
+        with zipfile.ZipFile(self.root / exported['path']) as archive:
+            self.assertEqual({name for name in archive.namelist() if name.startswith(('media/', 'styles/'))}, set(resources))
+            bundled = json.loads(archive.read('document.js').decode().removeprefix('window.STUDIO_DOCUMENT=').rstrip(';\n'))
+            self.assertEqual(bundled['pages'][0]['nodes'][0]['children'][1]['props']['attributes']['srcset'], source)
+            self.assertEqual(bundled['pages'][0]['authoredContext'], document['pages'][0]['authoredContext'])
+        self.assertEqual(source_path.read_bytes(), source_bytes)
+
+    def test_library_collects_unregistered_responsive_assets_without_external_paths(self):
+        document = copy.deepcopy(self.project['document'])
+        for name in ('small.png', 'large.png', 'poster.png'):
+            target = self.root / self.directory / 'media' / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(name.encode())
+        document['components']['picture'] = {'id': 'picture', 'name': 'Picture', 'node': {
+            'id': 'picture-node', 'type': 'element', 'props': {'authored': True, 'tag': 'img', 'attributes': {
+                'srcset': 'data:image/png;base64,AAAA 1x, __STUDIO_ASSET__/media/small.png 2x, __STUDIO_ASSET__/media/large.png 3x',
+                'src': 'https://remote.invalid/must-not-fetch.png', 'style': 'background:url(__STUDIO_ASSET__/media/poster.png)'}}, 'children': []}}
+        self.docs.apply(self.directory, [{'type': 'document.replace', 'document': document}], self.project['revision'], 'prepare-responsive-library')
+        state = self.workspace.publish(self.directory, 'component', 'picture', self.workspace.state()['revision'], 'publish-responsive-library')
+        item = self.workspace._load()['library'][state['items'][0]['id']]
+        self.assertEqual({asset['path'] for asset in item['assets'].values()}, {'media/small.png', 'media/large.png', 'media/poster.png'})
 
     def prepare_library(self):
         document = copy.deepcopy(self.project['document'])

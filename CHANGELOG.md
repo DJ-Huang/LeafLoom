@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Improve Design Studio navigation with persistent pan/zoom, Select and Hand tools, fit-to-page/selection, collapsible layers, selection breadcrumbs and grouped inspector sections. Show canvas connection failures with retry. Preserve more HTML document context, mixed text and responsive resources during conversion; keep original source and isolated preview boundaries.
+
 - Add permanent deletion and emptying to the design project recycle bin with confirmation, revision checks and resumable cleanup. Remove affected project recovery records while preserving unrelated history and shared libraries.
 
 - Show a restart diagnostic when a newer project homepage meets an older backend. Disable management actions until workspace state loads, expose retry, and prevent delete from silently doing nothing.

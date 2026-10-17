@@ -497,6 +497,41 @@ class DesignDocumentTests(unittest.TestCase):
         self.assertIn("/* ctx.assets.resolve('old') */", replaced)
         self.apply({'type': 'asset.delete', 'asset_id': 'old'})
 
+    def test_responsive_mixed_data_urls_and_filename_commas_guard_delete_and_replace(self):
+        old = 'Design/Assets/wide,version2.png'
+        new = 'Design/Assets/replacement.png'
+        data = 'data:image/svg+xml,%3Csvg%3E,%3C/svg%3E'
+        candidates = '  ' + data + ' 1x,\n __STUDIO_ASSET__/' + old + '?v=2#crop 2x,  '
+        preload = data + ' 1x, ../../Assets/wide,version2.png 640w'
+        markup = '<picture><source srcset="' + candidates + '"></picture><link imagesrcset="' + preload + '">'
+        self.apply({'type': 'asset.register', 'asset': {'id': 'old', 'path': old}},
+                   {'type': 'asset.register', 'asset': {'id': 'new', 'path': new}},
+                   {'type': 'page.update', 'page_id': self.page, 'patch': {'basePath': 'Design/UI/Site/'}},
+                   {'type': 'node.create', 'page_id': self.page, 'node': self.node('native-responsive', type='element', props={'authored': True, 'tag': 'img', 'attributes': {'srcset': candidates, 'imagesrcset': preload}})},
+                   {'type': 'node.create', 'page_id': self.page, 'node': self.node('html-responsive', type='html', props={'html': markup})})
+        uses = self.service.page_view(self.directory)['document']['assets']['old']['references']
+        self.assertEqual({item.get('node_id') for item in uses if item.get('node_id')}, {'native-responsive', 'html-responsive'})
+        with self.assertRaisesRegex(ValueError, 'Referenced asset'):
+            self.apply({'type': 'asset.delete', 'asset_id': 'old'})
+        self.apply({'type': 'asset.replace', 'asset_id': 'old', 'replacement_id': 'new'})
+        nodes = self.current['document']['pages'][0]['nodes']
+        self.assertEqual(nodes[0]['props']['attributes']['srcset'], candidates.replace(old, new))
+        self.assertEqual(nodes[0]['props']['attributes']['imagesrcset'], preload.replace('wide,version2.png', 'replacement.png'))
+        self.assertEqual(nodes[1]['props']['html'], markup.replace(old, new).replace('wide,version2.png', 'replacement.png'))
+        with self.assertRaisesRegex(ValueError, 'Referenced asset'):
+            self.apply({'type': 'asset.delete', 'asset_id': 'new'})
+        self.apply({'type': 'asset.delete', 'asset_id': 'old'})
+
+    def test_imagesrcset_only_reference_is_protected_in_markup_and_attributes(self):
+        self.apply({'type': 'asset.register', 'asset': {'id': 'preload', 'path': 'media/preload.png'}},
+                   {'type': 'node.create', 'page_id': self.page, 'node': self.node('preload-link', type='element', props={'attributes': {'imagesrcset': 'data:image/png;base64,AAAA 1x, media/preload.png 2x'}})})
+        with self.assertRaisesRegex(ValueError, 'Referenced asset'):
+            self.apply({'type': 'asset.delete', 'asset_id': 'preload'})
+        self.apply({'type': 'node.delete', 'page_id': self.page, 'node_id': 'preload-link'},
+                   {'type': 'node.create', 'page_id': self.page, 'node': self.node('preload-html', type='html', props={'html': '<link imagesrcset="data:image/png;base64,AAAA 1x, media/preload.png 2x">'})})
+        with self.assertRaisesRegex(ValueError, 'Referenced asset'):
+            self.apply({'type': 'asset.delete', 'asset_id': 'preload'})
+
     def test_external_edits_are_preserved(self):
         document = self.current['document']
         document['name'] = 'External change'

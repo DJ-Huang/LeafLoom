@@ -17,13 +17,14 @@ import stat
 import time
 import uuid
 import zipfile
+from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 from vault_rag.local_state import ConflictError, atomic_write, relative
 from vault_rag.platform_support import is_link, move_exclusive
 from vault_rag.design_documents import _diff, _patch, validate_page_contexts
-from vault_rag.design_references import AssetReferences, script_references, rewrite_script
+from vault_rag.design_references import AssetReferences, script_references, rewrite_script, srcset_urls as _srcset_urls
 
 
 RUNTIME = Path(__file__).parent / 'design_assets' / 'studio'
@@ -41,6 +42,24 @@ def _walk(nodes):
     for node in nodes:
         yield node
         yield from _walk(node.get('children', []))
+
+
+
+class _ExportHTMLReferences(HTMLParser):
+    """Read URL-bearing markup attributes, including responsive image sources."""
+    def __init__(self, add):
+        super().__init__(convert_charrefs=True)
+        self.add = add
+
+    def handle_starttag(self, tag, attrs):
+        for name, value in attrs:
+            if not value:
+                continue
+            if name in ('src', 'href', 'xlink:href', 'poster'):
+                self.add(value)
+            elif name in ('srcset', 'imagesrcset'):
+                for url in _srcset_urls(value):
+                    self.add(url)
 
 
 class DesignWorkspace:
@@ -569,11 +588,11 @@ class DesignWorkspace:
         script_paths = {value.get('path', key): key for key, value in source['script'].items() if isinstance(value, dict)}
         import posixpath
 
-        def asset_reference(name):
+        def asset_reference(name, base_path=''):
             if name in source['asset']:
                 add('asset', name)
                 return
-            path = AssetReferences.path(name)
+            path = AssetReferences.path(name, base_path)
             if not path:
                 return
             if path in paths:
@@ -610,6 +629,11 @@ class DesignWorkspace:
                     if key in typed and isinstance(child, str) and child:
                         add(typed[key], child)
                     else:
+                        if key in ('src', 'href', 'xlink:href', 'poster') and isinstance(child, str):
+                            asset_reference(child, module_path)
+                        elif key in ('srcset', 'imagesrcset') and isinstance(child, str):
+                            for reference in _srcset_urls(child):
+                                asset_reference(reference, module_path)
                         scan(child, module_path)
             elif isinstance(value, list):
                 for child in value:
@@ -629,10 +653,10 @@ class DesignWorkspace:
                     if script_id:
                         add('script', script_id)
                 for match in re.finditer(r'url\(\s*[\"\']?([^\"\')]+)|(?:src|href)=[\"\']([^\"\']+)', value):
-                    reference = (match[1] or match[2]).split('?', 1)[0].split('#', 1)[0]
-                    path = posixpath.normpath(posixpath.join(posixpath.dirname(module_path), reference))
-                    if path in paths:
-                        add('asset', paths[path])
+                    asset_reference(match[1] or match[2], module_path)
+                if '<' in value:
+                    parser = _ExportHTMLReferences(lambda reference: asset_reference(reference, module_path))
+                    parser.feed(value)
 
         add(kind, item_id)
         return selected
@@ -821,13 +845,24 @@ class DesignWorkspace:
         resources = {asset['path'] for asset in document.get('assets', {}).values() if asset.get('path')}
         scanned = set()
         def add(reference, base=''):
-            if not isinstance(reference, str) or not reference or reference.startswith(('#', 'data:', 'blob:')):
+            if not isinstance(reference, str):
                 return
-            reference = reference.replace('__STUDIO_ASSET__/', '')
-            url = urlsplit(reference)
+            reference = reference.strip()
+            if not reference or reference.lower().startswith(('#', 'data:', 'blob:')):
+                return
+            marker = '__STUDIO_ASSET__/'
+            if reference.startswith(marker):
+                reference, base = reference[len(marker):], ''
+            try:
+                url = urlsplit(reference)
+            except ValueError:
+                return
             if url.scheme or url.netloc:
                 return
-            path = posixpath.normpath(posixpath.join(base, unquote(url.path).lstrip('/')))
+            decoded = unquote(url.path)
+            if decoded.startswith('/'):
+                base = ''
+            path = posixpath.normpath(posixpath.join(base, decoded.lstrip('/')))
             try:
                 path = relative(path)
                 target = self.config.path_for(directory + '/' + path)
@@ -839,8 +874,14 @@ class DesignWorkspace:
                 resources.add(path)
         def scan(value, base=''):
             if isinstance(value, dict):
+                if isinstance(value.get('basePath'), str):
+                    base = value['basePath']
+                    if not base.endswith('/'):
+                        base = posixpath.dirname(base)
                 for key, child in value.items():
-                    if key in ('src', 'href', 'path', 'poster') and isinstance(child, str): add(child, base)
+                    if key in ('src', 'href', 'xlink:href', 'path', 'poster') and isinstance(child, str): add(child, base)
+                    if key in ('srcset', 'imagesrcset') and isinstance(child, str):
+                        for reference in _srcset_urls(child): add(reference, base)
                     scan(child, base)
             elif isinstance(value, list):
                 for child in value: scan(child, base)
@@ -848,6 +889,10 @@ class DesignWorkspace:
                 for match in re.finditer(r'__STUDIO_ASSET__/([^\s\"\'<>\)]+)', value): add(match[1])
                 for match in re.finditer(r'url\(\s*[\"\']?([^\"\')]+)|(?:src|href)=[\"\']([^\"\']+)|(?:from\s*|import\s*\(?\s*)[\"\']([^\"\']+)', value):
                     add(next(x for x in match.groups() if x is not None), base)
+                for match in re.finditer(r'@import\s+[\"\']([^\"\']+)', value, re.I): add(match[1], base)
+                if '<' in value:
+                    parser = _ExportHTMLReferences(lambda reference: add(reference, base))
+                    parser.feed(value)
         scan(document)
         for script in document.get('scripts', {}).values():
             if isinstance(script, dict):

@@ -1372,3 +1372,24 @@ HTML|HTML|HTML
 清空项目回收站|Empty project recycle bin|プロジェクトのゴミ箱を空にする
 永久删除以下 {count} 个项目？项目文件和设计历史将无法恢复，相关项目管理操作也将无法撤销。|Permanently delete these {count} projects? Project files and design history cannot be recovered, and related project management actions can no longer be undone.|以下の {count} 件のプロジェクトを完全に削除しますか？プロジェクトのファイルとデザイン履歴は復元できず、関連するプロジェクト管理操作も取り消せなくなります。
 项目已永久删除|Projects permanently deleted|プロジェクトを完全に削除しました
+画布工具|Canvas tools|キャンバスツール
+选择工具|Select tool|選択ツール
+抓手工具|Hand tool|手のひらツール
+展开图层|Expand layers|レイヤーを展開
+折叠图层|Collapse layers|レイヤーを折りたたむ
+从插入元素开始设计|Insert an element to start designing|要素を挿入してデザインを開始
+缩放画布|Canvas zoom|キャンバスのズーム
+缩小|Zoom out|縮小
+缩放比例|Zoom level|ズーム倍率
+放大|Zoom in|拡大
+缩放到选区|Zoom to selection|選択範囲にズーム
+选中图层路径|Selected layer path|選択したレイヤーのパス
+按住空格拖动画布|Hold Space and drag to pan|スペースキーを押しながらドラッグして移動
+外观|Appearance|外観
+文字排版|Typography|文字組み
+组件与结构|Components and structure|コンポーネントと構造
+画布连接超时，请重新加载画布|Canvas connection timed out. Reload the canvas.|キャンバスの接続がタイムアウトしました。再読み込みしてください。
+Some stylesheets could not be read and safely scoped; their styles were omitted. Original references are retained in the copied source and migration report.|部分样式表无法读取并安全限定作用范围，已省略其样式。原始引用保留在副本源码和迁移报告中。|Some stylesheets could not be read and safely scoped; their styles were omitted. Original references are retained in the copied source and migration report.|一部のスタイルシートを読み込んで安全にスコープ化できなかったため、省略しました。元の参照はコピーされたソースと移行レポートに保持されています。
+原始文本没有独立边界。请选择父级图层调整布局和文字样式。|Native text has no independent bounds. Select its parent layer to change layout and typography.|ネイティブテキストには独立した境界がありません。親レイヤーを選択してレイアウトや文字組みを変更してください。
+原始文本的布局和文字样式由源页面控制。|Native text layout and typography are controlled by the source page.|ネイティブテキストのレイアウトと文字組みは元のページで制御されます。
+选择父级图层|Select parent layer|親レイヤーを選択

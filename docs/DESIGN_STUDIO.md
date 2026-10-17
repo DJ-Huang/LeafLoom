@@ -56,6 +56,24 @@ libraries are retained. Cleanup is journaled and resumes after an interruption.
 and Delete removes selected elements. Focused source/text fields retain their
 normal editing shortcuts. A new edit after undo starts a new history branch.
 
+## Canvas navigation and inspection
+
+Use Select (`V`) for editing and Hand (`H`) for panning, or temporarily hold Space
+while dragging. Ctrl/Command + wheel zooms around the pointer. The toolbar shows
+the actual zoom percentage, presets and plus/minus controls. `Shift+1` fits the
+page and `Shift+2` fits the selection. Each project/page keeps its camera while
+its document updates; changing zoom or panning creates no history entry.
+
+Layer containers can collapse without changing the document. Selection reveals
+its ancestors and a breadcrumb provides direct parent selection. Layout,
+Appearance, Typography and Components/structure sections organize the inspector.
+Keyboard shortcuts do not intercept focused text fields.
+
+A canvas connection timeout provides Retry. The optional cloud browser developer
+mode may still fail to load separate named project origins; the management shell
+alone does not prove that the rendered canvas works. Do not weaken origin, cookie
+or CSRF boundaries to make a preview load.
+
 ## Portable document and durable history
 
 The editable source of truth is `Design/studio/project.json`, not generated
@@ -267,8 +285,18 @@ an image element, while imported authored SVG preserves native gradients,
 paths and transforms. Custom HTML cannot access the management interface.
 
 Legacy conversion copies the source directory first and captures authored
-DOM/CSS for every declared artboard. Native hierarchy, classes, CSS layout,
-text, image files, transparent artwork and SVG are retained instead of
+DOM/CSS for every declared artboard. HTML/body classes and attributes, the artboard ancestor chain, native mixed-text
+nodes, stylesheet media conditions, base URLs and responsive image candidates
+are retained. Readable CSS imports are scoped with their original resource bases.
+Unreadable external stylesheets are omitted with a migration warning and their
+references remain in the copied source/report; they are not injected globally.
+Native mixed-text nodes retain their exact DOM order but have no independent
+canvas bounding box; select their containing element for geometry changes.
+Viewport-relative units, rem units and media queries still use the renderer
+environment. Siblings outside the captured artboard ancestor chain are not
+cloned. These constraints mean conversion is not arbitrary-page equivalence.
+Native hierarchy, classes, CSS layout, image files, transparent artwork and SVG
+are retained instead of
 flattening a page into a screenshot. Captured native elements start without
 invented absolute geometry; later movement adds translation offsets. Original
 scripts stay in the copied source. Declarative `data-target` navigation is
@@ -303,6 +331,13 @@ in a worker with two concurrent jobs and a bounded 256-entry cache; decoding
 does not occupy the editor thread. The workbench itself loads on demand.
 
 Validation is explicit and environment-specific:
+
+- `node tests/test_studio_navigation.cjs` checks camera state and layer visibility
+  without a browser.
+- `python tests/studio_html_import_browser.py` compares original and imported
+  DOM geometry, computed styles and responsive sources. It writes paired PNGs
+  and measured layout to `.cache/studio-qa/`; the Design Studio contracts CI
+  workflow uploads these for visual review.
 
 - `python tests/studio_runtime_browser.py` runs the portable runtime's explicit
   Chromium contracts: rotated nested dragging and transaction boundaries,

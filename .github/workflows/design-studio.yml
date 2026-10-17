@@ -1,0 +1,72 @@
+name: Design Studio contracts
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feat/design-studio']
+    paths:
+      - 'vault_rag/design*'
+      - 'vault_rag/design_assets/**'
+      - 'web/src/design*'
+      - 'tests/*design*'
+      - 'tests/studio_*'
+      - 'tests/test_studio*'
+      - '.github/workflows/design-studio.yml'
+  pull_request:
+    paths:
+      - 'vault_rag/design*'
+      - 'vault_rag/design_assets/**'
+      - 'web/src/design*'
+      - 'tests/*design*'
+      - 'tests/studio_*'
+      - 'tests/test_studio*'
+      - '.github/workflows/design-studio.yml'
+permissions:
+  contents: read
+concurrency:
+  group: design-studio-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.0'
+      - run: uv sync --locked --no-dev
+      - run: npm ci --prefix web --no-audit --no-fund
+      - run: npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
+      - run: npm run build --prefix web
+      - name: Versioning, migration, export and boundary contracts
+        run: uv run --no-sync python -m unittest discover -s tests -p 'test_design*.py'
+      - name: Project draft contracts
+        run: |
+          node tests/test_design_project_drafts.cjs
+          node tests/test_studio_navigation.cjs
+      - name: Install isolated test browser
+        run: |
+          uv pip install --python .venv/bin/python playwright==1.58.0
+          .venv/bin/python -m playwright install --with-deps chromium
+      - name: Portable runtime browser contracts
+        run: |
+          .venv/bin/python tests/studio_runtime_browser.py
+          .venv/bin/python tests/studio_html_import_browser.py
+          .venv/bin/python tests/studio_migration_interactions_browser.py
+      - name: Install Chrome for full-stack acceptance
+        run: npx --yes playwright@1.64.0 install --with-deps chrome
+      - name: Workbench editing, navigation and recovery
+        run: node tests/studio_workbench_browser.cjs
+      - name: Render comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-render-comparison
+          path: .cache/studio-qa/
+          if-no-files-found: ignore

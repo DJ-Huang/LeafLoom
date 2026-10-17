@@ -38,6 +38,58 @@
     } catch (_) { return ''; }
   }
 
+  function responsiveSources(value, resolve) {
+    const result = []; let index = 0;
+    value = String(value);
+    while (index < value.length) {
+      while (index < value.length && /[\t\n\f\r ,]/.test(value[index])) index += 1;
+      const start = index;
+      while (index < value.length && !/[\t\n\f\r ]/.test(value[index])) index += 1;
+      let url = value.slice(start, index), descriptors = '';
+      if (!url) break;
+      if (/,$/.test(url)) url = url.replace(/,+$/, '');
+      else {
+        const descriptorStart = index; let depth = 0;
+        while (index < value.length) {
+          const char = value[index];
+          if (char === '(') depth += 1;
+          else if (char === ')') depth = Math.max(0, depth - 1);
+          else if (char === ',' && !depth) break;
+          index += 1;
+        }
+        descriptors = value.slice(descriptorStart, index).trim();
+        if (value[index] === ',') index += 1;
+      }
+      const resolved = url && resolve(url);
+      if (resolved) result.push(resolved + (descriptors ? ' ' + descriptors : ''));
+    }
+    return result.join(', ');
+  }
+
+  // Rewrite type selectors outside strings and attribute selectors only.
+  // This also covers :is(html.dark, body.ready), without changing [title="body"].
+  function documentSelectors(value, htmlRoot, bodyRoot) {
+    let result = '', quote = '', brackets = 0;
+    for (let index = 0; index < value.length;) {
+      const char = value[index];
+      if (char === '\\') { result += value.slice(index, index + 2); index += 2; continue; }
+      if (quote) { if (char === quote) quote = ''; result += char; index += 1; continue; }
+      if (char === '"' || char === "'") quote = char;
+      else if (char === '[') brackets += 1;
+      else if (char === ']') brackets -= 1;
+      if (!quote && !brackets) {
+        const rest = value.slice(index);
+        if (/^:root(?![\w-])/.test(rest)) { result += ':is(' + htmlRoot + ',:root)'; index += 5; continue; }
+        if (!index || /[\s>+~,(|]/.test(value[index - 1])) {
+          const match = /^(html|body)(?![\w-])/i.exec(rest);
+          if (match) { result += match[1].toLowerCase() === 'html' ? htmlRoot : bodyRoot; index += match[0].length; continue; }
+        }
+      }
+      result += char; index += 1;
+    }
+    return result;
+  }
+
   function presetFrames(name) {
     return ({
       fade: [{ opacity: 0 }, { opacity: 1 }],
@@ -86,6 +138,10 @@
     let generation = 0;
     let disposed = false;
     let zoom = 1;
+    const cameras = new Map();
+    let tool = 'select';
+    let spaceDown = false;
+    let panGesture = null;
     let gesture = null;
     let textEdit = null;
     let gestureFrame = 0;
@@ -94,6 +150,7 @@
     let previewNodeId = settings.previewNodeId || null;
     let navigationContext = {};
     let renderedEntries = [];
+    let authoredTexts = new Map();
     let editable = new Map();
     let cleanup = [];
     let urls = [];
@@ -178,7 +235,7 @@
 
     function placeholder(el, message) { el.classList.add('studio-missing'); el.textContent = message; }
 
-    function makeScope(prefix, nodes) {
+    function makeScope(prefix, nodes, context) {
       const scope = { prefix, refs: new Map(), domIds: new Map() };
       const collect = items => (items || []).forEach(node => {
         const id = node.props && node.props.attributes && node.props.attributes.id;
@@ -189,7 +246,12 @@
         }
         collect(node.children);
       });
-      collect(nodes); return scope;
+      collect(nodes);
+      if (context && context.version === 1) [context.html, context.body, ...(context.ancestors || [])].forEach(item => {
+        const id = item && item.attributes && item.attributes.id;
+        if (id) scope.domIds.set(String(id), prefix + '__dom_' + id);
+      });
+      return scope;
     }
 
     function localReferences(value, scope) {
@@ -198,10 +260,10 @@
     }
 
     function pageStyles(page, parent, scope) {
-      if (!page.css) return;
+      if (!page.css && !page.authoredContext) return;
       parent.dataset.studioPageScope = scope.prefix;
       const boundary = '[data-studio-page-scope="' + scope.prefix.replace(/["\\]/g, '\\$&') + '"]';
-      const temporary = doc.createElement('style'); temporary.media = 'not all'; temporary.textContent = materialize(page.css);
+      const temporary = doc.createElement('style'); temporary.media = 'not all'; temporary.textContent = materialize(page.css || '');
       doc.head.appendChild(temporary);
       const keyframes = scope.keyframes = new Map();
       function collectKeyframes(list) {
@@ -210,21 +272,25 @@
           else if (rule.cssRules) collectKeyframes(rule.cssRules);
         });
       }
-      function references(text) {
+      function references(text, selector) {
         let result = localReferences(text, scope);
-        scope.domIds.forEach((to, from) => { result = result.replace(new RegExp('#' + from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w-])', 'g'), '#' + win.CSS.escape(to)); });
+        if (selector) scope.domIds.forEach((to, from) => { result = result.replace(new RegExp('#' + from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w-])', 'g'), '#' + win.CSS.escape(to)); });
         return result.replace(/url\(\s*(['"]?)([^)'"\s]+)\1\s*\)/g, (all, quote, path) => path.startsWith('#') || path.startsWith('data:') ? all : 'url("' + resourceUrl(path, resourceUrl(page.basePath || './', base)) + '")');
       }
       function rules(list) {
         return [...list].map(rule => {
           if (rule.type === 1) {
-            const selectors = splitSelectors(references(rule.selectorText)).map(part => {
+            const selectors = splitSelectors(references(rule.selectorText, true)).map(part => {
+              if (page.authoredContext && page.authoredContext.version === 1) return boundary + ' ' + documentSelectors(part.trim(), 'studio-document-html:where([data-studio-document-root="html"])', 'studio-document-body:where([data-studio-document-root="body"])');
               const value = part.trim().replace(/(^|\s)(?:html|body|:root)(?=[\s.#:[>+~]|$)/g, '$1' + boundary);
               return value.includes(boundary) ? value : boundary + ' ' + value;
             }).join(',');
             scopeAnimationNames(rule.style, keyframes);
             return selectors + '{' + references(rule.style.cssText) + '}';
           }
+          // @import cannot be scoped by prefixing selectors. Capture expands
+          // readable imports; leave inaccessible remote sheets out of the host.
+          if (rule.type === 3) return '';
           if (rule.type === 7) { rule.name = keyframes.get(rule.name) || rule.name; return references(rule.cssText); }
           if (rule.cssRules && rule.type !== 7) return rule.cssText.slice(0, rule.cssText.indexOf('{') + 1) + rules(rule.cssRules) + '}';
           return references(rule.cssText);
@@ -233,7 +299,41 @@
       let css = '';
       try { collectKeyframes(temporary.sheet.cssRules); css = rules(temporary.sheet.cssRules); } catch (error) { report(error); }
       temporary.remove();
+      if (page.authoredContext && page.authoredContext.version === 1) {
+        css = ':where(' + boundary + ' [data-studio-document-root="html"]){display:block;font-family:"Times New Roman",serif;font-size:16px;line-height:normal;color:black;text-align:start;}' +
+          ':where(' + boundary + ' [data-studio-document-root="html"]:not([dir])){direction:ltr;}' +
+          ':where(' + boundary + ' [data-studio-document-root="body"]){display:block;margin:8px;}' +
+          ':where(' + boundary + ') *,:where(' + boundary + ') .studio-authored{box-sizing:content-box;}' + css;
+      }
       const style = doc.createElement('style'); style.textContent = css; parent.prepend(style);
+    }
+
+    function authoredAttributes(el, attributes, scope) {
+      Object.entries(attributes || {}).forEach(([key, value]) => {
+        if (/^on/i.test(key) || /^data-studio-/i.test(key) || key === 'srcdoc' || blockedKeys.has(key)) return;
+        let text = localReferences(materialize(value), scope);
+        if (key === 'id') text = scope.domIds.get(String(value)) || scope.prefix + '__dom_' + value;
+        if (['src', 'poster', 'href', 'xlink:href'].includes(key) && !String(value).startsWith('#')) text = resourceUrl(text, base);
+        if (key === 'srcset' || key === 'imagesrcset') text = responsiveSources(value, path => resourceUrl(path, base));
+        try { el.setAttribute(key, text); } catch (_) { /* Invalid authored attribute names are inert. */ }
+      });
+    }
+
+    function pageRoot(page, parent, scope) {
+      const context = page.authoredContext;
+      if (!context || context.version !== 1) return parent;
+      let target = parent;
+      const roots = [{...context.html, tag: 'html'}, {...context.body, tag: 'body'}, ...(context.ancestors || [])];
+      roots.forEach((item, index) => {
+        let tag = String(item.tag || 'div').toLowerCase();
+        if (index < 2) tag = index ? 'studio-document-body' : 'studio-document-html';
+        else if (!/^[a-z][\w-]*$/.test(tag) || ['script', 'style', 'link', 'iframe', 'object', 'embed', 'base', 'meta'].includes(tag)) tag = 'div';
+        const element = doc.createElement(tag);
+        authoredAttributes(element, item.attributes, scope);
+        if (index < 2) element.dataset.studioDocumentRoot = index ? 'body' : 'html';
+        target.appendChild(element); target = element;
+      });
+      return target;
     }
 
     function scopeAnimationNames(style, names) {
@@ -251,19 +351,17 @@
 
     function renderAuthored(node, parent, scope, chain, ownerId, entries) {
       const props = node.props || {};
+      if (props.textNode === true) {
+        const text = doc.createTextNode(node.hidden ? '' : String(props.text == null ? '' : props.text));
+        parent.appendChild(text);
+        if (ownerId == null) authoredTexts.set(node.id, { node, visual: text });
+        return;
+      }
       let tag = String(props.tag || (node.type === 'image' ? 'img' : node.type === 'button' ? 'button' : 'div')).toLowerCase();
       if (!/^[a-z][\w-]*$/.test(tag) || ['script', 'style', 'link', 'iframe', 'object', 'embed', 'base', 'meta'].includes(tag)) tag = 'div';
       const isSvg = tag === 'svg' || parent.namespaceURI === 'http://www.w3.org/2000/svg';
       const el = isSvg ? doc.createElementNS('http://www.w3.org/2000/svg', tag) : doc.createElement(tag);
-      Object.entries(props.attributes || {}).forEach(([key, value]) => {
-        if (/^on/i.test(key) || key === 'srcdoc' || blockedKeys.has(key)) return;
-        let text = localReferences(materialize(value), scope);
-        if (key === 'id') text = scope.domIds.get(String(value)) || scope.prefix + '__dom_' + value;
-        if (['src', 'poster'].includes(key) || key === 'href' && !String(value).startsWith('#')) text = resourceUrl(text, base);
-        if (key === 'srcset') text = String(value).split(',').map(item => { const pair = item.trim().split(/\s+/); return resourceUrl(pair[0], base) + (pair[1] ? ' ' + pair[1] : ''); }).join(', ');
-        if (key === 'href' && /^javascript:/i.test(text)) return;
-        el.setAttribute(key, text);
-      });
+      authoredAttributes(el, props.attributes, scope);
       el.classList.add('studio-node', 'studio-authored');
       el.dataset.studioNode = node.id;
       const entry = { node, wrapper: el, visual: el, scope, flow: false, authored: true, authoredCss: el.style.cssText, editable: ownerId == null, ownerId: ownerId || node.id };
@@ -363,9 +461,9 @@
           const ew = finite(Number(node.style && node.style.width), target.width), eh = finite(Number(node.style && node.style.height), target.height);
           embedded.style.transform = 'scale(' + ew / finite(target.width, 1280) + ',' + eh / finite(target.height, 720) + ')';
           visual.appendChild(embedded);
-          const childScope = makeScope(wrapper.id + '__page', target.nodes);
+          const childScope = makeScope(wrapper.id + '__page', target.nodes, target.authoredContext);
           pageStyles(target, embedded, childScope);
-          renderNodes(target.nodes, embedded, childScope, new Set([...chain, key]), ownerId || node.id, false, entries);
+          renderNodes(target.nodes, pageRoot(target, embedded, childScope), childScope, new Set([...chain, key]), ownerId || node.id, false, entries);
         }
       } else if (node.type === 'instance') {
         const component = model.components && model.components[props.componentId];
@@ -411,13 +509,93 @@
       if (notify) emit('studio-selection', { ids: [...selected] });
     }
 
+    const cameraKey = () => JSON.stringify([model.id, currentPageId, mode]);
+    const camera = () => cameras.get(cameraKey());
+    const clampZoom = value => Math.min(8, Math.max(.03, value));
+
+    function cameraChanged() {
+      const view = camera();
+      if (view) emit('studio-camera', { pageId: currentPageId, zoom: view.zoom, centerX: view.x, centerY: view.y, tool });
+    }
+
+    function applyCamera() {
+      const page = model.pages.find(item => item.id === currentPageId), view = camera();
+      if (!page || !view || disposed) return;
+      zoom = view.zoom;
+      stage.style.width = Math.max(1, finite(page.width, 1280)) + 'px';
+      stage.style.height = Math.max(1, finite(page.height, 720)) + 'px';
+      stage.style.transform = 'translate(' + (-view.x * zoom) + 'px,' + (-view.y * zoom) + 'px) scale(' + zoom + ')';
+      viewport.style.backgroundPosition = (viewport.clientWidth / 2 - view.x * zoom) + 'px ' + (viewport.clientHeight / 2 - view.y * zoom) + 'px';
+      cameraChanged();
+    }
+
     function fit() {
       const page = model.pages.find(item => item.id === currentPageId);
       if (!page || disposed) return;
-      const width = finite(page.width, 1280), height = finite(page.height, 720);
-      zoom = Math.min(1.5, Math.max(.03, Math.min((viewport.clientWidth - 48) / width, (viewport.clientHeight - 48) / height)));
-      stage.style.width = width + 'px'; stage.style.height = height + 'px';
-      stage.style.transform = 'translate(' + (-width * zoom / 2) + 'px,' + (-height * zoom / 2) + 'px) scale(' + zoom + ')';
+      const width = Math.max(1, finite(page.width, 1280)), height = Math.max(1, finite(page.height, 720));
+      cameras.set(cameraKey(), { zoom: Math.min(1.5, clampZoom(Math.min((viewport.clientWidth - 80) / width, (viewport.clientHeight - 80) / height))), x: width / 2, y: height / 2, automatic: true });
+      applyCamera();
+    }
+
+    function restoreCamera() {
+      if (!camera() || camera().automatic) fit();
+      else applyCamera();
+    }
+
+    function setZoom(value, anchor) {
+      if (typeof value !== 'number' || !Number.isFinite(value) || disposed) return;
+      if (!camera()) fit();
+      const view = camera();
+      if (!view) return;
+      const next = clampZoom(value), bounds = viewport.getBoundingClientRect();
+      const x = anchor ? anchor.x - bounds.left - viewport.clientWidth / 2 : 0;
+      const y = anchor ? anchor.y - bounds.top - viewport.clientHeight / 2 : 0;
+      view.x += x * (1 / view.zoom - 1 / next);
+      view.y += y * (1 / view.zoom - 1 / next);
+      view.zoom = next; view.automatic = false;
+      applyCamera();
+    }
+
+    function fitSelection() {
+      const bounds = [...selected].map(id => editable.get(id)).filter(entry => entry && !entry.node.hidden).map(entry => entry.wrapper.getBoundingClientRect()).filter(rect => rect.width > 0 && rect.height > 0);
+      if (!bounds.length) return;
+      const board = stage.getBoundingClientRect();
+      const left = Math.min(...bounds.map(rect => rect.left)), top = Math.min(...bounds.map(rect => rect.top));
+      const right = Math.max(...bounds.map(rect => rect.right)), bottom = Math.max(...bounds.map(rect => rect.bottom));
+      const width = (right - left) / zoom, height = (bottom - top) / zoom;
+      cameras.set(cameraKey(), { zoom: clampZoom(Math.min((viewport.clientWidth - 96) / Math.max(1, width), (viewport.clientHeight - 96) / Math.max(1, height))), x: ((left + right) / 2 - board.left) / zoom, y: ((top + bottom) / 2 - board.top) / zoom, automatic: false });
+      applyCamera();
+    }
+
+    function syncTool() {
+      viewport.classList.toggle('studio-hand', mode === 'edit' && (tool === 'hand' || spaceDown));
+      viewport.classList.toggle('studio-panning', !!panGesture);
+      if ((tool === 'hand' || spaceDown) && hovered) { hovered.classList.remove('studio-hovered'); hovered = null; }
+    }
+
+    function setTool(value) {
+      if (value !== 'select' && value !== 'hand') return;
+      cancelGesture(); finishTextEdit(false); tool = value; syncTool(); cameraChanged();
+    }
+
+    function finishPan() {
+      if (!panGesture) return;
+      const completed = panGesture; panGesture = null;
+      if (viewport.hasPointerCapture(completed.pointerId)) viewport.releasePointerCapture(completed.pointerId);
+      syncTool();
+    }
+
+    function wheel(event) {
+      if (mode !== 'edit' || textEdit || gesture || panGesture) return;
+      event.preventDefault();
+      if (event.ctrlKey || event.metaKey) setZoom(zoom * Math.exp(-event.deltaY * .01), { x: event.clientX, y: event.clientY });
+      else {
+        const view = camera(); if (!view) return;
+        const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1;
+        view.x += (event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX) * unit / zoom;
+        view.y += (event.shiftKey && !event.deltaX ? 0 : event.deltaY) * unit / zoom;
+        view.automatic = false; applyCamera();
+      }
     }
 
     function releasePreview() {
@@ -434,12 +612,13 @@
       finishTextEdit(true);
       cancelGesture();
       releasePreview();
-      editable = new Map(); renderedEntries = []; decorated = new Set();
+      editable = new Map(); authoredTexts = new Map(); renderedEntries = []; decorated = new Set();
       stage.replaceChildren();
       htmlFrames.clear();
       hovered = null;
       viewport.classList.toggle('studio-editing', mode === 'edit');
       viewport.classList.toggle('studio-previewing', mode === 'preview');
+      syncTool();
       const page = model.pages.find(item => item.id === currentPageId);
       if (!page) { placeholder(stage, 'Page not found'); return; }
       if (mode === 'preview' && page.migration) navigationContext = Object.assign({}, navigationContext, page.migration.contextSource && page.migration.contextSource.context || page.migration.contextDefaults);
@@ -447,11 +626,11 @@
       stage.style.background = page.background || '#fff';
       const fontRules = Object.values(model.assets || {}).filter(item => /\.(woff2?|ttf|otf)(?:$|[?#])/i.test(item.path || '')).map(item => '@font-face{font-family:"' + String(item.fontFamily || item.name || item.id).replace(/["\\]/g, '\\$&') + '";src:url("' + asset(item.id) + '");font-display:swap;}').join('\n');
       if (fontRules) { const fonts = doc.createElement('style'); fonts.textContent = fontRules; stage.appendChild(fonts); }
-      const scope = makeScope('page_' + page.id, page.nodes);
+      const scope = makeScope('page_' + page.id, page.nodes, page.authoredContext);
       pageStyles(page, stage, scope);
-      renderNodes(page.nodes, stage, scope, new Set(['page:' + page.id]), null, false, renderedEntries);
+      renderNodes(page.nodes, pageRoot(page, stage, scope), scope, new Set(['page:' + page.id]), null, false, renderedEntries);
       select([...selected], false);
-      fit();
+      restoreCamera();
       if (mode === 'preview') {
         const pageEntry = { node: { id: page.id, props: page.props, script: page.script, animation: page.animation }, wrapper: stage, visual: stage, scope, ownerId: page.id };
         startPreview(previewNodeId ? renderedEntries : [pageEntry, ...renderedEntries]);
@@ -485,7 +664,13 @@
     }
 
     function pointerDown(event) {
-      if (mode !== 'edit' || event.button !== 0 || gesture) return;
+      if (mode !== 'edit' || ![0, 1].includes(event.button) || gesture || panGesture) return;
+      if (event.button === 1 || tool === 'hand' || spaceDown) {
+        event.preventDefault(); finishTextEdit(false); viewport.focus({ preventScroll: true });
+        const view = camera(); if (!view) return;
+        panGesture = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, centerX: view.x, centerY: view.y };
+        viewport.setPointerCapture(event.pointerId); syncTool(); return;
+      }
       if (textEdit && textEdit.entry.visual.contains(event.target)) return;
       if (textEdit) finishTextEdit(false);
       viewport.focus({ preventScroll: true });
@@ -551,12 +736,19 @@
     }
 
     function pointerMove(event) {
+      if (panGesture && event.pointerId === panGesture.pointerId) {
+        const view = camera();
+        view.x = panGesture.centerX - (event.clientX - panGesture.x) / zoom;
+        view.y = panGesture.centerY - (event.clientY - panGesture.y) / zoom;
+        view.automatic = false; applyCamera(); return;
+      }
       if (!gesture || event.pointerId !== gesture.pointerId) return;
       gesture.dx = event.clientX - gesture.x; gesture.dy = event.clientY - gesture.y;
       if (!gestureFrame) gestureFrame = win.requestAnimationFrame(updateGesture);
     }
 
     function cancelGesture() {
+      finishPan();
       if (!gesture) return;
       if (gestureFrame) win.cancelAnimationFrame(gestureFrame);
       gestureFrame = 0;
@@ -567,6 +759,7 @@
     }
 
     function pointerUp(event) {
+      if (panGesture && event.pointerId === panGesture.pointerId) { finishPan(); return; }
       if (!gesture || event.pointerId !== gesture.pointerId) return;
       if (gestureFrame) win.cancelAnimationFrame(gestureFrame);
       updateGesture();
@@ -600,7 +793,7 @@
     }
 
     function doubleClick(event) {
-      if (mode !== 'edit') return;
+      if (mode !== 'edit' || tool === 'hand' || spaceDown) return;
       const wrapper = event.target.closest('[data-studio-select-id]');
       const entry = wrapper && editable.get(wrapper.dataset.studioSelectId);
       if (!entry || isLocked(entry) || (entry.node.children || []).length || !(entry.node.type === 'text' || entry.node.type === 'button' || entry.authored && entry.node.props && entry.node.props.text != null)) return;
@@ -807,13 +1000,18 @@
       const newPage = nextDocument.pages.find(page => page.id === nextPageId);
       const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
       const metadata = page => { const value = Object.assign({}, page); delete value.nodes; return value; };
-      let reusable = mode === 'edit' && nextMode === 'edit' && currentPageId === nextPageId && oldPage && newPage && equal(metadata(oldPage), metadata(newPage));
+      let reusable = model.id === nextDocument.id && mode === 'edit' && nextMode === 'edit' && currentPageId === nextPageId && oldPage && newPage && equal(metadata(oldPage), metadata(newPage));
       if (reusable) reusable = ['assets', 'components', 'styles', 'scripts'].every(key => equal(model[key], nextDocument[key]));
       const changes = [];
       function inspect(before, after) {
         if (!Array.isArray(before) || !Array.isArray(after) || before.length !== after.length) return false;
         return before.every((oldNode, index) => {
-          const newNode = after[index], entry = editable.get(oldNode.id);
+          const newNode = after[index], nativeText = authoredTexts.get(oldNode.id), entry = editable.get(oldNode.id);
+          if (nativeText) {
+            if (oldNode.id !== newNode.id || oldNode.type !== newNode.type || !newNode.props?.authored || newNode.props.textNode !== true || (newNode.children || []).length) return false;
+            changes.push({ entry: nativeText, oldNode, newNode, nativeText: true });
+            return true;
+          }
           if (!entry || oldNode.id !== newNode.id || oldNode.type !== newNode.type) return false;
           const oldProps = oldNode.props || {}, newProps = newNode.props || {};
           if (!equal(oldProps, newProps) && (['instance', 'page', 'html', 'svg'].includes(oldNode.type) || !equal(oldProps.attributes, newProps.attributes) || oldProps.styleId !== newProps.styleId || oldProps.html !== newProps.html)) return false;
@@ -823,12 +1021,14 @@
       }
       if (reusable) reusable = inspect(oldPage.nodes || [], newPage.nodes || []);
       cancelGesture();
+      if (nextDocument.id !== model.id) cameras.clear();
       model = clone(nextDocument); currentPageId = nextPageId; mode = nextMode;
       if (mode === 'edit') navigationContext = {};
       previewNodeId = next.previewNodeId || null;
       if (!reusable) { redraw(); if (next.selectedIds) select(next.selectedIds, false); return false; }
-      changes.forEach(({ entry, oldNode, newNode }) => {
+      changes.forEach(({ entry, oldNode, newNode, nativeText }) => {
         const props = newNode.props || {};
+        if (nativeText) { entry.node = newNode; entry.visual.textContent = newNode.hidden ? '' : String(props.text == null ? '' : props.text); return; }
         const oldStyle = resolvedStyle(oldNode), newStyle = resolvedStyle(newNode);
         Object.keys(oldStyle).forEach(key => { if (!(key in newStyle) && !layoutKeys.has(key)) entry.visual.style.removeProperty(key.replace(/[A-Z]/g, match => '-' + match.toLowerCase())); });
         entry.node = newNode;
@@ -869,9 +1069,9 @@
       board.style.width = finite(page.width, 640) + 'px'; board.style.height = finite(page.height, 480) + 'px';
       overlay.appendChild(board); stage.appendChild(overlay);
       overlayEntries = [];
-      const scope = makeScope('overlay_' + page.id, page.nodes);
+      const scope = makeScope('overlay_' + page.id, page.nodes, page.authoredContext);
       pageStyles(page, board, scope);
-      renderNodes(page.nodes, board, scope, new Set(['page:' + page.id]), '__overlay', false, overlayEntries);
+      renderNodes(page.nodes, pageRoot(page, board, scope), scope, new Set(['page:' + page.id]), '__overlay', false, overlayEntries);
       overlayStop = startPreview(overlayEntries);
       return overlay;
     }
@@ -893,7 +1093,7 @@
       else if (event.data.type === 'studio-custom-console') emit('studio-console', { nodeId, level: event.data.level, args: event.data.args });
     };
     const hoverOver = event => {
-      if (mode !== 'edit' || gesture) return;
+      if (mode !== 'edit' || gesture || panGesture || tool === 'hand' || spaceDown) return;
       const next = event.target.closest('[data-studio-select-id]');
       if (next === hovered) return;
       if (hovered) hovered.classList.remove('studio-hovered');
@@ -909,6 +1109,11 @@
       if (event.key === 'Escape') { cancelGesture(); if (mode === 'edit') select([], true); else closeOverlay(); return; }
       if (mode !== 'edit' || event.target.isContentEditable || event.target.closest('input, textarea')) return;
       const key = event.key.toLowerCase(), modifier = event.metaKey || event.ctrlKey;
+      if (key === ' ' && !modifier) { event.preventDefault(); spaceDown = true; syncTool(); return; }
+      if (!modifier && !event.altKey && ['v', 'h'].includes(key)) { event.preventDefault(); setTool(key === 'h' ? 'hand' : 'select'); return; }
+      if (event.shiftKey && event.code === 'Digit1') { event.preventDefault(); fit(); return; }
+      if (event.shiftKey && event.code === 'Digit2') { event.preventDefault(); fitSelection(); return; }
+      if (modifier && ['+', '=', '-', '0'].includes(key)) { event.preventDefault(); setZoom(key === '0' ? 1 : zoom * (key === '-' ? 1 / 1.2 : 1.2)); return; }
       let action = null;
       if (modifier && key === 'z') action = event.shiftKey ? 'redo' : 'undo';
       else if (modifier && key === 'y') action = 'redo';
@@ -916,6 +1121,9 @@
       else if (key === 'delete' || key === 'backspace') action = 'delete';
       if (action) { event.preventDefault(); emit('studio-shortcut', { action }); }
     };
+    const keyUp = event => { if (event.key === ' ') { spaceDown = false; syncTool(); } };
+    const blur = () => { spaceDown = false; cancelGesture(); syncTool(); };
+    viewport.addEventListener('wheel', wheel, { passive: false });
     viewport.addEventListener('pointerdown', pointerDown);
     viewport.addEventListener('pointermove', pointerMove);
     viewport.addEventListener('pointerover', hoverOver);
@@ -925,14 +1133,17 @@
     viewport.addEventListener('dblclick', doubleClick);
     viewport.addEventListener('lostpointercapture', cancelGesture);
     viewport.addEventListener('keydown', keyDown);
+    win.addEventListener('keyup', keyUp);
+    win.addEventListener('blur', blur);
     doc.addEventListener('visibilitychange', onVisibility);
     win.addEventListener('message', htmlMessage);
-    const resize = new win.ResizeObserver(fit); resize.observe(viewport);
+    const resize = new win.ResizeObserver(restoreCamera); resize.observe(viewport);
     redraw();
     return {
       version: VERSION,
       update,
-      select: ids => select(ids, false), fit,
+      select: ids => select(ids, false), fit, fitSelection, setZoom, setTool,
+      get camera() { return Object.assign({}, camera(), { tool }); },
       setMode: (next, nodeId) => { mode = next === 'preview' ? 'preview' : 'edit'; if (mode === 'edit') navigationContext = {}; previewNodeId = nodeId || null; redraw(); },
       navigate, openOverlay,
       get document() { return clone(model); },
@@ -944,7 +1155,8 @@
         if (disposed) return;
         finishTextEdit(true); cancelGesture(); disposed = true; releasePreview(); resize.disconnect();
         doc.removeEventListener('visibilitychange', onVisibility);
-        win.removeEventListener('message', htmlMessage); htmlFrames.clear();
+        win.removeEventListener('message', htmlMessage);
+        win.removeEventListener('keyup', keyUp); win.removeEventListener('blur', blur); htmlFrames.clear();
         root.replaceChildren();
       }
     };
@@ -969,7 +1181,9 @@
           send({ type: 'studio-rendered', pageId: data.pageId });
         } else if (instance && data.type === 'studio-select') instance.select(data.ids);
         else if (instance && data.type === 'studio-mode') instance.setMode(data.mode, data.previewNodeId);
-        else if (instance && data.type === 'studio-fit') instance.fit();
+        else if (instance && data.type === 'studio-fit') data.selection ? instance.fitSelection() : instance.fit();
+        else if (instance && data.type === 'studio-zoom') instance.setZoom(data.zoom);
+        else if (instance && data.type === 'studio-tool') instance.setTool(data.tool);
         else if (instance && data.type === 'studio-navigate') instance.navigate(data.pageId);
         else if (instance && data.type === 'studio-open') instance.openOverlay(data.pageId);
       } catch (error) { send({ type: 'studio-error', message: error.message }); }
