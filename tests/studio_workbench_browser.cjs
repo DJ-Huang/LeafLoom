@@ -271,7 +271,7 @@ async function main(){
   await require('./studio_polish_workflows.cjs')({page,request,info,checks});
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({ok:true,checks,temp},null,2));
- }catch(error){if(page)try{await page.screenshot({path:path.join(temp,'failure.png'),fullPage:true});fs.writeFileSync(path.join(temp,'failure.html'),await page.content());}catch{}console.error('Studio browser fixture retained at '+temp);throw error;}
+ }catch(error){if(page)try{const evidence=path.join(root,'.cache/studio-qa');fs.mkdirSync(evidence,{recursive:true});await page.screenshot({path:path.join(evidence,'workbench-failure.png'),fullPage:true});fs.writeFileSync(path.join(temp,'failure.html'),await page.content());fs.writeFileSync(path.join(evidence,'workbench-failure.json'),JSON.stringify({message:error.message,checks,errors},null,2));}catch{}console.error('Studio browser fixture retained at '+temp);throw error;}
  finally{await browser?.close();server.kill('SIGTERM');}
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

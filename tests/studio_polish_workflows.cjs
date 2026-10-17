@@ -29,7 +29,8 @@ module.exports=async function polishWorkflows({page,request,info,checks}){
  const brandValue=await canvas().locator('[data-studio-select-id="home-n1"]').first().evaluate(el=>getComputedStyle(el).getPropertyValue('--forma-accent').trim());assert.equal(brandValue,'#245fb3');
  await page.screenshot({path:path.join(evidence,'polish-forma-rebranded.png'),fullPage:true});
  await page.locator('.dw-toolbar').getByRole('button',{name:'返回项目',exact:true}).click();await page.locator('.design-project-title').getByText('My FORMA Studio',{exact:true}).click();
- await canvas().getByText('northstar',{exact:true}).first().waitFor();
+ await canvas().locator('[data-studio-select-id="home-n3"]').filter({hasText:'northstar'}).waitFor();
+ assert.match(await canvas().locator('[data-studio-select-id="home-n3"]').innerText(),/^northstar/);
  const formaDownload=page.waitForEvent('download');await page.locator('.dw-toolbar').getByRole('button',{name:'导出',exact:true}).click();await (await formaDownload).saveAs(path.join(evidence,'polish-forma.zip'));
  checks.push('polish-forma-brand-contact-linked-palette-reopen-export');
  await page.locator('.dw-toolbar').getByRole('button',{name:'返回项目',exact:true}).click();
