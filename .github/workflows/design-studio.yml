@@ -77,10 +77,6 @@ jobs:
           .venv/bin/python tests/studio_migration_interactions_browser.py
       - name: Install Chrome for full-stack acceptance
         run: npx --yes playwright@1.64.0 install --with-deps chrome
-      - name: Native Electron publishing acceptance
-        run: |
-          npm rebuild electron --prefix desktop
-          LEAFLOOM_TEST_PYTHON=.venv/bin/python xvfb-run -a desktop/node_modules/.bin/electron tests/studio_native_publishing.cjs
       - name: Workbench editing, navigation and recovery
         run: node tests/studio_workbench_browser.cjs
       - name: Render comparison evidence
@@ -91,3 +87,24 @@ jobs:
           path: .cache/studio-qa/
           if-no-files-found: ignore
           include-hidden-files: true
+  native-publishing:
+    # Exercise Electron with its normal sandbox, without Linux SUID helper changes.
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.0'
+      - run: npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
+      - run: uv sync --locked --no-dev
+      - name: Native Electron publishing acceptance
+        run: |
+          npm rebuild electron --prefix desktop
+          LEAFLOOM_TEST_PYTHON=.venv/bin/python desktop/node_modules/.bin/electron tests/studio_native_publishing.cjs

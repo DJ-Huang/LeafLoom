@@ -1,10 +1,11 @@
 'use strict';
 // Real Electron integration (not part of Node mock unit suite):
 // npm rebuild electron --prefix desktop
-// LEAFLOOM_TEST_PYTHON=python xvfb-run -a desktop/node_modules/.bin/electron tests/studio_native_publishing.cjs
+// macOS: LEAFLOOM_TEST_PYTHON=python desktop/node_modules/.bin/electron tests/studio_native_publishing.cjs
+// Linux (with a configured Chromium sandbox): prefix that command with xvfb-run -a
 // Uses only synthetic fixture data and a private Python stdio bridge. No servers,
 // browser downloads, OS credentials, real projects or external network required.
-const {app, BrowserWindow, session} = require('../desktop/node_modules/electron');
+const {app, BrowserWindow, session} = require('electron');
 const assert = require('node:assert/strict');
 const {spawn} = require('node:child_process');
 const {createInterface} = require('node:readline');
@@ -15,6 +16,9 @@ const {prepareManifest, renderManifest} = require('../desktop/design-publisher.c
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'leafloom-native-electron-'));
 app.setPath('userData', profile);
 app.disableHardwareAcceleration();
+// Each page owns a short-lived offscreen window. Keep the test alive between
+// pages, including after destroying the final window before backend verification.
+app.on('window-all-closed', () => {});
 let bridge;
 const pending = [];
 async function main() {
