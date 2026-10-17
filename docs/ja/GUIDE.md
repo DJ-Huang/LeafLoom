@@ -8,6 +8,8 @@
 
 **開発者向け：** ソースのルートで、Windows は `Dev.cmd`、macOS 14+ Apple Silicon は `Dev.command` をダブルクリックします。Mac の Terminal では `sh Dev.sh` も使えます。コピーやダウンロードで実行権限が失われた場合は、最初に `chmod +x Dev.command Dev.sh` を実行してください。両環境で `node scripts/dev-desktop.cjs` も利用できます。Node 22+ と uv が必要で、初回は依存関係を自動インストールします。デスクトップをソースから起動し、フロントエンドの変更を自動反映します。Dev はインストール版とユーザー設定・モデル・認証情報・デスクトップデータを共有し、バックエンドも同じ設定のポート（既定は 18080）を使います。開発依存関係のみ `.cache/desktop-dev/.venv` に保存し、Vite は 5173 を使用します。切り替え前に現在のアプリを終了してください。分離した検証には一時的な `VAULT_RAG_HOME` を明示します。Python/Electron の変更後はトレイから終了して再起動します。[ソース開発](../DESKTOP.md#source-development)を参照してください。
 
+**任意のブラウザー開発：** [2 つの Terminal での起動手順](../DESKTOP.md#optional-browser-development)に従い、Vite を `http://127.0.0.1:5173` で起動してから `uv run --locked python scripts/dev-browser.py --home /tmp/leafloom-browser-dev --port 36229 --loopback-ui` を実行します。表示された `http://localhost:36229/` を専用ブラウザープロファイルで開いてください。必須の home は新規／空のディレクトリ、またはこの起動スクリプトが印を付けたものに限ります。ポートと UI モードは固定され、変更には新しい home とプロファイルが必要です。`--loopback-ui` を省くと通常の `app.<installation-id>.localhost` 管理画面を使います。実際のランタイムとバックグラウンド処理を動かし、モデルの自動取得や外部 AI 呼び出しは行いません。影響のある管理対象ブラウザーでは別オリジンの HTML プレビューに制限が残る場合があります。安全性の警告は回避しないでください。Linux デスクトップのインストール対応ではありません。
+
 旧 Dev 設定は復旧用に `.cache/desktop-dev/` に保持し、インストール版の設定を上書きしません。共有データ保存先に `models/` がない場合のみ旧モデルをコピーし、元ファイルと既存のモデルフォルダーは保持します。
 
 従来のリポジトリ起動スクリプトは削除しました。インストール済みアプリは自身のショートカットとメニューで管理します。開発中は Dev を使い、そのトレイ／メニューバーから終了するか、起動した Terminal で Ctrl+C を押してください。

@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Add an optional browser developer launcher with an explicitly isolated state directory and Vite frontend. Opt-in `--loopback-ui` uses literal `localhost` for managed-browser compatibility while preserving authentication and separate HTML-project origins; project previews may still be affected. Normal desktop launches and supported installer platforms are unchanged.
+
 - Build Windows x64 and Mac arm64 installers on GitHub when a matching version tag is pushed; prepare a manually published Release draft with verified SHA-256 checksums. Keep manual artifact-only builds and protect published releases from replacement. Certificate-free Mac builds use ad-hoc signing without notarization.
 
 - Rename the settings sidebar entry and page title from AI integration to Skill.

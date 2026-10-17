@@ -8,6 +8,8 @@
 
 **开发者：** 在源码目录中，Windows 双击 `Dev.cmd`；macOS 14+ Apple 芯片双击 `Dev.command`，也可在终端运行 `sh Dev.sh`。若下载或复制后丢失执行权限，先运行一次 `chmod +x Dev.command Dev.sh`。两端也可运行 `node scripts/dev-desktop.cjs`。需要 Node 22+ 和 uv，首次启动自动安装依赖。桌面端直接运行源码，前端修改后自动更新，无需手动构建。Dev 与安装版完全共用用户配置、模型、凭据和桌面数据，后端沿用同一份配置中的端口（默认 18080）；只有开发依赖保存在 `.cache/desktop-dev/.venv`，Vite 使用 5173。切换前先退出当前应用；隔离验证时显式设置临时 `VAULT_RAG_HOME`。修改 Python/Electron 后从托盘退出并重新启动。详见[源码开发](../DESKTOP.md#source-development)。
 
+**可选浏览器开发：** 按[双终端启动步骤](../DESKTOP.md#optional-browser-development)先在 `http://127.0.0.1:5173` 启动 Vite，再运行 `uv run --locked python scripts/dev-browser.py --home /tmp/leafloom-browser-dev --port 36229 --loopback-ui`，用专用浏览器 profile 打开输出的 `http://localhost:36229/`。必填的 home 须为新建／空目录或由此启动器标记过的目录；标记固定端口与界面模式，更改时使用全新目录及 profile。省略 `--loopback-ui` 则保留 `app.<installation-id>.localhost` 管理界面。真实运行时与后台工作正常启用，不自动下载模型或调用外部 AI。受影响的受管浏览器仍可能无法预览独立来源的 HTML 项目，请勿绕过安全警告。这是浏览器开发入口，不代表支持 Linux 桌面安装。
+
 旧 Dev 配置保留在 `.cache/desktop-dev/` 中供恢复，不覆盖安装版配置。共享数据目录尚无 `models/` 时会复制复用旧模型并保留原文件；已有模型目录保持不变。
 
 旧仓库启动入口已移除。安装版通过自己的快捷方式和菜单管理；开发时使用 Dev，通过开发实例自己的托盘／菜单栏退出，或在启动终端按 Ctrl+C。
