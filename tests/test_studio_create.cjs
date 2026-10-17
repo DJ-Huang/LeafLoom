@@ -30,7 +30,7 @@ async function main(){
  button(view,'note.md').props.onClick();find(view,item=>item.props.className==='tree-more'&&item.props['aria-label']==='管理 Projects').props.onClick({currentTarget:{focus(){}}});
  assert.deepEqual(picked,['Projects','Projects/Child']);assert.deepEqual(opened,['note.md']);assert.deepEqual(managed,[['menu','Projects']]);
  const directoryOnly=tree.render('DirectoryTree',{...treeProps,dirsOnly:true});assert.equal(all(directoryOnly,item=>item.props.className==='tree-more').length,0);assert.equal(all(directoryOnly,item=>item.type==='button'&&text(item)==='note.md').length,0);
- for(const template of ['blank','forma']){
+ for(const template of ['blank','forma','motion']){
   const requests=[],notices=[];let resolveCreate,rejectCreate;
   const api=(endpoint,body)=>{requests.push({endpoint,body});if(body)return new Promise((resolve,reject)=>{resolveCreate=resolve;rejectCreate=reject;});return Promise.resolve({projects:[{directory:'Projects/Child/MyProject',name:'My project',managed:true}],selected:null});};
   const studio=component('design-studio.tsx',{api}),props={root:'/vault',active:true,initialFolder:'',onOpenNote(){},onOpenFolder(){},notify:value=>notices.push(value),refresh:0};
@@ -53,7 +53,7 @@ async function main(){
   // Invoke the same closure twice without a render: state alone cannot guard it.
   const handler=create().props.onClick,first=handler(clickEvent()),duplicate=handler(clickEvent());
   assert.equal(requests.length,1,'Same-tick duplicate create is blocked by synchronous guard');
-  assert.equal(requests[0].body.directory,'Projects/Child/MyProject');assert.equal(requests[0].body.name,'My project');assert.equal(requests[0].body.template_id,template==='forma'?'forma':undefined);
+  assert.equal(requests[0].body.directory,'Projects/Child/MyProject');assert.equal(requests[0].body.name,'My project');assert.equal(requests[0].body.template_id,template==='blank'?undefined:template);
   render();assert.equal(createForm().props['aria-busy'],true);
   assert.equal(find(view,item=>item.type==='fieldset'&&item.props.className==='pad design-create-form').props.disabled,true);
   assert.equal(button(view,'正在创建…').props.disabled,true);assert.equal(button(view,'取消').props.disabled,true);

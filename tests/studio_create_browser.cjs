@@ -51,7 +51,7 @@ async function main(){
   const target=()=>dialog().locator('.design-target-preview code').last();
   const open=async(template,slug)=>{await home().click();await dialog().locator('[data-template-id="'+template+'"]').click();await folder().fill(slug);await displayName().fill('Creation regression '+template);await treeButton('Projects').waitFor();};
   const unchanged=async(before,label,count=0)=>{await page.waitForTimeout(100);assert.equal(creationRequests.length,count,label+': no creation request');assert.deepEqual(snapshot(info.root),before,label+': no filesystem changes');};
-  for(const template of ['blank','forma']){
+  for(const template of ['blank','forma','motion']){
    for(const dismissal of ['cancel','escape']){
     const slug='Uncreated-'+template+'-'+dismissal,before=snapshot(info.root);
     await open(template,slug);
@@ -70,7 +70,7 @@ async function main(){
     checks.push(template+'-directory-mouse-keyboard-root-field-enter-'+dismissal+'-zero-creates');
    }
   }
-  for(const [index,template] of ['blank','forma'].entries()){
+  for(const [index,template] of ['blank','forma','motion'].entries()){
    const slug='Created-'+template,directory='Projects/BranchA/'+slug;
    await open(template,slug);await treeButton('Projects').click();await treeButton('BranchA').click();
    assert.equal(await parent().innerText(),'/Projects/BranchA');assert.equal(await target().innerText(),'/'+directory);
@@ -88,7 +88,7 @@ async function main(){
     await dialog().locator('.modal-footer .primary').evaluate(button=>{button.click();button.click();});
     await page.waitForTimeout(100);assert.equal(creationRequests.length,index+1,'One explicit create, despite duplicate activation');
     assert.equal(creationRequests.at(-1).directory,directory);
-    assert.equal(creationRequests.at(-1).template_id,template==='forma'?'forma':undefined);
+    assert.equal(creationRequests.at(-1).template_id,template==='blank'?undefined:template);
     assert.equal(await folder().isDisabled(),true);assert.equal(await displayName().isDisabled(),true);
     assert.equal(await rootButton().isDisabled(),true);assert.equal(await treeButton('BranchA').isDisabled(),true);
     for(const input of await dialog().locator('input, select').all())assert.equal(await input.isDisabled(),true,'All creation fields stay frozen while request is in flight');
@@ -99,7 +99,7 @@ async function main(){
    await dialog().waitFor({state:'detached'});await page.locator('.dw-toolbar strong').filter({hasText:'Creation regression '+template}).waitFor();
    assert.equal(creationRequests.length,index+1);
    const saved=await request('design/document?directory='+encodeURIComponent(directory));
-   assert.equal(saved.document.name,'Creation regression '+template);assert.equal(saved.document.pages.length,template==='forma'?4:1);
+   assert.equal(saved.document.name,'Creation regression '+template);assert.equal(saved.document.pages.length,template==='forma'?4:template==='motion'?3:1);
    assert.ok(fs.existsSync(path.join(info.root,directory)));
    await page.locator('.dw-toolbar').getByRole('button',{name:'返回项目',exact:true}).click();
    const all=await request('design/projects');assert.equal(all.projects.filter(project=>project.directory===directory).length,1);
@@ -109,7 +109,7 @@ async function main(){
   await page.locator('.design-project-title').getByText('Existing studio',{exact:true}).click();
   await page.locator('.dw-toolbar strong').filter({hasText:'Existing studio'}).waitFor();
   await page.locator('.dw-toolbar').getByRole('button',{name:'返回项目',exact:true}).click();
-  await unchanged(afterCreation,'Open existing project',2);
+  await unchanged(afterCreation,'Open existing project',3);
   assert.deepEqual(snapshot(path.join(info.root,'ExistingStudio')),existingBefore,'Existing project bytes are unchanged');
   checks.push('existing-project-open-keeps-files-and-does-not-create');
   assert.deepEqual(pageErrors,[]);

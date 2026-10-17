@@ -1,6 +1,6 @@
 import {Diagnostic,t,useLocale} from './i18n';
 import React,{useCallback,useEffect,useRef,useState} from 'react';
-import {CheckCircle2,ExternalLink,Folder,FolderOpen,Layers,Maximize,Minimize,MessageSquare,Palette,Plus,RefreshCw,Save} from 'lucide-react';
+import {CheckCircle2,ExternalLink,Folder,FolderOpen,Layers,Maximize,Minimize,MessageSquare,Palette,Play,Plus,RefreshCw,Save} from 'lucide-react';
 import {api,Change,OpenNote} from './api';
 import {Modal} from './ui';
 import {DirectoryTree} from './tree';
@@ -120,7 +120,7 @@ export function DesignStudio({
  const [parentFolder,setParentFolder]=useState('');
  const [folderSlug,setFolderSlug]=useState('NewDesignProject');
  const [projectName,setProjectName]=useState('');
- const [templateId,setTemplateId]=useState<'blank'|'forma'>('blank');
+ const [templateId,setTemplateId]=useState<'blank'|'forma'|'motion'>('blank');
  const [preset,setPreset]=useState('mobile-portrait');
  const [customWidth,setCustomWidth]=useState(720);
  const [customHeight,setCustomHeight]=useState(1560);
@@ -371,7 +371,7 @@ export function DesignStudio({
     root,managed:true,
     directory:targetDirectory,
     name:projectName.trim()||folderSlug.trim()||targetDirectory.split('/').pop(),
-    ...(templateId==='forma'?{template_id:'forma'}:{preset,width:customWidth,height:customHeight}),
+    ...(templateId!=='blank'?{template_id:templateId}:{preset,width:customWidth,height:customHeight}),
    });
    setCreateOpen(false);
    notify(t('已创建设计项目：')+res.project.name);
@@ -554,6 +554,11 @@ export function DesignStudio({
          <input type="radio" name="design-template" value="forma" checked={templateId==='forma'} onChange={()=>setTemplateId('forma')}/>
          <span className="design-template-art design-template-forma"><img src="/api/design/templates/forma/preview" alt={t('design.template.formaPreview')}/></span>
          <span className="design-template-copy"><strong>FORMA <small>{t('design.template.builtIn')}</small></strong><span>{t('design.template.formaDescription')}</span><span className="design-template-meta"><Layers size={13} aria-hidden="true"/>{t('design.template.formaLayers')}</span></span>
+        </label>
+        <label data-template-id="motion" className={'design-template-card'+(templateId==='motion'?' selected':'')}>
+         <input type="radio" name="design-template" value="motion" checked={templateId==='motion'} onChange={()=>setTemplateId('motion')}/>
+         <span className="design-template-art design-template-motion" aria-hidden="true"><span className="design-motion-orbit"/><span className="design-motion-word">Motion<br/><i>Playground.</i></span><span className="design-motion-label">01 / PLAY &amp; LEARN</span></span>
+         <span className="design-template-copy"><strong>Motion Playground <small>{t('design.template.builtIn')}</small></strong><span>{t('design.template.motionDescription')}</span><span className="design-template-meta"><Play size={13} aria-hidden="true"/>{t('design.template.motionModes')}</span></span>
         </label>
        </div>
       </fieldset>

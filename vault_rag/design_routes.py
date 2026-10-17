@@ -30,7 +30,11 @@ def design_router(studio):
     @router.get('/templates/{template_id}/preview')
     async def template_preview(template_id: str):
         from vault_rag.design_templates import template_path
-        return FileResponse(template_path(template_id) / 'preview.jpg', media_type='image/jpeg')
+        path = template_path(template_id) / 'preview.jpg'
+        if not path.is_file():
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail='Template uses an inline preview')
+        return FileResponse(path, media_type='image/jpeg')
 
     @router.get('/document')
     async def read_document(directory: str, page_id: str | None = None, manifest: bool = False, root: str | None = None, view: bool = False):

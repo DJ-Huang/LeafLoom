@@ -8,9 +8,9 @@ TEMPLATES = Path(__file__).parent / 'design_assets' / 'templates'
 
 
 def template_path(template_id: str) -> Path:
-    if template_id != 'forma':
+    if template_id not in ('forma', 'motion'):
         raise ValueError('未知的内置设计模板')
-    return TEMPLATES / 'forma'
+    return TEMPLATES / template_id
 
 
 def load_template(template_id: str) -> dict:

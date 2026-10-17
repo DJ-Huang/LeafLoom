@@ -1577,5 +1577,7 @@
   "桌面页边距": "Desktop gutter",
   "手机页边距": "Mobile gutter",
   "区块间距": "Section spacing",
-  "卡片间距": "Card spacing"
+  "卡片间距": "Card spacing",
+  "design.template.motionDescription": "A playable motion lab: entrance, hover, click feedback and interactive scripts, editable layer by layer.",
+  "design.template.motionModes": "Editor animations + JavaScript · Ready to play"
 }

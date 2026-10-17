@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Add the playable Motion Playground built-in template with editable native animation and JavaScript examples, a touch layout and in-project guide. Respect live reduced-motion settings, support focus/touch hover feedback, and avoid accumulating animations on repeated interaction.
+
 - Polish everyday Design Studio editing with marquee selection, snapping guides, keyboard nudging, rendered-coordinate alignment/distribution, selection scaling and auto-layout reordering. Add visual sizing, typography, effects, image crop, linked reusable styles and component overrides/reset; show import fidelity and pending-save recovery explicitly. Extend isolated acceptance with content-sized cards, FORMA rebranding and edited HTML ZIP replay.
 
 - Fix directory browsing accidentally submitting Design Studio creation. Require explicit creation, show parent and target paths, validate folder names and guard repeated clicks for blank and FORMA projects.

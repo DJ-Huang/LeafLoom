@@ -1591,3 +1591,6 @@ SVG 外部对象内容已省略|SVG foreignObject contents are omitted|SVG forei
 手机页边距|Mobile gutter|モバイル余白
 区块间距|Section spacing|セクション間隔
 卡片间距|Card spacing|カード間隔
+
+design.template.motionDescription|可试玩的动效实验室：入场、悬停、点击反馈与交互脚本，逐层可编辑。|A playable motion lab: entrance, hover, click feedback and interactive scripts, editable layer by layer.|登場・ホバー・クリックの動きと対話スクリプトを、レイヤーごとに編集して試せる実験室。
+design.template.motionModes|编辑器动画 + JavaScript · 可直接试玩|Editor animations + JavaScript · Ready to play|エディターアニメーション + JavaScript・すぐに体験

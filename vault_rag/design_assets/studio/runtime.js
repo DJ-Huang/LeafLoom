@@ -160,7 +160,7 @@
     let overlayEntries = [];
     let overlayStop = null;
     const runtimeState = Object.create(null);
-    const tracked = { listeners: 0, timers: 0, frames: 0, animations: 0 };
+    const tracked = { listeners: 0, timers: 0, frames: 0, animations: 0, ownedResources: 0 };
     const htmlFrames = new Map();
     const viewport = doc.createElement('div');
     viewport.className = 'studio-viewport';
@@ -1173,6 +1173,7 @@
         });
       }
       const registry = moduleRegistry(model, base);
+      const reducedMotion = typeof win.matchMedia === 'function' ? win.matchMedia('(prefers-reduced-motion: reduce)') : null;
       const sharedEvents = new win.EventTarget();
       const frameCallbacks = new Set();
       let frameId = 0;
@@ -1189,16 +1190,22 @@
         resources.urls = [];
       });
       function context(entry) {
-        const owned = [];
+        const owned = new Set();
         const guard = fn => (...args) => { if (disposed || groupDisposed || token !== generation) return; try { return fn(...args); } catch (error) { report(error, entry.node.id); } };
         const own = (fn, kind) => {
           let active = true;
           if (kind) tracked[kind] += 1;
-          const stop = () => { if (!active) return; active = false; if (kind) tracked[kind] -= 1; fn(); };
-          if (disposed || groupDisposed || token !== generation) stop(); else owned.push(stop);
+          const stop = () => {
+            if (!active) return;
+            active = false; owned.delete(stop); tracked.ownedResources -= 1;
+            if (kind) tracked[kind] -= 1;
+            fn();
+          };
+          owned.add(stop); tracked.ownedResources += 1;
+          if (disposed || groupDisposed || token !== generation) stop();
           return stop;
         };
-        groupCleanup.push(() => owned.splice(0).reverse().forEach(fn => { try { fn(); } catch (error) { report(error, entry.node.id); } }));
+        groupCleanup.push(() => [...owned].reverse().forEach(fn => { try { fn(); } catch (error) { report(error, entry.node.id); } }));
         const on = (target, type, listener, opts) => {
           if (typeof target === 'string') { opts = listener; listener = type; type = target; target = entry.visual; }
           const wrapped = guard(listener); target.addEventListener(type, wrapped, opts); return own(() => target.removeEventListener(type, wrapped, opts), 'listeners');
@@ -1249,9 +1256,38 @@
           const definition = presetFrames(animation.preset);
           if (definition) {
             const frames = nativePresetFrames(entry, definition);
-            const play = () => ctx.animate(frames, animationOptions(animation));
+            const automatic = !['click', 'hover'].includes(animation.trigger);
+            let activeAnimation = null;
+            // A preset owns one effect for its entire preview lifetime. Replaying
+            // replaces it rather than retaining a cleanup closure for every input.
+            const stop = () => {
+              if (!activeAnimation) return;
+              const previous = activeAnimation; activeAnimation = null;
+              tracked.animations -= 1; previous.cancel();
+            };
+            const play = () => {
+              stop();
+              if (reducedMotion && reducedMotion.matches) return;
+              activeAnimation = entry.visual.animate(frames, animationOptions(animation));
+              tracked.animations += 1;
+            };
+            groupCleanup.push(stop);
+            if (reducedMotion) ctx.on(reducedMotion, 'change', () => {
+              if (reducedMotion.matches) stop();
+              else if (automatic) play();
+            });
             if (animation.trigger === 'click') ctx.on('click', play);
-            else if (animation.trigger === 'hover') ctx.on('mouseenter', play);
+            else if (animation.trigger === 'hover') {
+              ctx.on('mouseenter', play);
+              ctx.on('focusin', play);
+              ctx.on('pointerdown', event => { if (event.pointerType === 'touch' || event.pointerType === 'pen') play(); });
+              // Preserve authored tab order and native controls, while making
+              // otherwise non-focusable hover examples reachable by keyboard.
+              if (entry.visual.tabIndex < 0 && !entry.visual.hasAttribute('tabindex')) {
+                entry.visual.setAttribute('tabindex', '0');
+                groupCleanup.push(() => { if (entry.visual.getAttribute('tabindex') === '0') entry.visual.removeAttribute('tabindex'); });
+              }
+            }
             else play();
           }
         }

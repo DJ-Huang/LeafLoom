@@ -275,6 +275,144 @@ class StudioRuntimeBrowserTests(unittest.TestCase):
         self.assertEqual(node.evaluate("el=>getComputedStyle(el).scale"), "1.5 2")
         self.assertEqual(node.evaluate("el=>getComputedStyle(el).rotate"), "30deg")
 
+    def test_presets_respect_initial_and_live_reduced_motion(self):
+        nodes = [{"id": trigger, "type": "button", "props": {"text": trigger},
+                  "style": {"x": index * 150, "y": 80, "width": 120, "height": 60},
+                  "animation": {"preset": "fade" if trigger == "load" else "breathe", "trigger": trigger,
+                                "duration": 10000, "iterations": "Infinity"}}
+                 for index, trigger in enumerate(("load", "click", "hover"))]
+        self.page.emulate_media(reduced_motion="reduce")
+        self.mount(nodes, mode="preview")
+        self.page.evaluate("""() => {
+          document.querySelector('[data-studio-node=click] button').click();
+          document.querySelector('[data-studio-node=hover] button').focus();
+        }""")
+        self.assertEqual(self.page.evaluate("instance.debugStats.animations"), 0)
+        self.assertEqual(self.page.evaluate("document.querySelector('.studio-stage').getAnimations({subtree:true}).length"), 0)
+        self.assertEqual(self.page.locator('[data-studio-node=load] button').evaluate("el=>getComputedStyle(el).opacity"), "1")
+
+        self.page.emulate_media(reduced_motion="no-preference")
+        self.page.wait_for_function("instance.debugStats.animations===1")
+        self.assertEqual(self.page.locator('[data-studio-node=click] button').evaluate("el=>el.getAnimations().length"), 0)
+        self.assertEqual(self.page.locator('[data-studio-node=hover] button').evaluate("el=>el.getAnimations().length"), 0)
+        self.page.evaluate("""() => {
+          document.querySelector('[data-studio-node=click] button').click();
+          document.querySelector('[data-studio-node=hover] button').dispatchEvent(new MouseEvent('mouseenter'));
+        }""")
+        self.assertEqual(self.page.evaluate("instance.debugStats.animations"), 3)
+        self.page.emulate_media(reduced_motion="reduce")
+        self.page.wait_for_function("instance.debugStats.animations===0")
+        self.assertEqual(self.page.evaluate("document.querySelector('.studio-stage').getAnimations({subtree:true}).length"), 0)
+        self.assertEqual(self.page.locator('[data-studio-node=load] button').evaluate("el=>getComputedStyle(el).opacity"), "1")
+        self.page.evaluate("instance.dispose()")
+        self.page.emulate_media(reduced_motion="no-preference")
+        self.assertEqual(self.page.evaluate("instance.debugStats.listeners"), 0)
+        self.assertEqual(self.page.evaluate("instance.debugStats.animations"), 0)
+        self.assertEqual(self.page.evaluate("events.filter(e=>e.type==='studio-error')"), [])
+
+    def test_hover_presets_support_keyboard_and_touch_without_replacing_tab_order(self):
+        self.mount([{"id": "hover", "type": "shape", "style": {"x": 80, "y": 80, "width": 120, "height": 60},
+                     "animation": {"preset": "breathe", "trigger": "hover", "duration": 10000}},
+                    {"id": "authored", "type": "element", "props": {"authored": True, "tag": "div", "attributes": {"tabindex": "-1"}},
+                     "animation": {"preset": "breathe", "trigger": "hover"}}], mode="preview")
+        hover = self.page.locator('[data-studio-node=hover] .studio-content')
+        self.assertEqual(hover.get_attribute("tabindex"), "0")
+        self.assertEqual(self.page.locator('[data-studio-node=authored]').get_attribute("tabindex"), "-1")
+        self.page.locator('.studio-viewport').focus()
+        self.page.keyboard.press("Tab")
+        self.assertTrue(hover.evaluate("el=>el===document.activeElement"))
+        self.assertEqual(hover.evaluate("el=>el.getAnimations().length"), 1)
+        hover.evaluate("el=>{window.previousPreset=el.getAnimations()[0];el.blur();}")
+        hover.dispatch_event("pointerdown", {"pointerType": "touch", "pointerId": 1, "isPrimary": True})
+        self.assertEqual(self.page.evaluate("previousPreset.playState"), "idle")
+        self.assertEqual(hover.evaluate("el=>el.getAnimations().length"), 1)
+        self.assertEqual(self.page.evaluate("instance.debugStats.animations"), 1)
+        self.page.evaluate("instance.setMode('edit')")
+        self.assertIsNone(self.page.locator('[data-studio-node=hover] .studio-content').get_attribute("tabindex"))
+        self.assertEqual(self.page.evaluate("instance.debugStats.animations"), 0)
+
+    def test_replaying_presets_replaces_effects_and_keeps_resources_bounded(self):
+        self.mount([{"id": trigger, "type": "button", "props": {"text": trigger},
+                     "style": {"x": index * 150, "y": 80, "width": 120, "height": 60},
+                     "animation": {"preset": "breathe", "trigger": trigger, "duration": 10000}}
+                    for index, trigger in enumerate(("click", "hover"))], mode="preview")
+        result = self.page.evaluate("""() => {
+          const click=document.querySelector('[data-studio-node=click] button');
+          const hover=document.querySelector('[data-studio-node=hover] button');
+          const listeners=instance.debugStats.listeners;
+          click.click();hover.dispatchEvent(new MouseEvent('mouseenter'));
+          const first=[click.getAnimations()[0],hover.getAnimations()[0]];
+          first.forEach(animation=>animation.finish());
+          let peak=0;
+          for(let index=0;index<200;index++) {
+            click.click();hover.dispatchEvent(new MouseEvent('mouseenter'));
+            peak=Math.max(peak,instance.debugStats.animations);
+          }
+          return {peak,firstStates:first.map(animation=>animation.playState),
+            effects:[click.getAnimations().length,hover.getAnimations().length],
+            listenersBefore:listeners,listenersAfter:instance.debugStats.listeners};
+        }""")
+        self.assertEqual(result["peak"], 2)
+        self.assertEqual(result["firstStates"], ["idle", "idle"])
+        self.assertEqual(result["effects"], [1, 1])
+        self.assertEqual(result["listenersBefore"], result["listenersAfter"])
+        for _ in range(3):
+            self.page.evaluate("instance.setMode('edit')")
+            stats = self.page.evaluate("instance.debugStats")
+            for key in ("listeners", "timers", "frames", "animations", "objectUrls", "previewGroups"):
+                self.assertEqual(stats[key], 0, key)
+            self.page.evaluate("instance.setMode('preview');document.querySelector('[data-studio-node=click] button').click()")
+            self.assertEqual(self.page.evaluate("instance.debugStats.animations"), 1)
+        self.page.evaluate("instance.dispose()")
+        self.assertEqual(self.page.evaluate("instance.debugStats.animations"), 0)
+        self.assertEqual(self.page.evaluate("instance.debugStats.listeners"), 0)
+
+    def test_stopped_script_resources_release_bookkeeping_and_dispose_in_reverse_order(self):
+        source = """export function mount(ctx) {
+          globalThis.scriptContext=ctx;globalThis.cleanupOrder=[];globalThis.lateCallbacks=0;
+          const target=new EventTarget(),remove=target.removeEventListener.bind(target);
+          target.removeEventListener=(type,...args)=>{cleanupOrder.push(type);remove(type,...args);};
+          ctx.on(target,'first',()=>{});ctx.on(target,'second',()=>{});
+          ctx.el.dataset.ready='true';
+          return()=>{cleanupOrder.push('script');delete globalThis.scriptContext;};
+        }"""
+        self.mount([{"id": "scripted", "type": "shape", "style": {"width": 120, "height": 60},
+                     "script": {"source": source}}], mode="preview")
+        self.page.wait_for_function("document.querySelector('[data-studio-node=scripted] .studio-content').dataset.ready==='true'")
+        result = self.page.evaluate("""async () => {
+          const ctx=scriptContext,before=instance.debugStats;
+          for(let index=0;index<500;index++) {
+            const stopFrame=ctx.onFrame(()=>{lateCallbacks++;});
+            const stopListener=ctx.onEvent('transient',()=>{});
+            stopFrame();stopFrame();stopListener();stopListener();
+          }
+          const afterStops=instance.debugStats,settled=[];
+          for(let batch=0;batch<8;batch++) {
+            await Promise.all(Array.from({length:50},()=>new Promise(resolve=>ctx.setTimeout(resolve,0))));
+            settled.push(instance.debugStats.ownedResources);
+          }
+          return {before,afterStops,afterTimers:instance.debugStats,settled,lateCallbacks};
+        }""")
+        self.assertEqual(result["afterStops"]["ownedResources"], result["before"]["ownedResources"])
+        self.assertEqual(result["afterStops"]["listeners"], result["before"]["listeners"])
+        self.assertEqual(result["afterStops"]["frames"], 0)
+        self.assertEqual(result["settled"], [result["before"]["ownedResources"]] * 8)
+        self.assertEqual(result["afterTimers"]["timers"], 0)
+        self.assertEqual(result["lateCallbacks"], 0)
+        self.page.evaluate("""() => {
+          scriptContext.onFrame(()=>{lateCallbacks++;});
+          scriptContext.setTimeout(()=>{lateCallbacks++;},0);
+          scriptContext.setInterval(()=>{lateCallbacks++;},1);
+          instance.dispose();
+        }""")
+        self.page.wait_for_timeout(50)
+        self.assertEqual(self.page.evaluate("cleanupOrder"), ["script", "second", "first"])
+        self.assertEqual(self.page.evaluate("lateCallbacks"), 0)
+        stats = self.page.evaluate("instance.debugStats")
+        for key in ("listeners", "timers", "frames", "animations", "ownedResources", "objectUrls", "previewGroups"):
+            self.assertEqual(stats[key], 0, key)
+        self.assertEqual(self.page.evaluate("events.filter(e=>e.type==='studio-error')"), [])
+
     def test_embedded_pages_namespace_css_keyframes_and_inline_names(self):
         def target(page_id, end, inline=False):
             return {"id": page_id, "width": 100, "height": 100,
