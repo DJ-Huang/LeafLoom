@@ -15,8 +15,21 @@ assert.deepEqual(ids(new Set(['page:child'])),['group','child','sibling']);
 assert.deepEqual(ids(new Set(['other:group'])),['group','child','leaf','sibling']);
 const rows=exported.visibleLayers(nodes,new Set(),'page');assert.equal(rows[2].parentId,'child');assert.equal(rows[2].depth,2);assert.equal(nodes[0].children.length,1);
 
+// Model the CSSStyleDeclaration methods used by runtime redraw/static cleanup.
+// Keep direct camelCase assignments working, as they do in a browser.
+class Style {
+ constructor(){Object.defineProperty(this,'priorities',{value:new Map()});}
+ key(name){return name.replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase());}
+ setProperty(name,value,priority=''){this[this.key(name)]=String(value);this.priorities.set(name,priority);}
+ getPropertyValue(name){return this[this.key(name)]||'';}
+ getPropertyPriority(name){return this.priorities.get(name)||'';}
+ removeProperty(name){const previous=this.getPropertyValue(name);delete this[this.key(name)];this.priorities.delete(name);return previous;}
+ *[Symbol.iterator](){for(const name of Object.keys(this))yield name.replace(/[A-Z]/g,letter=>'-'+letter.toLowerCase());}
+}
+const styleContract=new Style();styleContract.animation='spin 1s';assert.equal(styleContract.removeProperty('animation'),'spin 1s');assert.equal(styleContract.getPropertyValue('animation'),'');styleContract.setProperty('background-color','red','important');assert.equal(styleContract.backgroundColor,'red');assert.equal(styleContract.getPropertyPriority('background-color'),'important');assert.equal(styleContract.removeProperty('background-color'),'red');assert.equal(styleContract.getPropertyPriority('background-color'),'');
+
 class Element {
- constructor(doc){this.ownerDocument=doc;this.style={};this.children=[];this.dataset={};this.listeners={};this.clientWidth=1000;this.clientHeight=800;this.captured=new Set();const classes=new Set();this.classList={add:(...items)=>items.forEach(x=>classes.add(x)),remove:(...items)=>items.forEach(x=>classes.delete(x)),contains:item=>classes.has(item),toggle:(item,on)=>on?classes.add(item):classes.delete(item)};}
+ constructor(doc){this.ownerDocument=doc;this.style=new Style();this.children=[];this.dataset={};this.listeners={};this.clientWidth=1000;this.clientHeight=800;this.captured=new Set();const classes=new Set();this.classList={add:(...items)=>items.forEach(x=>classes.add(x)),remove:(...items)=>items.forEach(x=>classes.delete(x)),contains:item=>classes.has(item),toggle:(item,on)=>on?classes.add(item):classes.delete(item)};}
  setAttribute(){} appendChild(child){this.children.push(child);child.parentElement=this;return child;} prepend(child){this.children.unshift(child);} replaceChildren(...children){this.children=children;children.forEach(child=>child.parentElement=this);} querySelectorAll(){return [];} querySelector(){return null;} addEventListener(type,fn){this.listeners[type]=fn;} removeEventListener(type){delete this.listeners[type];} focus(){} getBoundingClientRect(){return {left:0,top:0,width:this.clientWidth,height:this.clientHeight};} setPointerCapture(id){this.captured.add(id);} hasPointerCapture(id){return this.captured.has(id);} releasePointerCapture(id){this.captured.delete(id);}
 }
 let resized;

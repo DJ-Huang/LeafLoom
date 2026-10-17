@@ -3,6 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const {execFileSync}=require('node:child_process');
+const {performance}=require('node:perf_hooks');
 module.exports=async function publishingWorkflows({page,request,info,checks}){
  const root=path.resolve(__dirname,'..'),python=process.env.LEAFLOOM_PYTHON||path.join(root,'.venv/bin/python'),directory='PublishingWorkflow',evidence=path.join(root,'.cache/studio-qa');
  fs.mkdirSync(evidence,{recursive:true});
@@ -16,7 +17,7 @@ module.exports=async function publishingWorkflows({page,request,info,checks}){
  await page.reload();await page.locator('.sidebar').getByRole('button',{name:'设计工作台',exact:true}).click();await page.locator('.design-project-title').getByText('Publishing Workflow',{exact:true}).click();
  const inspector=()=>page.locator('.dw-inspector'),canvas=()=>page.frameLocator('.dw-runtime'),node=id=>canvas().locator('[data-studio-node="'+id+'"]').first();
  await node('title-1').waitFor();
- const mutate=async action=>{const result=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/design/operations'&&response.request().method()==='POST');result.catch(()=>{});await action();const response=await result;assert.ok(response.ok(),await response.text());await page.locator('.dw-save-status').filter({hasText:'已保存'}).waitFor();};
+ const mutate=async (action,endpoint='design/operations')=>{const result=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/'+endpoint&&response.request().method()==='POST');result.catch(()=>{});await action();const response=await result;assert.ok(response.ok(),await response.text());await page.locator('.dw-save-status').filter({hasText:'已保存'}).waitFor();};
  const field=async(label,value)=>{const input=inspector().getByLabel(label,{exact:true});if(await input.inputValue()===String(value))return;await mutate(async()=>{await input.fill(String(value));await input.blur();});};
  const dataTab=()=>inspector().getByRole('button',{name:'数据',exact:true}).click();
  const variant=async id=>{await inspector().getByTestId('studio-variant').selectOption(id);await page.waitForTimeout(100);};
@@ -39,16 +40,19 @@ module.exports=async function publishingWorkflows({page,request,info,checks}){
  // The variant layout editor changes only the variant; toolbar history still works.
  await select('Editable collection title');const sourceStyle=JSON.stringify((await read()).document.pages[0].nodes[1].style);
  await field('宽度',550);saved=await read();assert.equal(saved.document.variants.ja.layout['title-1'].width,550);assert.equal(JSON.stringify(saved.document.pages[0].nodes[1].style),sourceStyle);
- await mutate(()=>page.locator('.dw-toolbar').getByRole('button',{name:/^撤销/}).click());assert.equal((await read()).document.variants.ja.layout['title-1'].width,undefined);
- await mutate(()=>page.locator('.dw-toolbar').getByRole('button',{name:/^重做/}).click());assert.equal((await read()).document.variants.ja.layout['title-1'].width,550);
- await node('title-1').filter({hasText:'クリエイティブ'}).waitFor();await page.getByTestId('studio-mode-preview').click();await node('title-1').filter({hasText:'クリエイティブ'}).waitFor();await page.getByTestId('studio-mode-edit').click();
+ await mutate(()=>page.locator('.dw-toolbar').getByRole('button',{name:/^撤销/}).click(),'design/history');assert.equal((await read()).document.variants.ja.layout['title-1'].width,undefined);
+ await mutate(()=>page.locator('.dw-toolbar').getByRole('button',{name:/^重做/}).click(),'design/history');assert.equal((await read()).document.variants.ja.layout['title-1'].width,550);
+ await node('title-1').filter({hasText:'クリエイティブ'}).waitFor();await page.getByTestId('studio-mode-preview').click();await page.waitForFunction(()=>document.querySelector('[data-testid="studio-mode-preview"]')?.getAttribute('aria-pressed')==='true');await node('title-1').filter({hasText:'クリエイティブ'}).waitFor();await page.getByTestId('studio-mode-edit').click();await page.waitForFunction(()=>document.querySelector('[data-testid="studio-mode-edit"]')?.getAttribute('aria-pressed')==='true');
  await variant('zh');await node('title-1').filter({hasText:'创意作品集'}).waitFor();
  checks.push('publishing-variant-layout-history-and-preview-projection');
  // An explicit fit request must respect both limits, or leave content unchanged.
  await field('page.1.title · 变体值','Long publishing title '.repeat(12));await field('高度',30);
  await openPublish();await page.getByRole('dialog').getByRole('button',{name:'检查当前画布',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'按边界适配文字',exact:true}).first().waitFor();
  const beforeFit=(await read()).document.variants.zh.layout['title-1'].fontSize;
- await page.getByRole('dialog').getByRole('button',{name:'按边界适配文字',exact:true}).first().click();await page.waitForTimeout(600);
+ await page.evaluate(()=>{window.__publishingFitResult=null;const receive=event=>{const frame=document.querySelector('.dw-runtime');if(event.source===frame?.contentWindow&&event.data?.type==='studio-fit-text-result'){window.__publishingFitResult=event.data;window.removeEventListener('message',receive);}};window.addEventListener('message',receive);});
+ await page.getByRole('dialog').getByRole('button',{name:'按边界适配文字',exact:true}).first().click();await page.waitForFunction(()=>window.__publishingFitResult!==null);
+ const fitResult=await page.evaluate(()=>window.__publishingFitResult);assert.equal(fitResult.nodeId,'title-1');
+ if(fitResult.patch){await page.locator('.dw-save-status').filter({hasText:'已保存'}).waitFor();assert.ok(fitResult.patch.style.fontSize>=12&&fitResult.patch.style.fontSize>=beforeFit*.8);}else assert.ok(fitResult.warnings?.length,'An unsuccessful fit must explain its readable limits');
  const afterFit=(await read()).document.variants.zh.layout['title-1'].fontSize;assert.ok(afterFit>=12&&afterFit>=beforeFit*.8);assert.equal(JSON.stringify((await read()).document.pages[0].nodes[1].style),sourceStyle);
  await page.screenshot({path:path.join(evidence,'publishing-preflight.png'),fullPage:true});await closePublish();
  await field('page.1.title · 变体值','创意作品集 1');await field('高度',190);
@@ -70,16 +74,32 @@ module.exports=async function publishingWorkflows({page,request,info,checks}){
  await dialog.getByRole('button',{name:'重试失败项',exact:true}).click();await dialog.locator('progress').evaluate(el=>new Promise(resolve=>{const tick=()=>el.value===1?resolve():requestAnimationFrame(tick);tick();}));assert.equal(retryBody.root,info.root);assert.equal(retryBody.expected_revision,undefined);
  await page.unroute('**/api/design/publish');await page.unroute('**/api/design/publish/test-transient-ui/retry');checks.push('publishing-simulated-transient-status-and-frozen-retry-ui');
  // Real 5-page x 3-locale PNG batch, with every PNG header inspected.
- const download=async filename=>{await dialog.getByRole('link',{name:'下载发布文件',exact:true}).waitFor({timeout:180000});const event=page.waitForEvent('download');await dialog.getByRole('link',{name:'下载发布文件',exact:true}).click();const file=await event;assert.equal(await file.failure(),null);const destination=path.join(evidence,filename);await file.saveAs(destination);return destination;};
- const startReal=async()=>{const previous=await dialog.locator('.dw-publish-job a').count()?await dialog.locator('.dw-publish-job a').getAttribute('href'):null;const response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/design/publish'&&r.request().method()==='POST');await dialog.getByTestId('publish-start').click();assert.ok((await response).ok());await page.waitForFunction(old=>{const link=document.querySelector('.dw-publish-job a');return !link||link.getAttribute('href')!==old;},previous);};
- await startReal();const zip=await download('publishing-5x3.zip');
+ const timings={},started={};
+ const download=async(filename,format)=>{
+  await dialog.getByRole('link',{name:'下载发布文件',exact:true}).waitFor({timeout:180000});
+  const ready=performance.now(),event=page.waitForEvent('download');await dialog.getByRole('link',{name:'下载发布文件',exact:true}).click();
+  const file=await event;assert.equal(await file.failure(),null);const destination=path.join(evidence,filename);await file.saveAs(destination);
+  const finished=performance.now();timings[format]={...timings[format],publishElapsedMs:Math.round(ready-started[format]),downloadElapsedMs:Math.round(finished-ready),totalElapsedMs:Math.round(finished-started[format])};
+  return destination;
+ };
+ const startReal=async format=>{
+  const previous=await dialog.locator('.dw-publish-job a').count()?await dialog.locator('.dw-publish-job a').getAttribute('href'):null;
+  const response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/design/publish'&&r.request().method()==='POST');
+  started[format]=performance.now();const startedAt=new Date().toISOString();await dialog.getByTestId('publish-start').click();
+  const accepted=await response;assert.ok(accepted.ok(),await accepted.text());const job=await accepted.json();
+  timings[format]={startedAt,jobId:job.job_id,outputs:job.total,renderer:'headless',scope:'Submit click to artifact visible; includes polling latency. Download measured separately.'};
+  await page.waitForFunction(old=>{const link=document.querySelector('.dw-publish-job a');return !link||link.getAttribute('href')!==old;},previous);
+ };
+ await startReal('png');const zip=await download('publishing-5x3.zip','png');
  const pngResult=JSON.parse(execFileSync(python,['-c',"import sys,json,zipfile,struct;z=zipfile.ZipFile(sys.argv[1]);names=[n for n in z.namelist() if n.endswith('.png')];print(json.dumps([{'name':n,'size':struct.unpack('>II',z.read(n)[16:24])} for n in names]))",zip],{encoding:'utf8'}));assert.equal(pngResult.length,15);assert.ok(pngResult.every(item=>item.size[0]===720&&item.size[1]===900));
  await page.screenshot({path:path.join(evidence,'publishing-5x3-completed.png'),fullPage:true});await closePublish();await openPublish();assert.equal(await page.getByRole('dialog').getByRole('link',{name:'下载发布文件',exact:true}).count(),1);
  checks.push('publishing-real-15-png-dimensions-and-modal-reopen');
+ fs.writeFileSync(path.join(evidence,'publishing-report.json'),JSON.stringify({png:pngResult,timings,fit:{beforeFit,afterFit},checks:checks.filter(item=>item.startsWith('publishing-'))},null,2));
  // One real multipage PDF in variant/page selection order.
  await dialog.getByLabel('输出格式',{exact:true}).selectOption('pdf');await dialog.getByTestId('publish-check').click();await dialog.getByText('发布检查通过',{exact:true}).waitFor({timeout:30000});
- await startReal();const pdf=await download('publishing-5x3.pdf');
+ await startReal('pdf');const pdf=await download('publishing-5x3.pdf','pdf');
  const pdfResult=JSON.parse(execFileSync(python,['-c',"import sys,json;from pypdf import PdfReader;r=PdfReader(sys.argv[1]);print(json.dumps({'pages':len(r.pages),'sizes':[[float(p.mediabox.width),float(p.mediabox.height)] for p in r.pages]}))",pdf],{encoding:'utf8'}));assert.equal(pdfResult.pages,15);assert.ok(pdfResult.sizes.every(([w,h])=>Math.abs(w-540)<1&&Math.abs(h-675)<1));
- fs.writeFileSync(path.join(evidence,'publishing-report.json'),JSON.stringify({png:pngResult,pdf:pdfResult,fit:{beforeFit,afterFit},checks:checks.filter(item=>item.startsWith('publishing-'))},null,2));
- checks.push('publishing-real-multipage-pdf-count-and-dimensions');await closePublish();
+ checks.push('publishing-real-multipage-pdf-count-and-dimensions');
+ fs.writeFileSync(path.join(evidence,'publishing-report.json'),JSON.stringify({png:pngResult,pdf:pdfResult,timings,fit:{beforeFit,afterFit},checks:checks.filter(item=>item.startsWith('publishing-'))},null,2));
+ await closePublish();
 };
