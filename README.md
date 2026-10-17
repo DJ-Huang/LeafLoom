@@ -131,6 +131,8 @@ cd LeafLoom
 3. First launch prepares a separate Python environment and dependencies, then opens the source desktop with automatic frontend updates. Dev shares the installed app's user settings, models and data. Only development dependencies stay in `.cache/desktop-dev/.venv`. Quit the running app before switching modes. The local search model is prepared only when requested in settings.
 4. Choose a language, try the fictional demo or connect your folder, then explicitly select what to search.
 
+**Optional browser development:** Run the real backend with a dedicated state directory and browser profile, without Electron. The opt-in `--loopback-ui` mode uses literal `localhost` when a managed browser cannot open `*.localhost`; isolated HTML project previews may still be affected. See [setup and limits](docs/DESKTOP.md#optional-browser-development). This does not add Linux desktop installer support.
+
 </details>
 
 [📖 User guide and FAQ](docs/en/GUIDE.md) · [✨ AI connections](docs/en/AI.md)

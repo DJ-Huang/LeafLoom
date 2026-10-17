@@ -16,7 +16,9 @@
 - [Public website build, downloads and GitHub Pages maintenance](WEBSITE.md)
 
 - [Desktop installation, builds and ChatGPT connection](DESKTOP.md)
+- [GitHub dual-platform builds, Release drafts and retries](DESKTOP.md#automatic-release-drafts)
 - [Run the source desktop with automatic frontend updates](DESKTOP.md#source-development)
+- [Optional browser development, isolated state and managed-browser limits](DESKTOP.md#optional-browser-development)
 - [Desktop installation and source development setup](SETUP.md)
 - [HTML project folders, sessions, storage migration and Safari compatibility](HTML_PROJECTS.md)
 - [Design Studio workflows, portable documents, scripts and validation boundaries](DESIGN_STUDIO.md)

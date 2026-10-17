@@ -92,7 +92,72 @@ The launcher synchronizes Python 3.12 into `.cache/desktop-dev/.venv`, verifies 
 
 React, TypeScript and CSS edits update through Vite HMR; some edits trigger a page reload. Save pending work before changes that require reloads. Python and Electron main/preload changes require **Quit** from the tray/menu bar, then relaunch. Closing the window leaves it running in the tray. Quit also stops the owned backend and Vite; Ctrl+C requests the same normal quit. If an unsaved-draft prompt appears, resolve it in the desktop window. Do not force-close the terminal while work is pending. A busy Vite/backend port is reported instead of attaching to another service. If another desktop instance is already running, the existing window is activated; quit it before starting a different mode.
 
-The workspace retains its `app.<installation-id>.localhost` origin. Only an unpackaged Electron run forwards `LEAFLOOM_DEV_SERVER` to its private sidecar. In this explicit mode, the backend fetches Vite's index and module assets without forwarding cookies or tokens; API authentication, CSRF checks and HTML-project routing remain in the backend. Development CSP permits the React preamble and the loopback HMR WebSocket. Packaged runs strip the development variable, and the regular web service never enables it implicitly.
+The source desktop workspace retains its `app.<installation-id>.localhost` origin. Only an unpackaged Electron run forwards `LEAFLOOM_DEV_SERVER` to its private sidecar; the optional browser launcher below explicitly configures its own development frontend. In this explicit mode, the backend fetches Vite's index and module assets without forwarding cookies or tokens; API authentication, CSRF checks and HTML-project routing remain in the backend. Development CSP permits the React preamble and the loopback HMR WebSocket. Packaged runs strip the development variable, and the regular web service never enables it implicitly.
+
+### Optional browser development
+
+Use `scripts/dev-browser.py` to run the actual application in a browser without
+Electron, including in a compatible Linux development environment. This is a
+source-development entry point, not a supported Linux desktop installation.
+Normal Windows/Mac Dev and installed-app launches are unchanged.
+
+Normal launches keep the existing configured port (default `18080`); the UI,
+file API and `/mcp` remain on that one backend. This launcher alone defaults to
+`36229` in its separate state directory. It does not rewrite the installed app's
+port, credentials or tunnel settings, and merging this support does not require
+changing an existing `http://127.0.0.1:18080/mcp` client address.
+
+Install Node 22+ (with npm), uv and Python 3.12+, then run these commands from the
+repository root. On a fresh checkout, create the static directory before editable
+Python installation; Vite supplies the frontend, so a production build is not
+required. These examples use a Unix shell and a disposable development state path.
+
+```sh
+mkdir -p vault_rag/static
+uv sync --locked --python 3.12
+npm ci --prefix web
+```
+
+Start Vite in one terminal and leave it running:
+
+```sh
+npm run dev --prefix web -- --host 127.0.0.1 --port 5173 --strictPort
+```
+
+In a second terminal, start the backend:
+
+```sh
+uv run --locked python scripts/dev-browser.py --home /tmp/leafloom-browser-dev --port 36229 --loopback-ui
+```
+
+Open the printed `http://localhost:36229/` address in a **dedicated development
+browser profile**. The backend binds only to loopback; Vite must be available at
+`http://127.0.0.1:5173`. Open the backend address, not Vite's page. The launcher does
+not start Vite. Save your work before stopping the backend with Ctrl+C, then stop
+Vite separately. Frontend edits use HMR; Python edits require a backend restart.
+
+- `--home` is required and must be a new/empty directory, or one already marked by
+  this launcher. Do not point it at installed-app state or an existing note folder.
+  The marker pins the backend port and UI mode; reusing the home with a different
+  port or mode is rejected. To change either, use a fresh home and browser profile.
+- Without `--loopback-ui`, the management UI keeps its normal
+  `app.<installation-id>.localhost` origin. The opt-in flag uses literal
+  `localhost` for the management UI only. A managed cloud browser exhibited a TLS
+  error for `*.localhost` even with explicit HTTP, while literal `localhost`
+  worked. A browser upgrade/proxy cause has not been established.
+- Keep a browser profile dedicated to this state directory. Cookies do not isolate
+  different ports on `localhost`, and reusing the same browser origin for unrelated
+  homes can mix drafts. Do not reuse that profile for another localhost development
+  instance. Vite stays on `127.0.0.1` so it does not receive the localhost app cookie.
+- The normal runtime and background workers run; this is not a fixture server.
+  The launcher does not download models or invoke external AI automatically. Use
+  fictional/disposable notes, select retrieval scope explicitly, and prepare models
+  only when wanted.
+- Authentication, CSRF, Host/Origin validation and development CSP still apply.
+  Untrusted HTML projects and drafts keep separate `p-` / `d-` project origins;
+  their previews may still fail in browsers affected by the `*.localhost` issue.
+  Do not bypass browser security warnings or move project content onto the
+  management origin to work around it.
 
 ## Build on the target OS
 
@@ -110,6 +175,7 @@ npm ci --prefix desktop
 npm ci --prefix web
 npm run build --prefix web
 python -X utf8 scripts/build_desktop_backend.py
+python -X utf8 scripts/build_tunnel.py
 npm run dist --prefix desktop
 ```
 
@@ -130,10 +196,64 @@ and run `npm start --prefix desktop`. Use a disposable `VAULT_RAG_HOME` for test
 
 ## Signing and release
 
-The `LeafLoom desktop packages` GitHub Actions workflow builds native Windows and
-Mac artifacts without publishing a release. Unsigned packages are test artifacts.
-Enable its `signed` input for public-distribution candidates; signing credentials
-must be configured in repository secrets.
+### Automatic release drafts
+
+The `LeafLoom desktop packages` GitHub Actions workflow builds Windows x64 on
+`windows-2025` and macOS arm64 on `macos-15`. No local build machine is required.
+The Mac job checks that it is actually running on Apple Silicon.
+Its packaging step raises the disposable runner's open-file limit for the signing
+tool's parallel scan of the embedded Python/Torch tree; local Mac builds with an
+`EMFILE` error need a sufficient open-file limit as well.
+
+1. Update the application version in `pyproject.toml`, `vault_rag/__init__.py`,
+   both `web/package.json` and `desktop/package.json`, the root application entries
+   in both npm lockfiles, and the `vault-rag` package in `uv.lock`. Update the three
+   changelogs. Commit the matching versions; CI checks them but never rewrites them.
+2. Push that commit, then create and push its stable `vX.Y.Z` tag. For example,
+   after preparing version 0.1.3: `git tag v0.1.3`, then
+   `git push public v0.1.3`. Use your actual remote name. Do not reuse an existing tag.
+3. In **Actions → LeafLoom desktop packages**, inspect both native builds and their
+   checks. Each build installs locked dependencies and prepares a full private
+   Python backend plus the verified Tunnel runtime. Either platform failing blocks
+   the draft upload job; logs and available acceptance reports remain in Actions.
+4. When both succeed, open the workflow summary's Release draft link. It contains
+   `LeafLoom-X.Y.Z-windows-x64-setup.exe`, `LeafLoom-X.Y.Z-macos-arm64.dmg`,
+   `SHA256SUMS.txt`, signing status, build links and generated release notes.
+   Uploaded file sizes and SHA-256 values are verified against the local outputs.
+5. Review the notes and installers, then click **Publish release** yourself.
+   Drafts are not offered by the app updater or the public website. Manual
+   publication triggers the existing website workflow.
+
+Build jobs have read-only repository access. Only the final draft job receives
+`contents: write`, using GitHub's built-in token; no personal access token is needed.
+Tag runs are serialized. Rerunning a failed job/workflow can replace the same
+draft's generated attachments while preserving edited notes. An upload failure
+may leave a partial draft: inspect it, rerun the failed job and publish only after
+verification succeeds. Already public Releases are rejected before replacement.
+For a source fix, commit a new version and tag instead of moving the old tag.
+There is no automatic public release or automatic version bump.
+
+### Manual builds and certificates
+
+For a build without a Release, use **Actions → LeafLoom desktop packages → Run
+workflow**, select the branch and leave `signed` unchecked. Download installers
+from the `leafloom-Windows-unsigned-test` and `leafloom-macOS-unsigned-test`
+artifacts after success. This entry point never creates or uploads a Release,
+even when a tag is selected. Test a new workflow branch here before its first
+release tag. The workflow must first be present on the default branch for the
+manual entry point to be available.
+
+Tag builds currently require no certificates: Windows is unsigned; Mac uses
+ad-hoc signing (`identity: "-"`), with Hardened Runtime and notarization disabled.
+The workflow selects this explicitly with `LEAFLOOM_UNSIGNED=1`; use the same
+environment variable for matching local builds. SmartScreen/Gatekeeper may warn
+or block installation. CI window acceptance does not prove a downloaded DMG will
+pass Gatekeeper on another Mac. Test the downloaded installers on target machines
+before manual publication; the draft explicitly records the signing limitation.
+
+For certificate-backed manual builds, enable `signed` and configure repository
+secrets below. This retains the existing signing and notarization checks; tag
+drafts remain without trusted signing until that release policy is changed.
 
 - Windows: `WINDOWS_CSC_LINK`, `WINDOWS_CSC_KEY_PASSWORD`. Mac:
   `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`. Local builds use electron-builder's
@@ -142,7 +262,7 @@ must be configured in repository secrets.
   All executables and native libraries in the bundled Python runtime must be signed
   as nested code before notarization; validate the resulting app with Gatekeeper.
 
-No signing credentials are checked into the repository. The workflow fails rather
+No signing credentials are checked into the repository. A signed build fails rather
 than treating a missing certificate as a signed release. App Store submission and
 unattended background installation are outside this version; updates are initiated
 explicitly from Settings.

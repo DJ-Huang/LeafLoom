@@ -1,5 +1,7 @@
 # Your first steps with LeafLoom
 
+Use **Settings → Skill** to install or update the bundled `wiki-search` skill.
+
 [English](GUIDE.md) · [中文](../zh-CN/GUIDE.md) · [日本語](../ja/GUIDE.md)
 
 [All documentation](../README.md)
@@ -7,6 +9,8 @@
 ## Install and open
 
 **Developers:** In a source checkout, double-click `Dev.cmd` on Windows or `Dev.command` on macOS 14+ Apple Silicon; on Mac, `sh Dev.sh` also works in Terminal. Run `chmod +x Dev.command Dev.sh` once if a copied/downloaded checkout loses execute permissions. You can also run `node scripts/dev-desktop.cjs` on either platform. Requires Node 22+ and uv; the first launch installs dependencies. The desktop runs directly from source and frontend edits update automatically. Dev shares the installed app's settings, models, credentials and desktop data, including its configured backend port (18080 by default). Only development dependencies stay in `.cache/desktop-dev/.venv`; Vite uses port 5173. Quit the running app before switching modes. For isolated testing, explicitly set a disposable `VAULT_RAG_HOME`. Quit from the tray before relaunching after Python/Electron edits. See [source development](../DESKTOP.md#source-development).
+
+**Optional browser development:** Follow [the two-terminal setup](../DESKTOP.md#optional-browser-development) to start Vite at `http://127.0.0.1:5173`, then run `uv run --locked python scripts/dev-browser.py --home /tmp/leafloom-browser-dev --port 36229 --loopback-ui`. Open the printed `http://localhost:36229/` in a dedicated browser profile. The required home must be new/empty or previously marked by this launcher; it pins the port and UI mode, so changes require a fresh home and profile. Omitting `--loopback-ui` keeps the normal `app.<installation-id>.localhost` UI. The real runtime and background workers remain active, without automatic model downloads or external AI calls. Separate HTML-project origins may still fail in affected managed browsers; do not bypass security warnings. This is browser development, not Linux desktop installer support.
 
 Previous Dev settings remain in `.cache/desktop-dev/` for recovery and do not override installed settings. If the shared data directory has no `models/` directory, Dev copies the previous model files while keeping the originals; existing model directories are preserved.
 
@@ -26,6 +30,14 @@ Supported: Windows 10/11 x64 and macOS 14+ on Apple Silicon. Linux, Intel Mac an
 Closing the window keeps LeafLoom in the tray/menu bar; use **Quit** to stop the application and its local service. Login startup is off for new installations and can be changed in desktop settings or the tray. To update, open **Settings → General → App updates → Check for updates**. The current and latest versions are shown. Choose **Download and install** to see the percentage and downloaded/total size. After SHA-256 verification, LeafLoom quits normally (including unsaved-draft prompts) and opens the Windows installer or Mac DMG. Complete the installer; on Mac, drag the new app to Applications. Reopen LeafLoom afterward. A canceled quit leaves **Continue installation** available. Failed requests/downloads can be retried. Dev only checks versions; update the source and restart Dev.
 
 The service binds to `127.0.0.1`, normally on port `18080`. See [desktop installation details](../DESKTOP.md) for requirements and validation limits. Developers can use the [source installation instructions](../../README.md#get-started).
+
+For maintainers, pushing a matching `vX.Y.Z` version tag automatically builds both
+installers on GitHub and prepares a Release draft with `SHA256SUMS.txt`. Review the
+Actions results and draft, then publish manually. Failed builds can be rerun;
+published Releases are protected from replacement. Manual **Run workflow** builds
+only provide Actions downloads. Current tag builds have no trusted publisher
+signature (Mac uses ad-hoc signing without notarization), so system warnings or
+blocks remain possible. See [build, retry and release instructions](../DESKTOP.md#automatic-release-drafts).
 
 ## Choose a language and folder
 

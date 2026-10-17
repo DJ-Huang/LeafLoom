@@ -8,7 +8,9 @@ Dev 和安装版共用 Tunnel 配置、应用启动／退出生命周期；存�
 
 一个 Python ASGI 进程提供本地网页、文件 API 与 HTTP MCP；BGE-M3 和向量任务在独立的 `rag_process` 中运行。网页由预构建静态文件提供，Node 只用于安装/构建；模型由检索工作进程延迟加载。正常客户端不通过 stdio 再启动服务或加载模型。
 
-源码桌面开发通过 `Dev.cmd`（Windows）、`Dev.command` / `sh Dev.sh`（Mac）或 `node scripts/dev-desktop.cjs` 启动：Dev 与安装版通过 `desktop/state-home.cjs` 共用同一用户数据目录、配置、模型、凭据与桌面 profile；后端沿用共享配置中的端口（新配置默认 18080），仅开发 Python 环境位于 `.cache/desktop-dev/.venv`，Vite 使用 5173。仅未打包桌面端显式传入开发地址时，`dev_frontend.py` 才从 Vite 获取入口和模块，保留原有工作区域名、API 认证与 HTML 项目隔离；前端通过本机 WebSocket 自动更新。生产桌面端移除该开发变量，普通服务不隐式读取它。详见[桌面开发](DESKTOP.md#source-development)。
+源码桌面开发通过 `Dev.cmd`（Windows）、`Dev.command` / `sh Dev.sh`（Mac）或 `node scripts/dev-desktop.cjs` 启动：Dev 与安装版通过 `desktop/state-home.cjs` 共用同一用户数据目录、配置、模型、凭据与桌面 profile；后端沿用共享配置中的端口（新配置默认 18080），仅开发 Python 环境位于 `.cache/desktop-dev/.venv`，Vite 使用 5173。未打包桌面端显式传入开发地址时，`dev_frontend.py` 从 Vite 获取入口和模块，保留原有工作区域名、API 认证与 HTML 项目隔离；前端通过本机 WebSocket 自动更新。生产桌面端移除该开发变量，普通服务不隐式读取它。详见[桌面开发](DESKTOP.md#source-development)。
+
+可选的 `scripts/dev-browser.py` 显式配置开发前端，直接运行正常 `Runtime` 与后台工作，不使用测试夹具、不自动下载模型或调用外部 AI。`--home` 必填，仅接受新建／空目录或此启动器标记过的专用目录；标记固定端口与界面模式，变更须新建目录并更换浏览器 profile。默认保留 `app.<installation-id>.localhost`，仅显式 `--loopback-ui` 将管理界面改为 `localhost`。Vite 必须单独运行在 `http://127.0.0.1:5173`，避免接收 localhost 管理会话 cookie。此入口不更改常规桌面启动，也不代表支持 Linux 桌面安装，详见[浏览器开发](DESKTOP.md#optional-browser-development)。
 
 生产 MCP 注册位于 `mcp_tools.py`，完整笔记工作流位于 `note_operations.py`，设计项目与图层工作流位于 `design_studio.py`，与网页共用 `Files` 的访问边界；受管设计文档使用独立的版本事务与持久历史。网页模板和日记复用笔记工作流。`mcp_access.py` 在私有配置保存本机凭据哈希与独立权限，Tunnel 凭据只驻留后端内存并通过环境引用注入运行时的发现及调用请求。旧五项只读工具保持原有范围；内部 `/ai-mcp` 允许读取设计项目，但只有用户在当前对话附加的设计项目可以直接应用设计事务。完整 MCP 访问须显式启用，两个连接的写入分别授权。工具、分页、版本与错误契约见 [MCP](MCP.md)。
 
@@ -78,6 +80,8 @@ Markdown 默认在 Tiptap/ProseMirror 正文编辑器中打开，CodeMirror 提�
 仅监听回环地址。Host/Origin 校验、网页会话、写入 CSRF 和 MCP bearer token 分别实施。本机令牌放在私有配置目录，不输出到共享 MCP 示例。macOS 使用 POSIX 权限；Windows 状态目录取消继承并授予当前用户和 SYSTEM 权限，子文件继承此保护，不改用户知识目录 ACL。
 
 HTML 按项目作为独立来源的网站运行；桌面窗口和浏览器共用同一份前端与容器。主界面与项目使用同站不同源的 `.localhost` 地址，原回环网页入口迁移本地草稿后打开主界面，MCP 地址保持不变。原始网页字节不注入脚本，草稿使用临时来源；资源请求在进入管理路由前分流。项目设置、会话与迁移详见 [HTML 网页运行](HTML_PROJECTS.md)。Windows 路径还拒绝备用数据流、设备名、尾随点/空格和无效字符；目录范围与链接解析按 Windows 大小写行为比较，外部路径不能借 junction 越界。
+
+浏览器开发的 `--loopback-ui` 不改变鉴权、CSRF、Host/Origin 校验或开发 CSP，也不将不可信 HTML 与草稿并入管理来源；`p-` / `d-` 项目来源保持独立。受管云浏览器中曾观察到 `*.localhost` 即使显式 HTTP 也报 TLS 错误，而 `localhost` 可用；浏览器升级／代理机制的具体原因尚未证实，项目预览仍可能受限。不要绕过安全警告。每个开发状态目录使用专用浏览器 profile：localhost cookie 不按端口隔离，同一来源用于无关目录还可能混用草稿。
 
 安装和实际 Windows 验收步骤见 [SETUP.md](SETUP.md)。
 

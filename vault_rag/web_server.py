@@ -38,9 +38,11 @@ class StaticCompression:
         app=self.compressed if scope['type']=='http' and not ranged and scope.get('path','').startswith('/assets/') else self.app
         await app(scope,receive,send)
 
-def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,dev_server=None):
+def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,dev_server=None,dev_ui_loopback=False):
     from vault_rag.dev_frontend import DevFrontend
     dev = DevFrontend(dev_server) if dev_server else None
+    if dev_ui_loopback and dev is None:
+        raise ValueError('Loopback UI is only available with an explicit development frontend')
     config=config or LocalConfig()
     if runtime is None:
         from vault_rag.knowledge import Runtime
@@ -48,6 +50,12 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     port=config.data.get('port',18080)
     previews=HtmlPreviews(config)
     websites=HtmlProjects(config,port)
+    if dev_ui_loopback:
+        # Explicit browser-development workaround, never inferred from the OS or
+        # environment. Keep project hosts separate and Vite on 127.0.0.1 so its
+        # WebSocket does not receive the management UI's host-only cookie.
+        websites.ui_host='localhost'
+        websites.ui_origin=f'http://localhost:{port}'
     design=DesignStudio(config,runtime,websites)
     local_dns=LocalDns(websites.install_id,port)
     storage_migration=BrowserStorageMigration(websites.ui_origin,port,config.directory)

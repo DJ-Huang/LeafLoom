@@ -117,14 +117,22 @@ class McpSecurityTests(unittest.TestCase):
 
 
 RUNNER = r'''
-import http.server,json,sys
+import http.server,json,socketserver,sys
 from pathlib import Path
 class Handler(http.server.BaseHTTPRequestHandler):
  def do_GET(self):
   self.send_response(200);self.end_headers()
   self.wfile.write(json.dumps({'components':{'control-plane':{'status':'ok'}}}).encode())
  def log_message(self,*args):pass
-server=http.server.HTTPServer(('127.0.0.1',0),Handler)
+class LoopbackServer(http.server.HTTPServer):
+ def server_bind(self):
+  # HTTPServer normally reverse-resolves 127.0.0.1 with getfqdn(). Hosted
+  # macOS DNS can block that lookup past the lifecycle readiness deadline.
+  # This fixture has a known loopback identity and must not depend on DNS.
+  socketserver.TCPServer.server_bind(self)
+  self.server_name='localhost'
+  self.server_port=self.server_address[1]
+server=LoopbackServer(('127.0.0.1',0),Handler)
 Path(sys.argv[1]).write_text('http://127.0.0.1:'+str(server.server_port))
 print('OAuth discovery failed: 404 metadata missing resource',flush=True)
 server.serve_forever()

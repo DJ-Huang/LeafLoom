@@ -7,7 +7,7 @@ export const settingsSections = [
  {id:'files',get title(){return t("文件与导入");},get description(){return t("在指定目录创建内容，或导入本地文件。");}},
  {id:'templates',get title(){return t("模板与写入");},get description(){return t("设置模板、日记与各类资料的默认位置。");}},
  {id:'index',get title(){return t("检索与索引");},get description(){return t("选择检索资料，查看模型与同步状态。");}},
- {id:'ai',get title(){return t("AI 集成");},get description(){return t("让 AI 从你的本地知识库中查找依据。");}},
+ {id:'ai',get title(){return t("Skill");},get description(){return t("让 AI 从你的本地知识库中查找依据。");}},
  {id:'history',get title(){return t("操作历史");},get description(){return t("查看目录操作和文档版本，恢复需要的内容。");}},
  {id:'trash',get title(){return t("回收区");},get description(){return t("找回已删除的内容，或永久清空回收区。");}},
 ] as const;

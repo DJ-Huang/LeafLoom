@@ -1,10 +1,14 @@
 # 开始使用 LeafLoom · 知织
 
+在 **设置 → Skill** 中安装或更新内置的 `wiki-search` 技能。
+
 [English](../en/GUIDE.md) · [中文](GUIDE.md) · [日本語](../ja/GUIDE.md)
 
 [全部文档](../README.md)
 
 **开发者：** 在源码目录中，Windows 双击 `Dev.cmd`；macOS 14+ Apple 芯片双击 `Dev.command`，也可在终端运行 `sh Dev.sh`。若下载或复制后丢失执行权限，先运行一次 `chmod +x Dev.command Dev.sh`。两端也可运行 `node scripts/dev-desktop.cjs`。需要 Node 22+ 和 uv，首次启动自动安装依赖。桌面端直接运行源码，前端修改后自动更新，无需手动构建。Dev 与安装版完全共用用户配置、模型、凭据和桌面数据，后端沿用同一份配置中的端口（默认 18080）；只有开发依赖保存在 `.cache/desktop-dev/.venv`，Vite 使用 5173。切换前先退出当前应用；隔离验证时显式设置临时 `VAULT_RAG_HOME`。修改 Python/Electron 后从托盘退出并重新启动。详见[源码开发](../DESKTOP.md#source-development)。
+
+**可选浏览器开发：** 按[双终端启动步骤](../DESKTOP.md#optional-browser-development)先在 `http://127.0.0.1:5173` 启动 Vite，再运行 `uv run --locked python scripts/dev-browser.py --home /tmp/leafloom-browser-dev --port 36229 --loopback-ui`，用专用浏览器 profile 打开输出的 `http://localhost:36229/`。必填的 home 须为新建／空目录或由此启动器标记过的目录；标记固定端口与界面模式，更改时使用全新目录及 profile。省略 `--loopback-ui` 则保留 `app.<installation-id>.localhost` 管理界面。真实运行时与后台工作正常启用，不自动下载模型或调用外部 AI。受影响的受管浏览器仍可能无法预览独立来源的 HTML 项目，请勿绕过安全警告。这是浏览器开发入口，不代表支持 Linux 桌面安装。
 
 旧 Dev 配置保留在 `.cache/desktop-dev/` 中供恢复，不覆盖安装版配置。共享数据目录尚无 `models/` 时会复制复用旧模型并保留原文件；已有模型目录保持不变。
 
@@ -27,6 +31,8 @@
 关闭窗口后，LeafLoom 留在托盘／菜单栏；选择 **退出** 才会停止应用及本地服务。新安装默认不开启登录启动，可在桌面设置或托盘中修改。更新时打开 **设置 → 常规 → 应用更新 → 检查更新**，查看当前与最新版本。有新版时选择 **下载并安装**，进度条显示百分比和已下载／总大小。SHA-256 校验通过后，应用正常退出（保留未保存草稿提示），再打开 Windows 安装向导或 Mac DMG；完成安装，Mac 将新版拖入“应用程序”，然后重新打开 LeafLoom。取消退出后可选择 **继续安装**；检查或下载失败可重试。Dev 仅检查版本，更新源码后重新运行 Dev。
 
 服务仅监听本机 `127.0.0.1`，默认端口 `18080`。[桌面安装详情](../DESKTOP.md)包含安装要求与验证边界；开发者可查看[源码安装说明](../../README.md#get-started)。
+
+维护者推送与项目版本一致的 `vX.Y.Z` 标签后，GitHub 会自动构建两个平台的安装包，并生成含 `SHA256SUMS.txt` 的 Release 草稿。检查 Actions 结果和草稿后手动发布；构建失败可重跑，已公开版本禁止覆盖。手动 **Run workflow** 只提供 Actions 附件下载。当前标签构建没有受信任发行签名（Mac 使用临时签名且未公证），系统仍可能提示或拦截。详见[构建、重试与发布步骤](../DESKTOP.md#automatic-release-drafts)。
 
 ## 选择语言与知识库
 

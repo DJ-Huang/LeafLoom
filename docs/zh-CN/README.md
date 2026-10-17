@@ -72,7 +72,7 @@ App Key 由操作系统加密保存。连接随应用启动，关闭窗口留在
 | --- | --- |
 | **MCP** | 将 Codex、Cursor、Claude Code 等客户端接入本地 HTTP MCP：`http://127.0.0.1:18080/mcp`（默认端口）。启用完整访问后可查找、创建、编辑、整理和恢复关联笔记；RAG 保持勾选范围，写入默认关闭。 |
 | **飞书** | 使用自行配置的 lark-cli 验证账号，让 MCP 客户端操作飞书文档与多维表格。本机和 Tunnel 权限分别设置，默认关闭。[接入指南](GUIDE.md#可选飞书接入)。 |
-| **Skill** | 在 **设置 → AI 集成 → 安装技能** 中安装内置的 [`wiki-search` Skill](../../wiki-search/SKILL.md)，引导兼容的 AI 助手完成检索、Wiki 导航与来源核对；MCP 连接需另行配置。 |
+| **Skill** | 在 **设置 → Skill → 安装技能** 中安装内置的 [`wiki-search` Skill](../../wiki-search/SKILL.md)，引导兼容的 AI 助手完成检索、Wiki 导航与来源核对；MCP 连接需另行配置。 |
 | **AI Chat** | 连接受支持、已登录的 CLI，围绕当前笔记或选文对话，打开回答中的引用。先预览修改差异，接受到草稿后再决定何时保存。 |
 
 [配置 AI Chat、MCP 与 Skill](AI.md)
@@ -130,6 +130,8 @@ cd LeafLoom
 2. 安装 Node 22+（含 npm）和 uv。Windows 10/11 x64：双击 `Dev.cmd`。macOS 14+ Apple 芯片：双击 `Dev.command` 或运行 `sh Dev.sh`。
 3. 首次自动准备独立 Python 环境与依赖，打开源码桌面并启用前端自动更新。Dev 与安装版共用用户配置、模型和数据，只有开发依赖位于 `.cache/desktop-dev/.venv`；切换前先退出当前应用。检索模型在设置中按需准备。
 4. 选择语言，体验虚构演示库或关联自己的目录，再明确选择检索范围。
+
+**可选浏览器开发：** 使用专用状态目录和浏览器 profile，在不启动 Electron 的情况下运行真实后端。受管浏览器无法打开 `*.localhost` 时，可显式启用 `--loopback-ui`，让管理界面使用 `localhost`；隔离的 HTML 项目预览仍可能受影响。详见[启动步骤与边界](../DESKTOP.md#optional-browser-development)。这不代表新增 Linux 桌面安装支持。
 
 </details>
 
