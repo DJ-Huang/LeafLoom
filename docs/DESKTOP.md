@@ -92,7 +92,66 @@ The launcher synchronizes Python 3.12 into `.cache/desktop-dev/.venv`, verifies 
 
 React, TypeScript and CSS edits update through Vite HMR; some edits trigger a page reload. Save pending work before changes that require reloads. Python and Electron main/preload changes require **Quit** from the tray/menu bar, then relaunch. Closing the window leaves it running in the tray. Quit also stops the owned backend and Vite; Ctrl+C requests the same normal quit. If an unsaved-draft prompt appears, resolve it in the desktop window. Do not force-close the terminal while work is pending. A busy Vite/backend port is reported instead of attaching to another service. If another desktop instance is already running, the existing window is activated; quit it before starting a different mode.
 
-The workspace retains its `app.<installation-id>.localhost` origin. Only an unpackaged Electron run forwards `LEAFLOOM_DEV_SERVER` to its private sidecar. In this explicit mode, the backend fetches Vite's index and module assets without forwarding cookies or tokens; API authentication, CSRF checks and HTML-project routing remain in the backend. Development CSP permits the React preamble and the loopback HMR WebSocket. Packaged runs strip the development variable, and the regular web service never enables it implicitly.
+The source desktop workspace retains its `app.<installation-id>.localhost` origin. Only an unpackaged Electron run forwards `LEAFLOOM_DEV_SERVER` to its private sidecar; the optional browser launcher below explicitly configures its own development frontend. In this explicit mode, the backend fetches Vite's index and module assets without forwarding cookies or tokens; API authentication, CSRF checks and HTML-project routing remain in the backend. Development CSP permits the React preamble and the loopback HMR WebSocket. Packaged runs strip the development variable, and the regular web service never enables it implicitly.
+
+### Optional browser development
+
+Use `scripts/dev-browser.py` to run the actual application in a browser without
+Electron, including in a compatible Linux development environment. This is a
+source-development entry point, not a supported Linux desktop installation.
+Normal Windows/Mac Dev and installed-app launches are unchanged.
+
+Install Node 22+ (with npm), uv and Python 3.12+, then run these commands from the
+repository root. On a fresh checkout, create the static directory before editable
+Python installation; Vite supplies the frontend, so a production build is not
+required. These examples use a Unix shell and a disposable development state path.
+
+```sh
+mkdir -p vault_rag/static
+uv sync --locked --python 3.12
+npm ci --prefix web
+```
+
+Start Vite in one terminal and leave it running:
+
+```sh
+npm run dev --prefix web -- --host 127.0.0.1 --port 5173 --strictPort
+```
+
+In a second terminal, start the backend:
+
+```sh
+uv run --locked python scripts/dev-browser.py --home /tmp/leafloom-browser-dev --port 36229 --loopback-ui
+```
+
+Open the printed `http://localhost:36229/` address in a **dedicated development
+browser profile**. The backend binds only to loopback; Vite must be available at
+`http://127.0.0.1:5173`. Open the backend address, not Vite's page. The launcher does
+not start Vite. Save your work before stopping the backend with Ctrl+C, then stop
+Vite separately. Frontend edits use HMR; Python edits require a backend restart.
+
+- `--home` is required and must be a new/empty directory, or one already marked by
+  this launcher. Do not point it at installed-app state or an existing note folder.
+  The marker pins the backend port and UI mode; reusing the home with a different
+  port or mode is rejected. To change either, use a fresh home and browser profile.
+- Without `--loopback-ui`, the management UI keeps its normal
+  `app.<installation-id>.localhost` origin. The opt-in flag uses literal
+  `localhost` for the management UI only. A managed cloud browser exhibited a TLS
+  error for `*.localhost` even with explicit HTTP, while literal `localhost`
+  worked. A browser upgrade/proxy cause has not been established.
+- Keep a browser profile dedicated to this state directory. Cookies do not isolate
+  different ports on `localhost`, and reusing the same browser origin for unrelated
+  homes can mix drafts. Do not reuse that profile for another localhost development
+  instance. Vite stays on `127.0.0.1` so it does not receive the localhost app cookie.
+- The normal runtime and background workers run; this is not a fixture server.
+  The launcher does not download models or invoke external AI automatically. Use
+  fictional/disposable notes, select retrieval scope explicitly, and prepare models
+  only when wanted.
+- Authentication, CSRF, Host/Origin validation and development CSP still apply.
+  Untrusted HTML projects and drafts keep separate `p-` / `d-` project origins;
+  their previews may still fail in browsers affected by the `*.localhost` issue.
+  Do not bypass browser security warnings or move project content onto the
+  management origin to work around it.
 
 ## Build on the target OS
 

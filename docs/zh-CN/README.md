@@ -130,6 +130,8 @@ cd LeafLoom
 3. 首次自动准备独立 Python 环境与依赖，打开源码桌面并启用前端自动更新。Dev 与安装版共用用户配置、模型和数据，只有开发依赖位于 `.cache/desktop-dev/.venv`；切换前先退出当前应用。检索模型在设置中按需准备。
 4. 选择语言，体验虚构演示库或关联自己的目录，再明确选择检索范围。
 
+**可选浏览器开发：** 使用专用状态目录和浏览器 profile，在不启动 Electron 的情况下运行真实后端。受管浏览器无法打开 `*.localhost` 时，可显式启用 `--loopback-ui`，让管理界面使用 `localhost`；隔离的 HTML 项目预览仍可能受影响。详见[启动步骤与边界](../DESKTOP.md#optional-browser-development)。这不代表新增 Linux 桌面安装支持。
+
 </details>
 
 [📖 新手指南与常见问题](GUIDE.md) · [✨ AI 接入](AI.md)
