@@ -1,0 +1,3019 @@
+{
+  "schemaVersion": 1,
+  "id": "atelier-original-2026",
+  "name": "ATELIER / Objects of light",
+  "description": "An original, fully editable editorial lighting campaign. Three artboards and complete English, Chinese and Japanese content variants.",
+  "pages": [
+    {
+      "id": "atelier-home",
+      "name": "01 / Editorial landing",
+      "group": "ATELIER / Objects of light",
+      "width": 1440,
+      "height": 1760,
+      "background": "#f3eee6",
+      "css": "\n*{box-sizing:border-box}h1,h2,h3,p{margin:0}button{font:inherit;color:inherit;cursor:pointer}button:focus-visible{outline:3px solid #a94d24;outline-offset:6px}.atelier{--paper:#f3eee6;--ink:#30291f;--accent:#a54c28;--line:#cfc6b9;--sans:Arial,'Noto Sans CJK SC','Noto Sans CJK JP',sans-serif;--serif:Georgia,'Noto Serif CJK SC','Noto Serif CJK JP',serif;background:var(--paper);color:var(--ink);font-family:var(--sans);min-height:100%;overflow:hidden;container-type:inline-size}.nav{display:flex;justify-content:space-between;align-items:center;margin:0 64px;height:100px;border-bottom:1px solid var(--line);gap:24px}.brand{font-size:29px;letter-spacing:7px;font-weight:500}.nav-caption{font:italic 18px var(--serif)}.micro{font:10px/1.7 var(--sans);letter-spacing:1.5px}.hero{display:grid;grid-template-columns:1fr 1fr;min-height:710px;padding-left:64px;gap:20px}.hero-copy{padding:70px 30px 48px 0;position:relative}.eyebrow{font-size:10px;letter-spacing:1.6px;line-height:1.8}.hero h1{font:400 100px/1.15 var(--serif);letter-spacing:-5px;white-space:pre-line;margin:34px 0 29px;overflow-wrap:break-word}.description{font-size:15px;line-height:1.85;max-width:355px;color:#665c50}.cta{display:inline-block;border:0;border-bottom:1px solid #8a7965;background:none;padding:0 0 10px;margin-top:31px;text-align:left;font-size:13px;letter-spacing:.2px}.hero .index{margin-top:66px;color:#7b6d5b}.scene{position:relative;overflow:hidden;background:radial-gradient(ellipse at 70% 24%,#f2d9b1 0,#d9b88b 42%,#b98c64 100%);isolation:isolate}.hero .scene{margin-top:26px;min-height:660px}.wall-light{position:absolute;inset:0;background:linear-gradient(125deg,transparent 34%,#fff2ca60 34.1%,#fff2ca08 58%,transparent 58.1%)}.surface{position:absolute;left:-10%;right:-10%;top:71%;height:50%;background:linear-gradient(150deg,#d6b58d,#c09971 68%);transform:rotate(-8deg);box-shadow:0 -1px 0 #e9cda6}.shadow{position:absolute;width:73%;height:12%;left:25%;top:79%;border-radius:50%;background:#48342247;filter:blur(13px);transform:rotate(-14deg)}.lamp{position:absolute;width:72%;height:69%;left:14%;top:10%;z-index:2}.lamp-foot{position:absolute;left:30%;width:40%;height:7%;bottom:1%;border-radius:50%;background:linear-gradient(90deg,#796955,#d2cec2 20%,#f0ede1 47%,#a79983 80%,#786957);box-shadow:0 5px 4px #63513c40}.lamp-stem{position:absolute;left:47%;width:7%;height:47%;top:47%;background:linear-gradient(90deg,#746c5d,#eae5d7 34%,#aba38f 76%,#746650);border-radius:0 0 4px 4px}.lamp-shade{position:absolute;width:100%;height:61%;top:4%;border-radius:50% 50% 13% 13% / 75% 75% 20% 20%;background:radial-gradient(ellipse at 48% 88%,#fff3c5 0,#ffce79 18%,#eaa657 40%,#b96c2f 67%,#8b4526 100%);box-shadow:inset 8px 0 11px #fff2c65c,inset -13px 1px 19px #542a1e62,0 18px 25px #6d411e27}.shade-rim{position:absolute;left:1%;width:98%;height:14%;top:51%;border-radius:50%;background:radial-gradient(ellipse,#ffe1a1 0,#f2bf73 65%,#b77a3e 95%);border:2px solid #c88c4c;box-shadow:0 7px 18px #eeb9704d}.shine{position:absolute;left:12%;top:15%;width:11%;height:32%;border-radius:70%;transform:rotate(28deg);background:linear-gradient(#fff2ca80,#fff2ca00);filter:blur(4px)}.scene-caption{position:absolute;bottom:20px;left:27px;right:27px;font-size:9px;letter-spacing:1.2px;z-index:3}.scene-no{position:absolute;right:28px;top:25px;font:italic 36px var(--serif);color:#684a30}.strip{display:flex;justify-content:space-between;padding:21px 64px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);gap:24px;font-size:9px;letter-spacing:1.5px}.story{display:grid;grid-template-columns:1fr 1fr;padding:55px 64px 42px;gap:75px}.story h2{font:43px/1.12 var(--serif);letter-spacing:-1.3px;white-space:pre-line;margin-top:15px}.story-description{padding-top:27px;font-size:14px;line-height:1.9;color:#665c50;max-width:490px}.details{display:grid;grid-template-columns:1.1fr 1fr;gap:28px;margin:0 64px 52px}.detail-art{height:285px;position:relative;overflow:hidden}.detail-art.scene{background:radial-gradient(ellipse at 50% 0,#e2d2b9,#c2b49a)}.detail-art .lamp{width:45%;left:28%;height:105%;top:1%}.detail-art .surface{top:85%}.detail-art .scene-caption{top:19px;bottom:auto;left:22px}.material-art{background:#ded7ca;padding:24px;isolation:isolate}.material-ring{position:absolute;left:21%;top:-18%;width:75%;height:143%;border:53px solid #ad5e2c;border-radius:50%;transform:rotate(38deg);box-shadow:inset 8px 9px 14px #713e242e,7px 13px 20px #7e582432;background:transparent}.metal-disk{position:absolute;width:42%;height:67%;right:1%;bottom:-22%;border-radius:50%;background:conic-gradient(#b4ac9b,#eee9dd,#97907f,#e1daca,#b4ac9b);box-shadow:-13px -4px 22px #71665126}.material-art .micro{position:relative;z-index:2}.detail-copy{display:flex;justify-content:space-between;gap:25px;padding-top:16px}.detail-copy h3{font:22px var(--serif)}.detail-copy p{font-size:11px;line-height:1.7;color:#665c50;margin-top:6px;max-width:340px}.detail-arrow{font-size:24px;font-weight:400}.footer{background:#393c30;color:#f3eee6;padding:35px 64px 23px}.footer-title{font:52px/1.15 var(--serif);letter-spacing:-1.6px;margin:17px 0 32px}.footer-bottom{border-top:1px solid #737363;padding-top:19px;display:flex;justify-content:space-between;gap:24px;font-size:9px;letter-spacing:1px}.mobile .nav{margin:0 24px;height:80px}.mobile .brand{font-size:22px;letter-spacing:4px}.mobile .nav-caption{font-size:14px}.mobile .nav .micro{display:none}.mobile .hero{display:block;padding:0}.mobile .hero-copy{padding:35px 24px 30px}.mobile .hero h1{font-size:65px;letter-spacing:-3px;margin:24px 0}.mobile .eyebrow{font-size:8px;letter-spacing:1px}.mobile .description{font-size:13px;line-height:1.8}.mobile .hero .index{margin-top:27px;font-size:8px}.mobile .hero .scene{height:420px;min-height:0;margin:0 16px 23px}.mobile .strip{padding:17px 24px;font-size:8px;gap:20px}.mobile .strip>*:nth-child(2){display:none}.mobile .story{display:block;padding:34px 24px 26px}.mobile .story h2{font-size:36px}.mobile .story-description{padding-top:21px;font-size:13px}.mobile .details{display:block;margin:0 24px 34px}.mobile .detail-art{height:255px}.mobile .detail-card+ .detail-card{margin-top:29px}.mobile .footer{padding:30px 24px 22px}.mobile .footer-title{font-size:35px;letter-spacing:-1px;margin-bottom:25px}.mobile .footer-bottom{font-size:7px;gap:15px}.poster{position:relative;height:100%;padding:47px;background:#d9b78c;isolation:isolate}.poster>.scene{position:absolute;inset:0;z-index:-1}.poster>.scene .lamp{width:55%;height:67%;left:35%;top:25%}.poster>.scene .surface{top:80%}.poster>.scene .scene-caption{display:none}.poster .nav{height:55px;margin:0;border-bottom:1px solid #907859}.poster .brand{font-size:31px}.poster-title{font:90px/1.15 var(--serif);letter-spacing:-4px;white-space:pre-line;position:relative;margin-top:60px}.poster-bottom{position:absolute;bottom:43px;left:47px;right:47px;display:flex;justify-content:space-between;align-items:end;gap:30px}.poster-bottom h3{font:26px var(--serif);margin-bottom:10px}.poster-bottom .micro{max-width:290px}.poster .eyebrow{margin-top:24px}.hero>*,.story>*,.details>*,.footer-bottom>*{min-width:0}button,.detail-copy p,.footer-title{overflow-wrap:anywhere}\n\n/* Keep the closing band at the artboard edge while allowing longer locales to grow. */\n.atelier:not(.poster){display:flex;flex-direction:column}.atelier:not(.poster)>*{flex-shrink:0}.atelier:not(.poster)>.footer{margin-top:auto}\n",
+      "nodes": [
+        {
+          "id": "atelier-home-68",
+          "type": "element",
+          "name": "atelier",
+          "style": {},
+          "props": {
+            "authored": true,
+            "tag": "main",
+            "attributes": {
+              "class": "atelier"
+            },
+            "styleIds": [
+              "atelier-palette"
+            ]
+          },
+          "children": [
+            {
+              "id": "atelier-home-4",
+              "type": "element",
+              "name": "nav",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "header",
+                "attributes": {
+                  "class": "nav"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-home-1",
+                  "type": "element",
+                  "name": "brand",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "brand"
+                    },
+                    "text": "ATELIER",
+                    "bindingKey": "atelier.brand"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-home-2",
+                  "type": "element",
+                  "name": "nav",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "nav-caption"
+                    },
+                    "text": "Objects of light",
+                    "bindingKey": "atelier.nav"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-home-3",
+                  "type": "element",
+                  "name": "edition",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "micro"
+                    },
+                    "text": "COLLECTION 01 / 2026",
+                    "bindingKey": "atelier.edition"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "atelier-home-23",
+              "type": "element",
+              "name": "hero",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "section",
+                "attributes": {
+                  "class": "hero"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-home-10",
+                  "type": "element",
+                  "name": "hero-copy",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": "hero-copy"
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-home-5",
+                      "type": "element",
+                      "name": "eyebrow",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "p",
+                        "attributes": {
+                          "class": "eyebrow"
+                        },
+                        "text": "THOUGHTFULLY SHAPED. QUIETLY PRESENT.",
+                        "bindingKey": "atelier.eyebrow"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-home-6",
+                      "type": "element",
+                      "name": "hero",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "h1",
+                        "attributes": {
+                          "class": ""
+                        },
+                        "text": "A softer\nway to live.",
+                        "bindingKey": "atelier.hero"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-home-7",
+                      "type": "element",
+                      "name": "desc",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "p",
+                        "attributes": {
+                          "class": "description"
+                        },
+                        "text": "Light that brings a room together. Meet Sol, a sculptural table lamp inspired by the warmth of the late afternoon.",
+                        "bindingKey": "atelier.desc"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-home-8",
+                      "type": "button",
+                      "name": "cta",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "button",
+                        "attributes": {
+                          "class": "cta"
+                        },
+                        "navigateTo": "atelier-campaign",
+                        "text": "Explore the collection ↗",
+                        "bindingKey": "atelier.cta"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-home-9",
+                      "type": "element",
+                      "name": "index",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "p",
+                        "attributes": {
+                          "class": "micro index"
+                        },
+                        "text": "01 — THE ART OF EVERYDAY",
+                        "bindingKey": "atelier.index"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "id": "atelier-home-22",
+                  "type": "element",
+                  "name": "Artwork / editable amber glass table lamp",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": "scene "
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-home-11",
+                      "type": "element",
+                      "name": "Window light",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "wall-light"
+                        }
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-home-12",
+                      "type": "element",
+                      "name": "Angled tabletop",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "surface"
+                        }
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-home-13",
+                      "type": "element",
+                      "name": "Soft cast shadow",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "shadow"
+                        }
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-home-19",
+                      "type": "element",
+                      "name": "lamp",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "lamp"
+                        }
+                      },
+                      "children": [
+                        {
+                          "id": "atelier-home-14",
+                          "type": "element",
+                          "name": "lamp-foot",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "lamp-foot"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-home-15",
+                          "type": "element",
+                          "name": "lamp-stem",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "lamp-stem"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-home-16",
+                          "type": "element",
+                          "name": "lamp-shade",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "lamp-shade"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-home-17",
+                          "type": "element",
+                          "name": "shade-rim",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "shade-rim"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-home-18",
+                          "type": "element",
+                          "name": "shine",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "shine"
+                            }
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "id": "atelier-home-20",
+                      "type": "element",
+                      "name": "Edition number",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "span",
+                        "attributes": {
+                          "class": "scene-no"
+                        },
+                        "text": "01"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-home-21",
+                      "type": "element",
+                      "name": "scene",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "p",
+                        "attributes": {
+                          "class": "scene-caption"
+                        },
+                        "text": "SOL / AMBER GLASS / BRUSHED ALUMINUM",
+                        "bindingKey": "atelier.scene"
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "atelier-home-27",
+              "type": "element",
+              "name": "strip",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "div",
+                "attributes": {
+                  "class": "strip"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-home-24",
+                  "type": "element",
+                  "name": "strip1",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "span",
+                    "attributes": {
+                      "class": ""
+                    },
+                    "text": "MADE TO FEEL AT HOME",
+                    "bindingKey": "atelier.strip1"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-home-25",
+                  "type": "element",
+                  "name": "strip2",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "span",
+                    "attributes": {
+                      "class": ""
+                    },
+                    "text": "FORM, FUNCTION & A LITTLE FEELING",
+                    "bindingKey": "atelier.strip2"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-home-26",
+                  "type": "element",
+                  "name": "strip3",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "span",
+                    "attributes": {
+                      "class": ""
+                    },
+                    "text": "DESIGNED TO STAY",
+                    "bindingKey": "atelier.strip3"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "atelier-home-32",
+              "type": "element",
+              "name": "story",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "section",
+                "attributes": {
+                  "class": "story"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-home-30",
+                  "type": "element",
+                  "name": "div",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": ""
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-home-28",
+                      "type": "element",
+                      "name": "storyLabel",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "p",
+                        "attributes": {
+                          "class": "eyebrow"
+                        },
+                        "text": "THE DESIGN NOTES",
+                        "bindingKey": "atelier.storyLabel"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-home-29",
+                      "type": "element",
+                      "name": "story",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "h2",
+                        "attributes": {
+                          "class": ""
+                        },
+                        "text": "Less noise.\nMore atmosphere.",
+                        "bindingKey": "atelier.story"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "id": "atelier-home-31",
+                  "type": "element",
+                  "name": "storyDesc",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "story-description"
+                    },
+                    "text": "A single curve. An honest material. A glow you can settle into. Sol balances an expressive silhouette with the simple pleasure of a well-lit corner.",
+                    "bindingKey": "atelier.storyDesc"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "atelier-home-61",
+              "type": "element",
+              "name": "details",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "section",
+                "attributes": {
+                  "class": "details"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-home-50",
+                  "type": "element",
+                  "name": "detail-card",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "article",
+                    "attributes": {
+                      "class": "detail-card"
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-home-44",
+                      "type": "element",
+                      "name": "Artwork / editable amber glass table lamp",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "scene detail-art"
+                        }
+                      },
+                      "children": [
+                        {
+                          "id": "atelier-home-33",
+                          "type": "element",
+                          "name": "Window light",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "wall-light"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-home-34",
+                          "type": "element",
+                          "name": "Angled tabletop",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "surface"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-home-35",
+                          "type": "element",
+                          "name": "Soft cast shadow",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "shadow"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-home-41",
+                          "type": "element",
+                          "name": "lamp",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "lamp"
+                            }
+                          },
+                          "children": [
+                            {
+                              "id": "atelier-home-36",
+                              "type": "element",
+                              "name": "lamp-foot",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "div",
+                                "attributes": {
+                                  "class": "lamp-foot"
+                                }
+                              },
+                              "children": []
+                            },
+                            {
+                              "id": "atelier-home-37",
+                              "type": "element",
+                              "name": "lamp-stem",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "div",
+                                "attributes": {
+                                  "class": "lamp-stem"
+                                }
+                              },
+                              "children": []
+                            },
+                            {
+                              "id": "atelier-home-38",
+                              "type": "element",
+                              "name": "lamp-shade",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "div",
+                                "attributes": {
+                                  "class": "lamp-shade"
+                                }
+                              },
+                              "children": []
+                            },
+                            {
+                              "id": "atelier-home-39",
+                              "type": "element",
+                              "name": "shade-rim",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "div",
+                                "attributes": {
+                                  "class": "shade-rim"
+                                }
+                              },
+                              "children": []
+                            },
+                            {
+                              "id": "atelier-home-40",
+                              "type": "element",
+                              "name": "shine",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "div",
+                                "attributes": {
+                                  "class": "shine"
+                                }
+                              },
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "id": "atelier-home-42",
+                          "type": "element",
+                          "name": "Edition number",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "span",
+                            "attributes": {
+                              "class": "scene-no"
+                            },
+                            "text": "01"
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-home-43",
+                          "type": "element",
+                          "name": "scene",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "p",
+                            "attributes": {
+                              "class": "scene-caption"
+                            },
+                            "text": "SOL / AMBER GLASS / BRUSHED ALUMINUM",
+                            "bindingKey": "atelier.scene"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "id": "atelier-home-49",
+                      "type": "element",
+                      "name": "detail-copy",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "detail-copy"
+                        }
+                      },
+                      "children": [
+                        {
+                          "id": "atelier-home-47",
+                          "type": "element",
+                          "name": "div",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": ""
+                            }
+                          },
+                          "children": [
+                            {
+                              "id": "atelier-home-45",
+                              "type": "element",
+                              "name": "product",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "h3",
+                                "attributes": {
+                                  "class": ""
+                                },
+                                "text": "Sol table light",
+                                "bindingKey": "atelier.product"
+                              },
+                              "children": []
+                            },
+                            {
+                              "id": "atelier-home-46",
+                              "type": "element",
+                              "name": "productDesc",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "p",
+                                "attributes": {
+                                  "class": ""
+                                },
+                                "text": "Amber glass · Sculptural silhouette",
+                                "bindingKey": "atelier.productDesc"
+                              },
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "id": "atelier-home-48",
+                          "type": "element",
+                          "name": "detail-arrow",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "span",
+                            "attributes": {
+                              "class": "detail-arrow"
+                            },
+                            "text": "↗"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "atelier-home-60",
+                  "type": "element",
+                  "name": "detail-card",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "article",
+                    "attributes": {
+                      "class": "detail-card"
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-home-54",
+                      "type": "element",
+                      "name": "Artwork / glass and brushed metal study",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "detail-art material-art"
+                        }
+                      },
+                      "children": [
+                        {
+                          "id": "atelier-home-51",
+                          "type": "element",
+                          "name": "material-ring",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "material-ring"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-home-52",
+                          "type": "element",
+                          "name": "metal-disk",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "metal-disk"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-home-53",
+                          "type": "element",
+                          "name": "detail2",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "p",
+                            "attributes": {
+                              "class": "micro"
+                            },
+                            "text": "02 / MATERIAL MATTERS",
+                            "bindingKey": "atelier.detail2"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "id": "atelier-home-59",
+                      "type": "element",
+                      "name": "detail-copy",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "detail-copy"
+                        }
+                      },
+                      "children": [
+                        {
+                          "id": "atelier-home-57",
+                          "type": "element",
+                          "name": "div",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": ""
+                            }
+                          },
+                          "children": [
+                            {
+                              "id": "atelier-home-55",
+                              "type": "element",
+                              "name": "material",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "h3",
+                                "attributes": {
+                                  "class": ""
+                                },
+                                "text": "Beautiful by nature.",
+                                "bindingKey": "atelier.material"
+                              },
+                              "children": []
+                            },
+                            {
+                              "id": "atelier-home-56",
+                              "type": "element",
+                              "name": "materialDesc",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "p",
+                                "attributes": {
+                                  "class": ""
+                                },
+                                "text": "A quiet conversation between translucent glass and cool, brushed metal.",
+                                "bindingKey": "atelier.materialDesc"
+                              },
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "id": "atelier-home-58",
+                          "type": "element",
+                          "name": "detail-arrow",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "span",
+                            "attributes": {
+                              "class": "detail-arrow"
+                            },
+                            "text": "↗"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "atelier-home-67",
+              "type": "element",
+              "name": "footer",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "footer",
+                "attributes": {
+                  "class": "footer"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-home-62",
+                  "type": "element",
+                  "name": "footerLabel",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "eyebrow"
+                    },
+                    "text": "GOOD LIGHT CHANGES EVERYTHING.",
+                    "bindingKey": "atelier.footerLabel"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-home-63",
+                  "type": "element",
+                  "name": "footer",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "h2",
+                    "attributes": {
+                      "class": "footer-title"
+                    },
+                    "text": "Make room for warmth.",
+                    "bindingKey": "atelier.footer"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-home-66",
+                  "type": "element",
+                  "name": "footer-bottom",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": "footer-bottom"
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-home-64",
+                      "type": "element",
+                      "name": "footnote",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "span",
+                        "attributes": {
+                          "class": ""
+                        },
+                        "text": "ATELIER / CONCEPT COLLECTION",
+                        "bindingKey": "atelier.footnote"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-home-65",
+                      "type": "element",
+                      "name": "footright",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "span",
+                        "attributes": {
+                          "class": ""
+                        },
+                        "text": "ORIGINAL DESIGN STUDY · 2026",
+                        "bindingKey": "atelier.footright"
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "atelier-mobile",
+      "name": "02 / Mobile landing",
+      "group": "ATELIER / Objects of light",
+      "width": 390,
+      "height": 2320,
+      "background": "#f3eee6",
+      "css": "\n*{box-sizing:border-box}h1,h2,h3,p{margin:0}button{font:inherit;color:inherit;cursor:pointer}button:focus-visible{outline:3px solid #a94d24;outline-offset:6px}.atelier{--paper:#f3eee6;--ink:#30291f;--accent:#a54c28;--line:#cfc6b9;--sans:Arial,'Noto Sans CJK SC','Noto Sans CJK JP',sans-serif;--serif:Georgia,'Noto Serif CJK SC','Noto Serif CJK JP',serif;background:var(--paper);color:var(--ink);font-family:var(--sans);min-height:100%;overflow:hidden;container-type:inline-size}.nav{display:flex;justify-content:space-between;align-items:center;margin:0 64px;height:100px;border-bottom:1px solid var(--line);gap:24px}.brand{font-size:29px;letter-spacing:7px;font-weight:500}.nav-caption{font:italic 18px var(--serif)}.micro{font:10px/1.7 var(--sans);letter-spacing:1.5px}.hero{display:grid;grid-template-columns:1fr 1fr;min-height:710px;padding-left:64px;gap:20px}.hero-copy{padding:70px 30px 48px 0;position:relative}.eyebrow{font-size:10px;letter-spacing:1.6px;line-height:1.8}.hero h1{font:400 100px/1.15 var(--serif);letter-spacing:-5px;white-space:pre-line;margin:34px 0 29px;overflow-wrap:break-word}.description{font-size:15px;line-height:1.85;max-width:355px;color:#665c50}.cta{display:inline-block;border:0;border-bottom:1px solid #8a7965;background:none;padding:0 0 10px;margin-top:31px;text-align:left;font-size:13px;letter-spacing:.2px}.hero .index{margin-top:66px;color:#7b6d5b}.scene{position:relative;overflow:hidden;background:radial-gradient(ellipse at 70% 24%,#f2d9b1 0,#d9b88b 42%,#b98c64 100%);isolation:isolate}.hero .scene{margin-top:26px;min-height:660px}.wall-light{position:absolute;inset:0;background:linear-gradient(125deg,transparent 34%,#fff2ca60 34.1%,#fff2ca08 58%,transparent 58.1%)}.surface{position:absolute;left:-10%;right:-10%;top:71%;height:50%;background:linear-gradient(150deg,#d6b58d,#c09971 68%);transform:rotate(-8deg);box-shadow:0 -1px 0 #e9cda6}.shadow{position:absolute;width:73%;height:12%;left:25%;top:79%;border-radius:50%;background:#48342247;filter:blur(13px);transform:rotate(-14deg)}.lamp{position:absolute;width:72%;height:69%;left:14%;top:10%;z-index:2}.lamp-foot{position:absolute;left:30%;width:40%;height:7%;bottom:1%;border-radius:50%;background:linear-gradient(90deg,#796955,#d2cec2 20%,#f0ede1 47%,#a79983 80%,#786957);box-shadow:0 5px 4px #63513c40}.lamp-stem{position:absolute;left:47%;width:7%;height:47%;top:47%;background:linear-gradient(90deg,#746c5d,#eae5d7 34%,#aba38f 76%,#746650);border-radius:0 0 4px 4px}.lamp-shade{position:absolute;width:100%;height:61%;top:4%;border-radius:50% 50% 13% 13% / 75% 75% 20% 20%;background:radial-gradient(ellipse at 48% 88%,#fff3c5 0,#ffce79 18%,#eaa657 40%,#b96c2f 67%,#8b4526 100%);box-shadow:inset 8px 0 11px #fff2c65c,inset -13px 1px 19px #542a1e62,0 18px 25px #6d411e27}.shade-rim{position:absolute;left:1%;width:98%;height:14%;top:51%;border-radius:50%;background:radial-gradient(ellipse,#ffe1a1 0,#f2bf73 65%,#b77a3e 95%);border:2px solid #c88c4c;box-shadow:0 7px 18px #eeb9704d}.shine{position:absolute;left:12%;top:15%;width:11%;height:32%;border-radius:70%;transform:rotate(28deg);background:linear-gradient(#fff2ca80,#fff2ca00);filter:blur(4px)}.scene-caption{position:absolute;bottom:20px;left:27px;right:27px;font-size:9px;letter-spacing:1.2px;z-index:3}.scene-no{position:absolute;right:28px;top:25px;font:italic 36px var(--serif);color:#684a30}.strip{display:flex;justify-content:space-between;padding:21px 64px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);gap:24px;font-size:9px;letter-spacing:1.5px}.story{display:grid;grid-template-columns:1fr 1fr;padding:55px 64px 42px;gap:75px}.story h2{font:43px/1.12 var(--serif);letter-spacing:-1.3px;white-space:pre-line;margin-top:15px}.story-description{padding-top:27px;font-size:14px;line-height:1.9;color:#665c50;max-width:490px}.details{display:grid;grid-template-columns:1.1fr 1fr;gap:28px;margin:0 64px 52px}.detail-art{height:285px;position:relative;overflow:hidden}.detail-art.scene{background:radial-gradient(ellipse at 50% 0,#e2d2b9,#c2b49a)}.detail-art .lamp{width:45%;left:28%;height:105%;top:1%}.detail-art .surface{top:85%}.detail-art .scene-caption{top:19px;bottom:auto;left:22px}.material-art{background:#ded7ca;padding:24px;isolation:isolate}.material-ring{position:absolute;left:21%;top:-18%;width:75%;height:143%;border:53px solid #ad5e2c;border-radius:50%;transform:rotate(38deg);box-shadow:inset 8px 9px 14px #713e242e,7px 13px 20px #7e582432;background:transparent}.metal-disk{position:absolute;width:42%;height:67%;right:1%;bottom:-22%;border-radius:50%;background:conic-gradient(#b4ac9b,#eee9dd,#97907f,#e1daca,#b4ac9b);box-shadow:-13px -4px 22px #71665126}.material-art .micro{position:relative;z-index:2}.detail-copy{display:flex;justify-content:space-between;gap:25px;padding-top:16px}.detail-copy h3{font:22px var(--serif)}.detail-copy p{font-size:11px;line-height:1.7;color:#665c50;margin-top:6px;max-width:340px}.detail-arrow{font-size:24px;font-weight:400}.footer{background:#393c30;color:#f3eee6;padding:35px 64px 23px}.footer-title{font:52px/1.15 var(--serif);letter-spacing:-1.6px;margin:17px 0 32px}.footer-bottom{border-top:1px solid #737363;padding-top:19px;display:flex;justify-content:space-between;gap:24px;font-size:9px;letter-spacing:1px}.mobile .nav{margin:0 24px;height:80px}.mobile .brand{font-size:22px;letter-spacing:4px}.mobile .nav-caption{font-size:14px}.mobile .nav .micro{display:none}.mobile .hero{display:block;padding:0}.mobile .hero-copy{padding:35px 24px 30px}.mobile .hero h1{font-size:65px;letter-spacing:-3px;margin:24px 0}.mobile .eyebrow{font-size:8px;letter-spacing:1px}.mobile .description{font-size:13px;line-height:1.8}.mobile .hero .index{margin-top:27px;font-size:8px}.mobile .hero .scene{height:420px;min-height:0;margin:0 16px 23px}.mobile .strip{padding:17px 24px;font-size:8px;gap:20px}.mobile .strip>*:nth-child(2){display:none}.mobile .story{display:block;padding:34px 24px 26px}.mobile .story h2{font-size:36px}.mobile .story-description{padding-top:21px;font-size:13px}.mobile .details{display:block;margin:0 24px 34px}.mobile .detail-art{height:255px}.mobile .detail-card+ .detail-card{margin-top:29px}.mobile .footer{padding:30px 24px 22px}.mobile .footer-title{font-size:35px;letter-spacing:-1px;margin-bottom:25px}.mobile .footer-bottom{font-size:7px;gap:15px}.poster{position:relative;height:100%;padding:47px;background:#d9b78c;isolation:isolate}.poster>.scene{position:absolute;inset:0;z-index:-1}.poster>.scene .lamp{width:55%;height:67%;left:35%;top:25%}.poster>.scene .surface{top:80%}.poster>.scene .scene-caption{display:none}.poster .nav{height:55px;margin:0;border-bottom:1px solid #907859}.poster .brand{font-size:31px}.poster-title{font:90px/1.15 var(--serif);letter-spacing:-4px;white-space:pre-line;position:relative;margin-top:60px}.poster-bottom{position:absolute;bottom:43px;left:47px;right:47px;display:flex;justify-content:space-between;align-items:end;gap:30px}.poster-bottom h3{font:26px var(--serif);margin-bottom:10px}.poster-bottom .micro{max-width:290px}.poster .eyebrow{margin-top:24px}.hero>*,.story>*,.details>*,.footer-bottom>*{min-width:0}button,.detail-copy p,.footer-title{overflow-wrap:anywhere}\n\n/* Keep the closing band at the artboard edge while allowing longer locales to grow. */\n.atelier:not(.poster){display:flex;flex-direction:column}.atelier:not(.poster)>*{flex-shrink:0}.atelier:not(.poster)>.footer{margin-top:auto}\n",
+      "nodes": [
+        {
+          "id": "atelier-mobile-136",
+          "type": "element",
+          "name": "atelier mobile",
+          "style": {},
+          "props": {
+            "authored": true,
+            "tag": "main",
+            "attributes": {
+              "class": "atelier mobile"
+            },
+            "styleIds": [
+              "atelier-palette"
+            ]
+          },
+          "children": [
+            {
+              "id": "atelier-mobile-72",
+              "type": "element",
+              "name": "nav",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "header",
+                "attributes": {
+                  "class": "nav"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-mobile-69",
+                  "type": "element",
+                  "name": "brand",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "brand"
+                    },
+                    "text": "ATELIER",
+                    "bindingKey": "atelier.brand"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-mobile-70",
+                  "type": "element",
+                  "name": "nav",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "nav-caption"
+                    },
+                    "text": "Objects of light",
+                    "bindingKey": "atelier.nav"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-mobile-71",
+                  "type": "element",
+                  "name": "edition",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "micro"
+                    },
+                    "text": "COLLECTION 01 / 2026",
+                    "bindingKey": "atelier.edition"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "atelier-mobile-91",
+              "type": "element",
+              "name": "hero",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "section",
+                "attributes": {
+                  "class": "hero"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-mobile-78",
+                  "type": "element",
+                  "name": "hero-copy",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": "hero-copy"
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-mobile-73",
+                      "type": "element",
+                      "name": "eyebrow",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "p",
+                        "attributes": {
+                          "class": "eyebrow"
+                        },
+                        "text": "THOUGHTFULLY SHAPED. QUIETLY PRESENT.",
+                        "bindingKey": "atelier.eyebrow"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-mobile-74",
+                      "type": "element",
+                      "name": "hero",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "h1",
+                        "attributes": {
+                          "class": ""
+                        },
+                        "text": "A softer\nway to live.",
+                        "bindingKey": "atelier.hero"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-mobile-75",
+                      "type": "element",
+                      "name": "desc",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "p",
+                        "attributes": {
+                          "class": "description"
+                        },
+                        "text": "Light that brings a room together. Meet Sol, a sculptural table lamp inspired by the warmth of the late afternoon.",
+                        "bindingKey": "atelier.desc"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-mobile-76",
+                      "type": "button",
+                      "name": "cta",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "button",
+                        "attributes": {
+                          "class": "cta"
+                        },
+                        "navigateTo": "atelier-campaign",
+                        "text": "Explore the collection ↗",
+                        "bindingKey": "atelier.cta"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-mobile-77",
+                      "type": "element",
+                      "name": "index",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "p",
+                        "attributes": {
+                          "class": "micro index"
+                        },
+                        "text": "01 — THE ART OF EVERYDAY",
+                        "bindingKey": "atelier.index"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "id": "atelier-mobile-90",
+                  "type": "element",
+                  "name": "Artwork / editable amber glass table lamp",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": "scene "
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-mobile-79",
+                      "type": "element",
+                      "name": "Window light",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "wall-light"
+                        }
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-mobile-80",
+                      "type": "element",
+                      "name": "Angled tabletop",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "surface"
+                        }
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-mobile-81",
+                      "type": "element",
+                      "name": "Soft cast shadow",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "shadow"
+                        }
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-mobile-87",
+                      "type": "element",
+                      "name": "lamp",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "lamp"
+                        }
+                      },
+                      "children": [
+                        {
+                          "id": "atelier-mobile-82",
+                          "type": "element",
+                          "name": "lamp-foot",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "lamp-foot"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-mobile-83",
+                          "type": "element",
+                          "name": "lamp-stem",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "lamp-stem"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-mobile-84",
+                          "type": "element",
+                          "name": "lamp-shade",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "lamp-shade"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-mobile-85",
+                          "type": "element",
+                          "name": "shade-rim",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "shade-rim"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-mobile-86",
+                          "type": "element",
+                          "name": "shine",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "shine"
+                            }
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "id": "atelier-mobile-88",
+                      "type": "element",
+                      "name": "Edition number",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "span",
+                        "attributes": {
+                          "class": "scene-no"
+                        },
+                        "text": "01"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-mobile-89",
+                      "type": "element",
+                      "name": "scene",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "p",
+                        "attributes": {
+                          "class": "scene-caption"
+                        },
+                        "text": "SOL / AMBER GLASS / BRUSHED ALUMINUM",
+                        "bindingKey": "atelier.scene"
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "atelier-mobile-95",
+              "type": "element",
+              "name": "strip",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "div",
+                "attributes": {
+                  "class": "strip"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-mobile-92",
+                  "type": "element",
+                  "name": "strip1",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "span",
+                    "attributes": {
+                      "class": ""
+                    },
+                    "text": "MADE TO FEEL AT HOME",
+                    "bindingKey": "atelier.strip1"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-mobile-93",
+                  "type": "element",
+                  "name": "strip2",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "span",
+                    "attributes": {
+                      "class": ""
+                    },
+                    "text": "FORM, FUNCTION & A LITTLE FEELING",
+                    "bindingKey": "atelier.strip2"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-mobile-94",
+                  "type": "element",
+                  "name": "strip3",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "span",
+                    "attributes": {
+                      "class": ""
+                    },
+                    "text": "DESIGNED TO STAY",
+                    "bindingKey": "atelier.strip3"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "atelier-mobile-100",
+              "type": "element",
+              "name": "story",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "section",
+                "attributes": {
+                  "class": "story"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-mobile-98",
+                  "type": "element",
+                  "name": "div",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": ""
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-mobile-96",
+                      "type": "element",
+                      "name": "storyLabel",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "p",
+                        "attributes": {
+                          "class": "eyebrow"
+                        },
+                        "text": "THE DESIGN NOTES",
+                        "bindingKey": "atelier.storyLabel"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-mobile-97",
+                      "type": "element",
+                      "name": "story",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "h2",
+                        "attributes": {
+                          "class": ""
+                        },
+                        "text": "Less noise.\nMore atmosphere.",
+                        "bindingKey": "atelier.story"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "id": "atelier-mobile-99",
+                  "type": "element",
+                  "name": "storyDesc",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "story-description"
+                    },
+                    "text": "A single curve. An honest material. A glow you can settle into. Sol balances an expressive silhouette with the simple pleasure of a well-lit corner.",
+                    "bindingKey": "atelier.storyDesc"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "atelier-mobile-129",
+              "type": "element",
+              "name": "details",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "section",
+                "attributes": {
+                  "class": "details"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-mobile-118",
+                  "type": "element",
+                  "name": "detail-card",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "article",
+                    "attributes": {
+                      "class": "detail-card"
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-mobile-112",
+                      "type": "element",
+                      "name": "Artwork / editable amber glass table lamp",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "scene detail-art"
+                        }
+                      },
+                      "children": [
+                        {
+                          "id": "atelier-mobile-101",
+                          "type": "element",
+                          "name": "Window light",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "wall-light"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-mobile-102",
+                          "type": "element",
+                          "name": "Angled tabletop",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "surface"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-mobile-103",
+                          "type": "element",
+                          "name": "Soft cast shadow",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "shadow"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-mobile-109",
+                          "type": "element",
+                          "name": "lamp",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "lamp"
+                            }
+                          },
+                          "children": [
+                            {
+                              "id": "atelier-mobile-104",
+                              "type": "element",
+                              "name": "lamp-foot",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "div",
+                                "attributes": {
+                                  "class": "lamp-foot"
+                                }
+                              },
+                              "children": []
+                            },
+                            {
+                              "id": "atelier-mobile-105",
+                              "type": "element",
+                              "name": "lamp-stem",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "div",
+                                "attributes": {
+                                  "class": "lamp-stem"
+                                }
+                              },
+                              "children": []
+                            },
+                            {
+                              "id": "atelier-mobile-106",
+                              "type": "element",
+                              "name": "lamp-shade",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "div",
+                                "attributes": {
+                                  "class": "lamp-shade"
+                                }
+                              },
+                              "children": []
+                            },
+                            {
+                              "id": "atelier-mobile-107",
+                              "type": "element",
+                              "name": "shade-rim",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "div",
+                                "attributes": {
+                                  "class": "shade-rim"
+                                }
+                              },
+                              "children": []
+                            },
+                            {
+                              "id": "atelier-mobile-108",
+                              "type": "element",
+                              "name": "shine",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "div",
+                                "attributes": {
+                                  "class": "shine"
+                                }
+                              },
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "id": "atelier-mobile-110",
+                          "type": "element",
+                          "name": "Edition number",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "span",
+                            "attributes": {
+                              "class": "scene-no"
+                            },
+                            "text": "01"
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-mobile-111",
+                          "type": "element",
+                          "name": "scene",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "p",
+                            "attributes": {
+                              "class": "scene-caption"
+                            },
+                            "text": "SOL / AMBER GLASS / BRUSHED ALUMINUM",
+                            "bindingKey": "atelier.scene"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "id": "atelier-mobile-117",
+                      "type": "element",
+                      "name": "detail-copy",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "detail-copy"
+                        }
+                      },
+                      "children": [
+                        {
+                          "id": "atelier-mobile-115",
+                          "type": "element",
+                          "name": "div",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": ""
+                            }
+                          },
+                          "children": [
+                            {
+                              "id": "atelier-mobile-113",
+                              "type": "element",
+                              "name": "product",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "h3",
+                                "attributes": {
+                                  "class": ""
+                                },
+                                "text": "Sol table light",
+                                "bindingKey": "atelier.product"
+                              },
+                              "children": []
+                            },
+                            {
+                              "id": "atelier-mobile-114",
+                              "type": "element",
+                              "name": "productDesc",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "p",
+                                "attributes": {
+                                  "class": ""
+                                },
+                                "text": "Amber glass · Sculptural silhouette",
+                                "bindingKey": "atelier.productDesc"
+                              },
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "id": "atelier-mobile-116",
+                          "type": "element",
+                          "name": "detail-arrow",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "span",
+                            "attributes": {
+                              "class": "detail-arrow"
+                            },
+                            "text": "↗"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "atelier-mobile-128",
+                  "type": "element",
+                  "name": "detail-card",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "article",
+                    "attributes": {
+                      "class": "detail-card"
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-mobile-122",
+                      "type": "element",
+                      "name": "Artwork / glass and brushed metal study",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "detail-art material-art"
+                        }
+                      },
+                      "children": [
+                        {
+                          "id": "atelier-mobile-119",
+                          "type": "element",
+                          "name": "material-ring",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "material-ring"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-mobile-120",
+                          "type": "element",
+                          "name": "metal-disk",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": "metal-disk"
+                            }
+                          },
+                          "children": []
+                        },
+                        {
+                          "id": "atelier-mobile-121",
+                          "type": "element",
+                          "name": "detail2",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "p",
+                            "attributes": {
+                              "class": "micro"
+                            },
+                            "text": "02 / MATERIAL MATTERS",
+                            "bindingKey": "atelier.detail2"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "id": "atelier-mobile-127",
+                      "type": "element",
+                      "name": "detail-copy",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "detail-copy"
+                        }
+                      },
+                      "children": [
+                        {
+                          "id": "atelier-mobile-125",
+                          "type": "element",
+                          "name": "div",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "div",
+                            "attributes": {
+                              "class": ""
+                            }
+                          },
+                          "children": [
+                            {
+                              "id": "atelier-mobile-123",
+                              "type": "element",
+                              "name": "material",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "h3",
+                                "attributes": {
+                                  "class": ""
+                                },
+                                "text": "Beautiful by nature.",
+                                "bindingKey": "atelier.material"
+                              },
+                              "children": []
+                            },
+                            {
+                              "id": "atelier-mobile-124",
+                              "type": "element",
+                              "name": "materialDesc",
+                              "style": {},
+                              "props": {
+                                "authored": true,
+                                "tag": "p",
+                                "attributes": {
+                                  "class": ""
+                                },
+                                "text": "A quiet conversation between translucent glass and cool, brushed metal.",
+                                "bindingKey": "atelier.materialDesc"
+                              },
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "id": "atelier-mobile-126",
+                          "type": "element",
+                          "name": "detail-arrow",
+                          "style": {},
+                          "props": {
+                            "authored": true,
+                            "tag": "span",
+                            "attributes": {
+                              "class": "detail-arrow"
+                            },
+                            "text": "↗"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "atelier-mobile-135",
+              "type": "element",
+              "name": "footer",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "footer",
+                "attributes": {
+                  "class": "footer"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-mobile-130",
+                  "type": "element",
+                  "name": "footerLabel",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "eyebrow"
+                    },
+                    "text": "GOOD LIGHT CHANGES EVERYTHING.",
+                    "bindingKey": "atelier.footerLabel"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-mobile-131",
+                  "type": "element",
+                  "name": "footer",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "h2",
+                    "attributes": {
+                      "class": "footer-title"
+                    },
+                    "text": "Make room for warmth.",
+                    "bindingKey": "atelier.footer"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-mobile-134",
+                  "type": "element",
+                  "name": "footer-bottom",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": "footer-bottom"
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-mobile-132",
+                      "type": "element",
+                      "name": "footnote",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "span",
+                        "attributes": {
+                          "class": ""
+                        },
+                        "text": "ATELIER / CONCEPT COLLECTION",
+                        "bindingKey": "atelier.footnote"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-mobile-133",
+                      "type": "element",
+                      "name": "footright",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "span",
+                        "attributes": {
+                          "class": ""
+                        },
+                        "text": "ORIGINAL DESIGN STUDY · 2026",
+                        "bindingKey": "atelier.footright"
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "atelier-campaign",
+      "name": "03 / Square campaign",
+      "group": "ATELIER / Objects of light",
+      "width": 1080,
+      "height": 1080,
+      "background": "#d9b78c",
+      "css": "\n*{box-sizing:border-box}h1,h2,h3,p{margin:0}button{font:inherit;color:inherit;cursor:pointer}button:focus-visible{outline:3px solid #a94d24;outline-offset:6px}.atelier{--paper:#f3eee6;--ink:#30291f;--accent:#a54c28;--line:#cfc6b9;--sans:Arial,'Noto Sans CJK SC','Noto Sans CJK JP',sans-serif;--serif:Georgia,'Noto Serif CJK SC','Noto Serif CJK JP',serif;background:var(--paper);color:var(--ink);font-family:var(--sans);min-height:100%;overflow:hidden;container-type:inline-size}.nav{display:flex;justify-content:space-between;align-items:center;margin:0 64px;height:100px;border-bottom:1px solid var(--line);gap:24px}.brand{font-size:29px;letter-spacing:7px;font-weight:500}.nav-caption{font:italic 18px var(--serif)}.micro{font:10px/1.7 var(--sans);letter-spacing:1.5px}.hero{display:grid;grid-template-columns:1fr 1fr;min-height:710px;padding-left:64px;gap:20px}.hero-copy{padding:70px 30px 48px 0;position:relative}.eyebrow{font-size:10px;letter-spacing:1.6px;line-height:1.8}.hero h1{font:400 100px/1.15 var(--serif);letter-spacing:-5px;white-space:pre-line;margin:34px 0 29px;overflow-wrap:break-word}.description{font-size:15px;line-height:1.85;max-width:355px;color:#665c50}.cta{display:inline-block;border:0;border-bottom:1px solid #8a7965;background:none;padding:0 0 10px;margin-top:31px;text-align:left;font-size:13px;letter-spacing:.2px}.hero .index{margin-top:66px;color:#7b6d5b}.scene{position:relative;overflow:hidden;background:radial-gradient(ellipse at 70% 24%,#f2d9b1 0,#d9b88b 42%,#b98c64 100%);isolation:isolate}.hero .scene{margin-top:26px;min-height:660px}.wall-light{position:absolute;inset:0;background:linear-gradient(125deg,transparent 34%,#fff2ca60 34.1%,#fff2ca08 58%,transparent 58.1%)}.surface{position:absolute;left:-10%;right:-10%;top:71%;height:50%;background:linear-gradient(150deg,#d6b58d,#c09971 68%);transform:rotate(-8deg);box-shadow:0 -1px 0 #e9cda6}.shadow{position:absolute;width:73%;height:12%;left:25%;top:79%;border-radius:50%;background:#48342247;filter:blur(13px);transform:rotate(-14deg)}.lamp{position:absolute;width:72%;height:69%;left:14%;top:10%;z-index:2}.lamp-foot{position:absolute;left:30%;width:40%;height:7%;bottom:1%;border-radius:50%;background:linear-gradient(90deg,#796955,#d2cec2 20%,#f0ede1 47%,#a79983 80%,#786957);box-shadow:0 5px 4px #63513c40}.lamp-stem{position:absolute;left:47%;width:7%;height:47%;top:47%;background:linear-gradient(90deg,#746c5d,#eae5d7 34%,#aba38f 76%,#746650);border-radius:0 0 4px 4px}.lamp-shade{position:absolute;width:100%;height:61%;top:4%;border-radius:50% 50% 13% 13% / 75% 75% 20% 20%;background:radial-gradient(ellipse at 48% 88%,#fff3c5 0,#ffce79 18%,#eaa657 40%,#b96c2f 67%,#8b4526 100%);box-shadow:inset 8px 0 11px #fff2c65c,inset -13px 1px 19px #542a1e62,0 18px 25px #6d411e27}.shade-rim{position:absolute;left:1%;width:98%;height:14%;top:51%;border-radius:50%;background:radial-gradient(ellipse,#ffe1a1 0,#f2bf73 65%,#b77a3e 95%);border:2px solid #c88c4c;box-shadow:0 7px 18px #eeb9704d}.shine{position:absolute;left:12%;top:15%;width:11%;height:32%;border-radius:70%;transform:rotate(28deg);background:linear-gradient(#fff2ca80,#fff2ca00);filter:blur(4px)}.scene-caption{position:absolute;bottom:20px;left:27px;right:27px;font-size:9px;letter-spacing:1.2px;z-index:3}.scene-no{position:absolute;right:28px;top:25px;font:italic 36px var(--serif);color:#684a30}.strip{display:flex;justify-content:space-between;padding:21px 64px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);gap:24px;font-size:9px;letter-spacing:1.5px}.story{display:grid;grid-template-columns:1fr 1fr;padding:55px 64px 42px;gap:75px}.story h2{font:43px/1.12 var(--serif);letter-spacing:-1.3px;white-space:pre-line;margin-top:15px}.story-description{padding-top:27px;font-size:14px;line-height:1.9;color:#665c50;max-width:490px}.details{display:grid;grid-template-columns:1.1fr 1fr;gap:28px;margin:0 64px 52px}.detail-art{height:285px;position:relative;overflow:hidden}.detail-art.scene{background:radial-gradient(ellipse at 50% 0,#e2d2b9,#c2b49a)}.detail-art .lamp{width:45%;left:28%;height:105%;top:1%}.detail-art .surface{top:85%}.detail-art .scene-caption{top:19px;bottom:auto;left:22px}.material-art{background:#ded7ca;padding:24px;isolation:isolate}.material-ring{position:absolute;left:21%;top:-18%;width:75%;height:143%;border:53px solid #ad5e2c;border-radius:50%;transform:rotate(38deg);box-shadow:inset 8px 9px 14px #713e242e,7px 13px 20px #7e582432;background:transparent}.metal-disk{position:absolute;width:42%;height:67%;right:1%;bottom:-22%;border-radius:50%;background:conic-gradient(#b4ac9b,#eee9dd,#97907f,#e1daca,#b4ac9b);box-shadow:-13px -4px 22px #71665126}.material-art .micro{position:relative;z-index:2}.detail-copy{display:flex;justify-content:space-between;gap:25px;padding-top:16px}.detail-copy h3{font:22px var(--serif)}.detail-copy p{font-size:11px;line-height:1.7;color:#665c50;margin-top:6px;max-width:340px}.detail-arrow{font-size:24px;font-weight:400}.footer{background:#393c30;color:#f3eee6;padding:35px 64px 23px}.footer-title{font:52px/1.15 var(--serif);letter-spacing:-1.6px;margin:17px 0 32px}.footer-bottom{border-top:1px solid #737363;padding-top:19px;display:flex;justify-content:space-between;gap:24px;font-size:9px;letter-spacing:1px}.mobile .nav{margin:0 24px;height:80px}.mobile .brand{font-size:22px;letter-spacing:4px}.mobile .nav-caption{font-size:14px}.mobile .nav .micro{display:none}.mobile .hero{display:block;padding:0}.mobile .hero-copy{padding:35px 24px 30px}.mobile .hero h1{font-size:65px;letter-spacing:-3px;margin:24px 0}.mobile .eyebrow{font-size:8px;letter-spacing:1px}.mobile .description{font-size:13px;line-height:1.8}.mobile .hero .index{margin-top:27px;font-size:8px}.mobile .hero .scene{height:420px;min-height:0;margin:0 16px 23px}.mobile .strip{padding:17px 24px;font-size:8px;gap:20px}.mobile .strip>*:nth-child(2){display:none}.mobile .story{display:block;padding:34px 24px 26px}.mobile .story h2{font-size:36px}.mobile .story-description{padding-top:21px;font-size:13px}.mobile .details{display:block;margin:0 24px 34px}.mobile .detail-art{height:255px}.mobile .detail-card+ .detail-card{margin-top:29px}.mobile .footer{padding:30px 24px 22px}.mobile .footer-title{font-size:35px;letter-spacing:-1px;margin-bottom:25px}.mobile .footer-bottom{font-size:7px;gap:15px}.poster{position:relative;height:100%;padding:47px;background:#d9b78c;isolation:isolate}.poster>.scene{position:absolute;inset:0;z-index:-1}.poster>.scene .lamp{width:55%;height:67%;left:35%;top:25%}.poster>.scene .surface{top:80%}.poster>.scene .scene-caption{display:none}.poster .nav{height:55px;margin:0;border-bottom:1px solid #907859}.poster .brand{font-size:31px}.poster-title{font:90px/1.15 var(--serif);letter-spacing:-4px;white-space:pre-line;position:relative;margin-top:60px}.poster-bottom{position:absolute;bottom:43px;left:47px;right:47px;display:flex;justify-content:space-between;align-items:end;gap:30px}.poster-bottom h3{font:26px var(--serif);margin-bottom:10px}.poster-bottom .micro{max-width:290px}.poster .eyebrow{margin-top:24px}.hero>*,.story>*,.details>*,.footer-bottom>*{min-width:0}button,.detail-copy p,.footer-title{overflow-wrap:anywhere}\n\n/* Keep the closing band at the artboard edge while allowing longer locales to grow. */\n.atelier:not(.poster){display:flex;flex-direction:column}.atelier:not(.poster)>*{flex-shrink:0}.atelier:not(.poster)>.footer{margin-top:auto}\n",
+      "nodes": [
+        {
+          "id": "atelier-campaign-160",
+          "type": "element",
+          "name": "atelier poster",
+          "style": {},
+          "props": {
+            "authored": true,
+            "tag": "main",
+            "attributes": {
+              "class": "atelier poster"
+            },
+            "styleIds": [
+              "atelier-palette"
+            ]
+          },
+          "children": [
+            {
+              "id": "atelier-campaign-148",
+              "type": "element",
+              "name": "Artwork / editable amber glass table lamp",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "div",
+                "attributes": {
+                  "class": "scene "
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-campaign-137",
+                  "type": "element",
+                  "name": "Window light",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": "wall-light"
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-campaign-138",
+                  "type": "element",
+                  "name": "Angled tabletop",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": "surface"
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-campaign-139",
+                  "type": "element",
+                  "name": "Soft cast shadow",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": "shadow"
+                    }
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-campaign-145",
+                  "type": "element",
+                  "name": "lamp",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": "lamp"
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-campaign-140",
+                      "type": "element",
+                      "name": "lamp-foot",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "lamp-foot"
+                        }
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-campaign-141",
+                      "type": "element",
+                      "name": "lamp-stem",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "lamp-stem"
+                        }
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-campaign-142",
+                      "type": "element",
+                      "name": "lamp-shade",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "lamp-shade"
+                        }
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-campaign-143",
+                      "type": "element",
+                      "name": "shade-rim",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "shade-rim"
+                        }
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-campaign-144",
+                      "type": "element",
+                      "name": "shine",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "div",
+                        "attributes": {
+                          "class": "shine"
+                        }
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "id": "atelier-campaign-146",
+                  "type": "element",
+                  "name": "Edition number",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "span",
+                    "attributes": {
+                      "class": "scene-no"
+                    },
+                    "text": "01"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-campaign-147",
+                  "type": "element",
+                  "name": "scene",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "scene-caption"
+                    },
+                    "text": "SOL / AMBER GLASS / BRUSHED ALUMINUM",
+                    "bindingKey": "atelier.scene"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "atelier-campaign-152",
+              "type": "element",
+              "name": "nav",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "header",
+                "attributes": {
+                  "class": "nav"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-campaign-149",
+                  "type": "element",
+                  "name": "brand",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "brand"
+                    },
+                    "text": "ATELIER",
+                    "bindingKey": "atelier.brand"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-campaign-150",
+                  "type": "element",
+                  "name": "nav",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "nav-caption"
+                    },
+                    "text": "Objects of light",
+                    "bindingKey": "atelier.nav"
+                  },
+                  "children": []
+                },
+                {
+                  "id": "atelier-campaign-151",
+                  "type": "element",
+                  "name": "edition",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "micro"
+                    },
+                    "text": "COLLECTION 01 / 2026",
+                    "bindingKey": "atelier.edition"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "id": "atelier-campaign-153",
+              "type": "element",
+              "name": "posterTitle",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "h1",
+                "attributes": {
+                  "class": "poster-title"
+                },
+                "text": "Everyday,\nin a new light.",
+                "bindingKey": "atelier.posterTitle"
+              },
+              "children": []
+            },
+            {
+              "id": "atelier-campaign-154",
+              "type": "element",
+              "name": "edition",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "p",
+                "attributes": {
+                  "class": "eyebrow"
+                },
+                "text": "COLLECTION 01 / 2026",
+                "bindingKey": "atelier.edition"
+              },
+              "children": []
+            },
+            {
+              "id": "atelier-campaign-159",
+              "type": "element",
+              "name": "poster-bottom",
+              "style": {},
+              "props": {
+                "authored": true,
+                "tag": "div",
+                "attributes": {
+                  "class": "poster-bottom"
+                }
+              },
+              "children": [
+                {
+                  "id": "atelier-campaign-157",
+                  "type": "element",
+                  "name": "div",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "div",
+                    "attributes": {
+                      "class": ""
+                    }
+                  },
+                  "children": [
+                    {
+                      "id": "atelier-campaign-155",
+                      "type": "element",
+                      "name": "product",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "h3",
+                        "attributes": {
+                          "class": ""
+                        },
+                        "text": "Sol table light",
+                        "bindingKey": "atelier.product"
+                      },
+                      "children": []
+                    },
+                    {
+                      "id": "atelier-campaign-156",
+                      "type": "element",
+                      "name": "productDesc",
+                      "style": {},
+                      "props": {
+                        "authored": true,
+                        "tag": "p",
+                        "attributes": {
+                          "class": "micro"
+                        },
+                        "text": "Amber glass · Sculptural silhouette",
+                        "bindingKey": "atelier.productDesc"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "id": "atelier-campaign-158",
+                  "type": "element",
+                  "name": "footnote",
+                  "style": {},
+                  "props": {
+                    "authored": true,
+                    "tag": "p",
+                    "attributes": {
+                      "class": "micro"
+                    },
+                    "text": "ATELIER / CONCEPT COLLECTION",
+                    "bindingKey": "atelier.footnote"
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "assets": {},
+  "components": {},
+  "scripts": {},
+  "styles": {
+    "atelier-palette": {
+      "id": "atelier-palette",
+      "name": "ATELIER / Paper and ink",
+      "kind": "color",
+      "style": {
+        "--paper": "#f3eee6",
+        "--ink": "#30291f",
+        "--accent": "#a54c28",
+        "--line": "#cfc6b9"
+      }
+    }
+  },
+  "bindings": {
+    "atelier.brand": {
+      "key": "atelier.brand",
+      "kind": "text",
+      "value": "ATELIER",
+      "revision": 1
+    },
+    "atelier.nav": {
+      "key": "atelier.nav",
+      "kind": "text",
+      "value": "Objects of light",
+      "revision": 1
+    },
+    "atelier.edition": {
+      "key": "atelier.edition",
+      "kind": "text",
+      "value": "COLLECTION 01 / 2026",
+      "revision": 1
+    },
+    "atelier.eyebrow": {
+      "key": "atelier.eyebrow",
+      "kind": "text",
+      "value": "THOUGHTFULLY SHAPED. QUIETLY PRESENT.",
+      "revision": 1
+    },
+    "atelier.hero": {
+      "key": "atelier.hero",
+      "kind": "text",
+      "value": "A softer\nway to live.",
+      "revision": 1
+    },
+    "atelier.desc": {
+      "key": "atelier.desc",
+      "kind": "text",
+      "value": "Light that brings a room together. Meet Sol, a sculptural table lamp inspired by the warmth of the late afternoon.",
+      "revision": 1
+    },
+    "atelier.cta": {
+      "key": "atelier.cta",
+      "kind": "text",
+      "value": "Explore the collection ↗",
+      "revision": 1
+    },
+    "atelier.scene": {
+      "key": "atelier.scene",
+      "kind": "text",
+      "value": "SOL / AMBER GLASS / BRUSHED ALUMINUM",
+      "revision": 1
+    },
+    "atelier.index": {
+      "key": "atelier.index",
+      "kind": "text",
+      "value": "01 — THE ART OF EVERYDAY",
+      "revision": 1
+    },
+    "atelier.strip1": {
+      "key": "atelier.strip1",
+      "kind": "text",
+      "value": "MADE TO FEEL AT HOME",
+      "revision": 1
+    },
+    "atelier.strip2": {
+      "key": "atelier.strip2",
+      "kind": "text",
+      "value": "FORM, FUNCTION & A LITTLE FEELING",
+      "revision": 1
+    },
+    "atelier.strip3": {
+      "key": "atelier.strip3",
+      "kind": "text",
+      "value": "DESIGNED TO STAY",
+      "revision": 1
+    },
+    "atelier.storyLabel": {
+      "key": "atelier.storyLabel",
+      "kind": "text",
+      "value": "THE DESIGN NOTES",
+      "revision": 1
+    },
+    "atelier.story": {
+      "key": "atelier.story",
+      "kind": "text",
+      "value": "Less noise.\nMore atmosphere.",
+      "revision": 1
+    },
+    "atelier.storyDesc": {
+      "key": "atelier.storyDesc",
+      "kind": "text",
+      "value": "A single curve. An honest material. A glow you can settle into. Sol balances an expressive silhouette with the simple pleasure of a well-lit corner.",
+      "revision": 1
+    },
+    "atelier.detail1": {
+      "key": "atelier.detail1",
+      "kind": "text",
+      "value": "01 / A WARMER PERSPECTIVE",
+      "revision": 1
+    },
+    "atelier.detail2": {
+      "key": "atelier.detail2",
+      "kind": "text",
+      "value": "02 / MATERIAL MATTERS",
+      "revision": 1
+    },
+    "atelier.product": {
+      "key": "atelier.product",
+      "kind": "text",
+      "value": "Sol table light",
+      "revision": 1
+    },
+    "atelier.productDesc": {
+      "key": "atelier.productDesc",
+      "kind": "text",
+      "value": "Amber glass · Sculptural silhouette",
+      "revision": 1
+    },
+    "atelier.material": {
+      "key": "atelier.material",
+      "kind": "text",
+      "value": "Beautiful by nature.",
+      "revision": 1
+    },
+    "atelier.materialDesc": {
+      "key": "atelier.materialDesc",
+      "kind": "text",
+      "value": "A quiet conversation between translucent glass and cool, brushed metal.",
+      "revision": 1
+    },
+    "atelier.footerLabel": {
+      "key": "atelier.footerLabel",
+      "kind": "text",
+      "value": "GOOD LIGHT CHANGES EVERYTHING.",
+      "revision": 1
+    },
+    "atelier.footer": {
+      "key": "atelier.footer",
+      "kind": "text",
+      "value": "Make room for warmth.",
+      "revision": 1
+    },
+    "atelier.footnote": {
+      "key": "atelier.footnote",
+      "kind": "text",
+      "value": "ATELIER / CONCEPT COLLECTION",
+      "revision": 1
+    },
+    "atelier.footright": {
+      "key": "atelier.footright",
+      "kind": "text",
+      "value": "ORIGINAL DESIGN STUDY · 2026",
+      "revision": 1
+    },
+    "atelier.posterTitle": {
+      "key": "atelier.posterTitle",
+      "kind": "text",
+      "value": "Everyday,\nin a new light.",
+      "revision": 1
+    }
+  },
+  "variants": {
+    "en": {
+      "id": "en",
+      "name": "English",
+      "locale": "en",
+      "values": {
+        "atelier.brand": {
+          "value": "ATELIER",
+          "sourceRevision": 1
+        },
+        "atelier.nav": {
+          "value": "Objects of light",
+          "sourceRevision": 1
+        },
+        "atelier.edition": {
+          "value": "COLLECTION 01 / 2026",
+          "sourceRevision": 1
+        },
+        "atelier.eyebrow": {
+          "value": "THOUGHTFULLY SHAPED. QUIETLY PRESENT.",
+          "sourceRevision": 1
+        },
+        "atelier.hero": {
+          "value": "A softer\nway to live.",
+          "sourceRevision": 1
+        },
+        "atelier.desc": {
+          "value": "Light that brings a room together. Meet Sol, a sculptural table lamp inspired by the warmth of the late afternoon.",
+          "sourceRevision": 1
+        },
+        "atelier.cta": {
+          "value": "Explore the collection ↗",
+          "sourceRevision": 1
+        },
+        "atelier.scene": {
+          "value": "SOL / AMBER GLASS / BRUSHED ALUMINUM",
+          "sourceRevision": 1
+        },
+        "atelier.index": {
+          "value": "01 — THE ART OF EVERYDAY",
+          "sourceRevision": 1
+        },
+        "atelier.strip1": {
+          "value": "MADE TO FEEL AT HOME",
+          "sourceRevision": 1
+        },
+        "atelier.strip2": {
+          "value": "FORM, FUNCTION & A LITTLE FEELING",
+          "sourceRevision": 1
+        },
+        "atelier.strip3": {
+          "value": "DESIGNED TO STAY",
+          "sourceRevision": 1
+        },
+        "atelier.storyLabel": {
+          "value": "THE DESIGN NOTES",
+          "sourceRevision": 1
+        },
+        "atelier.story": {
+          "value": "Less noise.\nMore atmosphere.",
+          "sourceRevision": 1
+        },
+        "atelier.storyDesc": {
+          "value": "A single curve. An honest material. A glow you can settle into. Sol balances an expressive silhouette with the simple pleasure of a well-lit corner.",
+          "sourceRevision": 1
+        },
+        "atelier.detail1": {
+          "value": "01 / A WARMER PERSPECTIVE",
+          "sourceRevision": 1
+        },
+        "atelier.detail2": {
+          "value": "02 / MATERIAL MATTERS",
+          "sourceRevision": 1
+        },
+        "atelier.product": {
+          "value": "Sol table light",
+          "sourceRevision": 1
+        },
+        "atelier.productDesc": {
+          "value": "Amber glass · Sculptural silhouette",
+          "sourceRevision": 1
+        },
+        "atelier.material": {
+          "value": "Beautiful by nature.",
+          "sourceRevision": 1
+        },
+        "atelier.materialDesc": {
+          "value": "A quiet conversation between translucent glass and cool, brushed metal.",
+          "sourceRevision": 1
+        },
+        "atelier.footerLabel": {
+          "value": "GOOD LIGHT CHANGES EVERYTHING.",
+          "sourceRevision": 1
+        },
+        "atelier.footer": {
+          "value": "Make room for warmth.",
+          "sourceRevision": 1
+        },
+        "atelier.footnote": {
+          "value": "ATELIER / CONCEPT COLLECTION",
+          "sourceRevision": 1
+        },
+        "atelier.footright": {
+          "value": "ORIGINAL DESIGN STUDY · 2026",
+          "sourceRevision": 1
+        },
+        "atelier.posterTitle": {
+          "value": "Everyday,\nin a new light.",
+          "sourceRevision": 1
+        }
+      },
+      "layout": {}
+    },
+    "zh-CN": {
+      "id": "zh-CN",
+      "name": "简体中文",
+      "locale": "zh-CN",
+      "values": {
+        "atelier.brand": {
+          "value": "ATELIER",
+          "sourceRevision": 1
+        },
+        "atelier.nav": {
+          "value": "光的物件",
+          "sourceRevision": 1
+        },
+        "atelier.edition": {
+          "value": "系列 01 / 2026",
+          "sourceRevision": 1
+        },
+        "atelier.eyebrow": {
+          "value": "用心塑造，静静相伴。",
+          "sourceRevision": 1
+        },
+        "atelier.hero": {
+          "value": "让生活，\n柔和一点。",
+          "sourceRevision": 1
+        },
+        "atelier.desc": {
+          "value": "以一盏灯，凝聚空间的温度。认识 Sol：从午后暖光中汲取灵感的雕塑感台灯。",
+          "sourceRevision": 1
+        },
+        "atelier.cta": {
+          "value": "探索系列 ↗",
+          "sourceRevision": 1
+        },
+        "atelier.scene": {
+          "value": "SOL / 琥珀玻璃 / 拉丝铝",
+          "sourceRevision": 1
+        },
+        "atelier.index": {
+          "value": "01 — 日常的艺术",
+          "sourceRevision": 1
+        },
+        "atelier.strip1": {
+          "value": "为家而生",
+          "sourceRevision": 1
+        },
+        "atelier.strip2": {
+          "value": "形态、功能，还有一点感性",
+          "sourceRevision": 1
+        },
+        "atelier.strip3": {
+          "value": "让陪伴更长久",
+          "sourceRevision": 1
+        },
+        "atelier.storyLabel": {
+          "value": "设计手记",
+          "sourceRevision": 1
+        },
+        "atelier.story": {
+          "value": "少一点喧嚣，\n多一点氛围。",
+          "sourceRevision": 1
+        },
+        "atelier.storyDesc": {
+          "value": "一道曲线，一种质朴材质，一束让人安定的光。Sol 用富有表现力的轮廓，回应角落里恰到好处的照明。",
+          "sourceRevision": 1
+        },
+        "atelier.detail1": {
+          "value": "01 / 温暖的视角",
+          "sourceRevision": 1
+        },
+        "atelier.detail2": {
+          "value": "02 / 材质的表达",
+          "sourceRevision": 1
+        },
+        "atelier.product": {
+          "value": "Sol 台灯",
+          "sourceRevision": 1
+        },
+        "atelier.productDesc": {
+          "value": "琥珀玻璃 · 雕塑感轮廓",
+          "sourceRevision": 1
+        },
+        "atelier.material": {
+          "value": "自然之美。",
+          "sourceRevision": 1
+        },
+        "atelier.materialDesc": {
+          "value": "通透玻璃与冷冽金属之间，一场安静的对话。",
+          "sourceRevision": 1
+        },
+        "atelier.footerLabel": {
+          "value": "好光，让日常不同。",
+          "sourceRevision": 1
+        },
+        "atelier.footer": {
+          "value": "为温暖，留一处空间。",
+          "sourceRevision": 1
+        },
+        "atelier.footnote": {
+          "value": "ATELIER / 概念系列",
+          "sourceRevision": 1
+        },
+        "atelier.footright": {
+          "value": "原创设计习作 · 2026",
+          "sourceRevision": 1
+        },
+        "atelier.posterTitle": {
+          "value": "让每一天，\n焕发新光。",
+          "sourceRevision": 1
+        }
+      },
+      "layout": {
+        "atelier-home-6": {
+          "fontSize": 77,
+          "lineHeight": 1.2,
+          "letterSpacing": "-2px"
+        },
+        "atelier-mobile-74": {
+          "fontSize": 52,
+          "lineHeight": 1.2,
+          "letterSpacing": "-2px"
+        },
+        "atelier-campaign-153": {
+          "fontSize": 77,
+          "lineHeight": 1.2,
+          "letterSpacing": "-2px"
+        }
+      }
+    },
+    "ja": {
+      "id": "ja",
+      "name": "日本語",
+      "locale": "ja",
+      "values": {
+        "atelier.brand": {
+          "value": "ATELIER",
+          "sourceRevision": 1
+        },
+        "atelier.nav": {
+          "value": "光のかたち",
+          "sourceRevision": 1
+        },
+        "atelier.edition": {
+          "value": "コレクション 01 / 2026",
+          "sourceRevision": 1
+        },
+        "atelier.eyebrow": {
+          "value": "丁寧につくる。静かに寄り添う。",
+          "sourceRevision": 1
+        },
+        "atelier.hero": {
+          "value": "暮らしに、\nやわらかな光。",
+          "sourceRevision": 1
+        },
+        "atelier.desc": {
+          "value": "部屋をひとつにつなぐ光。午後のぬくもりから生まれた、彫刻のようなテーブルランプ Sol。",
+          "sourceRevision": 1
+        },
+        "atelier.cta": {
+          "value": "コレクションを見る ↗",
+          "sourceRevision": 1
+        },
+        "atelier.scene": {
+          "value": "SOL / アンバーガラス / ブラッシュドアルミ",
+          "sourceRevision": 1
+        },
+        "atelier.index": {
+          "value": "01 — 日々の美しさ",
+          "sourceRevision": 1
+        },
+        "atelier.strip1": {
+          "value": "暮らしになじむ",
+          "sourceRevision": 1
+        },
+        "atelier.strip2": {
+          "value": "かたち、機能、そして心地よさ",
+          "sourceRevision": 1
+        },
+        "atelier.strip3": {
+          "value": "長く寄り添うデザイン",
+          "sourceRevision": 1
+        },
+        "atelier.storyLabel": {
+          "value": "デザインノート",
+          "sourceRevision": 1
+        },
+        "atelier.story": {
+          "value": "静けさから、\n空気が変わる。",
+          "sourceRevision": 1
+        },
+        "atelier.storyDesc": {
+          "value": "ひとつの曲線、素直な素材、心ほどける灯り。Sol は印象的な佇まいと、心地よい明るさを両立します。",
+          "sourceRevision": 1
+        },
+        "atelier.detail1": {
+          "value": "01 / あたたかな視点",
+          "sourceRevision": 1
+        },
+        "atelier.detail2": {
+          "value": "02 / 素材を見つめる",
+          "sourceRevision": 1
+        },
+        "atelier.product": {
+          "value": "Sol テーブルライト",
+          "sourceRevision": 1
+        },
+        "atelier.productDesc": {
+          "value": "アンバーガラス · 彫刻的なかたち",
+          "sourceRevision": 1
+        },
+        "atelier.material": {
+          "value": "素材そのものの美しさ。",
+          "sourceRevision": 1
+        },
+        "atelier.materialDesc": {
+          "value": "透けるガラスと、ひんやりとした金属の静かな対話。",
+          "sourceRevision": 1
+        },
+        "atelier.footerLabel": {
+          "value": "いい光で、日常は変わる。",
+          "sourceRevision": 1
+        },
+        "atelier.footer": {
+          "value": "ぬくもりの居場所を。",
+          "sourceRevision": 1
+        },
+        "atelier.footnote": {
+          "value": "ATELIER / コンセプトコレクション",
+          "sourceRevision": 1
+        },
+        "atelier.footright": {
+          "value": "オリジナルデザインスタディ · 2026",
+          "sourceRevision": 1
+        },
+        "atelier.posterTitle": {
+          "value": "日々に、\n新しい光を。",
+          "sourceRevision": 1
+        }
+      },
+      "layout": {
+        "atelier-home-6": {
+          "fontSize": 77,
+          "lineHeight": 1.2,
+          "letterSpacing": "-2px"
+        },
+        "atelier-mobile-74": {
+          "fontSize": 46,
+          "lineHeight": 1.2,
+          "letterSpacing": "-2px"
+        },
+        "atelier-campaign-153": {
+          "fontSize": 77,
+          "lineHeight": 1.2,
+          "letterSpacing": "-2px"
+        },
+        "atelier-mobile-131": {
+          "fontSize": 32
+        }
+      }
+    }
+  },
+  "metadata": {
+    "template": "atelier",
+    "templateVersion": 1,
+    "editingGuide": "Edit stable content bindings in Data; choose English, 简体中文 or 日本語 variants. Each lamp is made from individually editable CSS layers. Shared Paper and ink styles apply across artboards. ATELIER and Sol are fictional concept names, not product claims."
+  }
+}
