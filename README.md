@@ -14,6 +14,8 @@ Your files and search indexes live on your computer. Browse, write and search lo
 
 **[Download for Windows](https://github.com/DJ-Huang/LeafLoom/releases/latest) · [Download for Mac](https://github.com/DJ-Huang/LeafLoom/releases/latest)**
 
+Check [supported systems and signing status](#get-started) before installing.
+
 [Get started](#get-started) · [Connect ChatGPT](#your-local-knowledge-in-chatgpt) · [MCP, Skills & AI Chat](#ai-connections) · [User guide](docs/en/GUIDE.md) · [Documentation](docs/README.md)
 
 ![LeafLoom welcome screen: choose a language, open a folder or try the demo](assets/screenshots/en/01-welcome.png)
@@ -52,7 +54,9 @@ Keep a research library, build a project wiki, collect reading notes, or give yo
 
 ### Connect once, start with the app
 
-1. In the LeafLoom desktop app, open **Settings → ChatGPT connection**. Enter your existing **Tunnel ID** and **App Key** with **Tunnels Read + Use** permissions, then choose **Save and connect**. The client is built in: no separate download, configuration file or terminal is needed.
+Before starting, you need an existing OpenAI Tunnel, its runtime App Key and a ChatGPT workspace that allows custom MCP connections. Installing LeafLoom does not create these. Follow the [official setup guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) first if needed; the local workspace works without this connection.
+
+1. In the LeafLoom desktop app, open **Settings → AI connections → ChatGPT connection**. Enter your existing **Tunnel ID** and **App Key** with **Tunnels Read + Use** permissions, then choose **Save and connect**. The client is built in: no separate download, configuration file or terminal is needed.
 2. In ChatGPT, add a custom MCP server, choose **Tunnel**, enter the same Tunnel ID and select **No authentication**. Install the connection and select **LeafLoom** in your chat. The Tunnel must be associated with your ChatGPT workspace, which must allow custom MCP connections; see the [official setup guide](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels).
 3. Ask, for example: “Find my notes about this topic and show the sources.” Choose your searchable folders in LeafLoom first; no folders are indexed by default.
 
@@ -72,8 +76,8 @@ Use your knowledge where you already work, with source references you can check.
 | --- | --- |
 | **MCP** | Connect clients such as Codex, Cursor or Claude Code to the local HTTP MCP endpoint at `http://127.0.0.1:18080/mcp` (default port). Enable full access to find, create, edit, organize and recover connected notes. RAG keeps your selected scope; writing starts disabled. |
 | **Feishu / Lark** | Connect an externally configured lark-cli to verify your account and let MCP clients work with documents and Base records. Local and Tunnel permissions are separate and start disabled. [Setup](docs/en/GUIDE.md#optional-feishu--lark-connection). |
-| **Skills** | Install the included [`wiki-search` Skill](wiki-search/SKILL.md) from **Settings → AI integration → Install skill**. It guides compatible assistants through retrieval, Wiki navigation and source checking. Configure MCP separately. |
-| **AI Chat** | Connect a supported, signed-in CLI, discuss a note or selection, and open cited sources. Preview suggested changes, accept them into a draft, then save when ready. |
+| **Skills** | Install the included [`wiki-search` Skill](wiki-search/SKILL.md) from **Settings → Skill → Install skill**. It guides compatible assistants through retrieval, Wiki navigation and source checking. Configure MCP separately. |
+| **AI Chat** | Requires a separately installed, signed-in Codex or Codely CLI. Discuss a note or selection and open cited sources. Preview suggested changes, accept them into a draft, then save when ready. |
 
 [Set up AI Chat, MCP and Skills](docs/en/AI.md)
 
@@ -101,7 +105,7 @@ Keep the current note beside a conversation and follow references back to the so
 
 ### Open local HTML inside your workspace
 
-Open a local `.html` or `.htm` file, confirm its project folder once, and run the website with its companion styles, scripts and resources. Use project navigation, downloads, optional SPA routing, or open an existing HTTP/HTTPS site or development server from **Preview**. [HTML project guide](docs/en/GUIDE.md#open-html-projects-and-websites). The HTML reading room below is included in the demo.
+Open a local `.html` or `.htm` file, confirm its project folder once, and run the website with its companion styles, scripts and resources. Use project navigation, downloads, optional SPA routing, or open an existing HTTP/HTTPS site or development server from **Preview**. [HTML project guide](docs/en/GUIDE.md#open-html-projects-websites-and-design-studio). The HTML reading room below is included in the demo.
 
 ![Local HTML reading room previewed inside LeafLoom](assets/screenshots/en/showcase-html.png)
 
@@ -114,7 +118,20 @@ Open a local `.html` or `.htm` file, confirm its project folder once, and run th
 | Windows 10/11 x64 | [Windows installer](https://github.com/DJ-Huang/LeafLoom/releases/latest) · `.exe` | Run the installer, then open LeafLoom from Start or the desktop shortcut. |
 | macOS 14+ · Apple Silicon | [Mac installer](https://github.com/DJ-Huang/LeafLoom/releases/latest) · `.dmg` | Open the disk image, drag LeafLoom to Applications, then launch it. |
 
-Choose a language, try the included demo or open your own folder, then select what to search. No folders are indexed by default. You can browse first and prepare the local semantic-search model later in settings.
+**Before installing:** Windows packages are unsigned; Mac packages use ad-hoc signing and are not Apple-notarized. SmartScreen or Gatekeeper may warn or block installation. No Linux, Intel Mac or Windows ARM installer is provided. See the [release's signing status](https://github.com/DJ-Huang/LeafLoom/releases/latest) and [desktop validation limits](docs/DESKTOP.md#signing-and-release).
+
+### Try your first source-linked search
+
+No AI account, CLI or semantic-search model is needed for this walkthrough.
+
+1. Choose **English → Try the demo**. The included notes are fictional and separate from your own files; demo edits are kept when you return.
+2. In the search-scope step, select **Concepts**, then **Save and continue → Start exploring**. You can leave model preparation for later. No folders are selected automatically.
+3. Open **Knowledge search** in the sidebar and search for **Atomic notes**. Open the result for `Concepts/Atomic-notes.md` to read the original note, then follow its **Source notes** link.
+4. If there are no results, check **Settings → Search and indexing** for the selected scope and indexing status. A keyword/Wiki fallback without a prepared semantic model is expected; it does not mean semantic indexing is complete.
+
+**Search scope:** Only selected `.md` and `.txt` notes are indexed. HTML, images, videos and attachments can be browsed, but are not indexed or transcribed for knowledge search. `Ctrl/⌘+K` finds files by name; **Knowledge search** searches eligible note content.
+
+When ready, connect your own folder in Settings. Files stay in place, and edits you save change those original files. Prepare BGE-M3 from search settings only when you want local semantic retrieval.
 
 [Detailed installation and platform validation](docs/DESKTOP.md)
 
