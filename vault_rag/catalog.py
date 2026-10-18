@@ -1,7 +1,7 @@
 """Whole-vault file metadata, links, safe property queries and existing view adapters."""
 from __future__ import annotations
 from contextlib import closing
-import datetime as dt, json, re, sqlite3, threading, posixpath
+import datetime as dt, json, re, sqlite3, threading, posixpath, logging
 from pathlib import Path, PurePosixPath
 from collections import defaultdict
 import frontmatter, yaml
@@ -263,6 +263,10 @@ class Catalog:
 
     def apply(self,paths):
         with self.update_lock:
+            paths=set(paths)
+            try:self.files.attachments.apply(paths)
+            except (OSError,sqlite3.Error,ValueError):
+                logging.getLogger(__name__).warning('Attachment index update unavailable; refresh required',exc_info=True)
             root=self.files.config.root
             if self.root!=str(root):self.restore()
             entries=dict(self.entries);changed=set()
@@ -304,12 +308,15 @@ class Catalog:
     def indexes(entries):
         names=defaultdict(list);identities=defaultdict(list)
         for path,entry in entries.items():
-            names[path.rsplit('/',1)[-1]].append(path)
+            names[path_key(path.rsplit('/',1)[-1])].append(path)
             for key in [str(entry['metadata'].get('id','')),entry['title']]+[str(x) for x in list_value(entry['metadata'].get('aliases'))]:
                 if key:identities[key].append(path)
         return set(entries),dict(names),dict(identities),{path_key(p):p for p in entries}
     def resolve(self,target,source='',entries=None,indexes=None):
         current=entries is None;entries=self.entries if current else entries
+        if current and not self.complete_namespace:
+            found=self.files.resolve(target,source)
+            if found:return found
         if not entries:return self.files.resolve(target,source)
         indexes=indexes or self.resolver_indexes or self.indexes(entries)
         paths,names,identities,canonical=indexes
@@ -324,7 +331,7 @@ class Catalog:
                 p=self.files.config.path_for(candidate)
                 if p.is_file():return [p.relative_to(self.files.config.root).as_posix()]
             except (ValueError,OSError):pass
-        return []
+        return self.files.resolve(target,source)
     def search(self,query,limit=40):
         terms=tokens(query)
         if not terms:return []

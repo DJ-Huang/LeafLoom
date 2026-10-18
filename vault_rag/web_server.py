@@ -49,6 +49,10 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     port=config.data.get('port',18080)
     previews=HtmlPreviews(config)
     websites=HtmlProjects(config,port)
+    from vault_rag.attachment_migrations import AttachmentMigrations
+    migrations=AttachmentMigrations(runtime,websites)
+    from vault_rag.attachment_index_jobs import AttachmentIndexJobs
+    index_jobs=AttachmentIndexJobs(runtime)
     if dev_ui_loopback:
         # Explicit browser-development workaround, never inferred from the OS or
         # environment. Keep project hosts separate and Vite on 127.0.0.1 so its
@@ -77,6 +81,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
             try:yield
             finally:
                 await ai.close()
+                await asyncio.to_thread(migrations.stop)
+                await asyncio.to_thread(index_jobs.stop)
                 runtime.stop()
     app=FastAPI(lifespan=lifespan,docs_url=None,redoc_url=None)
     app.add_middleware(StaticCompression)
@@ -85,6 +91,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     app.state.ai=ai
     app.state.feishu=feishu
     app.state.websites=websites
+    app.state.attachment_migrations=migrations
+    app.state.attachment_index_jobs=index_jobs
     app.state.local_dns=local_dns
     app.include_router(ai_router(ai))
     @app.middleware('http')
@@ -229,6 +237,39 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     async def install_search_skill():
         try:return json_response(await asyncio.to_thread(install_skill))
         except OSError as e:return json_response({'error':f'无法安装 wiki-search：{e}'},400)
+    @app.get('/api/attachments/migrations')
+    async def list_attachment_migrations():
+        return await asyncio.to_thread(migrations.list)
+    @app.post('/api/attachments/migrations')
+    async def plan_attachment_migration(request:Request):
+        body=await request.json()
+        return await asyncio.to_thread(migrations.create,body['root'],body.get('destination','_attachments'))
+    @app.get('/api/attachments/migrations/{key}')
+    async def get_attachment_migration(key:str):
+        return await asyncio.to_thread(migrations.get,key)
+    @app.post('/api/attachments/migrations/{key}/{action}')
+    async def act_attachment_migration(key:str,action:str,request:Request):
+        body=await request.json()
+        return await asyncio.to_thread(migrations.action,key,action,body['root'],body.get('confirm',False))
+    @app.get('/api/attachments/status')
+    async def attachment_status(root:str=''):
+        return await asyncio.to_thread(index_jobs.status,root)
+    @app.post('/api/attachments/initialize')
+    @app.post('/api/attachments/rebuild')
+    @app.post('/api/attachments/refresh')
+    async def initialize_attachments(request:Request):
+        body=await request.json()
+        return await asyncio.to_thread(index_jobs.start,body['root'])
+    @app.post('/api/attachments/index-cancel')
+    async def cancel_attachment_index(request:Request):
+        body=await request.json()
+        return await asyncio.to_thread(index_jobs.cancel_job,body['root'])
+    @app.get('/api/attachments')
+    async def attachments(query:str='',after:str='',limit:int=100,root:str=''):
+        status=await asyncio.to_thread(index_jobs.status,root)
+        if not status['usable']:
+            return json_response({'error':'Initialize the attachment index first','initialization_required':True},409)
+        return await asyncio.to_thread(runtime.files.attachments.listing,query,after,limit)
     @app.get('/api/tree')
     async def tree(path:str=''):return await asyncio.to_thread(runtime.catalog.tree,path)
     @app.get('/api/file')
@@ -294,18 +335,20 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     async def restore(request:Request):
         body=await request.json();return await asyncio.to_thread(runtime.files.restore,body['kind'],body['id'])
     @app.post('/api/upload')
-    async def upload(request:Request,folder:str='',name:str='',root:str|None=None,create_folder:bool=False):
+    async def upload(request:Request,folder:str='',name:str='',root:str|None=None,create_folder:bool=False,central:bool=False):
         # Stream to a staging file, then atomically publish without overwriting.
         import uuid
         if '/' in name or '\\' in name or not name:raise ValueError('文件名无效')
-        if create_folder and root is None:raise ValueError('创建附件目录需要指定关联目录')
-        rel='/'.join(x for x in (folder,name) if x)
+        if (create_folder or central) and root is None:raise ValueError('创建附件目录需要指定关联目录')
         with config.lock:
+            runtime.files.ensure_mutable()
+            if central:folder=config.data.get('attachment_folder','_attachments')
+            rel='/'.join(x for x in (folder,name) if x)
             expected_root=str(config.root);revision=config.data.get('revision')
             if root is not None and root!=expected_root:raise ConflictError('关联目录已切换，附件未写入')
             dest=config.path_for(rel,writable=True)
             if dest.exists():raise ConflictError('同名文件已存在')
-            if create_folder:dest.parent.mkdir(exist_ok=True)
+            if create_folder or central:dest.parent.mkdir(parents=True,exist_ok=True)
             # Revalidate newly created directories before opening a staging file.
             dest=config.path_for(rel,writable=True)
             temp=dest.with_name('.upload-'+uuid.uuid4().hex)
@@ -315,6 +358,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
                 async for part in request.stream():f.write(part)
                 f.flush();os.fsync(f.fileno())
             with config.lock,runtime.files.lock:
+                runtime.files.ensure_mutable()
                 if str(config.root)!=expected_root or config.data.get('revision')!=revision:
                     raise ConflictError('关联目录已切换，附件未写入')
                 if config.path_for(rel,writable=True)!=dest:raise ConflictError('附件目录已变化，未写入')

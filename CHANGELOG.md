@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+- Unify attachment index initialization/upgrade and directory migration into one workflow: automatic index preparation, preview, then one confirmation for copy, reference rewrite, recoverable original retirement and final index rebuild. Keep index-only maintenance under collapsed advanced options. Opening the manager remains read-only; HTML projects remain excluded from migration.
+
+- Add explicit, asynchronous attachment migration previews with persisted progress, safety blockers, cancellation, journal-based recovery and confirmed rollback. Preserve original assets and note backups; completed migrations select the central folder for future uploads.
+
+- Add a metadata-only SQLite attachment index and sidebar attachment manager with paginated name/path search, original-file downloads, refresh, cancellation and retry. Keep original files, HTML projects and existing URLs unchanged.
+
 - Add the existing English demo video to all three website homepages with native playback controls, localized screenshot posters and a direct video link.
 
 - Add an optional browser developer launcher with an explicitly isolated state directory and Vite frontend. Opt-in `--loopback-ui` uses literal `localhost` for managed-browser compatibility while preserving authentication and separate HTML-project origins; project previews may still be affected. Normal desktop launches and supported installer platforms are unchanged.

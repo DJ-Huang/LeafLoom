@@ -10,16 +10,19 @@ export function attachmentName(file:File){
 }
 export type UploadedAsset={relative:string,label:string,image:boolean};
 export async function uploadEditorAssets(files:File[],options:{root:string,path:string,signal:AbortSignal,alive:()=>boolean,status:(message:string)=>void}){
- const parent=options.path.includes('/')?options.path.slice(0,options.path.lastIndexOf('/')):'',folder=(parent?parent+'/':'')+'attachments',assets:UploadedAsset[]=[];
+ const parent=options.path.includes('/')?options.path.slice(0,options.path.lastIndexOf('/')):'',assets:UploadedAsset[]=[];
  for(let i=0;i<files.length;i++){
   if(!options.alive())throw new DOMException('cancelled','AbortError');
   options.status(t('正在上传附件 {current}/{total}…',{current:i+1,total:files.length}));
-  const file=files[i],name=attachmentName(file),query=new URLSearchParams({folder,name,root:options.root,create_folder:'true'});
+  const file=files[i],name=attachmentName(file),query=new URLSearchParams({name,root:options.root,central:'true'});
   const response=await fetch('/api/upload?'+query,{method:'POST',credentials:'same-origin',headers:{'X-Vault-CSRF':csrf,'Content-Type':file.type||'application/octet-stream'},body:file,signal:options.signal});
   const result=await response.json();if(!response.ok)throw new Error(result.error||t('附件上传失败'));
   invalidate({paths:[result.path]});
   if(!options.alive())throw new DOMException('cancelled','AbortError');
-  assets.push({relative:'attachments/'+encodeURIComponent(name).replace(/\(/g,'%28').replace(/\)/g,'%29'),label:file.name||name,image:imageFile(name)});
+  const from=parent.split('/').filter(Boolean),to=String(result.path).split('/');
+  while(from.length&&to.length&&from[0]===to[0]){from.shift();to.shift();}
+  const relative=[...from.map(()=>'..'),...to].map(part=>encodeURIComponent(part).replace(/\(/g,'%28').replace(/\)/g,'%29')).join('/');
+  assets.push({relative,label:file.name||name,image:imageFile(name)});
  }
  return assets;
 }
