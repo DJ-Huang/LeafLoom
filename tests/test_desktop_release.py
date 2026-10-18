@@ -123,6 +123,25 @@ class DesktopReleaseTests(unittest.TestCase):
             f"{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.name}\n" for file in self.files))
         verify.assert_called_once()
 
+    def test_version_specific_curated_release_notes(self):
+        path = self.root / "docs/en/RELEASE_NOTES_1.2.3.md"
+        self.assertEqual(release.curated_release_notes("1.2.3", self.root), "")
+        path.parent.mkdir(parents=True)
+        path.write_text("# LeafLoom 1.2.3 — Release Notes\n\nCurated changes.\n", encoding="utf-8")
+        self.assertIn("Curated changes.", release.curated_release_notes("1.2.3", self.root))
+        for wrong_heading in ("# LeafLoom 1.2.2", "# LeafLoom 1.2.30 — Release Notes"):
+            path.write_text(wrong_heading + "\n\nWrong version.\n", encoding="utf-8")
+            with self.subTest(wrong_heading=wrong_heading), self.assertRaises(ValueError):
+                release.curated_release_notes("1.2.3", self.root)
+
+    def test_new_draft_includes_curated_and_generated_notes(self):
+        with patch.object(release, "curated_release_notes", return_value="# LeafLoom 1.2.3 — Release Notes\n\nReviewed."):
+            calls, _, _ = self.draft_fixture()
+        created = [body for _, body in calls if body and "draft" in body][0]
+        self.assertIn("Reviewed.", created["body"])
+        self.assertIn("GitHub-generated change list", created["body"])
+        self.assertIn("Generated notes", created["body"])
+
     def test_rerun_preserves_draft_notes(self):
         calls, upload, _ = self.draft_fixture(existing={"id": 123, "draft": True,
             "body": "User edited notes", "html_url": "https://github.com/example/repo/releases/123"})

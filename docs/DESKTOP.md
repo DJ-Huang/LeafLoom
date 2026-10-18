@@ -208,7 +208,11 @@ tool's parallel scan of the embedded Python/Torch tree; local Mac builds with an
 1. Update the application version in `pyproject.toml`, `vault_rag/__init__.py`,
    both `web/package.json` and `desktop/package.json`, the root application entries
    in both npm lockfiles, and the `vault-rag` package in `uv.lock`. Update the three
-   changelogs. Commit the matching versions; CI checks them but never rewrites them.
+   changelogs. Prepare `docs/en/RELEASE_NOTES_X.Y.Z.md` for curated release notes
+   (and matching `docs/zh-CN/` and `docs/ja/` translations), and link them from
+   `docs/README.md`. When present, the English note is included in the new draft
+   before the GitHub-generated change list; existing drafts preserve edited notes.
+   Commit the matching versions; CI checks them but never rewrites them.
 2. Push that commit, then create and push its stable `vX.Y.Z` tag. For example,
    after preparing version 0.1.3: `git tag v0.1.3`, then
    `git push public v0.1.3`. Use your actual remote name. Do not reuse an existing tag.
@@ -218,7 +222,7 @@ tool's parallel scan of the embedded Python/Torch tree; local Mac builds with an
    the draft upload job; logs and available acceptance reports remain in Actions.
 4. When both succeed, open the workflow summary's Release draft link. It contains
    `LeafLoom-X.Y.Z-windows-x64-setup.exe`, `LeafLoom-X.Y.Z-macos-arm64.dmg`,
-   `SHA256SUMS.txt`, signing status, build links and generated release notes.
+   `SHA256SUMS.txt`, signing status, build links, version-specific curated release notes (when present) and a GitHub-generated change list.
    Uploaded file sizes and SHA-256 values are verified against the local outputs.
 5. Review the notes and installers, then click **Publish release** yourself.
    Drafts are not offered by the app updater or the public website. Manual
