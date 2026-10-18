@@ -381,6 +381,9 @@ The separate blank-project workflow builds home, game, gallery and settings
 screens through the UI, reuses a published HUD, embeds a gallery, configures
 animation/scripts, closes the settings overlay, pages beyond 50 history entries
 and exports. Run `node tests/studio_workbench_browser.cjs` after building the UI.
+This full-workbench Chrome acceptance is manual-only; the Design Studio CI
+does not install Chrome or run this harness. Portable Chromium contracts and
+native Electron publishing acceptance remain in CI.
 The focused `node tests/studio_component_scripts_browser.cjs` also passed four
 real-UI checks for master extraction/editing, copied script references and undo/redo.
 Evidence is written to `.cache/studio-qa/` by
