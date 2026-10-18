@@ -138,6 +138,43 @@ class WebsiteTests(unittest.TestCase):
             self.assertEqual(len(result["fallback_releases"]), 101)
             self.assertEqual(fetch.call_args_list[-1].args, ("releases?per_page=100&page=2",))
 
+    def test_published_release_waits_for_public_latest_api(self):
+        stale = fixture()
+        stale["tag_name"] = "v1.2.2"
+        with patch.object(site, "release_json", side_effect=[stale, fixture()]) as fetch, \
+             patch.object(site.time, "sleep") as sleep:
+            result = site.latest_release(expected_tag="v1.2.3")
+        self.assertEqual(result["tag_name"], "v1.2.3")
+        self.assertEqual(fetch.call_count, 2)
+        sleep.assert_called_once_with(5)
+
+    def test_published_release_fails_closed_if_latest_stays_stale(self):
+        stale = fixture()
+        stale["tag_name"] = "v1.2.2"
+        with patch.object(site, "release_json", return_value=stale) as fetch, \
+             patch.object(site.time, "sleep") as sleep:
+            with self.assertRaisesRegex(RuntimeError, "Refusing a stale Pages deployment"):
+                site.latest_release(expected_tag="v1.2.3")
+        self.assertEqual(fetch.call_count, 6)
+        self.assertEqual(sleep.call_count, 5)
+
+    def test_previous_release_publish_does_not_block_newer_stable(self):
+        with patch.object(site, "release_json", return_value=fixture()) as fetch, \
+             patch.object(site.time, "sleep") as sleep:
+            result = site.latest_release(expected_tag="v1.2.1")
+        self.assertEqual(result["tag_name"], "v1.2.3")
+        fetch.assert_called_once_with("releases/latest")
+        sleep.assert_not_called()
+        with self.assertRaisesRegex(ValueError, "Unsupported stable release tag"):
+            site.latest_release(expected_tag="v1.2.3-rc.1")
+
+    def test_pages_workflow_uses_one_publication_hook_and_checks_version(self):
+        workflow = (ROOT / ".github/workflows/pages.yml").read_text(encoding="utf-8")
+        self.assertIn("types: [published, deleted]", workflow)
+        self.assertIn("LEAFLOOM_PUBLISHED_TAG:", workflow)
+        self.assertIn("group: leafloom-website-", workflow)
+        self.assertNotIn("types: [published, edited, released, deleted]", workflow)
+
     def test_template_rejects_missing_values(self):
         with self.assertRaisesRegex(ValueError, "Missing template value"):
             site.render("<h1>{{missing}}</h1>", {})

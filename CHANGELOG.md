@@ -4,7 +4,7 @@
 
 ## Unreleased
 
-_No changes yet._
+- Avoid duplicate Pages deployments when a GitHub Release is published, and refuse stale latest-version builds until the public Release API catches up.
 
 ## 0.1.3 — 2026-10-18
 

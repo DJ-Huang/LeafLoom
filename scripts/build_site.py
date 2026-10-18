@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import time
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
@@ -26,8 +27,28 @@ def release_json(path: str):
         return json.load(response)
 
 
-def latest_release() -> dict:
-    release = release_json("releases/latest")
+def stable_version(tag: str) -> tuple[int, int, int, int]:
+    if not re.fullmatch(r"v?\d+\.\d+\.\d+(?:\.\d+)?", tag):
+        raise ValueError(f"Unsupported stable release tag: {tag}")
+    parts = tuple(map(int, tag.removeprefix("v").split(".")))
+    return parts + (0,) * (4 - len(parts))
+
+
+def latest_release(expected_tag: str = "") -> dict:
+    # GitHub can dispatch 'published' before releases/latest reflects that tag.
+    # Fail instead of deploying stale HTML if the API never catches up.
+    expected = stable_version(expected_tag) if expected_tag else None
+    for attempt in range(6 if expected else 1):
+        release = release_json("releases/latest")
+        if expected is None or stable_version(release["tag_name"]) >= expected:
+            break
+        if attempt < 5:
+            time.sleep(5)
+    else:
+        raise RuntimeError(
+            f"GitHub releases/latest is still {release['tag_name']}; "
+            f"expected at least published {expected_tag}. Refusing a stale Pages deployment."
+        )
     info = release_info(release)
     if all(info[platform] for platform in ("windows", "macos")):
         return release
@@ -67,18 +88,14 @@ def release_info(release: dict) -> dict:
 def platform_releases(release: dict) -> dict:
     latest = release_info(release)
 
-    def version(tag):
-        parts = tuple(map(int, tag.removeprefix("v").split(".")))
-        return parts + (0,) * (4 - len(parts))
-
     history = []
     for candidate in release.get("fallback_releases", []):
         tag = candidate.get("tag_name", "")
         if candidate.get("draft") or candidate.get("prerelease") or not re.fullmatch(r"v?\d+\.\d+\.\d+(?:\.\d+)?", tag):
             continue
-        if version(tag) < version(latest["tag"]):
+        if stable_version(tag) < stable_version(latest["tag"]):
             history.append(release_info(candidate))
-    candidates = [latest] + sorted(history, key=lambda item: version(item["tag"]), reverse=True)
+    candidates = [latest] + sorted(history, key=lambda item: stable_version(item["tag"]), reverse=True)
     return {platform: next((item for item in candidates if item[platform]), latest)
             for platform in ("windows", "macos")}
 
@@ -198,7 +215,8 @@ def main():
     parser.add_argument("--base-url", default=DEFAULT_URL)
     parser.add_argument("--release-json", type=Path, help="Use a saved public API response for offline checks")
     args = parser.parse_args()
-    release = json.loads(args.release_json.read_text(encoding="utf-8-sig")) if args.release_json else latest_release()
+    release = (json.loads(args.release_json.read_text(encoding="utf-8-sig")) if args.release_json
+               else latest_release(os.environ.get("LEAFLOOM_PUBLISHED_TAG", "")))
     build(args.output, release, args.base_url)
 
 
