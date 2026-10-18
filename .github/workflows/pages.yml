@@ -27,12 +27,21 @@ on:
       - 'assets/promo/leafloom-en.mp4'
       - 'tests/test_site.py'
       - '.github/workflows/pages.yml'
+  # 'published' already covers draft-to-public and normal releases.
+  # 'released' and 'edited' also fired on v0.1.3 publication, causing
+  # duplicate builds and competing Pages deployments.
   release:
-    types: [published, edited, released, deleted]
+    types: [published, deleted]
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Serialize entire production builds, not only the deployment step. This
+# prevents an older API snapshot from deploying after a newer publication.
+concurrency:
+  group: leafloom-website-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -53,6 +62,9 @@ jobs:
       - name: Build public site with the latest stable downloads
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          # GitHub's releases/latest endpoint may briefly lag a published event.
+          # Never deploy a stale version when a newer stable release was published.
+          LEAFLOOM_PUBLISHED_TAG: ${{ github.event_name == 'release' && github.event.action == 'published' && !github.event.release.prerelease && github.event.release.tag_name || '' }}
         run: python scripts/build_site.py
       - uses: actions/upload-pages-artifact@v4
         with:
