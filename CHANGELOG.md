@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+_No changes yet._
+
+## 0.1.3 — 2026-10-18
+
 - Refine the Design Studio workbench hierarchy, group page actions, and introduce a focused publishing workspace with persistent actions and expandable results. Add the editable ATELIER lighting campaign with three artboards and complete English/Chinese/Japanese variants.
 
 - Add stable text/image data bindings, reviewable language/general variants, per-variant layout overrides, text/resource preflight and bounded fitting, plus selected-page/variant PNG ZIP and multi-page PDF publishing with progress and retry. Preserve interactive HTML export and undo/conflict protection.

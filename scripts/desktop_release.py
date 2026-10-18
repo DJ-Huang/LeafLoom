@@ -115,6 +115,20 @@ def verify_assets(repository, release_id, files):
                     raise ValueError(f"Downloaded SHA-256 mismatch: {file.name}")
 
 
+def curated_release_notes(version, root=ROOT):
+    """Use reviewed, version-scoped release notes when provided; never read a draft from another tag."""
+    path = root / "docs" / "en" / f"RELEASE_NOTES_{version}.md"
+    if not path.exists():
+        return ""
+    if not path.is_file():
+        raise ValueError(f"Release notes path is not a file: {path}")
+    notes = path.read_text(encoding="utf-8").strip()
+    first_line = notes.splitlines()[0] if notes else ""
+    if first_line != f"# LeafLoom {version}" and not first_line.startswith(f"# LeafLoom {version} — "):
+        raise ValueError(f"Release notes must have the exact LeafLoom {version} heading: {path}")
+    return notes
+
+
 def create_draft(repository, tag, directory):
     version = application_version(tag=tag)
     files = artifacts(directory, version)
@@ -130,6 +144,9 @@ def create_draft(repository, tag, directory):
     files.append(manifest)
     if release is None:
         notes = gh_json(f"repos/{repository}/releases/generate-notes", body={"tag_name": tag})["body"]
+        curated = curated_release_notes(version)
+        if curated:
+            notes = curated + "\n\n## GitHub-generated change list\n\n" + notes
         run_url = f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{repository}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
         release = gh_json(f"repos/{repository}/releases", body={
             "tag_name": tag, "name": f"LeafLoom {version}", "draft": True,
