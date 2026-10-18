@@ -14,6 +14,8 @@
 
 **[下载 Windows 安装包](https://github.com/DJ-Huang/LeafLoom/releases/latest) · [下载 Mac 安装包](https://github.com/DJ-Huang/LeafLoom/releases/latest)**
 
+安装前请先确认[支持的系统与签名状态](#开始使用)。
+
 [开始使用](#开始使用) · [连接 ChatGPT](#在-chatgpt-中使用本地知识库) · [MCP、Skill 与 AI Chat](#ai-connections) · [新手指南](GUIDE.md) · [文档目录](../README.md)
 
 ![LeafLoom 欢迎页：选择语言、打开文件夹或体验演示知识库](../../assets/screenshots/zh-CN/01-welcome.png)
@@ -52,7 +54,9 @@
 
 ### 配置一次，随应用自动连接
 
-1. 在 LeafLoom 桌面应用中打开 **设置 → ChatGPT 连接**，填写已有的 **Tunnel ID** 和具有 **Tunnels Read + Use** 权限的 **App Key**，点击 **保存并连接**。客户端已内置，无需另外下载、编写配置文件或打开终端。
+开始前，需要已有的 OpenAI Tunnel、对应的运行时 App Key，以及允许自定义 MCP 连接的 ChatGPT 工作区。安装 LeafLoom 不会自动创建这些资源；如尚未准备，请先阅读[官方接入指南](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)。本地工作区无需此连接即可使用。
+
+1. 在 LeafLoom 桌面应用中打开 **设置 → AI 连接 → ChatGPT 连接**，填写已有的 **Tunnel ID** 和具有 **Tunnels Read + Use** 权限的 **App Key**，点击 **保存并连接**。客户端已内置，无需另外下载、编写配置文件或打开终端。
 2. 在 ChatGPT 中添加自定义 MCP，连接方式选择 **Tunnel**，填写同一 Tunnel ID，认证选择 **无认证**。安装连接后，在对话中选择 **LeafLoom**。Tunnel 需要关联到目标 ChatGPT 工作区，该工作区需允许自定义 MCP 连接；详见[官方接入指南](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels)。
 3. 试着问：“找到与这个主题有关的笔记，并列出来源。”先在 LeafLoom 中选择检索目录；默认不索引任何目录。
 
@@ -73,7 +77,7 @@ App Key 由操作系统加密保存。连接随应用启动，关闭窗口留在
 | **MCP** | 将 Codex、Cursor、Claude Code 等客户端接入本地 HTTP MCP：`http://127.0.0.1:18080/mcp`（默认端口）。启用完整访问后可查找、创建、编辑、整理和恢复关联笔记；RAG 保持勾选范围，写入默认关闭。 |
 | **飞书** | 使用自行配置的 lark-cli 验证账号，让 MCP 客户端操作飞书文档与多维表格。本机和 Tunnel 权限分别设置，默认关闭。[接入指南](GUIDE.md#可选飞书接入)。 |
 | **Skill** | 在 **设置 → Skill → 安装技能** 中安装内置的 [`wiki-search` Skill](../../wiki-search/SKILL.md)，引导兼容的 AI 助手完成检索、Wiki 导航与来源核对；MCP 连接需另行配置。 |
-| **AI Chat** | 连接受支持、已登录的 CLI，围绕当前笔记或选文对话，打开回答中的引用。先预览修改差异，接受到草稿后再决定何时保存。 |
+| **AI Chat** | 需另外安装并登录 Codex 或 Codely CLI。围绕当前笔记或选文对话，打开回答中的引用。先预览修改差异，接受到草稿后再决定何时保存。 |
 
 [配置 AI Chat、MCP 与 Skill](AI.md)
 
@@ -101,7 +105,7 @@ App Key 由操作系统加密保存。连接随应用启动，关闭窗口留在
 
 ### HTML 预览：把本地网页也放进知识库
 
-打开本地 `.html`、`.htm` 文件，确认一次项目文件夹，即可运行带有配套样式、脚本和资源的网站。支持网页导航、下载与可选 SPA 路由，也可从侧栏「网页」打开已有 HTTP/HTTPS 网站或开发服务。参阅 [HTML 项目指南](GUIDE.md#打开-html-项目与网站)。下图的 HTML 阅览室已包含在演示库中。
+打开本地 `.html`、`.htm` 文件，确认一次项目文件夹，即可运行带有配套样式、脚本和资源的网站。支持网页导航、下载与可选 SPA 路由，也可从侧栏「网页」打开已有 HTTP/HTTPS 网站或开发服务。参阅 [HTML 项目指南](GUIDE.md#打开-html-项目网站与设计工作台)。下图的 HTML 阅览室已包含在演示库中。
 
 ![LeafLoom 内的本地 HTML 阅览室预览](../../assets/screenshots/zh-CN/showcase-html.png)
 
@@ -114,7 +118,20 @@ App Key 由操作系统加密保存。连接随应用启动，关闭窗口留在
 | Windows 10/11 x64 | [Windows 安装包](https://github.com/DJ-Huang/LeafLoom/releases/latest) · `.exe` | 运行安装程序，完成后从开始菜单或桌面快捷方式打开 LeafLoom。 |
 | macOS 14+ · Apple 芯片 | [Mac 安装包](https://github.com/DJ-Huang/LeafLoom/releases/latest) · `.dmg` | 打开磁盘映像，将 LeafLoom 拖入「应用程序」，再启动应用。 |
 
-选择语言，体验内置演示库或打开自己的目录，再选择检索范围。默认不索引任何目录；可以先浏览，需要语义检索时再在设置中准备本地模型。
+**安装前须知：** Windows 安装包未签名；Mac 安装包采用临时签名，未经 Apple 公证。SmartScreen 或 Gatekeeper 可能警告或阻止安装。不提供 Linux、Intel Mac 或 Windows ARM 安装包。请查看[当前版本的签名状态](https://github.com/DJ-Huang/LeafLoom/releases/latest)与[桌面验证边界](../DESKTOP.md#signing-and-release)。
+
+### 完成第一次可追溯检索
+
+以下步骤无需 AI 账号、CLI 或语义检索模型。
+
+1. 选择 **中文 → 体验演示知识库**。内置笔记为虚构示例，与自己的文件分开；再次打开演示库会保留修改。
+2. 在检索范围步骤勾选 **Concepts**，再点击 **保存范围并继续 → 开始探索**。模型可以稍后准备；默认不会勾选任何目录。
+3. 打开侧栏的 **知识检索**，搜索 **原子笔记**。打开 `Concepts/Atomic-notes.md` 对应的结果阅读原文，再沿 **来源笔记** 链接继续浏览。
+4. 如果没有结果，在 **设置 → 检索与索引** 中检查勾选范围与索引状态。未准备语义模型时，关键词/Wiki 回退是正常情况，不代表语义索引已经完成。
+
+**检索范围：** 只有选中目录内的 `.md`、`.txt` 笔记会被索引。HTML、图片、视频和附件可以浏览，但不会被纳入知识检索或转写。`Ctrl/⌘+K` 按文件名查找；**知识检索** 搜索符合条件的笔记正文。
+
+准备好后，在设置中关联自己的目录。文件保留原位，保存的编辑会修改原始文件。需要本地语义检索时，再在检索设置中准备 BGE-M3。
 
 [详细安装要求与平台验证说明](../DESKTOP.md)
 
