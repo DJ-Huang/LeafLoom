@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
 const {Backend} = require('./backend.cjs');
+const {publishJob} = require('./design-publisher.cjs');
 const {TunnelSettings, tunnelBinary} = require('./tunnel.cjs');
 const {Updater} = require('./updater.cjs');
 const policy = require('./policy.cjs');
@@ -312,6 +313,10 @@ else {
       {role: 'editMenu'}, {role: 'viewMenu'}, {role: 'windowMenu'},
     ]));
     const methods = {
+      'design-publish': id => {
+        if (!backend?.ready || !workspaceLoaded) throw new Error('Workspace is not ready for publishing');
+        return publishJob({BrowserWindow, session}, backend.ready.url, fs.readFileSync(path.join(home, 'auth-token'), 'utf8').trim(), id);
+      },
       'tunnel-status': () => tunnel.status(),
       'tunnel-save': input => {tunnel.save(input); return configureTunnel();},
       'tunnel-reconnect': () => {if (!tunnel.value.encryptedKey) throw new Error('tunnel.error.key'); tunnel.save({tunnelId: tunnel.value.tunnelId, enabled: true}); return configureTunnel();},

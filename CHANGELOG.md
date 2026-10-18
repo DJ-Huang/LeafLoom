@@ -4,6 +4,25 @@
 
 ## Unreleased
 
+- Refine the Design Studio workbench hierarchy, group page actions, and introduce a focused publishing workspace with persistent actions and expandable results. Add the editable ATELIER lighting campaign with three artboards and complete English/Chinese/Japanese variants.
+
+- Add stable text/image data bindings, reviewable language/general variants, per-variant layout overrides, text/resource preflight and bounded fitting, plus selected-page/variant PNG ZIP and multi-page PDF publishing with progress and retry. Preserve interactive HTML export and undo/conflict protection.
+
+- Add an explicit Edit / Preview switch with a distraction-free interactive canvas, page picker and replay. Wait for the latest edits to save before preview, retain failed saves, and restore the original editing page, selection and camera on return.
+
+- Add the playable Motion Playground built-in template with editable native animation and JavaScript examples, a touch layout and in-project guide. Respect live reduced-motion settings, support focus/touch hover feedback, and avoid accumulating animations on repeated interaction.
+
+- Polish everyday Design Studio editing with marquee selection, snapping guides, keyboard nudging, rendered-coordinate alignment/distribution, selection scaling and auto-layout reordering. Add visual sizing, typography, effects, image crop, linked reusable styles and component overrides/reset; show import fidelity and pending-save recovery explicitly. Extend isolated acceptance with content-sized cards, FORMA rebranding and edited HTML ZIP replay.
+
+- Fix directory browsing accidentally submitting Design Studio creation. Require explicit creation, show parent and target paths, validate folder names and guard repeated clicks for blank and FORMA projects.
+
+- Add the built-in FORMA editorial studio template to new design projects with a preview, four editable artboards and 328 layers. Each creation gets independent document history, bundled artwork and overwrite protection.
+
+- Improve Design Studio navigation with persistent pan/zoom, Select and Hand tools, fit-to-page/selection, collapsible layers, selection breadcrumbs and grouped inspector sections. Show canvas connection failures with retry. Preserve more HTML document context, mixed text and responsive resources during conversion; keep original source and isolated preview boundaries.
+
+- Add permanent deletion and emptying to the design project recycle bin with confirmation, revision checks and resumable cleanup. Remove affected project recovery records while preserving unrelated history and shared libraries.
+
+- Show a restart diagnostic when a newer project homepage meets an older backend. Disable management actions until workspace state loads, expose retry, and prevent delete from silently doing nothing.
 - Add the existing English demo video to all three website homepages with native playback controls, localized screenshot posters and a direct video link.
 
 - Add an optional browser developer launcher with an explicitly isolated state directory and Vite frontend. Opt-in `--loopback-ui` uses literal `localhost` for managed-browser compatibility while preserving authentication and separate HTML-project origins; project previews may still be affected. Normal desktop launches and supported installer platforms are unchanged.
@@ -15,6 +34,12 @@
 - Add English, Chinese and Japanese About pages with the creator’s GitHub and X profiles, linked from website navigation and footers.
 
 - Keep the latest available stable Windows and Mac website downloads independently, with matching versions, release notes and checksums. Allow `v*` tags in the Pages environment so Release events can deploy automatically.
+
+- Expand Design Studio into a visual HTML game-screen workbench: project home and recycle bin, asset metadata/replacement, reusable components and embedded pages, versioned personal shared libraries, and standalone ZIP export. Keep legacy 1.1.0 projects and convert authored DOM/CSS into a separate copy, adapting recognized navigation, switches and context-dependent page states; original scripts remain in the copied source and other runtime behavior needs new scripts.
+
+- Share durable transaction undo/redo across pages, source edits, assets and directly applied AI batches, including after restart. Add version checks, idempotent retries, pending-save recovery and external-change protection. Offer animation presets and per-element/page `mount(ctx)` scripts with editable parameters, isolated preview, tracked cleanup and console/error attribution. Canvas gestures update selected nodes per frame and commit once; real-project and pressure-test budgets remain explicit acceptance targets.
+
+- Expand the combined HTTP MCP surface to 42 tools: 23 note tools, 14 Design Studio tools and five optional Feishu tools, retaining independent note and Feishu permissions. Refresh client tools after updating; managed designs use document, operation, history, asset, shared-library and export interfaces.
 
 ## 0.1.2 — 2026-10-16
 

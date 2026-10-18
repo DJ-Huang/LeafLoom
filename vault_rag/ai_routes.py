@@ -12,7 +12,7 @@ from starlette.responses import StreamingResponse
 from vault_rag.local_state import ConflictError
 
 
-def ai_mcp_server(ai):
+def ai_mcp_server(ai, design=None):
     server = FastMCP('vault-ai', host='127.0.0.1', port=ai.config.data.get('port', 18080),
                      streamable_http_path='/ai-mcp', stateless_http=True, json_response=True)
 
@@ -40,6 +40,48 @@ def ai_mcp_server(ai):
         For existing notes supply read_note's base_hash. For a new note set create=true.
         """
         return json.dumps(ai.propose(conversation(ctx), path, text, base_hash, create), ensure_ascii=False)
+
+    if design is not None:
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False))
+        def design_list_projects(ctx: Context, folder: str = '') -> str:
+            """List all Design Studio projects in the connected vault."""
+            conversation(ctx)
+            return json.dumps(design.list_projects(folder), ensure_ascii=False, default=str)
+
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False))
+        def design_get_project(directory: str, ctx: Context, board_id: str | None = None) -> str:
+            """Read a Design Studio project's spec, artboards, and saved layer transforms."""
+            conversation(ctx)
+            return json.dumps(design.get_project(directory, board_id), ensure_ascii=False, default=str)
+
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False))
+        def design_update_layers(directory: str, board_id: str, layers: dict, ctx: Context, merge: bool = True) -> str:
+            """Apply Figma-like layer transforms (tx, ty, x, y, width, height, scaleX, scaleY, rotate, flipX, flipY, opacity, zIndex, text) to a design board."""
+            conversation(ctx)
+            return json.dumps(design.save_transforms(directory, board_id, layers, merge=merge), ensure_ascii=False, default=str)
+
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False))
+        def design_document(directory: str, ctx: Context, page_id: str | None = None, manifest: bool = False) -> str:
+            """Read managed design pages/elements/assets/components/scripts and revision. Use stable IDs in design_operations."""
+            conversation(ctx)
+            return json.dumps(design.documents.manifest(directory) if manifest else design.documents.read(directory, page_id), ensure_ascii=False)
+
+        @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False))
+        def design_operations(directory: str, commands: list[dict], expected_revision: str, operation_id: str,
+                              workspace_revision: str, ctx: Context, label: str = '') -> str:
+            """Apply one directly undoable AI instruction. Commands type page.create/update/delete, node.create/update/replace/delete/move,
+            component.create/update/detach, asset.update/replace, project.update. node.update uses {page_id,node_id,patch}.
+            Nodes support script:{source:'export function mount(ctx){...}',props,parameters} and animation:{preset,trigger,duration,delay,iterations,easing}.
+            ctx provides el,props,state,find,on,onEvent,emit,animate,timers,assets,navigate and overlays. Retain expected_revision; stale writes save nothing.
+            """
+            current = conversation(ctx)
+            turn = ai.rows('SELECT references_json FROM turns WHERE id=?', (ai.active_turns.get(current['id'], ''),))
+            references = json.loads(turn[0]['references_json']) if turn else []
+            from vault_rag.local_state import relative
+            if not any(ref.get('kind') == 'design' and ref.get('directory') == relative(directory) for ref in references):
+                raise ValueError('Attach this Design Studio project before applying AI edits')
+            return json.dumps(design.documents.apply(directory, commands, expected_revision, operation_id,
+                                                      label=label, workspace_revision=workspace_revision), ensure_ascii=False)
 
     return server
 

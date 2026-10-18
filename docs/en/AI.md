@@ -16,6 +16,10 @@ Inspect the proposed difference. **Accept into draft** changes the editor, not t
 
 If the note, draft or saved version changed, regenerate or merge manually. LeafLoom preserves conflicting drafts rather than silently replacing the file.
 
+## Edit a design with AI
+
+In Design Studio, select elements and use **Send to AI** to attach their project, page, stable IDs and revision. Ask for layout, asset, component, animation or script changes. Only projects attached to the current turn can be changed by the built-in assistant. A design batch applies directly as one persistent undo step; version conflicts preserve the newer design. Script playback remains temporary. See [Design Studio](../DESIGN_STUDIO.md) for script APIs and export.
+
 ## Connect another AI client through MCP
 
 Open **Settings → AI connections → MCP access permissions**. Enable local AI reading and copy the generated connection configuration. Its dedicated credential is shown once. Use `http_headers.Authorization` in Codex, `headers.Authorization` in Cursor, and `type: http` plus `headers.Authorization` in Claude Code. Regenerating the credential or disabling all its resource scopes revokes it; keep configurations private.
@@ -24,7 +28,7 @@ Enable **Allow local AI to modify notes** separately for direct saves. For ChatG
 
 Full access covers all connected Markdown, TXT and HTML/HTM notes, including archives and notes outside RAG. It supports finding, reading, creating, precise edits, properties, moves, recoverable deletion, history, links, templates and daily notes. RAG still uses only selected eligible Markdown/TXT. HTML is read and edited as source. Existing unauthenticated loopback and legacy bearer connections retain the original five read-only capabilities; the old `auth-token` does not unlock full access.
 
-Every mutation checks the workspace revision; existing notes also require their read-time version. Moves and deletes first return an impact preview; history and Trash can be previewed and restored. MCP reads saved files, preserves conflicting editor drafts and reports pending indexing separately from successful saves. The browser assistant above keeps its proposal workflow.
+Every mutation checks the workspace revision; existing notes also require their read-time version. Moves and deletes first return an impact preview; history and Trash can be previewed and restored. MCP reads saved files, preserves conflicting editor drafts and reports pending indexing separately from successful saves. The browser assistant keeps its proposal workflow for notes. Managed designs use `design_document`, `design_operations` and the design history, asset, library and export tools with the connection's read/write permissions.
 
 **Settings → Skill → Install skill** installs `wiki-search` instructions and does not configure MCP. See the [complete tool contract](../MCP.md).
 

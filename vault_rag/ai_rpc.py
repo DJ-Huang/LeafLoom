@@ -15,6 +15,9 @@ from vault_rag.platform_support import hidden_process_options
 from vault_rag.ai_process import ProcessTree
 from vault_rag.local_state import atomic_write
 
+SCOPED_TOOLS = ('knowledge_search', 'read_note', 'propose_note', 'design_list_projects',
+                'design_get_project', 'design_document', 'design_operations')
+
 
 class RpcError(RuntimeError):
     def __init__(self, message, *, code=None, method=None):
@@ -281,7 +284,7 @@ class CliAdapter:
             config = self.service.codex_mcp_overrides()
             config.setdefault('mcp_servers', {})['vault-ai'] = {'url': self.service.mcp_url, 'enabled': True,
                 'required': True, 'http_headers': {'Authorization': 'Bearer ' + conversation['capability']},
-                'enabled_tools': ['knowledge_search', 'read_note', 'propose_note'],
+                'enabled_tools': list(SCOPED_TOOLS),
                 'default_tools_approval_mode': 'auto'}
             # Disable inherited MCP tools: only the scoped knowledge server is allowed.
             params = {'cwd': cwd, 'sandbox': 'read-only', 'approvalPolicy': 'on-request', 'approvalsReviewer': 'user',
@@ -384,7 +387,7 @@ class CliAdapter:
             self.service.request_methods.append(method)
         # Approval and filesystem/terminal callbacks never write or execute commands.
         if method == 'session/request_permission':
-            safe = {'knowledge_search', 'read_note', 'propose_note'}
+            safe = set(SCOPED_TOOLS)
             safe |= {'vault-ai__' + name for name in safe}
             tool = params.get('toolCall') or {}
             if (self.active and params.get('sessionId') == self.active.get('native_id')

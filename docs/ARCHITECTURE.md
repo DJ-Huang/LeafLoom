@@ -12,7 +12,7 @@ Dev 和安装版共用 Tunnel 配置、应用启动／退出生命周期；存�
 
 可选的 `scripts/dev-browser.py` 显式配置开发前端，直接运行正常 `Runtime` 与后台工作，不使用测试夹具、不自动下载模型或调用外部 AI。`--home` 必填，仅接受新建／空目录或此启动器标记过的专用目录；标记固定端口与界面模式，变更须新建目录并更换浏览器 profile。默认保留 `app.<installation-id>.localhost`，仅显式 `--loopback-ui` 将管理界面改为 `localhost`。Vite 必须单独运行在 `http://127.0.0.1:5173`，避免接收 localhost 管理会话 cookie。此入口不更改常规桌面启动，也不代表支持 Linux 桌面安装，详见[浏览器开发](DESKTOP.md#optional-browser-development)。
 
-生产 MCP 注册位于 `mcp_tools.py`，完整笔记工作流位于 `note_operations.py`，与网页共用 `Files` 的保存、历史、回收区和移动事务；网页模板与日记也复用该工作流。`mcp_access.py` 在私有配置保存本机凭据哈希与独立权限，Tunnel 凭据只驻留后端内存并通过环境引用注入运行时的发现及调用请求。旧五项只读工具与 `/ai-mcp` 保持原有范围；完整访问须显式启用，两个连接的写入分别授权。工具、分页、版本与错误契约见 [MCP](MCP.md)。
+生产 MCP 注册位于 `mcp_tools.py`，完整笔记工作流位于 `note_operations.py`，设计项目与图层工作流位于 `design_studio.py`，与网页共用 `Files` 的访问边界；受管设计文档使用独立的版本事务与持久历史。网页模板和日记复用笔记工作流。`mcp_access.py` 在私有配置保存本机凭据哈希与独立权限，Tunnel 凭据只驻留后端内存并通过环境引用注入运行时的发现及调用请求。旧五项只读工具保持原有范围；内部 `/ai-mcp` 允许读取设计项目，但只有用户在当前对话附加的设计项目可以直接应用设计事务。完整 MCP 访问须显式启用，两个连接的写入分别授权。工具、分页、版本与错误契约见 [MCP](MCP.md)。
 
 - 网页入口：`http://127.0.0.1:18080/`；浏览器迁移到 `http://app.<installation-id>.localhost:18080/`，端口跟随配置。
 
@@ -59,6 +59,14 @@ BGE-M3 使用本地已准备的权重；macOS 优先 MPS 并可回退 CPU，Wind
 
 哈希命名的静态资源 immutable 一年，入口与会话 no-store。知识素材 private/no-cache，校验根目录与权限后处理 ETag/304、视频 Range；媒体 ETag 包含根目录与配置版本。HTML 快照正文 no-store，配套资源可条件校验，失效地址即使携带旧 ETag 也不能得到 304。
 
+## Design Studio 编辑模型
+
+`design_documents.py` 以项目内 `Design/studio/project.json` 为编辑真源，保存具有稳定 ID 的页面、元素、素材、组件、样式与脚本。网页、公共 MCP 和内置 AI 共用同一批量命令及版本校验；一次指令作为一个事务，旧版 `design_studio.py` 接口保留兼容适配。项目私有 `.vault-rag/design-studio/<id>/history.sqlite3` 保存正反差量、请求回执、周期检查点与未完成提交，衔接 SQLite 与 JSON 原子替换；恢复与撤销遇到外部修改时保留冲突数据，不覆盖新内容。
+
+`design_workspace.py` 管理项目组织、移动与回收、版本共享库和独立 ZIP 导出，工作区管理历史与项目编辑历史分离；项目回收站的永久清理先提交移除元数据与相关管理历史，再按持久日志清理文件和该项目的设计数据库，启动恢复可继续未完成清理；项目管理中的显示名称用于工作台、复制和导出。跨项目组件导入将闭包依赖及二进制资源落盘，显式选择版本更新。`design_references.py` 静态识别声明式引用、原生资源路径和受支持的脚本字面量调用，供素材保护、替换、引用展示及共享库闭包收集复用，不执行项目代码。迁移先复制旧项目，再由隔离来源捕获原生 DOM/CSS；原脚本保留在副本源码，任意动态行为不自动转译。
+
+`design_routes.py` 提供网页接口；React `design-workbench` 按需加载，串行保存并保留待处理指令及源码草稿。页面投影只传输活动页面和递归嵌入依赖，其他页面保留摘要；引用索引按版本缓存，避免丢失未加载页面的素材使用位置。素材列表虚拟化，缩略图在 Worker 中以有界队列生成。项目来源的 `design_assets/studio/runtime` 接收经过来源、父窗口与会话校验的文档，按活动页面渲染，命名空间隔离嵌入内容。拖动只在帧内更新选中节点，结束提交一次操作；同页简单修改增量应用到已有 DOM。顶部编辑/预览切换先通过同源校验的消息提交帧内文字，等待保存队列完成后才用最新文档进入预览；保存失败保留队列并阻止旧内容预览。返回时恢复编辑页与选择，运行时按页面/模式保留相机。编辑状态暂停脚本，预览通过 `mount(ctx)` 提供受跟踪事件、计时器、动画、消息和页面导航，停止时清理并从设计文档重建。导出复用同一渲染器，包含素材与本地脚本依赖。数据契约、运行限制和验收目标见 [Design Studio](DESIGN_STUDIO.md)。
+
 ## Markdown 编辑与原文保存
 
 Markdown 默认在 Tiptap/ProseMirror 正文编辑器中打开，CodeMirror 提供源码编辑。`rich-markdown` 将可编辑块与原文片段关联，仅重新序列化发生变化的块，保留未修改原文、文档前缀与后缀；复杂或不支持直接编辑的内容通过保留节点展示并可跳转源码。较大正文的初始解析交给 `rich-markdown.worker`。
@@ -78,3 +86,26 @@ HTML 按项目作为独立来源的网站运行；桌面窗口和浏览器共用
 安装和实际 Windows 验收步骤见 [SETUP.md](SETUP.md)。
 
 飞书 MCP 改为五个通用入口：状态、CLI 发现、只读执行、写入执行、临时文件传输。能力与风险按已安装 CLI 的 help/schema 动态发现并缓存，不再逐项包装文档或 Base。高风险权限按连接独立保存，默认关闭，执行仍须明确确认。临时文件按凭据代际隔离，在独立命令工作目录内传递；已关联附件导入及其派生产物继续检查笔记读取权限。旧四个业务工具已移除，客户端升级后须刷新工具列表。接口、额度、版本保护和迁移规则见[飞书接入](FEISHU.md)。
+
+### Built-in design starters
+
+`vault_rag/design_templates.py` allowlists packaged starters in `design_assets/templates/`. The new-project UI submits a template ID through the existing rooted managed-project API. FORMA contains four pages and 328 native layers; its artwork is self-contained CSS. Creation validates the document, rejects existing destinations, deep-copies it with a fresh document ID and initializes ordinary project history. Runtime files continue to come from the installed Studio runtime; no template code runs in the management origin. Preview images are served through the authenticated design API.
+
+### Design binding projections and offline publication
+
+`design_bindings.py` validates stable text/image content keys and lightweight
+variant deltas, resolves a detached rendering projection, and participates in
+`DesignDocuments` atomic operations and durable undo. Canonical source nodes stay
+consistent with their bindings. Layout override references are pruned when their
+nodes are deleted. Assets remain shared by registry ID; source/variant image
+references participate in replacement and deletion checks.
+
+`design_publishing.py` snapshots a saved revision and registered asset bytes into
+bounded jobs. Desktop's trusted main-frame IPC accepts only a job ID; it fetches
+the authenticated manifest and renders it in an ephemeral sandboxed Electron
+session with an in-memory resource allowlist, denied permissions, no preload and
+no external network/filesystem access. Authored scripts and animation are disabled
+only for static output. Headless publication uses an optional Playwright renderer
+with the same offline boundary. The backend validates native output dimensions
+and combines PDF pages or PNG files in selected order. Progress and retries are
+job-scoped and retain accepted results and the frozen revision.

@@ -1,0 +1,37 @@
+// Narrow storage safety assertions; no browser, service or generated build needed.
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
+const ts=require('../web/node_modules/typescript');
+const source=fs.readFileSync(path.join(__dirname,'../web/src/design-projects.tsx'),'utf8');
+const javascript=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+const exported={};
+vm.runInNewContext(javascript,{exports:exported,require:()=>({}),console});
+const {designQueueStatus,rekeyDesignSourceDrafts,rekeyDesignRelocation}=exported;
+function storage(){const entries=new Map();return{get length(){return entries.size;},key:index=>[...entries.keys()][index]??null,getItem:key=>entries.has(key)?entries.get(key):null,setItem:(key,value)=>entries.set(key,String(value)),removeItem:key=>entries.delete(key)};}
+const queue=(root,directory)=>'leafloom-design-queue:'+JSON.stringify([root,directory]);
+const draft=(root,directory,nodeId)=>'leafloom-design-source:'+JSON.stringify([root,directory,nodeId]);
+const area=storage(),root='/vault',other='/other-vault';
+assert.equal(designQueueStatus(root,'Projects/Pets',area),null);
+area.setItem(queue(root,'Projects/Pets'),'[]');assert.equal(designQueueStatus(root,'Projects/Pets',area),null);
+area.setItem(queue(root,'Projects/Dogs'),JSON.stringify([{id:'pending-operation',commands:[]}]));
+assert.equal(designQueueStatus(root,'Projects/Pets',area),null);assert.equal(designQueueStatus(root,undefined,area),'pending');
+area.setItem(queue(other,'Projects/Other'),'{invalid');assert.equal(designQueueStatus(root,undefined,area),'pending');
+area.setItem(queue(root,'Projects/Pets'),'{invalid');assert.equal(designQueueStatus(root,'Projects/Pets',area),'corrupt');assert.equal(designQueueStatus(root,undefined,area),'corrupt');
+area.setItem(queue(root,'Projects/Pets'),'{}');assert.equal(designQueueStatus(root,'Projects/Pets',area),'corrupt');
+area.setItem(queue(root,'Projects/Pets'),'[{"commands":[]}]');assert.equal(designQueueStatus(root,'Projects/Pets',area),'corrupt');
+const forbidden={...area,getItem(){throw new Error('Storage inaccessible');}};assert.equal(designQueueStatus(root,'Projects/Pets',forbidden),'corrupt');
+const originals=storage();originals.setItem(draft(root,'Old','cat'),'cat-draft');originals.setItem(draft(root,'Old','dog'),'dog-draft');originals.setItem(draft(other,'Old','cat'),'other-root');
+let moved=rekeyDesignSourceDrafts(root,'Old','New',originals);assert.equal(moved.moved,2);assert.equal(moved.retained,0);assert.equal(moved.failed,false);
+assert.equal(originals.getItem(draft(root,'New','cat')),'cat-draft');assert.equal(originals.getItem(draft(root,'Old','cat')),null);assert.equal(originals.getItem(draft(other,'Old','cat')),'other-root');
+const collision=storage();collision.setItem(draft(root,'Old','cat'),'original');collision.setItem(draft(root,'New','cat'),'destination');
+moved=rekeyDesignSourceDrafts(root,'Old','New',collision);assert.equal(moved.retained,1);assert.equal(collision.getItem(draft(root,'Old','cat')),'original');assert.equal(collision.getItem(draft(root,'New','cat')),'destination');
+const full=storage();full.setItem(draft(root,'Old','cat'),'original');const quota={...full,setItem(){throw new Error('Quota exceeded');}};
+moved=rekeyDesignSourceDrafts(root,'Old','New',quota);assert.equal(moved.failed,true);assert.equal(moved.retained,1);assert.equal(full.getItem(draft(root,'Old','cat')),'original');
+const broken=storage();broken.setItem(draft(root,'Old','cat'),'original');const changing={...broken,setItem(key,value){broken.setItem(key,value);broken.setItem(draft(root,'Old','cat'),'newer edit');}};
+moved=rekeyDesignSourceDrafts(root,'Old','New',changing);assert.equal(moved.retained,1);assert.equal(broken.getItem(draft(root,'Old','cat')),'newer edit');assert.equal(broken.getItem(draft(root,'New','cat')),'original');
+const history=storage();history.setItem(draft(root,'Original','cat'),'history-draft');
+rekeyDesignRelocation(root,{source:'Original',destination:'Moved'},history);rekeyDesignRelocation(root,{source:'Moved',destination:'Original'},history);
+assert.equal(history.getItem(draft(root,'Original','cat')),'history-draft');assert.equal(history.getItem(draft(root,'Moved','cat')),null);
+const ignored=rekeyDesignRelocation(root,{source:'Original',destination:'.vault-rag/design-studio/workspace-trash/key/content'},history);
+assert.equal(ignored.moved,0);assert.equal(history.getItem(draft(root,'Original','cat')),'history-draft');
+console.log('Design project queue guards and source draft rekey checks passed.');

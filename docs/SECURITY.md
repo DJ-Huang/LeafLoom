@@ -49,3 +49,22 @@ Repository hygiene: use fictional paths and a public GitHub noreply address for 
 これらの対策はリスクを減らしますが、絶対的な安全を保証しません。OS のアカウント、トークン、バックアップを保護し、不明なファイルや外部サービスを確認してください。公開の複数ユーザー向けウェブ配置は現在サポートしていません。
 
 リポジトリには架空のパスを使い、コミットには GitHub の公開 noreply アドレスを使用します。環境ファイル、MCP 設定、トークン、秘密署名鍵、ノート状態を追跡対象に含めないでください。公開前に [Gitleaks](https://github.com/gitleaks/gitleaks) を `--redact=100` 付きで実行し、作業ツリーと全履歴を確認してから、個人情報とテスト値を区別します。画像、アーカイブ、アクセスできないファイルまで安全と証明するものではありません。履歴の書き換えはコミット／タグ ID を変更します。復旧バックアップは非公開で保管し、リモートへの反映は別途調整してください。実際の認証情報が流出した場合は、履歴の削除だけに頼らず先に失効／更新します。
+
+### Static design publication
+
+A publication is a bounded snapshot of a saved design and its registered assets,
+not permission to crawl project folders or fetch external URLs. Desktop IPC accepts
+a job identifier only and is restricted to the trusted application's main frame.
+The temporary export window has sandbox/context isolation enabled, Node disabled,
+no preload, denied permissions and downloads, and a nonpersistent resource-only
+session. CSP disables authored script, objects, forms, connections and frames;
+only the application's trusted static renderer is executed by the main process.
+The optional headless renderer likewise intercepts requests and fails closed.
+Missing or blocked assets produce explicit item errors rather than enabling wider
+network/file access. Existing interactive project isolation is unchanged.
+
+Publication snapshots/results have finite per-job and session memory budgets.
+They are transient service-session work; after a restart, start a new publication.
+The source document and its undo history remain durable. Native output intake
+checks type and requested dimensions, and never treats an upload as executable
+code. The standard API authentication, CSRF and connected-folder checks still apply.
