@@ -1435,7 +1435,7 @@ migration.confirmAction|确认继续|Confirm and continue|確認して続行
 migration.recovery|关闭此窗口只会停止轮询，不会停止服务端任务。重新打开可查看保存的任务；停止可能保留部分进度，必要时回滚。原附件与笔记备份保存在知识库的 .vault-rag/attachment-migrations 中，不会在此永久删除。|Closing this window stops polling, not the server job. Reopen to inspect saved jobs. Cancellation may retain partial progress; roll back if needed. Originals and note backups are retained in the vault's .vault-rag/attachment-migrations folder and are not permanently deleted here.|この画面を閉じてもサーバーの処理は停止しません。再度開くと保存済みジョブを確認できます。停止後も一部の変更が残る場合はロールバックしてください。元の添付とノートのバックアップは保管庫の .vault-rag/attachment-migrations に保持され、ここでは完全削除されません。
 migration.state.planning|正在生成预览|Preparing preview|プレビューを準備中
 migration.state.ready|预览已就绪，等待确认|Preview ready; awaiting confirmation|プレビュー完了、確認待ち
-migration.state.blocked|计划被阻止|Plan blocked|計画はブロックされています
+migration.state.blocked|附件迁移预览被阻止|Attachment migration preview blocked|添付の移行プレビューはブロックされています
 migration.state.running|正在迁移|Migration running|移行中
 migration.state.completed|迁移已完成|Migration completed|移行完了
 migration.state.cancelled|任务已停止|Job cancelled|ジョブ停止済み
@@ -1774,3 +1774,168 @@ design.template.atelierLayers|3 个画板 · EN / 中文 / 日本語|3 artboards
 design.template.atelierPreview|ATELIER 灯具营销模板预览|ATELIER lighting campaign preview|ATELIER 照明キャンペーンのプレビュー
 隐藏面板|Hide panels|パネルを非表示
 显示面板|Show panels|パネルを表示
+migration.blockedHelp|此预览尚未移动附件或改写笔记。阻止项仅影响目录迁移；索引已就绪时，仍可在上方搜索和下载附件。展开原因，处理后重新生成预览。|This preview has not moved attachments or rewritten notes. Blockers affect directory migration only; a ready index remains available for searching and downloading above. Review the reasons, resolve them, then generate a new preview.|このプレビューでは添付の移動やノートの書き換えは行われていません。ブロックは保存先の移行のみが対象です。索引が準備済みなら、上部で検索とダウンロードを続けられます。原因を確認・解決してからプレビューを再作成してください。
+migration.blockerCount|查看阻止原因（显示 {shown} / 共 {total} 项）|Review blockers (showing {shown} of {total})|ブロック理由を確認（全 {total} 件中 {shown} 件を表示）
+migration.exclusionCount|查看排除项（显示 {shown} / 共 {total} 项）|Review exclusions (showing {shown} of {total})|除外項目を確認（全 {total} 件中 {shown} 件を表示）
+Escaped HTML project dependency requires manual review|项目依赖含转义字符，需要人工核对引用路径。|Escaped HTML project dependency requires manual review|プロジェクトの依存先にエスケープ文字があるため、参照パスの確認が必要です。
+HTML project script may construct external asset paths; manual dependency review required|项目脚本可能动态生成外部资源路径，需人工核对依赖后才能迁移附件。|HTML project script may construct external asset paths; manual dependency review required|プロジェクトのスクリプトが外部リソースのパスを動的に生成する可能性があるため、移行前に依存関係の確認が必要です。
+Unsupported HTML project dependency format requires manual review|项目引用了暂不支持分析的文件格式，需要人工核对依赖。|Unsupported HTML project dependency format requires manual review|プロジェクトが解析未対応の形式を参照しているため、依存関係の確認が必要です。
+Document exceeds safe reference analysis limit|文件过大，超出安全引用分析上限，需要人工核对。|Document exceeds safe reference analysis limit|ファイルが参照解析の安全なサイズ上限を超えているため、確認が必要です。
+Unsupported source format or dynamic reference requires manual review|文件格式或动态引用无法可靠分析，需要人工核对附件依赖。|Unsupported source format or dynamic reference requires manual review|形式または動的参照を確実に解析できないため、添付の依存関係の確認が必要です。
+Unsupported non-UTF-8 document may contain attachment references|非 UTF-8 文件无法可靠分析，可能含附件引用，需要人工核对。|Unsupported non-UTF-8 document may contain attachment references|UTF-8 以外のファイルは確実に解析できず、添付参照を含む可能性があるため、確認が必要です。
+HTML project has custom base or dynamic markup; manual dependency review required|项目含自定义基准路径或动态标记，需要人工核对资源依赖。|HTML project has custom base or dynamic markup; manual dependency review required|プロジェクトに独自の基準パスまたは動的マークアップがあるため、リソースの依存関係の確認が必要です。
+Preserved HTML project resource or shared runtime dependency|保留原位的项目资源或共享依赖（不参与迁移）|Project resource or shared dependency retained in place (excluded from migration)|プロジェクト素材・共有依存を元の場所に保持（移行対象外）
+aw.library|附件资料库|ASSET LIBRARY|添付ライブラリ
+aw.subtitle|浏览、预览和整理，文件始终由你掌握。|Browse, preview and organize. Your files stay yours.|閲覧もプレビューも整理も、ファイルはいつもあなたの手元に。
+aw.ready|索引已就绪|Index ready|索引の準備完了
+aw.tasks|任务|Tasks|タスク
+aw.upload|上传附件|Upload|アップロード
+aw.organize|整理附件|Organize|添付を整理
+aw.initialize|初始化并准备整理|Set up & prepare|初期化して整理を準備
+aw.total|全部附件|TOTAL FILES|すべての添付
+aw.space|占用空间|STORAGE USED|使用容量
+aw.local|保存在你的知识库|Stored in your workspace|ワークスペースに保存
+aw.localHint|原文件、本地预览、可恢复操作|Original files. Local previews. Recoverable changes.|元ファイル、ローカルプレビュー、復元可能な操作
+aw.preparing|正在准备你的附件库|Preparing your library|添付ライブラリを準備中
+aw.startTitle|让每个附件，都触手可及。|Everything you need, within reach.|必要な添付が、すぐ手元に。
+aw.startHint|一次点击建立附件索引并分析整理方案。就绪后即可搜索和预览，实际移动文件前会请你确认。|One click builds the index and prepares an organization plan. Browse as soon as the index is ready; review before files move.|ワンクリックで索引と整理案を準備。索引ができ次第、検索・プレビューができます。移動前に内容を確認できます。
+aw.viewTask|查看任务|View task|タスクを見る
+aw.previewOnly|初始化和分析不会移动原文件|Setup and analysis do not move originals|初期化と解析で元ファイルは移動しません
+aw.searchPlaceholder|搜索文件名或路径…|Search names or paths…|ファイル名・パスを検索…
+aw.clearSearch|清除搜索|Clear search|検索をクリア
+aw.sort|排序方式|Sort by|並べ替え
+aw.grid|网格视图|Grid view|グリッド表示
+aw.list|列表视图|List view|リスト表示
+aw.refresh|刷新附件列表|Refresh files|添付一覧を更新
+aw.types|附件类型|File types|添付の種類
+aw.type.all|全部|All files|すべて
+aw.type.image|图片|Images|画像
+aw.type.pdf|PDF|PDF|PDF
+aw.type.audio|音频|Audio|音声
+aw.type.video|视频|Video|動画
+aw.type.other|其他|Other|その他
+aw.sort.modified.desc|最近修改|Recently modified|更新が新しい順
+aw.sort.modified.asc|最早修改|Oldest modified|更新が古い順
+aw.sort.name.asc|名称 A–Z|Name A–Z|名前 A–Z
+aw.sort.name.desc|名称 Z–A|Name Z–A|名前 Z–A
+aw.sort.size.desc|从大到小|Largest first|サイズが大きい順
+aw.sort.size.asc|从小到大|Smallest first|サイズが小さい順
+aw.selected|已选 {count} 个附件|{count} files selected|{count} 件選択中
+aw.results|{count} 个结果|{count} results|{count} 件の結果
+aw.selectPage|选择本页全部附件|Select this page|このページをすべて選択
+aw.selectHint|选择文件查看预览|Select a file to preview|ファイルを選んでプレビュー
+aw.move|移动|Move|移動
+aw.recycle|移入回收区|Recycle|ごみ箱へ移動
+aw.clearSelection|清除选择|Clear selection|選択を解除
+aw.loading|正在读取附件…|Loading files…|添付を読み込み中…
+aw.files|附件文件|Attachment files|添付ファイル
+aw.selectFile|选择 {name}|Select {name}|{name} を選択
+aw.emptyHint|试试其他关键词或文件类型。|Try another search or file type.|別のキーワードや種類をお試しください。
+aw.pageRange|{start}–{end} / 共 {total} 个|{start}–{end} of {total}|{total} 件中 {start}–{end} 件
+aw.previous|上一页附件|Previous page|前のページ
+aw.next|下一页附件|Next page|次のページ
+aw.preview|文件预览|FILE PREVIEW|ファイルプレビュー
+aw.backToFiles|返回附件列表|Back to files|添付一覧に戻る
+aw.expand|放大预览|Expand preview|プレビューを拡大
+aw.location|位置|Location|保存場所
+aw.size|大小|Size|サイズ
+aw.modified|修改时间|Modified|更新日時
+aw.format|格式|Format|形式
+aw.protected|项目资源或共享依赖：保留原位|Project resource or shared dependency: kept in place|プロジェクト素材・共有依存：元の場所に保持
+aw.selectPreview|选一个附件，看看细节。|A closer look starts here.|添付を選んで、詳しく。
+aw.selectPreviewHint|支持图片、PDF、音视频就地预览，无需离开附件库。|Preview images, PDFs, audio and video without leaving your library.|画像、PDF、音声、動画をその場で確認できます。
+aw.previewUnavailable|暂时无法预览此图片，可下载原文件查看。|This image cannot be previewed. Download the original to view it.|この画像をプレビューできません。元ファイルをダウンロードしてください。
+aw.fit|适应窗口|Fit|全体表示
+aw.codecHint|无法播放时可下载原文件，使用本机播放器打开。|If playback is unavailable, download and use a local player.|再生できない場合はダウンロードしてローカルプレーヤーで開いてください。
+aw.noPreview|此格式暂不支持预览|Preview unavailable for this format|この形式のプレビューは未対応です
+aw.downloadHint|原文件保持完整，可以下载后使用对应应用打开。|Download the original and open it with a compatible app.|元ファイルをダウンロードし、対応アプリで開いてください。
+aw.processed|已处理 {count} 项|{count} items processed|{count} 件処理済み
+aw.limit|每次最多选择 100 个文件，请分批操作。|Select up to 100 files at a time.|一度に最大 100 件を選択してください。
+aw.noteUpload|笔记文件请从文件目录创建或导入。|Create or import note files from the file browser.|ノートはファイル一覧から作成・インポートしてください。
+aw.uploadFailed|上传未完成，请检查连接后重试。|Upload incomplete. Check the connection and retry.|アップロード未完了です。接続を確認して再試行してください。
+aw.cancelled|操作已取消|Operation cancelled|操作をキャンセルしました
+aw.operation.organize|附件整理|Attachment organization|添付の整理
+aw.operation.move|移动附件|Move attachments|添付を移動
+aw.operation.rename|重命名附件|Rename attachment|添付の名前を変更
+aw.operation.trash|回收附件|Recycle attachments|添付をごみ箱へ移動
+aw.recyclePrepare|先检查文件保护状态和已发现的笔记引用，再确认回收。|Check resource protection and discovered note references before confirming.|保護状態と検出されたノート参照を確認してから実行します。
+aw.newName|新的文件名|New file name|新しいファイル名
+aw.chooseFolder|浏览目标目录|Browse folders|保存先を選択
+aw.checkOperation|检查并准备操作|Check & prepare|確認して準備
+aw.tasksTitle|整理与文件任务|Organization & file tasks|整理とファイルタスク
+aw.organizeTitle|整理得清楚，使用更从容。|A little order, a clearer workspace.|整えて、使いやすい場所に。
+aw.organizeHint|准备方案、核对变化，再安心执行。|Prepare a plan, review changes, then apply.|案を準備し、変更を確認して実行。
+aw.zip|打包下载|ZIP download|ZIP ダウンロード
+aw.downloadZip|下载 ZIP 文件|Download ZIP|ZIP をダウンロード
+aw.uploads|上传队列|Upload queue|アップロード一覧
+aw.attachments|个附件|files|件の添付
+aw.totalSize|文件总大小|Total size|合計サイズ
+aw.affectedNotes|篇关联笔记|related notes|件の関連ノート
+aw.recycleWarning|回收后可从此任务恢复。已发现的笔记链接不会自动删除，可能暂时失效。|Restore from this task after recycling. Discovered note links are retained and may stop working temporarily.|このタスクから復元できます。検出されたノートリンクは削除されず、一時的に無効になる場合があります。
+aw.planReady|方案已准备好。项目及共享资源保持原位，执行前还会检查文件是否发生变化。|Plan ready. Project and shared resources stay in place; files are checked again before applying.|準備完了。プロジェクトと共有素材は保持し、実行前に変更を再確認します。
+aw.references|已发现 {count} 篇引用笔记|{count} discovered referring notes|参照ノートを {count} 件検出
+aw.recycleLinks|这些笔记的链接可能暂时失效。确认回收不会删除或改写笔记；需要时可恢复附件。|These note links may temporarily stop working. Recycling does not edit notes; restore attachments when needed.|これらのリンクは一時的に無効になる場合があります。ノートは変更せず、添付を後で復元できます。
+aw.rewriteLinks|将自动更新支持的引用，并保留笔记版本检查和恢复记录。|Supported links are updated with version checks and recovery records.|対応するリンクを更新し、版の確認と復元記録を保持します。
+aw.fileResults|逐文件执行结果|Per-file results|ファイルごとの結果
+aw.confirmRecycle|确认移入回收区|Confirm recycle|ごみ箱へ移動を確定
+aw.confirmOperation|确认执行操作|Apply this plan|この案を実行
+aw.stop|请求停止|Request stop|停止をリクエスト
+aw.restore|恢复／撤销此任务|Restore / undo task|復元・取り消し
+aw.technical|技术信息与恢复位置|Technical & recovery details|技術情報と復元場所
+aw.organizeSettings|整理位置与资源保护|Destination & resource protection|保存先と素材の保護
+aw.newPlan|生成新的整理预览|Prepare a new plan|新しい整理案を準備
+aw.confirmTitle|核对后，确认执行|Review and confirm|内容を確認して実行
+aw.executeHint|请核对文件数量和目标位置。受支持的笔记引用会同步更新，原附件与笔记恢复资料会保留。|Review the file count and destination. Supported note links are updated; recovery originals and note backups are retained.|件数と移動先を確認してください。対応リンクを更新し、元ファイルとノートの復元資料を保持します。
+aw.confirmContinue|确认继续|Confirm & continue|確認して続ける
+aw.result.pending|等待中|Queued|待機中
+aw.result.uploading|上传中|Uploading|アップロード中
+aw.result.completed|已完成|Completed|完了
+aw.result.failed|未完成|Failed|未完了
+aw.result.cancelled|已取消|Cancelled|キャンセル済み
+aw.result.interrupted|已中断|Interrupted|中断
+aw.result.rolled_back|已恢复|Restored|復元済み
+aw.stage.index|准备附件索引|Preparing the index|索引を準備中
+aw.stage.discover|读取文件目录|Discovering files|ファイルを確認中
+aw.stage.dependencies|识别项目与共享资源|Checking project resources|プロジェクト素材を確認中
+aw.stage.hashing|核对附件内容|Verifying attachments|添付を照合中
+aw.stage.references|检查笔记引用|Checking note references|ノート参照を確認中
+aw.stage.snapshot|准备恢复记录|Preparing recovery records|復元記録を準備中
+aw.stage.ready|方案已就绪|Plan ready|準備完了
+aw.phase.planning|正在准备方案|Preparing the plan|案を準備中
+aw.phase.copying|复制并验证附件|Copying and verifying files|コピーと検証中
+aw.phase.rewriting|更新笔记引用|Updating note links|ノートリンクを更新中
+aw.phase.retiring|归档原附件|Retaining recovery originals|元の添付を保管中
+aw.phase.indexing|更新附件索引|Updating the attachment index|添付索引を更新中
+aw.phase.rollback|恢复文件和引用|Restoring files and links|ファイルとリンクを復元中
+aw.phase.completed|已完成|Completed|完了
+aw.phase.rolled_back|已恢复|Restored|復元済み
+aw.phase.planned|方案已就绪|Plan ready|準備完了
+Project or source resource is retained in place|项目资源或源文件保留原位，不能从附件库移动、改名或回收。|Project or source resource is retained in place|プロジェクト素材・ソースは元の場所に保持し、添付ライブラリから移動・名前変更・削除できません。
+Destination already exists or matches the source|目标已存在或与原路径相同，请选择其他位置或名称。|Destination already exists or matches the source|移動先が既存または元のパスと同じです。別の保存先・名前を選んでください。
+Attachment results changed; start from the first page|附件结果已变化，已返回第一页，请重新选择文件。|Attachment results changed; start from the first page|添付の結果が変更されました。最初のページから選び直してください。
+Connected folder changed|知识库已切换，请在当前目录重新打开。|Connected folder changed|ワークスペースが切り替わりました。現在の場所で開き直してください。
+Wait for the current downloads to finish|请等待当前下载打包完成。|Wait for the current downloads to finish|現在のダウンロード準備が終わるまでお待ちください。
+下载|Download|ダウンロード
+aw.stale|文件在分析后发生了变化。请生成新的预览，核对后再执行。|Files changed after analysis. Prepare a new preview before applying.|解析後にファイルが変更されました。新しいプレビューを確認してから実行してください。
+aw.recheck|重新检查此操作|Recheck this operation|この操作を再確認
+aw.restoreTitle|恢复此任务|Restore this task|このタスクを復元
+aw.resumeTitle|继续此任务|Resume this task|このタスクを再開
+aw.state.planning|准备中|Preparing|準備中
+aw.state.ready|等待确认|Ready for review|確認待ち
+aw.state.blocked|需要处理|Needs attention|確認が必要
+aw.state.running|执行中|In progress|実行中
+aw.state.completed|已完成|Completed|完了
+aw.state.cancelled|已取消|Cancelled|キャンセル済み
+aw.state.failed|未完成|Failed|未完了
+aw.state.interrupted|已中断|Interrupted|中断
+aw.state.rolling_back|恢复中|Restoring|復元中
+aw.state.rolled_back|已恢复|Restored|復元済み
+aw.state.conflict|需要检查|Review required|確認が必要
+aw.notReady|待初始化|Not set up|初期化待ち
+aw.building|索引更新中|Updating index|索引を更新中
+aw.needsUpgrade|待升级|Upgrade needed|更新が必要
+aw.needsAttention|需要检查|Needs review|確認が必要
+Attachment download settings changed; prepare a new download|访问范围或设置已变化，请重新准备下载。|Attachment download settings changed; prepare a new download|アクセス範囲または設定が変わりました。ダウンロードを再準備してください。
+desktop.restart|重启 LeafLoom|Restart LeafLoom|LeafLoom を再起動
+desktop.restartDetail|返回保存，或保留本地笔记草稿后重启；未保存的设置将被丢弃。|Return to save your changes, or restart keeping local note drafts for next launch. Unsaved settings will be discarded.|戻って保存するか、ローカルのメモの下書きを残して再起動します。未保存の設定は破棄されます。
+desktop.restartFailed|未能自动重启，请重新打开 LeafLoom；开发模式下请重新运行 Dev。|Unable to restart automatically. Open LeafLoom again; in development, run Dev again.|自動で再起動できませんでした。LeafLoom を開き直してください。開発モードでは Dev を再実行してください。

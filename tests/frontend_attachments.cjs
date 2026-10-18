@@ -1,60 +1,133 @@
-// Isolated attachment UI contract test; no user's vault or running service is used.
-// PLAYWRIGHT_MODULE may point to a shared playwright-core installation.
-const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
-const root=path.resolve(__dirname,'..'),out=path.join(root,'.cache/attachment-ui');fs.mkdirSync(out,{recursive:true});
-require(path.join(root,'web/node_modules/esbuild')).buildSync({stdin:{contents:"import React from 'react';import {createRoot} from 'react-dom/client';import {Attachments} from './src/attachments';import {setLocale} from './src/i18n';setLocale('en');const root=createRoot(document.getElementById('app'));let key=0;window.mount=()=>root.render(<Attachments root={'fixture-'+key} key={++key} onClose={()=>root.render(null)}/>);window.mount();",resolveDir:path.join(root,'web'),loader:'tsx'},outfile:path.join(out,'test.js'),bundle:true,format:'iife',jsx:'automatic'});
+// Real API + production frontend in a disposable workspace. No user service/data.
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),net=require('node:net'),{spawn}=require('node:child_process');
+const root=path.resolve(__dirname,'..'),output=path.join(root,'.cache/attachment-workspace');fs.mkdirSync(output,{recursive:true});
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||path.join(root,'desktop/node_modules/playwright-core'));
-const server=http.createServer((req,res)=>{if(req.url==='/test.js'){res.setHeader('Content-Type','text/javascript');res.end(fs.readFileSync(path.join(out,'test.js')));}else if(req.url==='/test.css'){res.setHeader('Content-Type','text/css');res.end(fs.readFileSync(path.join(out,'test.css')));}else{res.setHeader('Content-Type','text/html');res.end('<link rel="stylesheet" href="/test.css"><div id="app"></div><script src="/test.js"></script>');}});
-let browser;
+const executable=process.env.CHROMIUM_PATH||['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge','/usr/bin/chromium'].find(p=>fs.existsSync(p));
+let server,browser,logs='';
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 (async()=>{
- await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});
- const page=await browser.newPage(),errors=[],calls=[];page.on('pageerror',error=>errors.push(error.message));
- let migration,plans=0,executions=0;
- let delayed=[],fail=false,refreshes=0,initializations=0,statusChecks=0,indexState='uninitialized',buildChecks=0;
- const item=path=>({path,name:path.split('/').pop(),size:123,mtime:1700000000,mime:'text/html'});
- await page.route('**/api/attachments**',async route=>{
-  const request=route.request(),url=new URL(request.url());calls.push(url.search);
-  if(url.pathname.endsWith('/migrations')){if(request.method()==='POST'){plans++;indexState='ready';migration={id:'fixture-job',root:request.postDataJSON().root,destination:'_attachments',state:'ready',summary:{files:1,bytes:123,notes:1},moves:[{source:'old.png',destination:'_attachments/old.png',size:123}],blockers:[]};await route.fulfill({json:migration});}else await route.fulfill({json:{jobs:[]}});return;}
-  if(url.pathname.endsWith('/fixture-job/execute')){assert.equal(request.postDataJSON().confirm,true);executions++;migration={...migration,state:'completed'};await route.fulfill({json:migration});return;}
-  if(url.pathname.endsWith('/fixture-job')){await route.fulfill({json:migration});return;}
-  if(url.pathname.endsWith('/status')){statusChecks++;if(indexState==='building'&&++buildChecks>1)indexState='ready';await route.fulfill({json:{state:indexState,schema_version:indexState==='uninitialized'?null:indexState==='needs_upgrade'?0:1,current_version:1,usable:indexState==='ready',progress:{done:3},last_scanned_at:refreshes}});return;}
-  if(url.pathname.endsWith('/initialize')){initializations++;indexState='building';buildChecks=0;await route.fulfill({json:{state:'building'}});return;}
-  if(url.pathname.endsWith('/rebuild')){refreshes++;indexState='building';buildChecks=0;await route.fulfill({json:{state:'building'}});return;}
-  if(url.pathname.endsWith('/index-cancel')){indexState='cancelled';await route.fulfill({json:{state:'cancelled'}});return;}
-  const query=url.searchParams.get('query'),after=url.searchParams.get('after');
-  if(query==='slow'){delayed.push(route);return;}
-  if(fail){fail=false;await route.fulfill({status:500,json:{error:'fixture failed'}});return;}
-  const items=query?[item(query+'.html')]:after?[item('last.html')]:Array.from({length:100},(_,i)=>item('assets/'+String(i).padStart(3,'0')+'.html'));
-  await route.fulfill({json:{items,total:query?1:101,next_cursor:!query&&!after?'assets/099.html':null}});
+ const port=await new Promise(resolve=>{const socket=net.createServer();socket.listen(0,'127.0.0.1',()=>{const p=socket.address().port;socket.close(()=>resolve(p));});});
+ const python=process.env.LEAFLOOM_TEST_PYTHON||path.join(root,'.venv',process.platform==='win32'?'Scripts/python.exe':'bin/python');
+ server=spawn(python,['-u',path.join(root,'tests/attachment_workspace_server.py'),path.join(root,'vault_rag/static')],{cwd:root,env:{...process.env,LEAFLOOM_ATTACHMENT_TEST_PORT:String(port)},stdio:['ignore','pipe','pipe']});
+ server.stdout.on('data',data=>{logs+=data;});server.stderr.on('data',data=>{logs+=data;});
+ let info;
+ for(let i=0;i<150;i++){
+  const line=logs.split('\n').find(line=>line.startsWith('{"fixture": true'));
+  if(line){info=JSON.parse(line);try{await fetch('http://127.0.0.1:'+port+'/');break;}catch{}}
+  if(server.exitCode!==null)throw new Error('Fixture exited: '+logs.slice(-1500));
+  await pause(100);
+ }
+ assert.ok(info?.fixture,'fixture startup failed: '+logs.slice(-1500));
+ browser=await chromium.launch({executablePath:executable,headless:true,args:['--no-sandbox','--no-proxy-server']});
+ const page=await browser.newPage({baseURL:info.ui,viewport:{width:1440,height:960},deviceScaleFactor:1});page.setDefaultTimeout(12000);
+ const errors=[];page.on('pageerror',error=>errors.push(error.message));
+ let holdPlan=false,plans=0,executions=0;
+ await page.route('**/api/attachments/migrations',async route=>{
+  if(route.request().method()==='POST'){
+   plans++;const response=await route.fetch();holdPlan=true;await route.fulfill({response});
+  }else{
+   const response=await route.fetch();const data=await response.json();
+   if(holdPlan&&data.jobs.length)data.jobs=data.jobs.map((job,index)=>index?job:{...job,state:'planning',phase:'planning',stage:'references',progress:{done:5522,total:0}});
+   await route.fulfill({json:data});
+  }
  });
- await page.goto('http://127.0.0.1:'+server.address().port);
- const rows=page.locator('.attachments-list li'),search=page.getByRole('searchbox');
- await page.getByText('Advanced: index-only maintenance',{exact:true}).waitFor();
- await page.getByRole('button',{name:'Initialize / upgrade and organize attachments',exact:true}).waitFor();
- assert.equal(await page.getByRole('button',{name:'Initialize attachment database',exact:true}).isVisible(),false);
- assert.ok(statusChecks>0);assert.equal(await rows.count(),0);assert.equal(calls.filter(value=>value.includes('limit=')).length,0);
- await page.getByRole('button',{name:'Initialize / upgrade and organize attachments',exact:true}).click();
- await rows.first().waitFor();assert.equal(initializations,0);assert.equal(plans,1);assert.equal(await rows.count(),100);
- const execute=page.getByRole('button',{name:'Confirm and execute migration',exact:true});assert.ok(await execute.isDisabled());
- await page.getByRole('checkbox').check();await execute.click();await page.getByText('Migration completed',{exact:true}).waitFor();assert.equal(executions,1);
- assert.match(await rows.first().locator('a').getAttribute('href'),/download=true/);assert.equal(await page.locator('iframe').count(),0);
- await page.getByRole('button',{name:'Next page',exact:true}).click();await page.getByText('last.html',{exact:true}).first().waitFor();assert.equal(await rows.count(),1);assert.ok(await page.getByRole('button',{name:'Next page',exact:true}).isDisabled());
- await page.getByRole('button',{name:'First page',exact:true}).click();await page.getByText('000.html',{exact:true}).waitFor();assert.equal(await rows.count(),100);
- await search.fill('slow');await page.getByRole('button',{name:'Search',exact:true}).click();await page.getByText(/Reading attachment metadata/).waitFor();
- const count=calls.length;await page.getByRole('button',{name:'Search',exact:true}).click();assert.equal(calls.length,count);
- await search.fill('new');await page.getByRole('button',{name:'Search',exact:true}).click();await page.getByText('new.html',{exact:true}).first().waitFor();
- for(const route of delayed.splice(0))await route.fulfill({json:{items:[item('stale.html')],total:1,next_cursor:null}}).catch(()=>{});
- assert.equal(await page.getByText('stale.html',{exact:true}).count(),0);
- await search.fill('slow');await page.getByRole('button',{name:'Search',exact:true}).click();await page.getByRole('button',{name:'Cancel',exact:true}).click();await page.getByText(/Stopped waiting/).waitFor();assert.equal(await rows.count(),0);
- // A new keyed root must not show results from the cancelled old root.
- await page.evaluate(()=>window.mount());await page.getByText('000.html',{exact:true}).waitFor();
- for(const route of delayed.splice(0))await route.fulfill({json:{items:[item('old-root.html')],total:1,next_cursor:null}}).catch(()=>{});
- assert.equal(await page.getByText('old-root.html',{exact:true}).count(),0);
- fail=true;await search.fill('retry');await page.getByRole('button',{name:'Search',exact:true}).click();await page.getByRole('alert').waitFor();await page.getByRole('button',{name:'Retry',exact:true}).click();await page.getByText('retry.html',{exact:true}).first().waitFor();
- await page.getByText('Advanced: index-only maintenance',{exact:true}).click();await page.getByRole('button',{name:'Refresh attachment index',exact:true}).click();await page.getByText('retry.html',{exact:true}).first().waitFor();assert.equal(refreshes,1);
- await page.getByRole('button',{name:'Close',exact:true}).click();assert.equal(await page.locator('dialog').count(),0);
- indexState='unsupported';await page.evaluate(()=>window.mount());await page.getByText(/This database version is unsupported/).waitFor();assert.equal(await rows.count(),0);assert.equal(await page.getByRole('button',{name:'Initialize attachment database',exact:true}).count(),0);
- indexState='needs_upgrade';await page.evaluate(()=>window.mount());await page.getByText('Advanced: index-only maintenance',{exact:true}).click();await page.getByRole('button',{name:'Upgrade attachment database',exact:true}).click();await rows.first().waitFor();assert.equal(initializations,1);
- assert.deepEqual(errors,[]);console.log('Attachment UI passed: bounded pages, download safety, search races, repeated clicks, cancellation, root remount, retry, refresh, close.');
-})().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{await browser?.close();server.close();});
+ page.on('request',request=>{if(request.method()==='POST'&&/\/migrations\/[^/]+\/execute$/.test(new URL(request.url()).pathname))executions++;});
+ await page.goto(info.ui+'/?view=attachments');
+ const initialize=page.getByRole('button',{name:'Set up & prepare',exact:true});await initialize.waitFor();assert.equal(await initialize.count(),1);
+ assert.equal(await page.locator('.aw-card').count(),0);assert.equal(plans,0);
+ await page.screenshot({path:path.join(output,'onboarding-en.png'),fullPage:true});
+ await initialize.click();await page.locator('.aw-tasks').waitFor();
+ await page.getByText('5,522 items processed',{exact:true}).waitFor();
+ assert.equal(await page.locator('.aw-tasks progress').first().getAttribute('value'),null);
+ assert.equal(await page.locator('.aw-tasks').getByText(/5,522\s*\/\s*0/).count(),0);assert.equal(plans,1);assert.equal(executions,0);
+ await page.reload();await page.locator('.aw-header-actions button').first().click();
+ await page.getByText('5,522 items processed',{exact:true}).waitFor();assert.equal(plans,1);
+ holdPlan=false;await page.locator('.aw-job-state.ready').waitFor();
+ await page.locator('.aw-tasks').getByRole('button',{name:'Close',exact:true}).click();
+ await page.locator('.aw-card').first().waitFor();assert.equal(await page.locator('.aw-card').count(),100);
+ const fixture=await (await page.request.get('/api/attachment-fixture')).json();assert.ok(fixture.fixture);
+ const session=await (await page.request.get('/api/session')).json();const headers={'X-Vault-CSRF':session.csrf};
+ const search=page.getByRole('searchbox',{name:'File name or relative path'});
+ const card=name=>page.locator('.aw-file-open').filter({hasText:name});
+ await card('Autumn collection.png').click();await page.locator('.aw-preview .aw-image-stage img').waitFor();
+ await page.locator('.aw-preview img').evaluate(image=>image.decode());
+ await page.screenshot({path:path.join(output,'workspace-en-desktop.png'),fullPage:true});
+ assert.match(await page.locator('.aw-preview img').getAttribute('src'),/root=/);
+ // Filename/path search, type filtering and stable pagination.
+ await search.fill('not present');await page.getByText('No matching attachments.',{exact:true}).waitFor();
+ await search.fill('Campaign/Autumn');await card('Autumn collection.png').waitFor();assert.equal(await page.locator('.aw-card').count(),1);
+ await search.fill('');await page.locator('.aw-card').nth(99).waitFor();
+ await page.getByRole('button',{name:'Next page',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.aw-card').length<100&&document.querySelectorAll('.aw-card').length>0);
+ await page.getByRole('button',{name:'Previous page',exact:true}).click();await page.locator('.aw-card').nth(99).waitFor();
+ await page.getByRole('checkbox',{name:'Select this page',exact:true}).check();assert.equal(await page.locator('.aw-card.checked').count(),100);
+ await page.getByRole('button',{name:'Next page',exact:true}).click();await page.waitForFunction(()=>!document.querySelectorAll('.aw-card.checked').length);
+ await page.getByRole('button',{name:'Previous page',exact:true}).click();await page.locator('.aw-card').nth(99).waitFor();
+ await page.getByRole('button',{name:'List view',exact:true}).click();assert.ok(await page.locator('.aw-items.list').count());
+ await page.getByRole('button',{name:'Grid view',exact:true}).click();
+ await page.getByRole('checkbox',{name:'Select this page',exact:true}).check();
+ await page.locator('.aw-filters button').nth(1).click();await page.waitForFunction(()=>!document.querySelectorAll('.aw-card.checked').length);
+ await search.fill('Campaign/');await page.locator('.aw-toolbar select').selectOption('name:asc');
+ await page.waitForFunction(()=>{const names=[...document.querySelectorAll('.aw-file-copy>strong')].map(e=>e.textContent);return names.length===28&&names[0]==='Autumn collection.png';});
+ await search.fill('');await page.locator('.aw-filters button').first().click();await page.locator('.aw-toolbar select').selectOption('modified:desc');await page.locator('.aw-card').nth(99).waitFor();
+ // Broken image falls back without crashing; HTML never executes in a management iframe.
+ await search.fill('Broken image');await card('Broken image.png').click();await page.getByText('This image cannot be previewed. Download the original to view it.',{exact:true}).waitFor();
+ await search.fill('Site/index.html');await card('index.html').click();await page.getByText('Preview unavailable for this format',{exact:true}).waitFor();assert.equal(await page.locator('.aw-preview iframe').count(),0);
+ await page.getByText('Project resource or shared dependency: kept in place',{exact:true}).waitFor();assert.ok(await page.locator('.aw-detail-actions').getByRole('button',{name:'Rename',exact:true}).isDisabled());
+ // Reference-preserving rename and referenced-file recycling followed by restoration.
+ await search.fill('Campaign/Autumn');await card('Autumn collection.png').click();
+ await page.waitForFunction(()=>{const b=[...document.querySelectorAll('.aw-detail-actions button')].find(b=>b.textContent==='Rename');return b&&!b.disabled;});
+ await page.locator('.aw-detail-actions').getByRole('button',{name:'Rename',exact:true}).click();
+ await page.locator('.aw-operation input').fill('Autumn study.png');await page.getByRole('button',{name:'Check & prepare',exact:true}).click();
+ await page.locator('.aw-job-state.ready').waitFor();await page.getByText('1 discovered referring notes',{exact:true}).waitFor();
+ assert.equal(await page.locator('.aw-tasks input[type=checkbox]').count(),0);
+ await page.getByRole('button',{name:'Apply this plan',exact:true}).click();await page.locator('.aw-confirmation').getByRole('button',{name:'Confirm & continue',exact:true}).click();
+ await page.locator('.aw-job-state.completed').waitFor();assert.equal(executions,1);
+ let note=await (await page.request.get('/api/file?path='+encodeURIComponent('Notes/Creative brief.md'))).json();assert.match(note.text,/Autumn study\.png/);
+ await page.locator('.aw-tasks').getByRole('button',{name:'Close',exact:true}).click();
+ await card('Autumn study.png').click();await page.waitForFunction(()=>{const b=[...document.querySelectorAll('.aw-detail-actions button')].find(b=>b.textContent==='Recycle');return b&&!b.disabled;});
+ await page.locator('.aw-detail-actions').getByRole('button',{name:'Recycle',exact:true}).click();await page.getByRole('button',{name:'Check & prepare',exact:true}).click();
+ await page.locator('.aw-job-state.ready').waitFor();await page.getByText('These note links may temporarily stop working. Recycling does not edit notes; restore attachments when needed.',{exact:true}).waitFor();
+ await page.locator('.aw-job-actions').getByRole('button',{name:'Confirm recycle',exact:true}).click();await page.locator('.aw-confirmation').getByRole('button',{name:'Confirm recycle',exact:true}).click();
+ await page.locator('.aw-job-state.completed').waitFor();
+ const unchanged=await (await page.request.get('/api/file?path='+encodeURIComponent('Notes/Creative brief.md'))).json();assert.equal(unchanged.text,note.text);
+ await page.getByRole('button',{name:'Restore / undo task',exact:true}).click();await page.locator('.aw-confirmation').getByRole('button',{name:'Confirm & continue',exact:true}).click();
+ await page.locator('.aw-job-state.rolled_back').waitFor();await page.locator('.aw-tasks').getByRole('button',{name:'Close',exact:true}).click();
+ await card('Autumn study.png').waitFor();
+ // PDF, audio lifecycle, unique uploads and ZIP download.
+ await search.fill('Field guide.pdf');await card('Field guide.pdf').click();await page.locator('.aw-preview .aw-pdf').waitFor();assert.match(await page.locator('.aw-pdf').getAttribute('src'),/root=/);
+ await search.fill('Quiet signal');await card('Quiet signal.wav').click();const audio=await page.locator('audio').elementHandle();await audio.evaluate(element=>element.play());
+ await search.fill('Autumn study');await card('Autumn study.png').click();assert.ok(await audio.evaluate(element=>element.paused));
+ const payload={name:'Uploaded image.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==','base64')};
+ await page.locator('input[type=file]').setInputFiles([payload,payload]);
+ await page.waitForFunction(()=>document.querySelectorAll('.aw-upload-row>svg').length>=2);
+ await page.locator('.aw-tasks').getByRole('button',{name:'Close',exact:true}).click();await search.fill('Uploaded image');await card('Uploaded image (2).png').waitFor();assert.equal(await page.locator('.aw-card').count(),2);
+ await page.getByRole('checkbox',{name:'Select this page',exact:true}).check();await page.locator('.aw-batch-actions').getByRole('button',{name:'Download',exact:true}).click();await page.getByRole('link',{name:'Download ZIP',exact:true}).waitFor();
+ const downloaded=page.waitForEvent('download');await page.getByRole('link',{name:'Download ZIP',exact:true}).click();assert.match((await downloaded).suggestedFilename(),/\.zip$/);
+ await page.locator('.aw-tasks').getByRole('button',{name:'Close',exact:true}).click();
+ // A playable video fixture produced in the browser; no external media is loaded.
+ const video=await page.evaluate(async()=>{const canvas=document.createElement('canvas');canvas.width=160;canvas.height=100;const ctx=canvas.getContext('2d');ctx.fillStyle='#748d7e';ctx.fillRect(0,0,160,100);const stream=canvas.captureStream(5),recorder=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp8'}),chunks=[];recorder.ondataavailable=event=>chunks.push(event.data);const done=new Promise(resolve=>recorder.onstop=resolve);recorder.start();await new Promise(resolve=>setTimeout(resolve,400));recorder.stop();await done;stream.getTracks().forEach(track=>track.stop());const bytes=new Uint8Array(await new Blob(chunks).arrayBuffer());return btoa(String.fromCharCode(...bytes));});
+ await page.locator('input[type=file]').setInputFiles({name:'Motion sample.webm',mimeType:'video/webm',buffer:Buffer.from(video,'base64')});
+ await page.waitForFunction(()=>[...document.querySelectorAll('.aw-upload-row')].some(row=>row.textContent.includes('Motion sample.webm')&&row.querySelector('svg')));
+ await page.locator('.aw-tasks').getByRole('button',{name:'Close',exact:true}).click();await search.fill('Motion sample');await card('Motion sample.webm').click();const movie=await page.locator('.aw-preview video').elementHandle();await movie.evaluate(element=>element.play());
+ await search.fill('Autumn study');await card('Autumn study.png').click();assert.ok(await movie.evaluate(element=>element.paused));
+ // Desktop and narrow visual acceptance in Chinese, with an additional Japanese check.
+ await page.request.put('/api/preferences',{headers,data:{locale:'zh-CN'}});await page.reload();await page.getByRole('searchbox').waitFor();
+ await page.getByRole('searchbox').fill('Autumn study');await card('Autumn study.png').click();await page.locator('.aw-preview img').evaluate(image=>image.decode());
+ await page.getByRole('searchbox').fill('');await page.locator('.aw-card').nth(99).waitFor();await card('Autumn study.png').click();await page.screenshot({path:path.join(output,'workspace-zh-desktop.png'),fullPage:true});
+ await page.getByRole('button',{name:'放大预览',exact:true}).click();await page.locator('.aw-expanded .aw-image-stage img').waitFor();await page.screenshot({path:path.join(output,'preview-zh-expanded.png'),fullPage:true});await page.locator('.aw-expanded').getByRole('button',{name:'关闭',exact:true}).click();
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'workspace-zh-mobile-preview.png'),fullPage:true});
+ assert.ok(await page.locator('.aw-preview').isVisible());await page.getByRole('button',{name:'返回附件列表',exact:true}).click();await page.screenshot({path:path.join(output,'workspace-zh-mobile-files.png'),fullPage:true});
+ assert.ok(await page.locator('.aw-browser').isVisible());assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await page.setViewportSize({width:1440,height:960});await page.request.put('/api/preferences',{headers,data:{locale:'ja'}});await page.reload();await page.locator('.aw-card').first().waitFor();await page.screenshot({path:path.join(output,'workspace-ja-desktop.png'),fullPage:true});
+ // Root changes discard pending searches, selection and preview requests.
+ const oldRoot=fixture.root;
+ await page.getByRole('searchbox').fill('Autumn study');await card('Autumn study.png').click();
+ await page.locator('.aw-preview img').waitFor();
+ await page.request.post('/api/config',{headers,data:{root:fixture.other_root}});
+ await page.waitForFunction(()=>!document.querySelector('.attachment-workspace'));
+ await page.locator('.sidebar-shortcuts').getByRole('button',{name:'添付ファイル',exact:true}).click();
+ await page.locator('.aw-onboarding').waitFor();assert.equal(await page.locator('.aw-card,.aw-preview img').count(),0);
+ assert.equal((await page.request.get('/api/media?'+new URLSearchParams({root:oldRoot,path:'Campaign/Autumn study.png'}))).status(),409);
+ assert.deepEqual(errors,[]);console.log('Attachment workspace passed: one-click setup, unknown progress, pagination, previews, protected resources, rename/link repair, referenced recycle/restore, unique upload, ZIP, media cleanup, and desktop/mobile visuals.');
+})().catch(async error=>{if(browser){const page=browser.contexts()[0]?.pages()[0];await page?.screenshot({path:path.join(output,'failure.png'),fullPage:true}).catch(()=>{});}console.error(error);console.error(logs.slice(-1800));process.exitCode=1;}).finally(async()=>{await browser?.close();server?.kill('SIGINT');});

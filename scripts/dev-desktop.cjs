@@ -6,6 +6,9 @@ const {spawn, spawnSync} = require('node:child_process');
 const {pathToFileURL} = require('node:url');
 const {resolveStateHome} = require('../desktop/state-home.cjs');
 const {reuseLegacyModels} = require('./dev-state.cjs');
+const {developmentExecutable} = require('./dev-app.cjs');
+const {consumeDevelopmentRestart} = require('../desktop/restart.cjs');
+const {randomUUID} = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const {home, registrationHome} = resolveStateHome();
 const legacyHome = path.join(root, '.cache', 'desktop-dev');
@@ -43,24 +46,37 @@ async function main() {
     host: '127.0.0.1', port: 5173, strictPort: true,
     hmr: {host: '127.0.0.1', protocol: 'ws', clientPort: 5173},
   }});
-  let child;
+  let child, stopping = false;
+  const restartFile = path.join(legacyHome, 'restart-' + process.pid + '-' + randomUUID());
   try {
     await vite.listen();
-    const electron = require(path.join(root, 'desktop/node_modules/electron'));
+    let electron;
     const env = {...process.env, LEAFLOOM_PYTHON: python, VAULT_RAG_HOME: home,
-      LEAFLOOM_REGISTRATION_HOME: registrationHome, LEAFLOOM_DEV_SERVER: 'http://127.0.0.1:5173'};
+      LEAFLOOM_REGISTRATION_HOME: registrationHome, LEAFLOOM_DEV_SERVER: 'http://127.0.0.1:5173',
+      LEAFLOOM_DEV_RESTART_FILE: restartFile};
     delete env.ELECTRON_RUN_AS_NODE;
-    console.log(`\nLeafLoom development | shared app data: ${home}\nUses the installed app's settings, models and credentials. Quit the running app before switching modes.\nFrontend edits update automatically. Quit from the tray to stop.\n`);
-    child = spawn(electron, [path.join(root, 'desktop')], {cwd: root, env, stdio: 'inherit', windowsHide: true});
+    console.log(`\nLeafLoom development | shared app data: ${home}\nUses the installed app's settings, models and credentials. Quit the running app before switching modes.\nFrontend edits update automatically. Use Restart LeafLoom after backend or desktop edits; Quit stops Dev.\n`);
     // Ask Electron to quit normally so pending edits and the sidecar can settle.
     const quit = () => {
+      stopping = true;
+      if (!child || child.exitCode !== null) return;
       const request = spawn(electron, [path.join(root, 'desktop'), '--quit'], {cwd: root, env, stdio: 'ignore', windowsHide: true});
       request.on('error', error => console.error(error.message));
     };
     process.on('SIGINT', quit); process.on('SIGTERM', quit);
     try {
-      process.exitCode = await new Promise((resolve, reject) => {child.once('error', reject); child.once('exit', code => resolve(code ?? 1));});
+      let restarting = false;
+      while (true) {
+        if (restarting) run('uv', ['sync', '--locked', '--python', '3.12']);
+        if (stopping) {process.exitCode = 0; break;}
+        electron = developmentExecutable(require(path.join(root, 'desktop/node_modules/electron')), root);
+        child = spawn(electron, [path.join(root, 'desktop')], {cwd: root, env, stdio: 'inherit', windowsHide: true});
+        const code = await new Promise((resolve, reject) => {child.once('error', reject); child.once('exit', code => resolve(code ?? 1));});
+        if (!consumeDevelopmentRestart(restartFile, code) || stopping) {process.exitCode = code; break;}
+        restarting = true;
+        console.log('Restarting LeafLoom with the current source…');
+      }
     } finally {process.off('SIGINT', quit); process.off('SIGTERM', quit);}
-  } finally {await vite.close();}
+  } finally {fs.rmSync(restartFile, {force: true}); await vite.close();}
 }
 main().catch(error => {console.error(error.message); process.exitCode = 1;});

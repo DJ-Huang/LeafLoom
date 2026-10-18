@@ -28,8 +28,9 @@ ASSETS = {'.png','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.ico','.tif','.ti
           '.zip','.7z','.rar','.tar','.gz','.bz2','.epub','.woff','.woff2','.ttf','.otf'}
 DOCUMENTS = {'.md','.markdown','.txt','.base','.html','.htm','.css','.svg','.js','.mjs','.cjs','.json','.yaml','.yml','.xml'}
 SOURCE_MARKERS = {'package.json','pyproject.toml','Cargo.toml','go.mod','CMakeLists.txt'}
+SOURCE_RESOURCE_TYPES = {'.js','.mjs','.cjs','.ts','.tsx','.jsx','.py','.blend','.blend1',
+                         '.blend2','.fbx','.glb','.gltf','.uasset','.umap','.psd','.ai','.bytes'}
 ACTIVE = {'planning','running','rolling_back'}
-MAX_DOCUMENT = 10 * 1024 * 1024
 
 
 def file_hash(path):
@@ -99,8 +100,11 @@ class AttachmentMigrations:
 
     @staticmethod
     def _public(job):
-        keys = ('id','root','destination','state','phase','progress','summary','error','created_at','updated_at','warnings')
+        keys = ('id','root','destination','state','phase','progress','summary','error','created_at','updated_at','warnings','stage','kind','references','results')
         result = {k:job[k] for k in keys if k in job}
+        result['references']=job.get('references',[])[:200]
+        result['results']=job.get('results',[])[:200]
+        result['results_total']=len(job.get('results',[]))
         result['moves'] = [{k:m[k] for k in ('source','destination','size')} for m in job.get('moves',[])[:200]]
         result['blockers'] = job.get('blockers',[])[:200]
         result['exclusions'] = job.get('exclusions',[])[:200]
@@ -135,16 +139,22 @@ class AttachmentMigrations:
             self.threads[job['id']]=thread;thread.start()
         return self._public(job)
 
-    def create(self,root,destination='_attachments'):
+    def create(self,root,destination='_attachments',*,selection=None,kind='organize',destinations=None):
         self._guard(root);files=self._files();destination=relative(destination)
-        if not destination:raise ValueError('Choose a dedicated attachment directory')
-        path=files.config.path_for(destination,writable=True)
+        if kind not in {'organize','move','rename','trash'}:raise ValueError('Invalid attachment operation')
+        if selection is not None:
+            if not isinstance(selection,list) or not 1<=len(selection)<=100 or any(not isinstance(p,str) for p in selection):raise ValueError('Select between 1 and 100 attachments')
+            selection=list(dict.fromkeys(relative(p) for p in selection))
+        if kind!='organize' and selection is None:raise ValueError('Select attachments first')
+        if not destination and kind=='organize':raise ValueError('Choose a dedicated attachment directory')
+        path=files.config.path_for(destination,writable=bool(destination))
         if path.exists() and not path.is_dir():raise ValueError('Attachment destination is not a directory')
         key=uuid.uuid4().hex
         job={'version':1,'id':key,'root':root,'destination':destination,'state':'planning','phase':'planning',
              'created_at':time.time(),'progress':{'done':0,'total':0},'summary':{'files':0,'bytes':0,'notes':0},
              'moves':[],'edits':[],'documents':{},'blockers':[],'exclusions':[],
-             'previous_attachment_folder':self.config.data.get('attachment_folder','_attachments')}
+             'previous_attachment_folder':self.config.data.get('attachment_folder','_attachments'),
+             'kind':kind,'selection':selection,'destinations':destinations or {},'results':[]}
         self._directory(files,key).mkdir(parents=True,mode=0o700)
         return self._start(files,job,'plan')
 
@@ -173,8 +183,9 @@ class AttachmentMigrations:
         if cancel.is_set():raise InterruptedError('Migration cancelled')
 
     def _plan(self, files, job, cancel):
-        from vault_rag.attachment_references import plan_references, discover_project_dependencies
-        job.update(moves=[],edits=[],documents={},blockers=[],exclusions=[])
+        from vault_rag.attachment_references import plan_references, discover_project_dependencies, OPAQUE_RESOURCE_TYPES
+        job.update(moves=[],edits=[],documents={},opaque_documents={},blockers=[],exclusions=[],references=[],results=[])
+        job['stage']='index';self._save(files,job)
         # One onboarding job prepares the metadata database and migration plan.
         # This stage never moves source files; confirmation remains mandatory.
         def index_progress(done):
@@ -185,6 +196,7 @@ class AttachmentMigrations:
             self._check(job,cancel)
             self.runtime.files.attachments.refresh(cancel=cancel,progress=index_progress)
         self._check(job,cancel)
+        job['stage']='discover';job['progress']={'done':0,'total':0};self._save(files,job)
         root=files.config.root;target=job['destination'];paths=set()
         for path in files.walk(strict=True):
             self._check(job,cancel);paths.add(path.relative_to(root).as_posix())
@@ -193,15 +205,28 @@ class AttachmentMigrations:
         if self.websites:
             project_roots.update(p['directory'] for p in self.websites.projects if p['vault']==job['root'])
         source_roots={p.rpartition('/')[0] for p in paths if PurePosixPath(p).name in SOURCE_MARKERS}
-        if any(under(target,p) for p in project_roots|source_roots):
+        # Loose scripts and native authoring files also own sibling resources.
+        # Their folders are retained, rather than treating their contents as
+        # globally blocking Markdown reference sources.
+        source_roots.update(p.rpartition('/')[0] for p in paths if Path(p).suffix.lower() in SOURCE_RESOURCE_TYPES)
+        if job.get('kind')!='trash' and any(under(target,p) for p in project_roots|source_roots):
             job['blockers'].append({'path':target,'reason':'Destination is inside an HTML or source project; choose another directory'})
-        dependencies=discover_project_dependencies(files,paths,project_roots|source_roots)
+        reference_sources={p for p in paths if Path(p).suffix.lower() not in OPAQUE_RESOURCE_TYPES|{
+            '.md','.markdown'}}
+        dependencies=discover_project_dependencies(files,paths,project_roots|source_roots,
+                                                  reference_sources=reference_sources)
         protected=dependencies['protected']
         job['blockers'].extend(dependencies['blockers'])
-        candidates=[];reserved={path_key(p) for p in paths}
+        job['stage']='dependencies';self._save(files,job)
+        candidates=[];reserved={path_key(p) for p in paths};selection=job.get('selection')
+        if selection is not None:
+            for path in selection:
+                if path not in paths or path in protected or Path(path).suffix.lower() not in ASSETS:
+                    job['blockers'].append({'path':path,'reason':'Project or source resource is retained in place'})
         for path in sorted(paths):
+            if selection is not None and path not in selection:continue
             suffix=Path(path).suffix.lower()
-            if under(path,target):continue
+            if selection is None and under(path,target):continue
             if suffix not in ASSETS:
                 if suffix=='.svg':job['exclusions'].append({'path':path,'reason':'Vector resource retained for dependency review'})
                 if suffix not in DOCUMENTS and suffix not in {'.py','.ts','.tsx','.jsx','.toml','.ini','.cfg','.log','.csv','.srt','.vtt'}:
@@ -212,34 +237,46 @@ class AttachmentMigrations:
             if any(under(path,p) for p in source_roots):
                 job['exclusions'].append({'path':path,'reason':'Preserved inside source project'});continue
             candidates.append(path)
-        job['progress']={'done':0,'total':len(candidates)};self._save(files,job)
+        job['stage']='hashing';job['progress']={'done':0,'total':len(candidates)};self._save(files,job)
         for index,path in enumerate(candidates):
             self._check(job,cancel);source=files.config.path_for(path);size=source.stat().st_size;sha=file_hash(source)
-            dest=target+'/'+path
-            if path_key(dest) in reserved or files.config.path_for(dest).exists():
+            dest=job.get('destinations',{}).get(path) if selection is not None else None
+            dest=relative(dest) if dest else '/'.join(p for p in (target,PurePosixPath(path).name if selection is not None else path) if p)
+            if job.get('kind')=='trash':dest='_removed/'+path
+            if selection is not None and job.get('kind')!='trash' and (path_key(dest) in reserved or dest==path):
+                job['blockers'].append({'path':path,'reason':'Destination already exists or matches the source'});continue
+            if any(under(dest,p) for p in project_roots|source_roots) and job.get('kind')!='trash':
+                job['blockers'].append({'path':dest,'reason':'Destination is inside an HTML or source project; choose another directory'});continue
+            if job.get('kind')!='trash' and (path_key(dest) in reserved or files.config.path_for(dest).exists()):
                 original=PurePosixPath(dest);tag=hashlib.sha256(path.encode()).hexdigest()[:12];n=0
                 while True:
                     name=original.stem+'--'+tag+('-'+str(n) if n else '')+original.suffix
                     dest=str(original.with_name(name));n+=1
                     if path_key(dest) not in reserved and not files.config.path_for(dest).exists():break
             files.config.path_for(dest,writable=True);reserved.add(path_key(dest))
-            job['moves'].append({'source':path,'destination':dest,'size':size,'sha256':sha,'backup':str(index)})
+            job['moves'].append({'source':path,'destination':dest,'size':size,'sha256':sha,'backup':str(index),'trash_id':uuid.uuid4().hex})
+            job['results'].append({'path':path,'state':'pending'})
             job['progress']['done']=index+1
             if index%20==0:self._save(files,job)
         mapping={m['source']:m['destination'] for m in job['moves']}
-        scan_paths={p for p in paths if p not in protected}
-        # Source/config files may refer outside their own project. Leave them
-        # unchanged, but let unsupported reference checks block unsafe moves.
-        scan_paths.update(p for p in paths if any(under(p,root) for root in source_roots) and Path(p).suffix.lower() in {'.json','.toml','.yaml','.yml','.ini','.cfg','.xml'})
+        scan_paths={p for p in paths if p not in protected and Path(p).suffix.lower() in {'.md','.markdown'}}
+        job['stage']='references';job['progress']={'done':0,'total':0};self._save(files,job)
         result=plan_references(files,mapping,paths,scan_paths=scan_paths)
+        job['references']=sorted(result['edits'])
         job['blockers'].extend(result['blockers'])
         for path in sorted(paths):
             if Path(path).suffix.lower() in ASSETS:continue
             p=files.config.path_for(path)
-            if p.stat().st_size>MAX_DOCUMENT:
-                job['blockers'].append({'path':path,'reason':'Document exceeds safe reference analysis limit'});continue
+            if Path(path).suffix.lower() in OPAQUE_RESOURCE_TYPES:
+                info=p.stat()
+                job['opaque_documents'][path]=[info.st_size,info.st_mtime_ns,info.st_ino]
+                continue
+            # Snapshot verification hashes bytes in a stream; unlike reference
+            # parsing it does not need a text-size cap or a UTF-8 decoder.
             job['documents'][path]=file_hash(p)
+        job['stage']='snapshot';self._save(files,job)
         for index,(path,edit) in enumerate(sorted(result['edits'].items())):
+            if job.get('kind')=='trash':continue
             self._check(job,cancel)
             before,after=edit['before'],edit['after']
             for kind,data in (('before',before),('after',after)):
@@ -247,9 +284,9 @@ class AttachmentMigrations:
                 atomic_write(files.state_path('attachment-migrations',job['id'],'notes',str(index)+'.'+kind),data)
             job['edits'].append({'path':path,'before_hash':digest(before),'after_hash':digest(after),'backup':str(index)})
         job['summary']={'files':len(job['moves']),'bytes':sum(m['size'] for m in job['moves']),
-                        'notes':len(job['edits']),'excluded':len(job['exclusions']),'blockers':len(job['blockers']),
+                        'notes':len(job['references']),'excluded':len(job['exclusions']),'blockers':len(job['blockers']),
                         'references':result.get('references',0)}
-        job['state']='blocked' if job['blockers'] else 'ready';job['phase']='planned'
+        job['state']='blocked' if job['blockers'] else 'ready';job['phase']='planned';job['stage']='ready'
         self._save(files,job)
 
     def _note_bytes(self,files,job,edit,kind):
@@ -265,7 +302,12 @@ class AttachmentMigrations:
         edits={e['path']:e for e in job['edits']}
         current={p.relative_to(files.config.root).as_posix() for p in files.walk(strict=True)
                  if p.suffix.lower() not in ASSETS}
-        if current!=set(job['documents']):raise ConflictError('Document list changed; preview again before moving attachments')
+        opaque=job.get('opaque_documents',{})
+        if current!=set(job['documents'])|set(opaque):raise ConflictError('Document list changed; preview again before moving attachments')
+        for path,before in opaque.items():
+            info=files.config.path_for(path).stat()
+            if [info.st_size,info.st_mtime_ns,info.st_ino]!=before:
+                raise ConflictError('Document changed since preview: '+path)
         for path,before in job['documents'].items():
             allowed={before}
             if allow_after and path in edits:allowed.add(edits[path]['after_hash'])
@@ -309,6 +351,7 @@ class AttachmentMigrations:
         move_exclusive(stage,dest)
 
     def _execute(self,files,job,cancel):
+        if job.get('kind')=='trash':return self._execute_trash(files,job,cancel)
         self._check(job,cancel);self._validate_documents(files,job)
         required=sum(m['size'] for m in job['moves'] if not files.config.path_for(m['destination']).exists())
         required+=sum(len(self._note_bytes(files,job,e,'after')) for e in job['edits'])+4*1024*1024
@@ -320,8 +363,10 @@ class AttachmentMigrations:
             if not existing.is_file() or file_hash(existing)!=move['sha256']:raise ConflictError('Source changed: '+move['source'])
         job['phase']='copying';job['progress']={'done':0,'total':len(job['moves'])};self._save(files,job)
         for index,move in enumerate(job['moves']):
+            job['current_path']=move['source']
             self._check(job,cancel);self._copy(files,job,move);job['progress']['done']=index+1
             if index%20==0:self._save(files,job)
+        job.pop('current_path',None)
         self._validate_documents(files,job);job['phase']='rewriting';self._save(files,job)
         for edit in job['edits']:
             with self.config.lock,self.runtime.files.lock:
@@ -331,6 +376,7 @@ class AttachmentMigrations:
                 atomic_write(p,self._note_bytes(files,job,edit,'after'))
         self._validate_documents(files,job);job['phase']='retiring';self._save(files,job)
         for index,move in enumerate(job['moves']):
+            job['current_path']=move['source']
             self._check(job,cancel);source=files.config.path_for(move['source'],writable=True);backup=self._backup(files,job,move)
             dest=files.config.path_for(move['destination'])
             if not dest.is_file() or file_hash(dest)!=move['sha256']:raise ConflictError('Copied attachment changed')
@@ -346,15 +392,19 @@ class AttachmentMigrations:
             elif not backup.is_file() or file_hash(backup)!=move['sha256']:
                 raise ConflictError('Recovery original is missing or changed')
             job['progress']['done']=index+1
+            if job.get('results'):job['results'][index]['state']='completed'
             if index%20==0:self._save(files,job)
+        job.pop('current_path',None)
         self._check(job,cancel)
         with self.config.lock:
-            self._guard(job['root']);self.config.save({'attachment_folder':job['destination']})
+            self._guard(job['root'])
+            if job.get('kind','organize')=='organize':self.config.save({'attachment_folder':job['destination']})
         job['phase']='indexing';self._save(files,job)
         self._reindex(job,strict=True)
         job['state']='completed';job['phase']='completed';self._save(files,job)
 
     def _rollback(self,files,job):
+        if job.get('kind')=='trash':return self._rollback_trash(files,job)
         self._guard(job['root']);self._validate_documents(files,job)
         # Preflight all paths before restoring anything. Never overwrite a later edit.
         for move in job['moves']:
@@ -387,8 +437,49 @@ class AttachmentMigrations:
                 retained.parent.mkdir(parents=True,exist_ok=True);move_exclusive(dest,retained)
         with self.config.lock:
             self._guard(job['root'])
-            if self.config.data.get('attachment_folder')==job['destination']:
+            if job.get('kind','organize')=='organize' and self.config.data.get('attachment_folder')==job['destination']:
                 self.config.save({'attachment_folder':job['previous_attachment_folder']})
+        for result in job.get('results',[]):result['state']='rolled_back'
+        self._reindex(job);job['state']='rolled_back';job['phase']='rolled_back';self._save(files,job)
+
+    def _execute_trash(self,files,job,cancel):
+        self._check(job,cancel);self._validate_documents(files,job,allow_after=False)
+        job['phase']='retiring';self._save(files,job)
+        for index,move in enumerate(job['moves']):
+            job['current_path']=move['source']
+            with self.config.lock,self.runtime.files.lock:
+                self._check(job,cancel)
+                source=files.config.path_for(move['source'],writable=True)
+                folder=files.state_path('trash',move['trash_id']);content=files.state_path('trash',move['trash_id'],'content')
+                if content.exists():
+                    if source.exists() or file_hash(content)!=move['sha256']:raise ConflictError('Recycle record changed')
+                else:
+                    if not source.is_file() or file_hash(source)!=move['sha256']:raise ConflictError('Source changed: '+move['source'])
+                    folder.mkdir(parents=True,exist_ok=True,mode=0o700)
+                    atomic_write(files.state_path('trash',move['trash_id'],'record.json'),json.dumps({'id':move['trash_id'],'path':move['source'],'time':time.time(),'attachment_operation':job['id']}).encode())
+                    move_exclusive(source,content)
+                    if file_hash(content)!=move['sha256']:
+                        if not source.exists():move_exclusive(content,source)
+                        raise ConflictError('Original changed during retirement; latest bytes preserved')
+                job['results'][index]['state']='completed'
+                job['progress']={'done':index+1,'total':len(job['moves'])};self._save(files,job)
+        job.pop('current_path',None)
+        self._reindex(job,strict=True);job['state']='completed';job['phase']='completed';self._save(files,job)
+
+    def _rollback_trash(self,files,job):
+        self._guard(job['root']);job['phase']='rollback';self._save(files,job)
+        for index,move in enumerate(job['moves']):
+            with self.config.lock,self.runtime.files.lock:
+                self._guard(job['root']);source=files.config.path_for(move['source'],writable=True)
+                content=files.state_path('trash',move['trash_id'],'content')
+                if source.exists():
+                    if content.exists() or file_hash(source)!=move['sha256']:raise ConflictError('Original path is occupied; recovery stopped')
+                elif content.is_file() and file_hash(content)==move['sha256']:
+                    source.parent.mkdir(parents=True,exist_ok=True);move_exclusive(content,source)
+                else:raise ConflictError('Recovery original is missing or changed')
+                record=files.state_path('trash',move['trash_id'],'record.json')
+                record.unlink(missing_ok=True)
+                job['results'][index]['state']='rolled_back';self._save(files,job)
         self._reindex(job);job['state']='rolled_back';job['phase']='rolled_back';self._save(files,job)
 
     def _reindex(self,job,strict=False):
@@ -404,12 +495,16 @@ class AttachmentMigrations:
         if action!='plan':
             with self.config.lock,self.runtime.files.lock:
                 self.runtime.files.migration_active=True
+        job.pop('current_path',None)
         try:
             if action=='plan':self._plan(files,job,cancel)
             elif action=='rollback':self._rollback(files,job)
             else:self._execute(files,job,cancel)
         except Exception as error:
             job['error']=str(error)
+            if action!='plan':
+                pending=next((r for r in job.get('results',[]) if r['path']==job.get('current_path')),None)
+                if pending:pending.update(state='failed',error=str(error))
             if action=='plan':job['state']='cancelled' if isinstance(error,InterruptedError) else 'failed'
             elif self.config.data.get('root')!=job['root']:
                 job['state']='interrupted'

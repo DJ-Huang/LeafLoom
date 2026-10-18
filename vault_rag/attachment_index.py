@@ -6,6 +6,9 @@ The same namespace supports cold basename links without building RAG metadata.
 from __future__ import annotations
 
 import copy
+import base64
+import hashlib
+import json
 import mimetypes
 import sqlite3
 import threading
@@ -23,6 +26,7 @@ class AttachmentIndex:
         self.files = files
         self.lock = threading.RLock()
         self.ready_root = None
+        self.generation = time.time_ns()
 
     def _snapshot(self):
         with self.files.config.lock:
@@ -168,6 +172,8 @@ class AttachmentIndex:
                     except (FileNotFoundError, ValueError):
                         continue
                 self._check_root(root)
+                # Incremental changes invalidate sorted cursors just like a full scan.
+                self.generation += 1
 
     def resolve(self, target, source=''):
         """Indexed candidates; Files.resolve preserves path precedence/ambiguity."""
@@ -198,31 +204,45 @@ class AttachmentIndex:
             # Re-encode literal %, # and | to avoid a second interpretation.
             return files.resolve(quote(target, safe='/'), source, paths=paths)
 
-    def listing(self, query='', after='', limit=100):
+    def listing(self, query='', after='', limit=100, *, kind='all', sort='path', order='asc', cursor=''):
         limit = max(1, min(int(limit), 500))
-        if len(query) > 500 or len(after) > 4096:
+        if len(query)>500 or len(after)>4096 or len(cursor)>8192:
             raise ValueError('Attachment query is too long')
+        fields={'path':'path','name':'name_key','modified':'mtime_ns','size':'size'}
+        if kind not in {'all','image','pdf','audio','video','other'} or sort not in fields or order not in {'asc','desc'}:
+            raise ValueError('Invalid attachment filter or sort')
+        if after and (cursor or sort!='path' or order!='asc'):
+            raise ValueError('Use a cursor for sorted attachments')
+        category="CASE WHEN mime LIKE 'image/%' THEN 'image' WHEN mime='application/pdf' THEN 'pdf' WHEN mime LIKE 'audio/%' THEN 'audio' WHEN mime LIKE 'video/%' THEN 'video' ELSE 'other' END"
         with self.lock:
-            self._ensure()
-            files = self._snapshot()
-            root = files.config.root
-            pattern = '%' + query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+            self._ensure();files=self._snapshot();root=files.config.root
+            pattern='%'+query.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%'
             with closing(self._connect(files)) as db:
-                where = "attachment=1 AND path LIKE ? ESCAPE '\\'"
-                total = db.execute('SELECT count(*) FROM assets WHERE ' + where, (pattern,)).fetchone()[0]
-                rows = db.execute('SELECT path,name,size,mtime_ns,mime FROM assets WHERE ' + where +
-                                  ' AND path>? ORDER BY path LIMIT ?', (pattern, after, limit + 1)).fetchall()
-                scanned_at = db.execute('SELECT scanned_at FROM state WHERE root=?', (str(root),)).fetchone()
-            items = []
+                scanned=db.execute('SELECT scanned_at FROM state WHERE root=?',(str(root),)).fetchone()
+                scope=hashlib.sha256(json.dumps([str(root),query,kind,sort,order,scanned,self.generation],ensure_ascii=False).encode()).hexdigest()[:24]
+                where="attachment=1 AND path LIKE ? ESCAPE '\\'";args=[pattern]
+                if kind!='all':where+=' AND ('+category+')=?';args.append(kind)
+                total=db.execute('SELECT count(*) FROM assets WHERE '+where,args).fetchone()[0]
+                stats=db.execute('SELECT '+category+',count(*),coalesce(sum(size),0) FROM assets WHERE attachment=1 GROUP BY 1').fetchall()
+                summary={'files':sum(r[1] for r in stats),'bytes':sum(r[2] for r in stats),'kinds':{r[0]:r[1] for r in stats}}
+                field=fields[sort];direction='ASC' if order=='asc' else 'DESC';sign='>' if order=='asc' else '<'
+                if cursor:
+                    try:
+                        token=json.loads(base64.urlsafe_b64decode(cursor+'='*(-len(cursor)%4)))
+                        if not isinstance(token,list) or len(token)!=3 or token[0]!=scope or not isinstance(token[2],str) or not isinstance(token[1],str if sort in {'path','name'} else int):raise ValueError()
+                        where+=f' AND ({field} {sign} ? OR ({field}=? AND path {sign} ?))';args.extend([token[1],token[1],token[2]])
+                    except (ValueError,TypeError,KeyError):raise ConflictError('Attachment results changed; start from the first page')
+                elif after:where+=' AND path>?';args.append(after)
+                rows=db.execute('SELECT path,name,size,mtime_ns,mime,'+field+' FROM assets WHERE '+where+f' ORDER BY {field} {direction},path {direction} LIMIT ?',(*args,limit+1)).fetchall()
+            items=[]
             for row in rows[:limit]:
-                try:
-                    # Cached paths are never authorization, including listings.
-                    files.config.path_for(row[0])
-                except (ValueError, OSError):
-                    continue
-                items.append(dict(path=row[0], name=PurePosixPath(row[0]).name, size=row[2],
-                                  mtime=row[3] / 1e9, mime=row[4]))
+                try:files.config.path_for(row[0])
+                except (ValueError,OSError):continue
+                items.append(dict(path=row[0],name=PurePosixPath(row[0]).name,size=row[2],mtime=row[3]/1e9,mime=row[4]))
             self._check_root(root)
-            return {'items': items,
-                    'next_cursor': rows[limit - 1][0] if len(rows) > limit else None, 'total': total,
-                    'last_scanned_at': scanned_at[0] if scanned_at else None}
+            next_cursor=None;next_after=None
+            if len(rows)>limit:
+                last=rows[limit-1];next_after=last[0]
+                next_cursor=base64.urlsafe_b64encode(json.dumps([scope,last[5],last[0]],ensure_ascii=False).encode()).decode().rstrip('=')
+            return {'items':items,'next_cursor':next_after if sort=='path' and order=='asc' and not cursor else next_cursor,
+                    'cursor':next_cursor,'total':total,'summary':summary,'last_scanned_at':scanned[0] if scanned else None}

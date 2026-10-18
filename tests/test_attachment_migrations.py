@@ -176,12 +176,69 @@ class AttachmentMigrationTests(unittest.TestCase):
         self.runtime.files.save('n.md','new accepted edit',value['etag'])
         self.assertEqual((self.root/'n.md').read_text(),'new accepted edit')
 
-    def test_source_project_shared_config_reference_is_protected_or_blocks(self):
+    def test_source_project_shared_config_reference_is_protected(self):
         self.put('code/package.json','{"icon":"../shared/icon.png"}')
         self.put('shared/icon.png');self.put('loose.png')
         plan=self.plan()
-        self.assertEqual(plan['state'],'blocked',plan)
+        self.assertEqual(plan['state'],'ready',plan)
+        self.assertEqual([m['source'] for m in plan['moves']],['loose.png'])
+        self.assertEqual(self.execute(plan)['state'],'completed')
         self.assertTrue((self.root/'shared/icon.png').exists())
+
+    def test_dynamic_html_and_native_resources_stay_while_independent_asset_moves(self):
+        self.put('site/index.html','<base href="../shared/"><script src="../site/app.js"></script>')
+        self.put('site/app.js','const base="../shared/"; fetch(base + name); console.log("\\n");')
+        self.put('shared/app.css','body {background:url(../fonts/bg.png)}')
+        self.put('shared/runtime.json','{"image":"../art/icon.png"}')
+        self.put('shared/a.png');self.put('art/icon.png');self.put('fonts/bg.png')
+        self.put('models/work/model.blend',b'BLENDER\xff')
+        self.put('models/work/texture.png')
+        self.put('models/runtime/data.bytes',b'\xff\x00')
+        self.put('models/runtime/texture.png')
+        self.put('build/symbols.pdb',b'Microsoft\xff\x00')
+        self.put('standalone/photo.png');self.put('note.md','![[standalone/photo.png]]')
+        before={p:p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        plan=self.plan();self.assertEqual(plan['state'],'ready',plan)
+        self.assertEqual([m['source'] for m in plan['moves']],['standalone/photo.png'])
+        self.assertEqual(self.execute(plan)['state'],'completed')
+        for p,data in before.items():
+            if p.relative_to(self.root).parts[0] in {'site','shared','art','fonts','models'}:
+                self.assertEqual(p.read_bytes(),data)
+        self.assertIn('_attachments/standalone/photo.png',(self.root/'note.md').read_text())
+        self.manager.action(plan['id'],'rollback',str(self.root),True)
+        self.assertEqual(self.wait(plan['id'])['state'],'rolled_back')
+        for p,data in before.items():self.assertEqual(p.read_bytes(),data)
+
+    def test_binary_engineering_files_are_not_parsed_as_text(self):
+        self.put('build/release.apk',b'PK\xff'+b'x'*(10*1024*1024))
+        self.put('loose.png');self.put('note.md','![[loose.png]]')
+        plan=self.plan();self.assertEqual(plan['state'],'ready',plan)
+        self.assertEqual([m['source'] for m in plan['moves']],['loose.png'])
+        self.assertEqual(self.execute(plan)['state'],'completed')
+        self.assertEqual((self.root/'build/release.apk').stat().st_size,10*1024*1024+3)
+
+    def test_retained_binary_drift_stops_migration(self):
+        self.put('build/release.apk',b'PK\xff')
+        self.put('loose.png');plan=self.plan()
+        self.put('build/release.apk',b'changed')
+        result=self.execute(plan)
+        self.assertEqual(result['state'],'conflict',result)
+        self.assertTrue((self.root/'loose.png').exists())
+        self.assertEqual((self.root/'build/release.apk').read_bytes(),b'changed')
+
+    def test_unknown_text_format_retains_referenced_asset(self):
+        self.put('settings.custom','image=shared/icon.png')
+        self.put('shared/icon.png');self.put('loose.png')
+        plan=self.plan();self.assertEqual(plan['state'],'ready',plan)
+        self.assertEqual([m['source'] for m in plan['moves']],['loose.png'])
+        self.assertEqual(self.execute(plan)['state'],'completed')
+        self.assertTrue((self.root/'shared/icon.png').exists())
+
+    def test_unknown_unreadable_reference_source_still_blocks(self):
+        self.put('unknown.custom',b'\xff\xfe')
+        self.put('loose.png')
+        plan=self.plan();self.assertEqual(plan['state'],'blocked',plan)
+        self.assertTrue((self.root/'loose.png').exists())
 
     def test_previously_irrelevant_config_drift_is_detected(self):
         self.put('a.png');self.put('settings.cfg','theme=blue');plan=self.plan()

@@ -149,13 +149,17 @@ class AttachmentReferenceTests(unittest.TestCase):
         self.assertEqual(result['blockers'], [])
         self.assertEqual(page.read_text(), original)
 
-    def test_dynamic_project_protects_known_literal_and_blocks(self):
+    def test_dynamic_project_stays_in_place_and_retains_shared_directory(self):
         self.put('site/index.html', '<script src="app.js"></script>')
-        self.put('site/app.js', 'fetch("../shared/a.png"); fetch(prefix + name);')
+        self.put('site/app.js', 'fetch("../shared/a.png"); const prefix="../shared/"; fetch(prefix + name); console.log("\\n");')
         self.put('shared/a.png')
+        self.put('shared/b.png')
+        self.put('loose/photo.png')
         result = discover_project_dependencies(self.files, self.paths, {'site'})
         self.assertIn('shared/a.png', result['protected'])
-        self.assertEqual(result['blockers'][0]['path'], 'site/app.js')
+        self.assertIn('shared/b.png', result['protected'])
+        self.assertNotIn('loose/photo.png', result['protected'])
+        self.assertEqual(result['blockers'], [])
 
     def test_scan_paths_keeps_full_resolution_and_opaque_assets(self):
         self.put('notes/n.md', '![[a.png]] [doc](../report.docx)')
@@ -169,6 +173,64 @@ class AttachmentReferenceTests(unittest.TestCase):
         self.assertEqual(result['blockers'], [])
         self.assertEqual(result['references'], 2)
         self.assertEqual(set(result['edits']), {'notes/n.md'})
+
+    def test_root_navigation_and_embedded_markup_do_not_preserve_entire_vault(self):
+        self.put('site/index.html','<a href="/">Home</a><script>const markup="\\u003cimg src=\\\"../shared/a.png\\\">";</script>')
+        self.put('shared/a.png');self.put('loose/photo.png')
+        result=discover_project_dependencies(self.files,self.paths,{'site'})
+        self.assertEqual(result['blockers'],[])
+        self.assertIn('shared/a.png',result['protected'])
+        self.assertNotIn('loose/photo.png',result['protected'])
+
+    def test_retained_config_and_template_prefix_protect_external_resources(self):
+        self.put('site/index.html','<script src="app.js"></script>')
+        self.put('site/app.js','const url=`../shared/${name}.png`;')
+        self.put('shared/a.png');self.put('settings.cfg','image=art/icon.png')
+        self.put('art/icon.png');self.put('loose/photo.png')
+        result=discover_project_dependencies(self.files,self.paths,{'site'},reference_sources={'settings.cfg'})
+        self.assertEqual(result['blockers'],[])
+        self.assertTrue({'shared/a.png','art/icon.png'}<=result['protected'])
+        self.assertNotIn('loose/photo.png',result['protected'])
+
+    def test_unreadable_project_source_still_blocks(self):
+        self.put('site/index.html','<script src="app.js"></script>')
+        self.put('site/app.js',b'\xff\xfe')
+        self.put('loose/photo.png')
+        result=discover_project_dependencies(self.files,self.paths,{'site'})
+        self.assertEqual(result['blockers'][0]['path'],'site/app.js')
+
+    def test_unrelated_escaped_navigation_does_not_block_attachment_moves(self):
+        self.put('a.png')
+        self.put('note.md','<a href="chapters\\">read</a>\n![[a.png]]')
+        result=self.plan({'a.png':'attachments/a.png'})
+        self.assertEqual(result['blockers'],[])
+        self.assertIn(b'![[attachments/a.png]]',result['edits']['note.md']['after'])
+        self.assertIn(b'href="chapters\\"',result['edits']['note.md']['after'])
+
+    def test_escaped_destination_of_moved_attachment_still_blocks(self):
+        self.put('assets/a.png')
+        self.put('note.md','<img src="assets\\a.png">')
+        result=self.plan({'assets/a.png':'attachments/a.png'})
+        self.assertTrue(result['blockers'])
+        self.assertEqual(result['blockers'][0]['reason'],'Unsupported escaped attachment destination')
+
+    def test_dynamic_markup_and_mixed_srcset_retain_external_resources(self):
+        self.put('site/index.html','<img srcset="data:image/png;base64,AAAA 1x, ../shared/a.png 2x" onload="fetch(\'../shared/data.json\')"><iframe srcdoc="&lt;img src=&quot;../shared/b.png&quot;&gt;"></iframe>')
+        self.put('shared/a.png');self.put('shared/b.png')
+        self.put('shared/data.json','{"image":"../art/icon.png"}')
+        self.put('art/icon.png');self.put('loose/photo.png')
+        result=discover_project_dependencies(self.files,self.paths,{'site'})
+        self.assertEqual(result['blockers'],[])
+        self.assertTrue({'shared/a.png','shared/b.png','shared/data.json','art/icon.png'}<=result['protected'])
+        self.assertNotIn('loose/photo.png',result['protected'])
+
+    def test_css_escaped_dependency_is_retained_without_rewriting(self):
+        self.put('site/theme.css',r'body {background:url(../shared/a\2e png)}')
+        self.put('shared/a.png');self.put('loose/photo.png')
+        result=discover_project_dependencies(self.files,self.paths,{'site'})
+        self.assertEqual(result['blockers'],[])
+        self.assertIn('shared/a.png',result['protected'])
+        self.assertNotIn('loose/photo.png',result['protected'])
 
     def test_indented_list_attachment_is_not_silently_treated_as_code(self):
         self.put('assets/a.png')

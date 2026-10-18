@@ -1,6 +1,6 @@
 import {t,useLocale} from './i18n';
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {BookOpen,Calendar,ChevronRight,FileText,Folder,Home,Palette,PanelLeftClose,Search,Network} from 'lucide-react';
+import {BookOpen,Paperclip,Calendar,ChevronRight,FileText,Folder,Home,Palette,PanelLeftClose,Search,Network} from 'lucide-react';
 import {Config,OpenNote} from './api';
 import {useStatus} from './hooks';
 import {Action} from './ui';
@@ -50,7 +50,7 @@ export function PathNavigation({path,view,onFolder}:{path:string,view:string,onF
   {browsing?<><li><button onClick={()=>onFolder('')} title={t("打开知识库根目录")}><BookOpen size={15}/><span>{t("知识库")}</span></button></li>{parts.map((part,index)=>{
    const current=index===parts.length-1,target=parts.slice(0,index+1).join('/');
    return <li key={target}><ChevronRight size={13} aria-hidden="true"/>{current?<span className="path-current" aria-current="page" title={path}>{view==='document'?<FileText size={15}/>:<Folder size={15}/>}<span>{part}</span></span>:<button title={t("打开 ")+target} onClick={()=>onFolder(target)}>{part}</button>}</li>;
-  })}</>:<li><span className="path-current" aria-current="page">{view==='knowledge'?<Search size={15}/>:view==='graph'?<Network size={15}/>:view==='design'?<Palette size={15}/>:<Home size={15}/>}<span>{view==='knowledge'?t("知识检索"):view==='graph'?t("关系图谱"):view==='design'?t("设计工作台"):view==='web'?t("网页"):t("首页")}</span></span></li>}
+  })}</>:<li><span className="path-current" aria-current="page">{view==='attachments'?<Paperclip size={15}/>:view==='knowledge'?<Search size={15}/>:view==='graph'?<Network size={15}/>:view==='design'?<Palette size={15}/>:<Home size={15}/>}<span>{view==='attachments'?t('attachments.title'):view==='knowledge'?t("知识检索"):view==='graph'?t("关系图谱"):view==='design'?t("设计工作台"):view==='web'?t("网页"):t("首页")}</span></span></li>}
  </ol></nav>;
 }
 export function IndexStatus({onOpen}:{onOpen:()=>void}){

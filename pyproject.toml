@@ -31,7 +31,7 @@ dependencies = [
   "rich>=13.7.0",
   "mcp>=1.30.0,<2.0.0",
   "pystray>=0.19.5,<0.20; sys_platform == 'win32'",
-  "Pillow>=11,<13; sys_platform == 'win32'",
+  "Pillow>=11,<13",
   "torch>=2.2,<3",
   "msvc-runtime==14.44.35112; sys_platform == 'win32' and python_version < '3.15'",
 ]

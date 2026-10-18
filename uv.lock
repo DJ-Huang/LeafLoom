@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -4102,7 +4102,7 @@ dependencies = [
     { name = "msvc-runtime", marker = "python_full_version < '3.15' and sys_platform == 'win32'" },
     { name = "pandas" },
     { name = "pathspec" },
-    { name = "pillow", marker = "sys_platform == 'win32'" },
+    { name = "pillow" },
     { name = "pydantic-settings" },
     { name = "pypdf" },
     { name = "pystray", marker = "sys_platform == 'win32'" },
@@ -4134,7 +4134,7 @@ requires-dist = [
     { name = "msvc-runtime", marker = "python_full_version < '3.15' and sys_platform == 'win32'", specifier = "==14.44.35112" },
     { name = "pandas", specifier = ">=2.0.0,<3" },
     { name = "pathspec", specifier = ">=0.12.1" },
-    { name = "pillow", marker = "sys_platform == 'win32'", specifier = ">=11,<13" },
+    { name = "pillow", specifier = ">=11,<13" },
     { name = "playwright", marker = "extra == 'publish'", specifier = ">=1.50,<2" },
     { name = "pydantic-settings", specifier = ">=2.2.0" },
     { name = "pypdf", specifier = ">=5,<7" },

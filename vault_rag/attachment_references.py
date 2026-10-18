@@ -22,6 +22,13 @@ _BINARY = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.ico', '.bmp',
            '.7z', '.gz', '.tar', '.exe', '.dll', '.so', '.dylib', '.m4a',
            '.aac', '.m4v', '.doc', '.xls', '.ppt', '.rar', '.bz2',
            '.docx', '.xlsx', '.pptx', '.odt', '.ods', '.odp', '.epub'}
+# These are retained engineering artifacts, not UTF-8 reference documents.
+_BINARY |= {'.blend', '.blend1', '.blend2', '.glb', '.fbx', '.apk', '.aab',
+            '.unitypackage', '.uasset', '.umap', '.psd', '.ai', '.pdb', '.bytes'}
+OPAQUE_RESOURCE_TYPES = frozenset(_BINARY)
+REFERENCE_TEXT = _STATIC | {'.txt', '.base', '.js', '.mjs', '.cjs', '.ts', '.tsx',
+                            '.jsx', '.json', '.yaml', '.yml', '.xml', '.toml',
+                            '.ini', '.cfg', '.py', '.csv', '.srt', '.vtt', '.log', '.gltf'}
 
 
 def _masked(text, spans):
@@ -160,7 +167,9 @@ def _spans(text, suffix):
                         yield start + part.start(1), start + part.end(1), 'html'
                 else:
                     yield start, start + len(m[group]), 'html'
-    for m in re.finditer(r'url\(\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s)]+))\s*\)', clean, re.I):
+    css_escape=r'\\(?:[0-9a-fA-F]{1,6}(?:\r\n|[ \t\r\n\f])?|[^\r\n])'
+    css_unquoted='(?:'+css_escape+r'|[^\s)\\])+'
+    for m in re.finditer(r'url\(\s*(?:"((?:\\.|[^"\\])*)"|\'((?:\\.|[^\'\\])*)\'|('+css_unquoted+r'))\s*\)', clean, re.I):
         group = next(g for g in (1, 2, 3) if m[g] is not None)
         yield m.start(group), m.end(group), 'css'
     for m in re.finditer(r'@import\s+(?:"([^"]*)"|\'([^\']*)\')', clean, re.I):
@@ -247,7 +256,8 @@ def plan_references(files, mapping: dict[str, str], paths: set[str], *, scan_pat
             if not link:
                 continue
             if '\\' in link or '\x00' in link:
-                block(source, 'Unsupported escaped attachment destination', raw)
+                if syntax=='css' or relevant(raw) or path_key(source) in moved:
+                    block(source, 'Unsupported escaped attachment destination', raw)
                 continue
             relative = posixpath.normpath(posixpath.join(posixpath.dirname(source), link))
             root = posixpath.normpath(link.lstrip('/'))
@@ -303,26 +313,43 @@ def plan_references(files, mapping: dict[str, str], paths: set[str], *, scan_pat
     return result
 
 
-def discover_project_dependencies(files, paths: set[str], project_roots: set[str]):
+def discover_project_dependencies(files, paths: set[str], project_roots: set[str], *, reference_sources=()):
     """Protect HTML projects and their transitive static external dependencies.
 
-    This only reads bounded UTF-8 sources, never edits or executes them. Unknown
-    script behavior, base-URL overrides, unreadable sources, and escaped resource
-    destinations are explicit blockers. Literal JS strings are inspected to
-    protect discoverable dependencies even when script review is still required.
+    Whole project scopes stay in place, including dynamic scripts. Static file
+    references and literal directory prefixes retain shared resources outside
+    those scopes transitively. Unreadable dependency sources still fail closed.
     """
     paths = set(paths)
+    root_prefix = files.config.root.as_posix().rstrip('/') + '/'
+    root_key = path_key(root_prefix)
+    reference_sources = set(reference_sources)
     by_key = {}
+    basename = {}
+    directories = {}
     for path in paths:
         by_key.setdefault(path_key(path), []).append(path)
+        basename.setdefault(path_key(PurePosixPath(path).name), []).append(path)
+        for parent in PurePosixPath(path).parents:
+            directories.setdefault(path_key(str(parent)), []).append(path)
+    directory_names={path_key(PurePosixPath(p).name) for p in directories}
     roots = {path_key(root.rstrip('/')) for root in project_roots}
     protected = {path for path in paths if any(
         not root or root == '.' or path_key(path) == root or path_key(path).startswith(root + '/')
         for root in roots)}
+    protected.update(set(reference_sources) & paths)
     result = {'protected': protected, 'blockers': []}
-    source_types = {'.html', '.htm', '.css', '.svg', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx'}
+    source_types = REFERENCE_TEXT | {PurePosixPath(p).suffix.lower() for p in reference_sources}
     pending = sorted(p for p in protected if PurePosixPath(p).suffix.lower() in source_types)
     seen = set()
+    scope_cache = {}
+
+    def script_unescape(match):
+        value=match[0][1:]
+        if value.startswith('u{'):return chr(int(value[2:-1],16))
+        if value.startswith(('u','x')) and len(value)>1:return chr(int(value[1:],16))
+        return {'n':'\n','r':'\r','t':'\t','b':'\b','f':'\f','v':'\v','0':'\x00',
+                '\n':'','\r\n':''}.get(value,value)
 
     def block(source, reason, target=None):
         entry = {'path': source, 'reason': reason}
@@ -332,37 +359,74 @@ def discover_project_dependencies(files, paths: set[str], project_roots: set[str
             result['blockers'].append(entry)
 
     def protect_target(source, raw, syntax):
+        # Large configuration/geometry files contain many scalar tokens. A
+        # bare token can name a dependency only if that name exists. Keep URL,
+        # escape, markup and directory-prefix forms for full resolution below.
+        if raw not in {'.','..'} and not any(c in raw for c in '/\\<%?#$&'):
+            key=path_key(raw)
+            if key not in basename and key not in directory_names:return
         target = html.unescape(raw) if syntax == 'html' else raw
-        if re.match(r'^(?:[a-z][a-z0-9+.-]*:|//|#|\?)', target, re.I):
+        if syntax=='css':
+            target=re.sub(r'\\(?:([0-9a-fA-F]{1,6})(?:\r\n|[ \t\r\n\f])?|(\r\n|[\r\n\f])|(.))',
+                          lambda m:chr(int(m[1],16)) if m[1] and 0<int(m[1],16)<=0x10ffff else
+                          '' if m[2] else m[3] or '\ufffd',target)
+        if syntax == 'js' and '\\' in target:
+            try:
+                target = re.sub(r'\\(?:u\{[0-9a-fA-F]+\}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|\r?\n|.)',script_unescape,target)
+            except ValueError:
+                block(source, 'Escaped HTML project dependency requires manual review')
+                return
+        # Serialized markup is content, not a single escaped filename. Inspect
+        # its static destinations without dumping the embedded text as an error.
+        if '<' in target:
+            for start,end,kind in _spans(target,'.html'):
+                protect_target(source,target[start:end],kind)
+            return
+        if len(target)>4096:return
+        target = target.split('${', 1)[0]
+        target = target.replace('\\','/')
+        local_absolute = path_key(target).startswith(root_key)
+        if not local_absolute and re.match(r'^(?:[a-z][a-z0-9+.-]*:|//|#|\?)', target, re.I):
             return
         target = unquote(re.split(r'[?#]', target, maxsplit=1)[0])
         if not target:
             return
-        if '\\' in target or '\x00' in target:
-            block(source, 'Escaped HTML project dependency requires manual review', raw)
+        if '\x00' in target or any(c in target for c in '\r\n'):
             return
-        # Web references are source-relative (or root-absolute), never basename
-        # fallback: that fallback belongs only to the note-link resolver.
-        candidate = posixpath.normpath(target.lstrip('/') if target.startswith('/') else
+        # Rooted web URLs resolve inside the retained project, not the vault.
+        if source not in scope_cache:
+            source_key=path_key(source)
+            scopes=[root for root in roots if root in ('','.') or source_key.startswith(root+'/')]
+            scope_cache[source]=max(scopes,key=len) if scopes else posixpath.dirname(source)
+        scope=scope_cache[source]
+        candidate = posixpath.normpath(posixpath.join(scope,target.lstrip('/')) if target.startswith('/') else
                                        posixpath.join(posixpath.dirname(source), target))
-        candidates = by_key.get(path_key(candidate), [])
+        # Configurations sometimes use vault-relative or absolute local paths.
+        candidates = list(by_key.get(path_key(candidate), []))
+        candidates += by_key.get(path_key(target.lstrip('/')), [])
+        if local_absolute:
+            local=path_key(posixpath.normpath(target[len(root_prefix):]))
+            candidates += by_key.get(local, []) + directories.get(local, [])
+        # Literal folder prefixes can be completed dynamically. Retain their
+        # entire subtree, not just the file names we happen to see in scripts.
+        if candidate != '.' or target.endswith('/'):
+            candidates += directories.get(path_key(candidate), [])
+        if not candidates and '/' not in target:
+            candidates = basename.get(path_key(target), [])
         for candidate in candidates:
-            if PurePosixPath(candidate).suffix.lower() not in source_types | _BINARY:
-                block(source, 'Unsupported HTML project dependency format requires manual review', raw)
             if candidate not in protected:
                 protected.add(candidate)
                 if PurePosixPath(candidate).suffix.lower() in source_types:
                     pending.append(candidate)
 
     def inspect_script(source, script):
-        clean = re.sub(r'/\*.*?\*/|//[^\r\n]*', '', script, flags=re.S)
-        for match in re.finditer(r'"([^"\r\n]*)"|\'([^\'\r\n]*)\'', script):
-            protect_target(source, match[1] if match[1] is not None else match[2], 'js')
-        # Static module imports have a known base and destination. Anything else
-        # can construct/obfuscate URLs; the planner must not certify its safety.
-        residue = re.sub(r'\bimport\s+(?:(?:[^;\r\n]*?)\s+from\s+)?["\'][^"\']+["\']\s*;?', '', clean)
-        if residue.strip():
-            block(source, 'HTML project script may construct external asset paths; manual dependency review required')
+        for match in re.finditer(r'(["\'`])((?:\\.|(?!\1)[^\\\r\n])*)\1', script):
+            protect_target(source, match[2], 'js')
+        # Also retain unquoted INI/YAML/config paths. This scanner only adds
+        # exclusions and never attempts to rewrite configuration or code.
+        if PurePosixPath(source).suffix.lower() not in {'.js','.mjs','.cjs','.ts','.tsx','.jsx','.py'}:
+            for match in re.finditer(r'[^\s"\'`<>()\[\]{},;:=]+', script):
+                protect_target(source, match[0], 'js')
 
     while pending:
         source = pending.pop()
@@ -379,17 +443,22 @@ def discover_project_dependencies(files, paths: set[str], project_roots: set[str
             block(source, 'Cannot safely inspect HTML project dependencies: ' + str(exc))
             continue
         suffix = PurePosixPath(source).suffix.lower()
-        if suffix in {'.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx'}:
+        if suffix not in _STATIC:
             inspect_script(source, text)
             continue
-        if re.search(r'<base\b|\bsrcdoc\s*=|\bon\w+\s*=', text, re.I):
-            block(source, 'HTML project has custom base or dynamic markup; manual dependency review required')
-        if re.search(r'srcset\s*=\s*[\"\'][^\"\']*data:', text, re.I):
-            block(source, 'Mixed data-URL srcset requires manual dependency review')
-        if re.search(r'style\s*=\s*[\"\'][^\"\']*&', text, re.I):
-            block(source, 'Entity-encoded inline style requires manual dependency review')
-        for start, end, syntax in _spans(text, suffix):
-            protect_target(source, text[start:end], syntax)
+        # Scan markup strings too: base paths, event handlers and mixed srcsets
+        # may contain external literal resources even though markup stays put.
+        decoded=html.unescape(text)
+        for start, end, syntax in _spans(decoded, suffix):
+            protect_target(source, decoded[start:end], syntax)
+        if suffix=='.css':inspect_script(source,text)
+        for attr in re.finditer(r'\b(on\w+|srcdoc|srcset)\s*=\s*(?:"([^"]*)"|\'([^\']*)\')',text,re.I):
+            value=html.unescape(attr[2] if attr[2] is not None else attr[3])
+            if attr[1].lower()=='srcdoc':protect_target(source,value,'html')
+            elif attr[1].lower()=='srcset':
+                for part in re.finditer(r'(?:^|,)\s*([^\s,]+)',value):
+                    protect_target(source,part[1],'html')
+            else:inspect_script(source,value)
         for script in re.finditer(r'<script\b[^>]*>(.*?)</script\s*>', text, re.I | re.S):
             inspect_script(source, html.unescape(script[1]))
     return result
