@@ -50,6 +50,12 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     port=config.data.get('port',18080)
     previews=HtmlPreviews(config)
     websites=HtmlProjects(config,port)
+    from vault_rag.attachment_migrations import AttachmentMigrations
+    migrations=AttachmentMigrations(runtime,websites)
+    from vault_rag.attachment_workspace import AttachmentWorkspace
+    attachments_workspace=AttachmentWorkspace(runtime,migrations)
+    from vault_rag.attachment_index_jobs import AttachmentIndexJobs
+    index_jobs=AttachmentIndexJobs(runtime)
     if dev_ui_loopback:
         # Explicit browser-development workaround, never inferred from the OS or
         # environment. Keep project hosts separate and Vite on 127.0.0.1 so its
@@ -79,6 +85,9 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
             try:yield
             finally:
                 await ai.close()
+                await asyncio.to_thread(attachments_workspace.stop)
+                await asyncio.to_thread(migrations.stop)
+                await asyncio.to_thread(index_jobs.stop)
                 runtime.stop()
     app=FastAPI(lifespan=lifespan,docs_url=None,redoc_url=None)
     app.add_middleware(StaticCompression)
@@ -87,6 +96,9 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     app.state.ai=ai
     app.state.feishu=feishu
     app.state.websites=websites
+    app.state.attachment_migrations=migrations
+    app.state.attachments_workspace=attachments_workspace
+    app.state.attachment_index_jobs=index_jobs
     app.state.design=design
     app.state.local_dns=local_dns
     app.include_router(ai_router(ai))
@@ -234,6 +246,65 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     async def install_search_skill():
         try:return json_response(await asyncio.to_thread(install_skill))
         except OSError as e:return json_response({'error':f'无法安装 wiki-search：{e}'},400)
+    @app.get('/api/attachments/migrations')
+    async def list_attachment_migrations():
+        return await asyncio.to_thread(migrations.list)
+    @app.post('/api/attachments/migrations')
+    async def plan_attachment_migration(request:Request):
+        body=await request.json()
+        return await asyncio.to_thread(migrations.create,body['root'],body.get('destination','_attachments'))
+    @app.get('/api/attachments/migrations/{key}')
+    async def get_attachment_migration(key:str):
+        return await asyncio.to_thread(migrations.get,key)
+    @app.post('/api/attachments/migrations/{key}/{action}')
+    async def act_attachment_migration(key:str,action:str,request:Request):
+        body=await request.json()
+        return await asyncio.to_thread(migrations.action,key,action,body['root'],body.get('confirm',False))
+    @app.get('/api/attachments/details')
+    async def attachment_details(root:str,path:str):
+        return await asyncio.to_thread(attachments_workspace.details,root,path)
+    @app.get('/api/attachments/thumbnail')
+    async def attachment_thumbnail(request:Request,root:str,path:str):
+        target=await asyncio.to_thread(attachments_workspace.thumbnail,root,path)
+        return conditional_file(target,request,identity=root+path)
+    @app.post('/api/attachments/operations')
+    async def attachment_operation(request:Request):
+        body=await request.json()
+        return await asyncio.to_thread(attachments_workspace.operation,body['root'],body['kind'],body['paths'],body.get('destination',''),body.get('name',''))
+    @app.post('/api/attachments/downloads')
+    async def attachment_download(request:Request):
+        body=await request.json();return await asyncio.to_thread(attachments_workspace.download,body['root'],body['paths'])
+    @app.get('/api/attachments/downloads/{key}')
+    async def attachment_download_status(key:str,root:str):
+        return await asyncio.to_thread(attachments_workspace.download_status,root,key)
+    @app.post('/api/attachments/downloads/{key}/cancel')
+    async def attachment_download_cancel(request:Request,key:str):
+        body=await request.json();return await asyncio.to_thread(attachments_workspace.download_status,body['root'],key,True)
+    @app.get('/api/attachments/downloads/{key}/file')
+    async def attachment_download_file(key:str,root:str):
+        target=await asyncio.to_thread(attachments_workspace.download_file,root,key)
+        return FileResponse(target,filename='LeafLoom-attachments.zip',media_type='application/zip')
+    @app.get('/api/attachments/status')
+    async def attachment_status(root:str=''):
+        return {**await asyncio.to_thread(index_jobs.status,root),'folder':config.data.get('attachment_folder','_attachments')}
+    @app.post('/api/attachments/initialize')
+    @app.post('/api/attachments/rebuild')
+    @app.post('/api/attachments/refresh')
+    async def initialize_attachments(request:Request):
+        body=await request.json()
+        return await asyncio.to_thread(index_jobs.start,body['root'])
+    @app.post('/api/attachments/index-cancel')
+    async def cancel_attachment_index(request:Request):
+        body=await request.json()
+        return await asyncio.to_thread(index_jobs.cancel_job,body['root'])
+    @app.get('/api/attachments')
+    async def attachments(query:str='',after:str='',limit:int=100,root:str='',kind:str='all',sort:str='path',order:str='asc',cursor:str=''):
+        status=await asyncio.to_thread(index_jobs.status,root)
+        if not status['usable']:
+            return json_response({'error':'Initialize the attachment index first','initialization_required':True},409)
+        result=await asyncio.to_thread(runtime.files.attachments.listing,query,after,limit,kind=kind,sort=sort,order=order,cursor=cursor)
+        if root:migrations._guard(root)
+        return result
     @app.get('/api/tree')
     async def tree(path:str=''):return await asyncio.to_thread(runtime.catalog.tree,path)
     @app.get('/api/file')
@@ -369,18 +440,21 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     async def restore(request:Request):
         body=await request.json();return await asyncio.to_thread(runtime.files.restore,body['kind'],body['id'])
     @app.post('/api/upload')
-    async def upload(request:Request,folder:str='',name:str='',root:str|None=None,create_folder:bool=False):
+    async def upload(request:Request,folder:str='',name:str='',root:str|None=None,create_folder:bool=False,central:bool=False,unique:bool=False):
         # Stream to a staging file, then atomically publish without overwriting.
         import uuid
         if '/' in name or '\\' in name or not name:raise ValueError('文件名无效')
-        if create_folder and root is None:raise ValueError('创建附件目录需要指定关联目录')
-        rel='/'.join(x for x in (folder,name) if x)
+        if (create_folder or central) and root is None:raise ValueError('创建附件目录需要指定关联目录')
         with config.lock:
+            runtime.files.ensure_mutable()
+            if central:folder=config.data.get('attachment_folder','_attachments')
+            rel='/'.join(x for x in (folder,name) if x)
             expected_root=str(config.root);revision=config.data.get('revision')
             if root is not None and root!=expected_root:raise ConflictError('关联目录已切换，附件未写入')
             dest=config.path_for(rel,writable=True)
-            if dest.exists():raise ConflictError('同名文件已存在')
-            if create_folder:dest.parent.mkdir(exist_ok=True)
+            if unique and root is None:raise ValueError('Unique uploads require a connected folder')
+            if dest.exists() and not unique:raise ConflictError('同名文件已存在')
+            if create_folder or central:dest.parent.mkdir(parents=True,exist_ok=True)
             # Revalidate newly created directories before opening a staging file.
             dest=config.path_for(rel,writable=True)
             temp=dest.with_name('.upload-'+uuid.uuid4().hex)
@@ -390,18 +464,28 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
                 async for part in request.stream():f.write(part)
                 f.flush();os.fsync(f.fileno())
             with config.lock,runtime.files.lock:
+                runtime.files.ensure_mutable()
                 if str(config.root)!=expected_root or config.data.get('revision')!=revision:
                     raise ConflictError('关联目录已切换，附件未写入')
                 if config.path_for(rel,writable=True)!=dest:raise ConflictError('附件目录已变化，未写入')
-                if dest.exists():raise ConflictError('同名文件已存在')
+                if unique:
+                    original=dest;number=2
+                    while dest.exists():
+                        dest=original.with_name(original.stem+' ('+str(number)+')'+original.suffix);number+=1
+                        config.path_for(dest.relative_to(config.root).as_posix(),writable=True)
+                elif dest.exists():raise ConflictError('同名文件已存在')
                 os.link(temp,dest);temp.unlink()
                 rel=dest.relative_to(config.root).as_posix();runtime.files_changed(rel)
         finally:temp.unlink(missing_ok=True)
+        if unique:
+            await asyncio.to_thread(runtime.files.attachments.apply,[rel])
+            runtime.publish('files',[rel])
         return {'path':rel}
     @app.get('/api/media')
-    async def media(request:Request,path:str,download:bool=False):
+    async def media(request:Request,path:str,download:bool=False,root:str|None=None):
         def response():
             with config.lock:
+                if root is not None and root!=str(config.root):raise ConflictError('Connected folder changed')
                 p=config.path_for(path)
                 if not p.is_file():raise FileNotFoundError(path)
                 headers={'Content-Security-Policy':"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:;"} if p.suffix.lower() in ('.html','.htm','.svg') else None

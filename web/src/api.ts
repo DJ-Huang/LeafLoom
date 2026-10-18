@@ -84,4 +84,4 @@ export async function api<T=any>(path:string,body?:any,method?:string,options:{s
  entry.promise=work().finally(()=>{entry.settled=true;if(requests.get(requestKey)===entry)requests.delete(requestKey);});
  if(verb==='GET'||readable)requests.set(requestKey,entry);return consume<T>(entry,options.signal);
 }
-export const media=(path:string,download=false)=>{if(!resources.has(path))resources.set(path,resourceVersion);return '/api/media?path='+encodeURIComponent(path)+'&v='+resources.get(path)+(download?'&download=true':'');};
+export const media=(path:string,download=false,root?:string)=>{if(!resources.has(path))resources.set(path,resourceVersion);return '/api/media?path='+encodeURIComponent(path)+'&v='+resources.get(path)+(download?'&download=true':'')+(root?'&root='+encodeURIComponent(root):'');};

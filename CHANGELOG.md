@@ -4,6 +4,22 @@
 
 ## Unreleased
 
+- Add **Restart LeafLoom** to the application and tray menus, preserving draft checks and orderly backend shutdown. Dev keeps Vite running, refreshes locked Python dependencies and reopens the current source; canceling the unsaved-content prompt cancels restart.
+
+- Replace the attachment dialog with a dedicated gallery/list workspace, global filename/path search, filters, sorting and inline media previews. Add one-click setup, clear background progress, safe duplicate-preserving uploads, reference-aware rename/move/recycle with recovery, and asynchronous ZIP downloads; keep project resources read-only and support narrow screens.
+
+- Keep HTML/source projects and their shared resources in place during attachment migration; retain literal dependency directories and configuration references, stop treating engineering binaries as text, and allow independent attachments to migrate with drift checks and rollback.
+
+- Distinguish blocked attachment migration previews from index initialization, localize common blocker reasons, and show displayed/total counts for blockers and exclusions.
+
+- Show the LeafLoom logo and application name in the macOS Dock when launching Dev, using a cached branded runtime.
+
+- Unify attachment index initialization/upgrade and directory migration into one workflow: automatic index preparation, preview, then one confirmation for copy, reference rewrite, recoverable original retirement and final index rebuild. Keep index-only maintenance under collapsed advanced options. Opening the manager remains read-only; HTML projects remain excluded from migration.
+
+- Add explicit, asynchronous attachment migration previews with persisted progress, safety blockers, cancellation, journal-based recovery and confirmed rollback. Preserve original assets and note backups; completed migrations select the central folder for future uploads.
+
+- Add a metadata-only SQLite attachment index and sidebar attachment manager with paginated name/path search, original-file downloads, refresh, cancellation and retry. Keep original files, HTML projects and existing URLs unchanged.
+
 - Avoid duplicate Pages deployments when a GitHub Release is published, and refuse stale latest-version builds until the public Release API catches up.
 
 ## 0.1.3 — 2026-10-18

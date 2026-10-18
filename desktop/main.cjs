@@ -9,11 +9,13 @@ const {TunnelSettings, tunnelBinary} = require('./tunnel.cjs');
 const {Updater} = require('./updater.cjs');
 const policy = require('./policy.cjs');
 const {strings, resolve} = require('./strings.cjs');
+const {restartApplication} = require('./restart.cjs');
 
 function readJson(file) {try {return JSON.parse(fs.readFileSync(file, 'utf8'));} catch {return null;}}
 const {home, registrationHome} = require('./state-home.cjs').resolveStateHome();
 fs.mkdirSync(path.join(home, 'desktop-ui'), {recursive: true, mode: 0o700});
 app.setPath('userData', path.join(home, 'desktop-ui'));
+app.setName('LeafLoom');
 app.setAppUserModelId('com.djhuang.leafloom');
 const statusFile = path.join(__dirname, 'status.html');
 const statusUrl = pathToFileURL(statusFile).href;
@@ -24,8 +26,9 @@ let startupTimer, closeTimer;
 const tunnel = new TunnelSettings(home, safeStorage);
 const updater = new Updater({current: app.getVersion(), platform: process.platform, arch: process.arch, directory: path.join(home, 'desktop-updates'), packaged: app.isPackaged});
 let pendingInstaller = '';
+let restartPending = false;
 async function installUpdate() {
-  if (pendingInstaller || quitPending || quitting || updater.state.phase !== 'ready') return updater.status();
+  if (pendingInstaller || restartPending || quitPending || quitting || updater.state.phase !== 'ready') return updater.status();
   try {
     pendingInstaller = await updater.installer();
     await requestQuit();
@@ -79,7 +82,9 @@ function updateMenu() {
     {label: t.login, type: 'checkbox', checked: openAtLogin, click: item => {try {setLogin(item.checked);} catch (e) {log(e); dialog.showErrorBox('LeafLoom', e.message); updateMenu();}}},
     {label: t.logs, click: () => void shell.openPath(path.join(home, 'logs'))},
     {label: t.retry, enabled: Boolean(failure) && !retrying, click: () => void startBackend()},
-    {type: 'separator'}, {label: t.quit, click: () => void requestQuit()},
+    {type: 'separator'},
+    {label: t.restart, enabled: !pendingInstaller && !restartPending && !quitPending && !quitting, click: () => void requestRestart()},
+    {label: t.quit, click: () => void requestQuit()},
   ]));
 }
 function setLogin(enabled) {
@@ -131,14 +136,16 @@ function createWindow() {
     quitPending = false;
     showWindow();
     const t = text();
-    void dialog.showMessageBox(window, {type: 'warning', title: 'LeafLoom', message: t.unsaved, detail: t.unsavedDetail, buttons: [t.back, t.exit], defaultId: 0, cancelId: 0}).then(choice => {if (choice.response === 1) {
+    void dialog.showMessageBox(window, {type: 'warning', title: 'LeafLoom', message: t.unsaved, detail: restartPending ? t.restartDetail : t.unsavedDetail, buttons: [t.back, restartPending ? t.restart : t.exit], defaultId: 0, cancelId: 0}).then(choice => {if (choice.response === 1) {
       // Trigger a second unload with a one-use permission instead of relying on
       // an event that expired while the native dialog was awaiting a response.
       allowDiscard = true; quitPending = true; window.close();
-    } else if (pendingInstaller) {
-      pendingInstaller = ''; updater.state.phase = 'ready';
+    } else {
+      restartPending = false;
+      if (pendingInstaller) {pendingInstaller = ''; updater.state.phase = 'ready';}
     }}).catch(error => {
       quitPending = false;
+      restartPending = false;
       if (pendingInstaller) {pendingInstaller = ''; updater.state.phase = 'ready';}
       log(error);
     });
@@ -159,6 +166,11 @@ async function requestQuit() {
     window.close();
   } else await finishQuit();
 }
+async function requestRestart() {
+  if (restartPending || pendingInstaller || quitting || quitPending) return;
+  restartPending = true;
+  await requestQuit();
+}
 async function finishQuit() {
   if (quitting) return; quitting = true;
   clearTimeout(startupTimer); clearInterval(closeTimer);
@@ -173,7 +185,7 @@ async function finishQuit() {
       showWindow(); await startBackend(); return;
     }
   }
-  tray?.destroy(); app.quit();
+  app.quit();
 }
 function fail(error) {
   if (quitting) return;
@@ -279,9 +291,17 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', (_, argv) => {if (argv.includes('--quit')) void requestQuit(); else showWindow();});
   app.on('before-quit', event => {if (!quitting) {event.preventDefault(); void requestQuit();}});
+  app.on('will-quit', () => {
+    if (restartPending) {
+      try {restartApplication(app, home, {argv: process.argv, env: process.env});}
+      catch (error) {log(error); dialog.showErrorBox('LeafLoom', text().restartFailed);}
+    }
+    tray?.destroy();
+  });
   app.on('window-all-closed', () => {});
   app.on('activate', showWindow);
   app.whenReady().then(async () => {
+    if (process.platform === 'darwin' && !app.isPackaged) app.dock.setIcon(image('logo.png'));
     if (process.platform === 'darwin') background = background || loginSettings().wasOpenedAtLogin;
     if (process.argv.includes('--quit')) {quitting = true; app.quit(); return;}
     if (!((process.platform === 'win32' && process.arch === 'x64') || (process.platform === 'darwin' && process.arch === 'arm64'))) throw new Error('Supported platforms: Windows x64 and Apple Silicon macOS');
@@ -309,7 +329,7 @@ else {
     tray = new Tray(trayImage); tray.setToolTip('LeafLoom'); tray.on('click', showWindow); tray.on('right-click', updateMenu); updateMenu();
     const t = text();
     Menu.setApplicationMenu(Menu.buildFromTemplate([
-      {label: 'LeafLoom', submenu: [{label: t.open, click: showWindow}, {type: 'separator'}, {label: t.quit, accelerator: 'CmdOrCtrl+Q', click: () => void requestQuit()}]},
+      {label: 'LeafLoom', submenu: [{label: t.open, click: showWindow}, {type: 'separator'}, {label: t.restart, click: () => void requestRestart()}, {label: t.quit, accelerator: 'CmdOrCtrl+Q', click: () => void requestQuit()}]},
       {role: 'editMenu'}, {role: 'viewMenu'}, {role: 'windowMenu'},
     ]));
     const methods = {

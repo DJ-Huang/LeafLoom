@@ -31,6 +31,8 @@ Tunnel 内部凭据通过 `X-LeafLoom-Tunnel-Authorization` 注入发现与业�
 
 安装版由 Electron 管理窗口、托盘／菜单栏、登录启动和私有 Python sidecar，退出时正常停止自己拥有的后端及检索工作进程。开发模式通过 Dev 启动 Vite 与源码 Electron，复用安装版的用户数据与单实例锁；切换前正常退出当前应用。开发依赖保持独立，隔离测试通过显式临时 `VAULT_RAG_HOME` 指定。旧 Dev 模型仅在共享 `models/` 缺失时经暂存复制复用，旧配置与源模型保留。
 
+应用菜单和托盘提供“重启 LeafLoom”，复用主窗口的草稿准备与 `beforeunload` 确认。取消确认会清理重启意图；本地服务停止后，只有真正进入 `will-quit` 才安排重新启动。安装版用 Electron `app.relaunch`，保留状态目录和自定义参数、移除 `--background` / `--quit`，以前台打开。Dev 启动器为本次会话传入独立重启请求文件；只有正常退出且有请求才继续启动，崩溃、普通退出或 Ctrl+C 均不触发重启循环。Dev 重启保留 Vite，先同步锁定的 Python 依赖并重新检查品牌运行文件，再打开当前源码。桌面菜单的新翻译同样由 `messages.tsv` 经 `compile_locales.py` 生成 `desktop/menu-messages.cjs`。
+
 Windows `windows_native` 使用当前用户与配置目录区分本地实例，正常退出不按进程名称强制结束其他 Python 程序。`service_control`、旧计划任务／LaunchAgent 和脚本托盘实现仅作为历史安装迁移与内部兼容代码保留；根目录旧服务启动入口已移除。
 
 桌面更新由 `desktop/updater.cjs` 在主进程中处理：固定 GitHub Release 来源、按平台选择安装包、流式下载进度与大小／SHA-256 校验，安装前再次校验。可信工作区通过 IPC 检查版本、读取进度及发起下载安装；正常退出保护草稿后打开安装向导或 DMG。源码 Dev 只检查版本，详见[桌面更新](DESKTOP.md#update-implementation)。
@@ -73,7 +75,7 @@ Markdown 默认在 Tiptap/ProseMirror 正文编辑器中打开，CodeMirror 提�
 
 `document-state` 管理正文、版本标识、本地草稿和自动保存；`edit-history` 在正文与源码之间共享撤销记录。正文映射与 `source-offsets` 处理编辑位置及换行偏移；后端保存继续校验版本并保留 BOM 和原文换行。外部修改与保存冲突保留当前草稿，AI 草稿仍需明确保存。
 
-附件上传使用现有文件接口，显式携带所属根目录，在笔记旁创建 `attachments` 并生成唯一文件名。上传后的文件与插入链接分别管理，撤销链接或取消后续插入不会删除已上传的文件。操作说明见[使用指南](zh-CN/GUIDE.md#用命令快速编辑)，回归入口见[贡献说明](../CONTRIBUTING.md)。
+附件上传使用现有文件接口，显式携带所属根目录，在知识库中创建统一的 `_attachments`（或配置的 `attachment_folder`）并生成唯一文件名。上传后的文件与插入链接分别管理，撤销链接或取消后续插入不会删除已上传的文件。操作说明见[使用指南](zh-CN/GUIDE.md#用命令快速编辑)，回归入口见[贡献说明](../CONTRIBUTING.md)。
 
 ## 本机安全
 
@@ -109,3 +111,33 @@ only for static output. Headless publication uses an optional Playwright rendere
 with the same offline boundary. The backend validates native output dimensions
 and combines PDF pages or PNG files in selected order. Progress and retries are
 job-scoped and retain accepted results and the frozen revision.
+
+## 附件元数据索引与管理入口
+
+`vault_rag/attachment_index.py` 在关联目录的 `.vault-rag/attachments.sqlite` 保存可重建的路径、文件名、大小、修改时间与 MIME 元数据；原文件仍为事实来源，不迁移文件、不改写链接。附件管理器先只读检查状态，首次初始化或已知旧版升级必须点击按钮；后台刷新与文件变更批次用于核对可用索引；扫描不解析笔记或读取附件正文，独立于 RAG。名称索引也服务于文件名解析。
+
+`GET /api/attachments?query=&after=&limit=100` 保留旧的路径升序行为；新增 `root`、`kind`、`sort`、`order`、`cursor`，按排序值与路径稳定分页，并返回全库数量、空间与类型汇总。游标绑定根目录、查询、筛选、排序、扫描版本与本服务的增量变更代次，过期时要求重新加载。`GET /api/attachments/status` 只读返回状态、目录与索引作业；显式 `initialize`、`rebuild`、`index-cancel` 管理后台索引。已知旧版本先备份，未知版本拒绝覆盖。列表只包含 `.md`、`.txt`、`.base` 之外的可浏览文件。
+
+主导航按需加载 `?view=attachments` 独立工作区，默认最近修改的缩略图网格。单页最多 100 项，全选只针对当前页。搜索防抖、AbortController 与响应代次保护阻止过期结果覆盖；根目录以组件 key 隔离旧列表、选择、上传和预览。离开页面暂停媒体并保留浏览条件及滚动位置。侧栏预览复用媒体组件与受保护的 `/api/media?root=`，PDF 内嵌、SVG 按图片显示，HTML 不执行，项目仍运行在独立来源。
+
+`vault_rag/attachment_workspace.py` 提供 `details` 保护提示、缩略图、操作规划与 ZIP 作业。`GET /api/attachments/thumbnail?root=&path=` 只解码受支持的栅格图片，限制 64 MiB 源文件、3200 万像素和两个并发，按根目录、路径与文件版本生成静态 WebP；缓存最多 1024 项。Pillow 为两端共享依赖，缩略图失败回退图标，不批量加载原图。`POST /api/upload` 的可选 `unique=true` 配合根目录确认，在发布锁内选择不覆盖的文件名，旧调用默认行为不变。
+
+`POST /api/attachments/operations` 携带 `root,kind,paths` 及 `destination` 或 `name`，复用迁移管理器的依赖保护、引用规划、漂移校验、执行锁和恢复日志，单批最多 100 项；执行、状态和恢复继续使用任务接口。重命名／移动修复支持的笔记引用；回收列出已发现引用并在确认后创建普通 `.vault-rag/trash/` 记录，不改写笔记。保护资源的提示为短期缓存，执行规划仍重新检查。`POST /api/attachments/downloads` 后台生成最多 100 文件的 ZIP，最多两个并发，状态／取消／文件接口携带根目录；逐文件核对版本与配置代次，访问范围变化后拒绝旧 ZIP；不执行内容，下载一小时后过期，清理时回收对应临时任务记录。缓存与下载存于各知识库的 `.vault-rag/`。
+
+这是路径索引而不是文件身份库：同名文件保留多个候选，笔记相对路径优先，不自动选择任意同名文件。现有 `catalog.sqlite` 仍负责笔记元数据与链接；新索引专门避免冷启动／懒加载目录中的附件名称解析反复遍历整库。完整目录索引的名称查找也使用平台规范化键直接查表。
+
+索引事务只在完整扫描成功且关联根目录未变化时提交；读取失败保留上一代，较新数据库版本拒绝打开，原文件不受影响。列表和解析候选均重新检查访问边界。`last_scanned_at` 表示最近一次成功的完整扫描时间，`total` 是缓存索引中的匹配数量，不是文件仍存在或没有引用的证明。重新启动复用索引；关闭期间的变化、监听失效或外部变更尚未同步时，应手动刷新。
+
+本阶段不保存二进制 BLOB：这不会减少图片解码成本，反而会引入文件迁移、备份与流式 Range 读取的兼容成本。缩略图应作为按需生成的派生缓存；重复检测应按需计算内容摘要，并且不能仅凭同名或摘要删除原文件。完整引用分析还需要覆盖 Markdown、HTML/CSS、历史与外部链接，不能把“未发现引用”直接解释为“可删除”。
+
+隔离云端夹具测试（5,000 个附件、50 个目录、20 次缺失文件名查找）中，原重复遍历约 2.689 秒，新索引一次构建约 0.277 秒，20 次热查询约 0.0145 秒，重启后查询约 0.0011 秒。此结果仅衡量文件名解析，不代表真实笔记整体渲染或大图解码加速比例。
+
+## 可恢复的附件迁移
+
+附件列表仍只查询可重建元数据，迁移通过独立的异步作业执行。`POST /api/attachments/migrations` 携带 `root` 与相对路径 `destination` 创建只读预览；`GET /api/attachments/migrations` 列出保存的任务，`GET /api/attachments/migrations/{id}` 读取状态、可选的展示阶段、进度、摘要、已发现引用、逐文件结果、路径变更、排除项和阻止项；未知总量显示活动进度。路径列表可以只返回前 200 项，文件总数以摘要为准。默认目标为 `_attachments`；成功迁移后的编辑器上传使用配置中的 `attachment_folder`。
+
+只有就绪且没有阻止项的计划才可通过 `POST .../{id}/execute` 并携带 `{root, confirm:true}` 执行。`cancel` 请求在安全边界停止；`resume` 和 `rollback` 均需明确确认。前端关闭、切换根目录或卸载只取消客户端等待与轮询，重开后从服务端读取持久化任务。服务重启后必须从日志重新验证，而不是假定此前全部成功。
+
+每个任务的恢复目录为 `.vault-rag/attachment-migrations/{id}/`，包括 `manifest.json`、原附件 `originals/`、笔记备份 `notes/`。应用前校验文件漂移、目标冲突、访问边界和可用空间；恢复时遇到后续编辑应报告冲突，不得覆盖用户新内容。该流程不永久删除恢复材料，也不按同名或相同摘要自动去重。
+
+静态引用规划独立于附件列表扫描，本阶段仅改写支持的 Markdown／Wiki 引用。按用户范围，HTML 文件、项目拥有的资源和 HTML 共享资源保持原位，列为明确排除项，不改写 HTML/CSS。HTML／源码项目、独立脚本和原生工程资源按目录保留，文件字面量引用和目录前缀递归扩大共享资源保留范围；配置文件作为只读依赖源，不作为待改写笔记。保留范围内的动态代码不再单独形成全库阻止项。依赖源无法安全读取、笔记中无法解释或存在歧义的引用仍阻止迁移，不能承诺“没有发现引用”等同于“无引用”。原生二进制文件不作文本解析：其大小、mtime_ns 与 inode 纳入只读漂移快照；文本源仍用流式摘要校验，执行／回滚同时校验完整非附件路径清单，兼容旧日志的纯摘要快照。外部引用与工具不可审计，因此执行前需用户核对风险。操作说明与恢复步骤见三语使用指南的附件管理章节。
