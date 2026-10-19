@@ -2,6 +2,8 @@
 
 [架构与工作流程图](assets/workflow.svg)
 
+公开官网与帮助中心使用独立静态构建：`scripts/build_site.py` 调用 `scripts/build_docs.py`，从三语 Markdown、`docs/help/navigation.json` 和语言目录生成 `/docs/{en,zh-CN,ja}/`、搜索数据与 sitemap，再由 Pages 发布。`site/help/` 提供展示与渐进增强，搜索仅加载当前语言的公开文章 JSON，不调用应用 API 或访问知识库。应用侧栏只打开外部帮助链接。内容维护与构建依赖见[官网说明](WEBSITE.md#help-center)。
+
 ## 进程和接口
 
 Dev 和安装版共用 Tunnel 配置、应用启动／退出生命周期；存在已注册安装时，Dev 选择安装版的运行文件，纯源码环境使用已验证的仓库运行文件。`tunnel_owner.py` 用共享状态目录内的操作系统文件锁限制受管运行时单实例，随进程退出自动释放；`tunnel.py` 在退出和错误路径始终关闭持有的进程 Job。Windows Job 在后端异常退出时回收子进程。独立手动启动的旧 CLI 不会被当作已授权实例复用。

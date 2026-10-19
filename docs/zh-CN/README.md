@@ -8,6 +8,8 @@
 
 **[访问官网与下载安装包](https://dj-huang.github.io/LeafLoom/zh-CN/)** · 查看产品截图、Windows / Mac 下载和版本说明。
 
+**[帮助中心](https://dj-huang.github.io/LeafLoom/docs/zh-CN/)** · 搜索笔记、附件、设计工作台、AI 接入与恢复指南。
+
 让零散笔记、项目文档和收藏网页，成为查得到、连得起、用得上的知识。**LeafLoom 是开源、本地优先的知识库管理工具与个人 Wiki**，支持 Markdown 与 HTML，集成来源可追溯的检索、知识图谱、MCP、Skill、AI Chat 和 ChatGPT 连接。
 
 文件和检索索引保存在自己的电脑上。日常阅读、记录与检索在本地完成；需要 AI 时，再把知识带进对话。

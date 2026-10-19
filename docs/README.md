@@ -2,6 +2,10 @@
 
 [Project home](../README.md) · [中文首页](zh-CN/README.md) · [日本語ホーム](ja/README.md)
 
+**Help center · 帮助中心 · ヘルプセンター:** [English](https://dj-huang.github.io/LeafLoom/docs/en/) · [中文](https://dj-huang.github.io/LeafLoom/docs/zh-CN/) · [日本語](https://dj-huang.github.io/LeafLoom/docs/ja/)
+
+The public help center has 39 task guides and four full guide/release references per language, with topic navigation, local full-text search, article contents, previous/next navigation, image zoom and copyable examples. Sources live in `docs/{en,zh-CN,ja}/help/`; [navigation.json](help/navigation.json) lists every article. The website build validates and publishes them with the existing guides. See [website maintenance](WEBSITE.md#help-center).
+
 ## Start here · 从这里开始 · はじめに
 
 | Topic / 主题 / 内容 | English | 中文 | 日本語 |

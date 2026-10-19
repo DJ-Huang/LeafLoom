@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{description}}">
+  <meta name="theme-color" content="#245c49">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>{{title}}</title>
+  <link rel="canonical" href="{{canonical}}">
+  {{alternates}}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="LeafLoom">
+  <meta property="og:title" content="{{title}}">
+  <meta property="og:description" content="{{description}}">
+  <meta property="og:url" content="{{canonical}}">
+  <link rel="icon" href="{{base}}assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="{{base}}docs/help.css">
+  <script src="{{base}}docs/help.js" defer></script>
+</head>
+<body data-locale="{{lang}}" data-search-url="{{docs_home}}search.json" data-copy="{{copy}}" data-copied="{{copied}}" data-copy-failed="{{copy_failed}}" data-loading="{{loading}}" data-search-error="{{search_error}}">
+  <a class="skip" href="#main">{{skip}}</a>
+  <header class="help-header">
+    <a class="brand" href="{{docs_home}}"><img src="{{base}}assets/logo.svg" width="35" height="35" alt=""><span>LeafLoom<small>{{home}}</small></span></a>
+    <div class="header-links"><a href="{{website_url}}">{{website}} ↗</a><nav class="languages" aria-label="{{languages}}">{{language_links}}</nav><button id="topics-toggle" type="button" aria-expanded="false" aria-controls="topics-nav">{{menu}}</button></div>
+  </header>
+  <div class="help-shell">
+    <nav class="topics-nav" id="topics-nav" aria-label="{{browse}}"><a class="all-topics" href="{{docs_home}}">{{all}}</a>{{topics}}<a class="nav-download" href="{{website_url}}#download">{{download}} ↗</a></nav>
+    <main id="main" tabindex="-1">{{body}}<footer><span>{{maintained}}</span><div><a href="https://github.com/DJ-Huang/LeafLoom/issues">{{feedback}} ↗</a><a href="https://github.com/DJ-Huang/LeafLoom/tree/main/docs">GitHub ↗</a></div></footer></main>
+  </div>
+  <dialog id="image-dialog" aria-label="{{zoom}}"><button type="button" autofocus aria-label="{{close_image}}">×</button><img alt=""></dialog>
+</body>
+</html>

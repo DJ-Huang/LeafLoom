@@ -6,6 +6,10 @@ Use **Settings → Skill** to install or update the bundled `wiki-search` skill.
 
 [All documentation](../README.md)
 
+## Help center
+
+Open **Help center** in the app sidebar or [visit the online help center](https://dj-huang.github.io/LeafLoom/docs/en/). Browse task topics or search full article text with `Ctrl/⌘+K`. Articles include steps, expected results, troubleshooting, contents and previous/next links. Language switching retains the task and its standard section. Examples can be copied and screenshots enlarged; topic browsing and articles also work without JavaScript. Help search covers public documentation only and never reads your vault.
+
 ## Install and open
 
 **Developers:** In a source checkout, double-click `Dev.cmd` on Windows or `Dev.command` on macOS 14+ Apple Silicon; on Mac, `sh Dev.sh` also works in Terminal. Run `chmod +x Dev.command Dev.sh` once if a copied/downloaded checkout loses execute permissions. You can also run `node scripts/dev-desktop.cjs` on either platform. Requires Node 22+ and uv; the first launch installs dependencies. The desktop runs directly from source and frontend edits update automatically. Dev shares the installed app's settings, models, credentials and desktop data, including its configured backend port (18080 by default). Only development dependencies stay in `.cache/desktop-dev/.venv`; Vite uses port 5173. Quit the running app before switching modes. For isolated testing, explicitly set a disposable `VAULT_RAG_HOME`. After Python/Electron edits, use **LeafLoom → Restart LeafLoom** or the tray menu’s **Restart LeafLoom**. See [source development](../DESKTOP.md#source-development).
