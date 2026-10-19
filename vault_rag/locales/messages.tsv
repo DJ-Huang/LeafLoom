@@ -1040,7 +1040,7 @@ site.navigation|主导航|Main navigation|メインナビゲーション
 site.languages|选择语言|Choose language|言語を選択
 site.nav_features|功能|Features|機能
 site.nav_download|下载|Download|ダウンロード
-site.nav_docs|使用指南|User guide|利用ガイド
+site.nav_docs|帮助中心|Help center|ヘルプセンター
 site.eyebrow|开源 · 本地优先 · 为你的知识而生|OPEN SOURCE · LOCAL FIRST · YOURS TO KEEP|オープンソース · ローカルファースト
 site.headline|让零散的想法，长成自己的知识。|A home for everything you know.|散らばったメモを、育つ知識へ。
 site.intro|把笔记、项目文档和收藏网页，织成自己的知识库与个人 Wiki。文件留在本地，需要时再连接 AI。|Turn notes, project docs and saved webpages into a connected knowledge base and personal wiki. Keep your files local. Bring AI in when you want it.|メモ、プロジェクト資料、保存したウェブページを、自分の知識ベースと個人 Wiki に。ファイルは手元に。AI は必要なときだけ。
@@ -1939,3 +1939,51 @@ Attachment download settings changed; prepare a new download|访问范围或设�
 desktop.restart|重启 LeafLoom|Restart LeafLoom|LeafLoom を再起動
 desktop.restartDetail|返回保存，或保留本地笔记草稿后重启；未保存的设置将被丢弃。|Return to save your changes, or restart keeping local note drafts for next launch. Unsaved settings will be discarded.|戻って保存するか、ローカルのメモの下書きを残して再起動します。未保存の設定は破棄されます。
 desktop.restartFailed|未能自动重启，请重新打开 LeafLoom；开发模式下请重新运行 Dev。|Unable to restart automatically. Open LeafLoom again; in development, run Dev again.|自動で再起動できませんでした。LeafLoom を開き直してください。開発モードでは Dev を再実行してください。
+# Public help-center navigation and progressive enhancements
+site.help_home|帮助中心|Help center|ヘルプセンター
+site.help_tagline|让每一次探索，都有清楚的指引。|A clear path through your knowledge.|知識を育てる、一歩ずつのガイド。
+site.help_intro|从第一篇笔记到完整知识工作流，找到操作指引，也找到解决问题的方法。|From your first note to a complete knowledge workflow. Find a guide, discover a feature, or solve a problem.|最初のメモから知識の活用まで。操作を学び、機能を見つけ、困りごとを解決できます。
+site.help_search|搜索帮助中心|Search the help center|ヘルプセンターを検索
+site.help_placeholder|试试笔记、附件、AI、版本恢复……|Try notes, attachments, AI, recovery…|メモ、添付、AI、復元などを検索…
+site.help_clear|清除搜索|Clear search|検索をクリア
+site.help_loading|正在查找相关文章…|Finding related articles…|関連記事を検索中…
+site.help_results|找到 {count} 篇文章，最多显示 20 篇|Found {count} articles; showing up to 20|{count} 件の記事が見つかりました（最大 20 件表示）
+site.help_empty|没有匹配的文章，试试更短的关键词或浏览主题。|No matching articles. Try a shorter term or browse the topics.|該当する記事がありません。短い語句かトピックからお探しください。
+site.help_search_error|暂时无法搜索，请使用下方主题导航，稍后重新输入可重试。|Search is unavailable. Browse the topics, or type again to retry.|検索を利用できません。トピックを参照するか、再入力してお試しください。
+site.help_no_js|可直接浏览所有主题；启用 JavaScript 后可全文搜索、复制示例和放大图片。|Browse every topic directly. Enable JavaScript for full-text search, copy buttons and image zoom.|全トピックを直接閲覧できます。全文検索・コピー・画像拡大には JavaScript を有効にしてください。
+site.help_start|第一次使用|Start here|はじめて使う
+site.help_features|查找功能|Explore features|機能を探す
+site.help_problems|解决问题|Solve a problem|問題を解決する
+site.help_browse|浏览全部主题|Browse all topics|すべてのトピック
+site.help_all|全部主题|All topics|全トピック
+site.help_count|篇文章|articles|件の記事
+site.help_group_start|开始使用|Getting started|使い始める
+site.help_group_notes|笔记与知识连接|Notes and connections|メモとつながり
+site.help_group_search|搜索与索引|Search and indexing|検索と索引
+site.help_group_assets|附件与 HTML 项目|Attachments and HTML|添付と HTML
+site.help_group_design|设计工作台|Design Studio|デザインスタジオ
+site.help_group_ai|AI 与外部连接|AI and integrations|AI と外部連携
+site.help_group_settings|设置、更新与数据|Settings, updates and data|設定・更新・データ
+site.help_group_problems|解决问题|Troubleshooting|トラブルシューティング
+site.help_group_reference|指南与版本记录|Guides and releases|ガイドと更新履歴
+site.help_previous|上一篇|Previous article|前の記事
+site.help_next|下一篇|Next article|次の記事
+site.help_adjacent|相邻文章|Adjacent articles|前後の記事
+site.help_source|查看仓库原文|View source on GitHub|GitHub で原文を見る
+site.help_contents|本页目录|On this page|このページの内容
+site.help_breadcrumbs|当前位置|Breadcrumbs|現在の位置
+site.help_version|适用于 LeafLoom|For LeafLoom|対象 LeafLoom
+site.help_local_first|本地优先的知识工作区|Your local knowledge workspace|ローカルの知識ワークスペース
+site.help_website|官网与下载|Website and downloads|公式サイト・ダウンロード
+site.help_download|下载 LeafLoom|Download LeafLoom|LeafLoom をダウンロード
+site.help_languages|选择语言|Choose language|言語を選ぶ
+site.help_menu|主题目录|Topics|トピック
+site.help_skip|跳至正文|Skip to content|本文へ移動
+site.help_maintained|文章原文统一维护在仓库中，与产品文档一同更新。|Articles are maintained in the repository alongside the product documentation.|記事の原文は製品ドキュメントとともにリポジトリで管理しています。
+site.help_feedback|反馈问题|Report an issue|問題を報告
+site.help_zoom|放大图片|Enlarge image|画像を拡大
+site.help_close_image|关闭图片|Close image|画像を閉じる
+site.help_copy|复制示例|Copy example|例をコピー
+site.help_copied|已复制|Copied|コピーしました
+site.help_copy_failed|请选择并复制示例|Select and copy the example|選択してコピーしてください
+help.center|帮助中心|Help center|ヘルプセンター

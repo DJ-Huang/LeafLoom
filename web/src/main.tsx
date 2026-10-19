@@ -1,5 +1,5 @@
 import {Diagnostic} from './i18n';
-import {t,useLocale} from './i18n';
+import {getLocale,t,useLocale} from './i18n';
 import React,{lazy,Suspense,useCallback,useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {BookOpen,Calendar,Home,PanelLeft,Plus,RefreshCw,Search,Settings,ArrowLeft,Network,MessageSquare,Globe,Paperclip,Palette} from 'lucide-react';
@@ -145,7 +145,7 @@ function App(){
    </nav>
    <div className="section-label"><span>{t("文件目录")}</span><div><Action title={t("刷新数据")} onClick={refreshData}><RefreshCw size={14}/></Action><Action title={t("新建笔记")} onClick={()=>newFile('file')}><Plus size={15}/></Action></div></div>
    <div className="file-tree"><DirectoryTree key={config.root} onOpen={openFile} onFolder={setCurrentFolder} selected={view==='document'?active:''} refresh={refresh} manage={manage}/></div>
-   <div className="sidebar-tools"><button onClick={()=>openSettings()}><Settings size={16}/>{t("设置")}</button><button className="help-button" onClick={()=>{showHome();void saveGuide({step:'done',dismissed:false}).catch(error=>notify(error.message));}}>{t("新手指南")}</button></div><IndexStatus onOpen={()=>openSettings({section:'index',targetId:'sync'})}/>
+   <div className="sidebar-tools"><button onClick={()=>openSettings()}><Settings size={16}/>{t("设置")}</button><button className="help-button" onClick={()=>{showHome();void saveGuide({step:'done',dismissed:false}).catch(error=>notify(error.message));}}>{t("新手指南")}</button><a href={`https://dj-huang.github.io/LeafLoom/docs/${getLocale()}/`} target="_blank" rel="noopener noreferrer"><BookOpen size={16}/>{t('help.center')}</a></div><IndexStatus onOpen={()=>openSettings({section:'index',targetId:'sync'})}/>
   </Sidebar>
   <main className="main" inert={narrow&&mobileOpen}><StorageMigrationNotice/>
    {connectionError&&<div role="status" className="connection-banner">{<Diagnostic message={connectionError}/>}<button onClick={refreshData}>{t("刷新数据")}</button></div>}

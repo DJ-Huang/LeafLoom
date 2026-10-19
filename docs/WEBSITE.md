@@ -4,13 +4,15 @@
 
 ## Source and build
 
-`site/page.html`, `site/about.html` and `site/style.css` form an independent, static marketing website. It does not load the application frontend, run the Python service, access vaults, or include analytics. English is the root page; Chinese and Japanese have `/zh-CN/` and `/ja/` routes. Each language has an `about/` page linked from the navigation and footer, with the creator’s GitHub and X profiles. Language links and canonical/alternate metadata retain the current page type; all six pages appear in the sitemap. All routes support direct loading without JavaScript.
+`site/page.html`, `site/about.html`, `site/style.css` and `site/help/` form an independent static marketing website and help center. It does not load the application frontend, run the Python service, access vaults, or include analytics. English is the root page; Chinese and Japanese have `/zh-CN/` and `/ja/` routes. Each language has an `about/` page linked from the navigation and footer, with the creator’s GitHub and X profiles. Help lives under `/docs/{en,zh-CN,ja}/`. Language links and canonical/alternate metadata retain the current page type; all six marketing pages and 132 help routes appear in the sitemap. All articles support direct loading without JavaScript.
 
-Author all website UI copy under `site.*` keys in `vault_rag/locales/messages.tsv`; do not edit generated catalogs or HTML. Run these commands from the repository root with Python 3.12+ (standard library only):
+Author all website UI copy under `site.*` keys in `vault_rag/locales/messages.tsv`; do not edit generated catalogs or HTML. Run these commands from the repository root with Python 3.12+. The small, pinned Markdown renderer is independent of the application's model/desktop dependencies:
 
 ```sh
+python -m pip install -r site/requirements.txt
 python scripts/compile_locales.py
 python -m unittest discover -s tests -p test_site.py -v
+python -m unittest discover -s tests -p test_docs.py -v
 python scripts/build_site.py
 ```
 
@@ -30,6 +32,20 @@ python -m http.server 18092 --bind 127.0.0.1 --directory .cache/site-preview
 ```
 
 Open `http://127.0.0.1:18092/LeafLoom/`. `--base-url` overrides the canonical origin and prefix for a different host. Stop the preview server after use. For offline reproduction, save the public response from `GET https://api.github.com/repos/DJ-Huang/LeafLoom/releases/latest` and pass `--release-json path/to/release.json`. To reproduce platform fallbacks offline, add a `fallback_releases` array containing the historical Release objects from the paginated releases API.
+
+## Help center
+
+`docs/help/navigation.json` owns topic order and source selection. There are 39 task articles per language under `docs/{en,zh-CN,ja}/help/`, plus the existing full user guide, AI guide, changelog and release notes. Existing sources retain their paths. `scripts/build_docs.py` renders these into the same Pages artifact as the homepage; `/docs/` offers language entry links and defaults to English. The website navigation, AI/privacy links and application sidebar point to localized help.
+
+Every task article has one H1 and six H2 sections: goal, prerequisites, steps, expected result, troubleshooting and next steps. Their anchors are `goal`, `before`, `steps`, `result`, `troubleshooting`, `next` in every language, so language switching retains an article and its standard section. Add the same slug in all three languages and list it in navigation. Article content belongs in Markdown; help interface copy belongs under `site.help_*` in `messages.tsv`. Keep examples fictional. When behavior changes, update the relevant task article as well as the three complete guides and changelogs.
+
+The help homepage includes grouped topics and three starting paths. Article pages include breadcrumbs, a page contents list, previous/next links and a repository source link. CSS handles phone layouts; JavaScript adds an accessible mobile topic toggle, local full-text search (`Ctrl/⌘+K`), code-copy buttons and image zoom. Without JavaScript, articles and topic navigation remain available. Search downloads only the current language's generated `search.json`; there is no remote search provider, analytics, application API or vault access. Failed searches can be retried without reloading the page.
+
+The renderer escapes raw HTML, rejects unsafe URLs and missing repository links, and copies only referenced images from the public screenshot/brand/document asset directories. Markdown links to included sources become site routes, while technical references stay on GitHub. All three languages must have every article; a missing source or translation fails the build. `tests/test_docs.py` validates coverage, standard section anchors, duplicate IDs, local links, cross-page fragments, media, prefixes and URL boundaries. `docs/**`, changelogs and help source changes trigger PR checks and main-branch deployment through the existing Pages workflow. PRs do not deploy.
+
+中文：帮助中心位于 `/docs/zh-CN/`，提供 39 篇任务指南与 4 篇完整指南／版本参考，覆盖分类导航、全文搜索、页内目录、前后篇、图片放大与示例复制。正文在各语言 `help/` 中维护，界面文案在 `messages.tsv`，导航顺序在 `docs/help/navigation.json`。更新功能时同时维护任务文章、完整指南与更新记录。文档变动自动触发 Pages；只发布静态公开内容，不接触本地知识库。
+
+日本語：`/docs/ja/` に 39 件のタスク記事と 4 件の全体ガイド／更新資料を提供します。分類・全文検索・目次・前後の記事・画像拡大・例のコピーに対応。本文は言語別 `help/`、UI 文言は `messages.tsv`、順序は `docs/help/navigation.json` で管理します。機能変更時は記事・全体ガイド・変更履歴を更新してください。文書の変更も Pages を起動し、公開用の静的内容のみを配信します。
 
 ## Downloads
 
