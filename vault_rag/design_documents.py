@@ -83,6 +83,17 @@ def _hash(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def history_owner_matches(owner: str, directory: str) -> bool:
+    """Match a vault-relative owner, independent of the syncing machine's root.
+
+    Keep the existing root/newline/directory record format for compatibility,
+    without rewriting history metadata just because another device reads it.
+    The relative directory still guards against two copies sharing an ID.
+    """
+    root, separator, stored_directory = owner.partition('\n')
+    return bool(root and separator) and stored_directory == directory
+
+
 def _diff(before: Any, after: Any, path: list | None = None) -> tuple[list, list]:
     """Paired JSON deltas; an insertion stores only the changed list segment."""
     path = path or []
@@ -364,7 +375,7 @@ class DesignDocuments:
                 with db:
                     db.execute('INSERT INTO meta VALUES (1,?,?,0,?)', (_id(), cached['hash'], owner))
                     db.execute('INSERT INTO checkpoints VALUES (0,?)', (path.read_bytes(),))
-            elif meta['owner'] != owner:
+            elif not history_owner_matches(meta['owner'], directory):
                 raise ConflictError('Project identity belongs to another directory; duplicate with a new document ID')
             self._recover(db, path)
             cached = self._cached_document(path, project)
@@ -661,9 +672,9 @@ class DesignDocuments:
             db = self._database(document['id'])
             try:
                 row = db.execute('SELECT owner FROM meta WHERE id=1').fetchone()
-                old_owner = str(self.config.root) + '\n' + old_directory
                 new_owner = str(self.config.root) + '\n' + directory
-                if row is not None and row['owner'] not in (old_owner, new_owner):
+                if row is not None and not any(history_owner_matches(row['owner'], candidate)
+                                               for candidate in (old_directory, directory)):
                     raise ConflictError('Project history belongs to a different directory')
                 self._recover(db, path)
                 with db:

@@ -213,6 +213,25 @@ class DesignWorkspaceTests(unittest.TestCase):
         self.workspace.history('redo', self.workspace.state()['revision'])
         self.assertEqual(self.docs.read(self.directory)['document']['name'], 'Edited creation')
 
+    def test_synced_history_supports_move_restore_and_trash_purge(self):
+        def foreign_owner(directory):
+            with self.docs._database(self.project['document']['id']) as db:
+                db.execute('UPDATE meta SET owner=? WHERE id=1', ('D:\\Knowledge\n' + directory,))
+
+        foreign_owner(self.directory)
+        moved = self.manage('move', 'move-synced-project', destination='Projects/Moved')
+        foreign_owner('Projects/Moved')
+        self.workspace.history('undo', moved['revision'])
+        self.assertEqual(self.docs.read(self.directory)['document'], self.project['document'])
+        deleted = self.manage('delete', 'delete-synced-project')
+        foreign_owner(deleted['meta'][self.directory]['trash'])
+        self.manage('restore', 'restore-synced-project')
+        self.assertEqual(self.docs.read(self.directory)['document'], self.project['document'])
+        deleted = self.manage('delete', 'delete-synced-again')
+        foreign_owner(deleted['meta'][self.directory]['trash'])
+        purged = self.workspace.purge_trash([self.directory], deleted['revision'], 'purge-synced-project', confirm=True)
+        self.assertEqual(purged['deleted'], 1)
+
     def test_interrupted_move_recovers_and_rebinds_idempotently(self):
         original_write = __import__('vault_rag.design_workspace', fromlist=['atomic_write']).atomic_write
 

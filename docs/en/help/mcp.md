@@ -10,6 +10,8 @@ Connect a local folder first. Practise in the demo vault if you prefer.
 
 ## Steps
 
+The existing workspace read/write switches include attachments. After restarting an updated backend, refresh both local clients and the LeafLoom ChatGPT plugin tools. `vault_files` provides search, metadata, original-byte reads, ZIP downloads and task status; `vault_files_update` provides chat/local uploads, move/rename, trash, organization, index maintenance and task control. Inspect a plan before confirming it with the current task revision. Uploads preserve duplicate names and return links without editing notes automatically. See the [file tool contract](../../MCP.md#general-file-tools).
+
 Open **Settings → AI connections → MCP access permissions**. Enable local AI reading and copy the generated connection configuration. Its dedicated credential is shown once. Use `http_headers.Authorization` in Codex, `headers.Authorization` in Cursor, and `type: http` plus `headers.Authorization` in Claude Code. Regenerating the credential or disabling all its resource scopes revokes it; keep configurations private.
 
 Enable **Allow local AI to modify notes** separately for direct saves. For ChatGPT, use the existing Tunnel connection and its separate **read all notes** and **modify notes** switches. Permission changes automatically reconnect the Tunnel; refresh the tool list in your client. Writing is off by default for both connections.

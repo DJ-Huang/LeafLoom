@@ -23,7 +23,7 @@ from vault_rag.attachment_references import OPAQUE_RESOURCE_TYPES, discover_proj
 class AttachmentWorkspace:
     def __init__(self, runtime, migrations):
         self.runtime=runtime;self.config=runtime.config;self.migrations=migrations
-        self.images=threading.BoundedSemaphore(2);self.lock=threading.RLock()
+        self.images=threading.BoundedSemaphore(2);self.lock=threading.RLock();self.guards={}
         self.protection_lock=threading.Lock();self.protection=None;self.downloads={};self.stops={};self.threads={}
 
     def files(self,root):
@@ -112,7 +112,7 @@ class AttachmentWorkspace:
     def _save_download(self,files,job):
         atomic_write(self._download_path(files,job['id'],'job.json'),json.dumps(job).encode())
 
-    def download(self,root,paths):
+    def download(self,root,paths,*,guard=None):
         files=self.files(root)
         if not isinstance(paths,list) or not 1<=len(paths)<=100 or any(not isinstance(p,str) for p in paths):
             raise ValueError('Select between 1 and 100 attachments')
@@ -129,6 +129,7 @@ class AttachmentWorkspace:
                             shutil.rmtree(checked.parent);self.downloads.pop(entry.name,None);self.stops.pop(entry.name,None);self.threads.pop(entry.name,None)
             if sum(t.is_alive() for t in self.threads.values())>=2:raise ConflictError('Wait for the current downloads to finish')
             key=uuid.uuid4().hex;stop=threading.Event();self.stops[key]=stop
+            if guard is not None:self.guards[key]=guard
             job={'id':key,'root':root,'revision':self.config.data.get('revision'),'state':'running','done':0,'total':len(paths),'created_at':time.time()}
             self._download_path(files,key,'job.json').parent.mkdir(parents=True,exist_ok=True,mode=0o700)
             self.downloads[key]=job;self._save_download(files,job)
@@ -136,7 +137,8 @@ class AttachmentWorkspace:
             self.threads[key]=thread;thread.start()
             return dict(job)
 
-    def _download_guard(self,job):
+    def _download_guard(self,job,*,authorize=False):
+        if authorize and job['id'] in self.guards:self.guards[job['id']]()
         self.migrations._guard(job['root'])
         if job.get('revision')!=self.config.data.get('revision'):
             raise ConflictError('Attachment download settings changed; prepare a new download')
@@ -149,7 +151,7 @@ class AttachmentWorkspace:
             if total+4*1024*1024>shutil.disk_usage(files.config.root).free:raise ValueError('Insufficient space for attachment download')
             with zipfile.ZipFile(partial,'w',compression=zipfile.ZIP_STORED,allowZip64=True) as archive:
                 for index,path in enumerate(paths):
-                    self._download_guard(job)
+                    self._download_guard(job,authorize=True)
                     if stop.is_set():raise InterruptedError()
                     source=files.config.path_for(path);before=source.stat()
                     with os.fdopen(os.open(source,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_BINARY',0)),'rb') as src,archive.open(path,'w',force_zip64=True) as dst:
@@ -157,12 +159,12 @@ class AttachmentWorkspace:
                         if not stat.S_ISREG(opened.st_mode) or (opened.st_size,opened.st_mtime_ns,opened.st_ino)!=(before.st_size,before.st_mtime_ns,before.st_ino):raise ConflictError('Attachment changed while opening')
                         while data:=src.read(1024*1024):
                             if stop.is_set():raise InterruptedError()
-                            self._download_guard(job);dst.write(data)
+                            self._download_guard(job,authorize=True);dst.write(data)
                     after=files.config.path_for(path).stat()
                     if (before.st_size,before.st_mtime_ns,before.st_ino)!=(after.st_size,after.st_mtime_ns,after.st_ino):
                         raise ConflictError('Attachment changed while preparing download')
                     job['done']=index+1;self._save_download(files,job)
-            self._download_guard(job);partial.rename(output);job['state']='completed'
+            self._download_guard(job,authorize=True);partial.rename(output);job['state']='completed'
         except Exception as error:
             job['state']='cancelled' if isinstance(error,InterruptedError) else 'failed'
             job['error']=str(error) or 'Download cancelled'

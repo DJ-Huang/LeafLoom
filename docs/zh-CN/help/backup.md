@@ -11,7 +11,7 @@
 ## 操作步骤
 
 1. 备份整个关联知识库，包括隐藏的 `.vault-rag/`，并保留附件、HTML 项目及设计项目。
-2. 已支持[待发布标注功能](annotations.md)的版本，还通过 `.vault-rag/annotations.sqlite` 保存评论与高亮；历史、回收区和附件迁移原件也是恢复材料，不能当作普通缓存删除。
+2. `.vault-rag/annotations.sqlite` 保存评论与高亮；历史、回收区和附件迁移原件也是恢复材料，不能当作普通缓存删除。
 3. 私有设置、模型、凭据及 AI 历史位于 Windows `%LOCALAPPDATA%\VaultRag` 或 Mac `~/Library/Application Support/VaultRag`；自定义目录以实际配置为准。
 4. 单独导出浏览器/桌面中的唯一未保存草稿，确保备份可读后再迁移。
 5. 恢复时先使用新的本机目录检查，再决定是否替换现有资料。

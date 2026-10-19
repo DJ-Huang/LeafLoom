@@ -12,7 +12,7 @@ The public help center has 39 task guides and four full guide/release references
 | --- | --- | --- | --- |
 | Install, write Markdown, open HTML projects, recover drafts | [User guide](en/GUIDE.md) | [使用指南](zh-CN/GUIDE.md) | [利用ガイド](ja/GUIDE.md) |
 | Highlights, inline and page comments | [Annotations](ANNOTATIONS.md) | [标注与评论](zh-CN/GUIDE.md#行内标注与评论) | [ハイライトとコメント](ja/GUIDE.md#ハイライトとコメント) |
-| AI Chat, MCP and Skills| AI Chat, MCP and Skills | [AI connections](en/AI.md) | [AI 接入](zh-CN/AI.md) | [AI 連携](ja/AI.md) |
+| AI Chat, MCP and Skills | [AI connections](en/AI.md) | [AI 接入](zh-CN/AI.md) | [AI 連携](ja/AI.md) |
 | Attachment workspace, previews, organization and recovery | [Attachments](en/GUIDE.md#attachment-manager) | [附件管理](zh-CN/GUIDE.md#附件管理) | [添付ファイル](ja/GUIDE.md#添付ファイルの管理) |
 | Change history | [Changelog](../CHANGELOG.md) | [更新记录](zh-CN/CHANGELOG.md) | [変更履歴](ja/CHANGELOG.md) |
 | LeafLoom 0.1.3 release notes | [Release notes](en/RELEASE_NOTES_0.1.3.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.3.md) | [リリースノート](ja/RELEASE_NOTES_0.1.3.md) |
@@ -32,7 +32,7 @@ The public help center has 39 task guides and four full guide/release references
 - [Bound design content, language variants and static publishing](DESIGN_STUDIO.md#bound-content-variants-and-static-publishing)
 - [Folder organization and indexing scope](VAULT_ORGANIZATION.md)
 - [AI assistant implementation](AI_ASSISTANT.md)
-- [Complete MCP tools, credentials and note workflows](MCP.md)
+- [Complete MCP tools, credentials, note workflows and the two general file tools](MCP.md)
 - [Feishu / Lark connection, CLI ownership and MCP tools](FEISHU.md)
 - [Local access and privacy boundaries](SECURITY.md)
 - [Architecture and workflow](ARCHITECTURE.md)

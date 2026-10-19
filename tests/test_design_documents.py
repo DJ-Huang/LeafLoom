@@ -3,6 +3,7 @@ import base64
 import copy
 import json
 from pathlib import Path
+import shutil
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -71,6 +72,70 @@ class DesignDocumentTests(unittest.TestCase):
         self.path.write_text(json.dumps(document))
         with self.assertRaises(ConflictError):
             self.service.read(self.directory)
+
+    def test_synced_vault_keeps_history_across_machine_roots(self):
+        self.apply({'type': 'project.update', 'patch': {'name': 'Synced design'}})
+        original = self.path.read_bytes()
+        foreign_owner = 'D:\\Knowledge\n' + self.directory
+        with self.service._database(self.current['document']['id']) as db:
+            db.execute('UPDATE meta SET owner=? WHERE id=1', (foreign_owner,))
+        destination = self.home / 'synced-vault'
+        shutil.copytree(self.root, destination)
+        self.config.save({'root': str(destination)})
+        self.service = DesignDocuments(self.studio)
+        synced = self.service.read(self.directory)
+        self.assertEqual(synced['document'], self.current['document'])
+        self.assertEqual(synced['revision'], self.current['revision'])
+        self.assertTrue(synced['history']['can_undo'])
+        self.assertEqual((destination / self.directory / DOCUMENT_PATH).read_bytes(), original)
+        with self.service._database(synced['document']['id']) as db:
+            self.assertEqual(db.execute('SELECT owner FROM meta WHERE id=1').fetchone()[0], foreign_owner)
+        self.history('undo')
+        self.assertEqual(self.current['document']['name'], 'Pet Home')
+        self.history('redo')
+        self.assertEqual(self.current['document']['name'], 'Synced design')
+        self.assertEqual(self.path.read_bytes(), original)
+
+    def test_synced_identity_still_rejects_a_different_relative_directory(self):
+        with self.service._database(self.current['document']['id']) as db:
+            db.execute('UPDATE meta SET owner=? WHERE id=1', ('D:\\Knowledge\n' + self.directory,))
+        shutil.copytree(self.root / self.directory, self.root / 'Projects/Copy')
+        original = self.path.read_bytes()
+        with self.assertRaisesRegex(ConflictError, 'another directory'):
+            self.service.read('Projects/Copy')
+        with self.assertRaisesRegex(ConflictError, 'different directory'):
+            self.service.relocate('Projects/Unrelated', 'Projects/Copy')
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertEqual((self.root / 'Projects/Copy' / DOCUMENT_PATH).read_bytes(), original)
+        self.assertEqual(self.service.read(self.directory)['revision'], self.current['revision'])
+
+    def test_synced_root_does_not_bypass_external_content_conflicts(self):
+        with self.service._database(self.current['document']['id']) as db:
+            db.execute('UPDATE meta SET owner=? WHERE id=1', ('/another/computer/vault\n' + self.directory,))
+        document = copy.deepcopy(self.current['document'])
+        document['name'] = 'External edit'
+        self.path.write_text(json.dumps(document))
+        original = self.path.read_bytes()
+        with self.assertRaisesRegex(ConflictError, 'changed outside the studio'):
+            self.service.read(self.directory)
+        self.assertEqual(self.path.read_bytes(), original)
+        with self.service._database(document['id']) as db:
+            self.assertEqual(db.execute('SELECT revision FROM meta WHERE id=1').fetchone()[0], self.current['revision'])
+
+    def test_synced_history_recovers_a_pending_save_without_changing_owner(self):
+        with patch('vault_rag.design_documents.atomic_write', side_effect=OSError('interruption')):
+            with self.assertRaises(OSError):
+                self.apply({'type': 'project.update', 'patch': {'name': 'Pending synced edit'}})
+        foreign_owner = 'D:\\Knowledge\n' + self.directory
+        with self.service._database(self.current['document']['id']) as db:
+            db.execute('UPDATE meta SET owner=? WHERE id=1', (foreign_owner,))
+        self.current = DesignDocuments(self.studio).read(self.directory)
+        self.assertEqual(self.current['document']['name'], 'Pending synced edit')
+        with self.service._database(self.current['document']['id']) as db:
+            self.assertEqual(db.execute('SELECT owner FROM meta WHERE id=1').fetchone()[0], foreign_owner)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM pending').fetchone()[0], 0)
+        self.history('undo')
+        self.assertEqual(self.current['document']['name'], 'Pet Home')
 
     def test_page_projection_loads_embedded_closure_and_keeps_inactive_asset_usage(self):
         document = copy.deepcopy(self.current['document'])

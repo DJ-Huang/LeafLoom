@@ -23,7 +23,7 @@ from typing import Any
 
 from vault_rag.local_state import ConflictError, atomic_write, relative
 from vault_rag.platform_support import is_link, move_exclusive
-from vault_rag.design_documents import _diff, _patch, validate_page_contexts
+from vault_rag.design_documents import _diff, _patch, validate_page_contexts, history_owner_matches
 from vault_rag.design_references import AssetReferences, script_references, rewrite_script, srcset_urls as _srcset_urls
 
 
@@ -216,7 +216,7 @@ class DesignWorkspace:
                 from urllib.parse import quote
                 with sqlite3.connect('file:' + quote(str(database), safe='/') + '?mode=ro', uri=True) as db:
                     row = db.execute('SELECT owner FROM meta WHERE id=1').fetchone()
-                if row is None or row[0] != str(self.config.root) + '\n' + item['trash']:
+                if row is None or not history_owner_matches(row[0], item['trash']):
                     raise ConflictError('Project history location changed; permanent deletion stopped')
             elif not item.get('history_verified'):
                 raise ConflictError('Project history identity is unavailable; permanent deletion stopped')

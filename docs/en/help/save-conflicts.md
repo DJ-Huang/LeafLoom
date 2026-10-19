@@ -14,7 +14,7 @@ Avoid refreshing, discarding the only draft or repeatedly resending stale writes
 2. Use **Save draft** or `Ctrl/⌘+S` for manual drafts.
 3. If disk content changed, reread both versions and merge explicitly.
 4. Design projects retain pending operations. Retry network errors; review version conflicts before reapplying.
-5. MCP conflicts require fresh revisions too.
+5. MCP conflicts require fresh revisions too. Annotation undo stops if another window changed the comments.
 
 ## What to expect
 
