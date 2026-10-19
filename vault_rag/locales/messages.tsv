@@ -1939,3 +1939,40 @@ Attachment download settings changed; prepare a new download|访问范围或设�
 desktop.restart|重启 LeafLoom|Restart LeafLoom|LeafLoom を再起動
 desktop.restartDetail|返回保存，或保留本地笔记草稿后重启；未保存的设置将被丢弃。|Return to save your changes, or restart keeping local note drafts for next launch. Unsaved settings will be discarded.|戻って保存するか、ローカルのメモの下書きを残して再起動します。未保存の設定は破棄されます。
 desktop.restartFailed|未能自动重启，请重新打开 LeafLoom；开发模式下请重新运行 Dev。|Unable to restart automatically. Open LeafLoom again; in development, run Dev again.|自動で再起動できませんでした。LeafLoom を開き直してください。開発モードでは Dev を再実行してください。
+
+# Markdown annotations and threaded comments
+AI 草稿尚未保存，请先手动保存正文|Save the AI draft manually before adding annotations.|AI の下書きを手動で保存してから注釈を追加してください。
+关联到当前选区|Relink to selected text|現在の選択範囲に再関連付け
+关闭评论|Close comments|コメントを閉じる
+删除|Delete|削除
+删除标注|Delete annotation|注釈を削除
+回复|Reply|返信
+回复评论|Reply to comment|コメントに返信
+回复评论…|Write a reply…|返信を入力…
+定位已失效|Text no longer found|参照箇所が見つかりません
+定位已失效，请重新关联|Text location was lost. Relink it to the current selection.|参照箇所を特定できません。選択範囲に再関連付けしてください。
+已解决|Resolved|解決済み
+提交评论|Post comment|コメントを投稿
+未解决|Open|未解決
+标记为已解决|Resolve|解決済みにする
+没有匹配的评论或标注|No matching comments or highlights|一致するコメントやハイライトはありません
+添加行内评论|Add inline comment|行内コメントを追加
+添加评论|Add comment|コメントを追加
+添加页面评论|Add page comment|ページコメントを追加
+添加高亮|Highlight text|テキストをハイライト
+确定永久删除这条标注及回复？|Permanently delete this annotation and its replies?|この注釈と返信を完全に削除しますか？
+编辑评论|Edit comment|コメントを編集
+行内评论|Inline comment|行内コメント
+评论|Comments|コメント
+评论内容|Comment text|コメント本文
+评论筛选|Filter comments|コメントを絞り込む
+请先保存正文后再创建标注|Save the document before creating an annotation.|注釈を作成する前に文書を保存してください。
+请先在正文中选择新的关联文字|Select new text in the document first.|文書内で再関連付けするテキストを選択してください。
+请重新选择有效文字|Select a valid text range again.|有効なテキスト範囲を選び直してください。
+读取评论失败|Could not load comments|コメントを読み込めません
+输入评论…|Write a comment…|コメントを入力…
+选中的文字已变化，请重新选择|The selected text changed. Select it again.|選択したテキストが変更されました。選び直してください。
+选区无效|Invalid selection|選択範囲が無効です
+重新打开|Reopen|再オープン
+页面评论|Page comment|ページコメント
+高亮标注|Text highlight|テキストのハイライト

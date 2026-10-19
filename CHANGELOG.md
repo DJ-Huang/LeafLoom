@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+- Add local-first Markdown text highlights and threaded inline/page comments with reply, edit, resolve/reopen, source decorations, quoted-text reattachment and a right comment panel. Store durable annotations separately from Markdown in per-vault SQLite and preserve comment identity across LeafLoom note moves/trash/restore, including MCP operations. Add explicit permission-gated MCP annotation tools.
+
+## Unreleased
+
 - Add **Restart LeafLoom** to the application and tray menus, preserving draft checks and orderly backend shutdown. Dev keeps Vite running, refreshes locked Python dependencies and reopens the current source; canceling the unsaved-content prompt cancels restart.
 
 - Replace the attachment dialog with a dedicated gallery/list workspace, global filename/path search, filters, sorting and inline media previews. Add one-click setup, clear background progress, safe duplicate-preserving uploads, reference-aware rename/move/recycle with recovery, and asynchronous ZIP downloads; keep project resources read-only and support narrow screens.

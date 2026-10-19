@@ -38,7 +38,7 @@ let browser;
  const type=async text=>{await page.keyboard.insertText(text);};
  const idle=async()=>{await page.keyboard.press('Control+s');await page.locator('.document:visible .save-state').filter({hasText:'已保存'}).waitFor();};
  const check=async(name,fn)=>{if(process.env.LEAFLOOM_RICH_CHECK&&!new RegExp(process.env.LEAFLOOM_RICH_CHECK).test(name))return;try{await fn();checks.push(name);console.log('PASS '+name);}catch(error){failed.push({name,error:String(error)});console.error('FAIL '+name,{markdown:await markdown().catch(()=>''),html:(await prose().innerHTML().catch(()=>'')).slice(-1200),errors});await page.screenshot({path:path.join(out,'failure-'+failed.length+'.png')}).catch(()=>{});}finally{await page.unroute('**/api/upload?**');}};
- await page.goto(base+'/?note='+encodeURIComponent(note));await api('editor-fixture');await api('preferences',{locale:'zh-CN'},'PUT');await page.reload();await prose().waitFor();
+ await page.goto(base+'/?note='+encodeURIComponent(note));await prose().waitFor();await api('editor-fixture');await api('preferences',{locale:'zh-CN'},'PUT');await page.reload();await prose().waitFor();
  await check('open, focus and source inspection never rewrite Markdown',async()=>{
   const original='---\ntitle: Untouched\ncustom: [a, b]\n---\n\nA **bold** and _italic_ paragraph.\n\n**`code` and [[Target|Alias]] and $x^2$**\n\n- [ ] task\n  - nested\n\n| Name | Value |\n| :--- | ---: |\n| A | 2 |\n\n~~~js\nconst a = 1;\n~~~\n\n$$\nx^2\n$$\n\n```mermaid\ngraph LR\n A --> B\n```\n\n![[Target.md]]\n\n```dataview\nLIST\n```\n\n[reference]: https://example.com\n';
   await reset(original);const before=await api('file?path='+encodeURIComponent(note));

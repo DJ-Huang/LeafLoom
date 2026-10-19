@@ -1,7 +1,7 @@
 import {Diagnostic} from './i18n';
 import {t,useLocale} from './i18n';
 import React,{lazy,memo,Suspense,useCallback,useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
-import {BookOpen,Download,FileText,Code,Eye,Search,History,PanelRight,Link2,MoreHorizontal,Maximize2,Minimize2} from 'lucide-react';
+import {BookOpen,Download,FileText,Code,Eye,Search,History,PanelRight,MessageCircle,Link2,MoreHorizontal,Maximize2,Minimize2} from 'lucide-react';
 import {api,affected,Change,media,Note,OpenNote} from './api';
 import {useApi} from './hooks';
 import {Action,ActionMenu,LazyBoundary,FormDialog} from './ui';
@@ -11,6 +11,8 @@ import {VirtualList} from './virtual';
 import {acceptDiskVersion,applyProperties,changeDocument,discardAiDraft,documentState,loadDocument,saveDocument} from './document-state';
 import {addAiReference} from './ai-context';
 import {MarkdownPreview} from './reader';
+import {Annotation,AnnotationColor,AnnotationSelection,makeAnchor,resolveAnchor} from './annotations';
+import {CommentsPanel} from './annotations-ui';
 const LiveEditor=lazy(()=>import('./editor').then(module=>({default:module.LiveEditor})));
 const RichEditor=lazy(()=>import('./rich-editor').then(module=>({default:module.RichEditor})));
 const BaseViewer=lazy(()=>import('./base').then(module=>({default:module.BaseViewer})));
@@ -32,14 +34,65 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
  const viewKey='view:'+vaultRoot+'\n'+path;
  const [mode,setMode]=useState<'live'|'source'|'read'>(()=>{const editing=sessionStorage.getItem('edit:'+path),stored=sessionStorage.getItem(viewKey+':mode');if(editing)sessionStorage.removeItem('edit:'+path);if(ext==='md')return stored==='source'&&!editing?'source':'live';if(editing)return 'source';return (stored as 'live'|'source'|'read')||'read';});
  const [side,setSide]=useState(()=>sessionStorage.getItem(viewKey+':side')==='true'),[more,setMore]=useState(false),[find,setFind]=useState(false),[search,setSearch]=useState(''),[match,setMatch]=useState(0);
+ const [commentsOpen,setCommentsOpen]=useState(false),[annotations,setAnnotations]=useState<Annotation[]>([]);
+ const [selectedAnnotation,setSelectedAnnotation]=useState<string>(),[annotationDraft,setAnnotationDraft]=useState<{range:AnnotationSelection|null,exact?:string}|null>(null);
+ const [annotationVersion,setAnnotationVersion]=useState(0);
  const [,setResourceVersion]=useState(0);
  const visible=useRef(active);visible.current=active;
  const moreAnchor=useRef<HTMLElement|null>(null);
- const [selectionMenu,setSelectionMenu]=useState<{x:number,y:number,text:string}>();
+ const [selectionMenu,setSelectionMenu]=useState<{x:number,y:number,text:string,range?:AnnotationSelection}>();
  useEffect(()=>{if(!selectionMenu)return;const close=()=>setSelectionMenu(undefined);window.addEventListener('pointerdown',close);window.addEventListener('scroll',close,true);const key=(e:KeyboardEvent)=>{if(e.key==='Escape')close();};window.addEventListener('keydown',key);return()=>{window.removeEventListener('pointerdown',close);window.removeEventListener('scroll',close,true);window.removeEventListener('keydown',key);};},[selectionMenu]);
  const area=useRef<HTMLDivElement>(null),editor=useRef<any>(null),restored=useRef(false),pendingAnchor=useRef('');
  const {data:related}=useApi('related?path='+encodeURIComponent(path),[],active&&side&&textFile&&ext!=='base');
  const text=session.text,note=session.note;
+ useEffect(()=>{
+  if(!active||ext!=='md'||!note)return;
+  const controller=new AbortController();
+  void api<{annotations:Annotation[]}>('annotations?root='+encodeURIComponent(vaultRoot)+'&path='+encodeURIComponent(path),undefined,undefined,{signal:controller.signal,force:true})
+   .then(value=>{if(!controller.signal.aborted)setAnnotations(value.annotations);})
+   .catch(error=>{if(!controller.signal.aborted&&error.name!=='AbortError')notify(t('读取评论失败')+': '+error.message);});
+  return()=>controller.abort();
+ },[active,ext,vaultRoot,path,note?.etag,annotationVersion]);
+ useEffect(()=>{setAnnotations([]);setCommentsOpen(false);setAnnotationDraft(null);setSelectedAnnotation(undefined);},[viewKey]);
+ const changedAnnotations=()=>setAnnotationVersion(value=>value+1);
+ const annotationWrite=async(endpoint:string,body:Record<string,unknown>,method='POST')=>{
+  const result=await api(endpoint,{root:vaultRoot,path,...body},method);
+  changedAnnotations();return result;
+ };
+ const stableNote=async()=>{
+  if(session.manualSave)throw new Error(t('AI 草稿尚未保存，请先手动保存正文'));
+  if(session.dirty)await saveDocument(session);
+  if(session.dirty||!session.note)throw new Error(t('请先保存正文后再创建标注'));
+  return session.note.etag;
+ };
+ const openAnnotation=(id:string)=>{
+  setSelectedAnnotation(id);setCommentsOpen(true);setSide(false);
+  requestAnimationFrame(()=>document.querySelector('[data-annotation-card="'+id+'"]')?.scrollIntoView({block:'nearest'}));
+ };
+ const requestAnnotation=(kind:'highlight'|'comment',color:AnnotationColor|undefined,range:AnnotationSelection)=>{
+  if(kind==='comment'){
+   setAnnotationDraft({range,exact:session.text.slice(range.from,range.to)});setCommentsOpen(true);setSide(false);return;
+  }
+  void (async()=>{
+   const expected=await stableNote(),anchor=makeAnchor(session.text,range,expected);
+   if(!anchor)throw new Error(t('请重新选择有效文字'));
+   await annotationWrite('annotations',{type:'highlight',anchor,etag:expected,color:color||'yellow'});
+  })().catch(error=>notify(error.message));
+ };
+ const createComment=async(content:string,range:AnnotationSelection|null)=>{
+  if(range&&annotationDraft?.exact!==session.text.slice(range.from,range.to))throw new Error(t('选中的文字已变化，请重新选择'));
+  const etag=range?await stableNote():session.note?.etag;
+  const anchor=range?makeAnchor(session.text,range,etag||''):null;
+  if(range&&!anchor)throw new Error(t('请重新选择有效文字'));
+  await annotationWrite('annotations',{type:'comment',anchor,etag,content});
+ };
+ const reanchorAnnotation=async(item:Annotation)=>{
+  const sel=editor.current?.state.selection.main as {from:number,to:number}|undefined;
+  if(!sel||sel.from===sel.to)throw new Error(t('请先在正文中选择新的关联文字'));
+  const etag=await stableNote(),anchor=makeAnchor(session.text,sel,etag);
+  if(!anchor)throw new Error(t('选区无效'));
+  await annotationWrite('annotations/'+item.id,{revision:item.revision,anchor,etag},'PATCH');
+ };
  const outline=useMemo(()=>[...text.matchAll(/^(#{1,6}) (.+)$/gm)].map(item=>({label:item[2],depth:item[1].length,pos:item.index!})),[text]);
  const matches=useMemo(()=>{if(!search)return [];const lower=text.toLocaleLowerCase(),needle=search.toLocaleLowerCase(),out:number[]=[];let at=0;while((at=lower.indexOf(needle,at))>=0&&out.length<10000){out.push(at);at+=Math.max(1,needle.length);}return out;},[text,search]);
  useEffect(()=>{if(textFile||!active)return;const changed=(event:Event)=>{if(affected('file?path='+encodeURIComponent(path),(event as CustomEvent<Change>).detail))setResourceVersion(value=>value+1);};window.addEventListener('vault-data-changed',changed);return()=>window.removeEventListener('vault-data-changed',changed);},[path,textFile,active]);
@@ -81,20 +134,32 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
  if(ext==='base')return <LazyBoundary><Suspense fallback={<p>{t("正在打开视图…")}</p>}><BaseViewer path={path} onOpen={onOpen} notify={notify}/></Suspense></LazyBoundary>;
  if(!textFile)return <div className="media-view"><div className="media-heading"><h2>{name(path)}</h2><a className="button" href={media(path,true)}><Download size={15}/> {" "}{t("下载原文件")}</a></div>{/^(png|jpg|jpeg|webp|gif|svg|avif)$/.test(ext)?<img src={media(path)} alt={name(path)} decoding="async"/>:/^(mp4|webm|mov|m4v)$/.test(ext)?<VideoPlayer path={path} active={active} stateKey={viewKey}/>:/^(mp3|m4a|wav|ogg|flac)$/.test(ext)?<AudioPlayer path={path} active={active} stateKey={viewKey}/>:ext==='pdf'?active&&<iframe className="pdf-view" src={media(path)} title={name(path)}/>:<div className="empty-state"><BookOpen size={40}/><h2>{t("文件已保存在本地")}</h2><p>{t("此格式可下载后使用对应程序打开。")}</p></div>}</div>;
  if(!note&&!(isHtml&&mode==='read'))return <div className={'empty-state '+(session.error?'error':'')}>{session.error||t("正在打开文档…")}{session.error&&<button onClick={()=>void loadDocument(session,undefined,true)}>{t("重试")}</button>}</div>;
- return <div className={'document'+(wide||isHtml?' wide-content':'')}><div className="document-toolbar"><div className="toolbar-actions"><span role="status" className={'save-state '+(session.state.includes(t("冲突"))||session.error?'error':'')}>{t(session.state)}</span>{ext==='md'?<button className={'source-toggle'+(mode==='source'?' active':'')} title={t(mode==='source'?'返回正文':'查看源码')} aria-pressed={mode==='source'} onClick={()=>setMode(mode==='source'?'live':'source')}><Code size={14}/><span>{t(mode==='source'?'返回正文':'查看源码')}</span></button>:<div className="segmented" aria-label={t("文档模式")}><button className={mode==='read'?'active':''} title={isHtml?t("网页"):t("阅读")} aria-pressed={mode==='read'} onClick={()=>setMode('read')}><Eye size={14}/><span>{isHtml?t("网页"):t("阅读")}</span></button>{!isHtml&&<button className={mode==='live'?'active':''} title={t("实时编辑")} aria-pressed={mode==='live'} onClick={()=>setMode('live')}><FileText size={14}/><span>{t("编辑")}</span></button>}<button className={mode==='source'?'active':''} title={t("源码")} aria-pressed={mode==='source'} onClick={()=>setMode('source')}><Code size={14}/><span>{t("源码")}</span></button></div>}{!isHtml&&onWidthChange&&<Action title={wide?t("标准宽度"):t("宽版阅读")} onClick={onWidthChange}>{wide?<Minimize2 size={15}/>:<Maximize2 size={15}/>}</Action>}<Action title={t("文档信息")} onClick={()=>setSide(value=>!value)}><PanelRight size={16}/></Action><Action title={t("更多操作")} onClick={event=>{moreAnchor.current=event.currentTarget;setMore(true);}}><MoreHorizontal size={18}/></Action></div></div>
+ return <div className={'document'+(wide||isHtml?' wide-content':'')}><div className="document-toolbar"><div className="toolbar-actions"><span role="status" className={'save-state '+(session.state.includes(t("冲突"))||session.error?'error':'')}>{t(session.state)}</span>{ext==='md'?<button className={'source-toggle'+(mode==='source'?' active':'')} title={t(mode==='source'?'返回正文':'查看源码')} aria-pressed={mode==='source'} onClick={()=>setMode(mode==='source'?'live':'source')}><Code size={14}/><span>{t(mode==='source'?'返回正文':'查看源码')}</span></button>:<div className="segmented" aria-label={t("文档模式")}><button className={mode==='read'?'active':''} title={isHtml?t("网页"):t("阅读")} aria-pressed={mode==='read'} onClick={()=>setMode('read')}><Eye size={14}/><span>{isHtml?t("网页"):t("阅读")}</span></button>{!isHtml&&<button className={mode==='live'?'active':''} title={t("实时编辑")} aria-pressed={mode==='live'} onClick={()=>setMode('live')}><FileText size={14}/><span>{t("编辑")}</span></button>}<button className={mode==='source'?'active':''} title={t("源码")} aria-pressed={mode==='source'} onClick={()=>setMode('source')}><Code size={14}/><span>{t("源码")}</span></button></div>}{!isHtml&&onWidthChange&&<Action title={wide?t("标准宽度"):t("宽版阅读")} onClick={onWidthChange}>{wide?<Minimize2 size={15}/>:<Maximize2 size={15}/>}</Action>}{ext==='md'&&<Action title={t('评论')} onClick={()=>{setSide(false);setCommentsOpen(value=>!value);}}><MessageCircle size={16}/></Action>}<Action title={t("文档信息")} onClick={()=>{setCommentsOpen(false);setSide(value=>!value);}}><PanelRight size={16}/></Action><Action title={t("更多操作")} onClick={event=>{moreAnchor.current=event.currentTarget;setMore(true);}}><MoreHorizontal size={18}/></Action></div></div>
   {more&&moreAnchor.current&&<ActionMenu title={t("文档操作")} anchor={moreAnchor.current} onClose={()=>setMore(false)}><button onClick={()=>{void saveDocument(session);setMore(false);}}>{t("保存文档")}{" "}<kbd>⌘ / Ctrl S</kbd></button><button onClick={()=>{setMore(false);if(mode==='read'||ext==='md'&&mode==='live')setFind(value=>!value);else void import('./editor').then(module=>{if(editor.current)module.openSearchPanel(editor.current);});}}>{t("文内查找")}{" "}<kbd>⌘ / Ctrl F</kbd></button><button onClick={()=>{setMore(false);onRecord('history',path);}}>{t("版本历史")}</button><a href={media(path,true)}>{t("下载原文件")}</a></ActionMenu>}
 
   {session.error&&<div className="conflict-banner">{<Diagnostic message={session.error}/>}{session.dirty&&<button onClick={()=>{const url=URL.createObjectURL(new Blob([session.text],{type:'text/plain;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download=name(path)+'.draft.txt';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>{t("下载当前草稿")}</button>}{session.state.includes(t("冲突"))&&<button onClick={async()=>{const latest=await api<Note>('file?path='+encodeURIComponent(path),undefined,undefined,{force:true});const original=window.open('','_blank');if(original){original.document.body.textContent=latest.text;original.document.title=t("磁盘版本 · ")+name(path);}if(confirm(t("核对磁盘版本后，使用当前编辑内容保存？"))){acceptDiskVersion(session,latest.etag);void saveDocument(session);}}}>{t("查看磁盘版本并合并")}</button>}</div>}
   {find&&(mode==='read'||ext==='md'&&mode==='live')&&<div className="reading-search"><input autoFocus aria-label={t("文内查找")} placeholder={t("查找正文…")} value={search} onChange={event=>{setSearch(event.target.value);setMatch(0);}} onKeyDown={event=>{if(event.key==='Enter'&&matches.length)jump(matches[match%matches.length]);if(event.key==='Escape')setFind(false);}}/><span>{matches.length?`${match%matches.length+1} / ${matches.length}`:t("0 个匹配")}</span><button onClick={()=>{if(matches.length){const next=(match+1)%matches.length;setMatch(next);jump(matches[next]);}}}>{t("下一个")}</button></div>}
   {session.manualSave&&<div className="ai-draft-banner" role="status"><span>{t("AI 草稿尚未写入文件")}</span><button onClick={()=>void saveDocument(session)}>{t("保存草稿")}</button><button onClick={()=>{if(confirm(t("丢弃当前 AI 草稿并恢复磁盘正文？")))void discardAiDraft(session).catch(error=>notify(error.message));}}>{t("丢弃草稿")}</button></div>}
-  {selectionMenu&&<div className="ai-selection-menu" role="menu" style={{left:selectionMenu.x,top:selectionMenu.y}} onPointerDown={event=>event.stopPropagation()}><button autoFocus role="menuitem" onClick={()=>{addAiReference({root:vaultRoot,path,text:selectionMenu.text});setSelectionMenu(undefined);}}>{t("添加到 AI 对话")}</button></div>}
+  {selectionMenu&&<div className="ai-selection-menu" role="menu" style={{left:selectionMenu.x,top:selectionMenu.y}} onPointerDown={event=>event.stopPropagation()}>
+   <button autoFocus role="menuitem" onClick={()=>{addAiReference({root:vaultRoot,path,text:selectionMenu.text});setSelectionMenu(undefined);}}>{t("添加到 AI 对话")}</button>
+   {ext==='md'&&selectionMenu.range&&<><button role="menuitem" onClick={()=>{requestAnnotation('highlight','yellow',selectionMenu.range!);setSelectionMenu(undefined);}}>{t('添加高亮')}</button><button role="menuitem" onClick={()=>{requestAnnotation('comment',undefined,selectionMenu.range!);setSelectionMenu(undefined);}}>{t('添加评论')}</button></>}
+  </div>}
   <div className="document-body"><div ref={area} className={'writing-area'+(isHtml?' html-writing-area':'')} onContextMenu={event=>{
    if(!active||!['md','txt'].includes(ext))return;
    const selection=window.getSelection();let selected='';
-   if(mode!=='read'&&editor.current){const range=editor.current.state.selection.main;if(range.from!==range.to)selected=editor.current.state.doc.sliceString(range.from,range.to);}
+   const range=editor.current?.state.selection.main as {from:number,to:number}|undefined;
+   if(range&&range.from!==range.to)selected=session.text.slice(range.from,range.to);
    if(!selected&&selection?.rangeCount&&area.current?.contains(selection.anchorNode)&&area.current?.contains(selection.focusNode))selected=selection.toString();
-   if(selected.trim()){event.preventDefault();setSelectionMenu({x:Math.max(8,Math.min(event.clientX,window.innerWidth-190)),y:Math.max(8,Math.min(event.clientY,window.innerHeight-55)),text:selected});}
+   if(selected.trim()){event.preventDefault();setSelectionMenu({x:Math.max(8,Math.min(event.clientX,window.innerWidth-190)),y:Math.max(8,Math.min(event.clientY,window.innerHeight-55)),text:selected,...(range&&range.from!==range.to?{range:{from:range.from,to:range.to}}:{})});}
   }}>
-   <LazyBoundary><Suspense fallback={<p className="pad subtle">{t("正在打开内容…")}</p>}>{ext==='md'&&mode!=='source'?<RichEditor key={path+'rich'} initial={text} path={path} root={vaultRoot} session={session} active={active} onChange={(value,meta)=>changeDocument(session,value,meta)} onOpen={onOpen} onRelease={releaseEditor} onReady={readyEditor} onSource={position=>{sessionStorage.setItem('cursor:'+path,String(position));setMode('source');}}/>:mode==='read'?(isHtml?active&&<HtmlPreview path={path} root={vaultRoot} draft={session.dirty?text:undefined} active/>:<pre className="plain-reading">{text}</pre>):<LiveEditor key={path+mode+(ext==='md'?'':session.externalEpoch)} initial={text} path={path} root={vaultRoot} active={active} source={mode==='source'||ext!=='md'} session={ext==='md'?session:undefined} onChange={(value,meta)=>changeDocument(session,value,meta)} onOpen={onOpen} onRelease={releaseEditor} onReady={readyEditor}/>}</Suspense></LazyBoundary>
-  </div>{side&&note&&<aside className="related-panel" aria-label={t("文档信息")}><div className="info-heading"><strong>{t("文档信息")}</strong><button className="icon-button" aria-label={t("关闭文档信息")} onClick={()=>setSide(false)}>×</button></div><details open><summary>{t("属性")}</summary><Properties note={note} onUpdate={value=>{if(!applyProperties(session,value))notify(t("正文有未保存修改；属性已保存，请合并后再保存正文"));}} notify={notify}/></details><details open><summary>{t("文档目录")}{" "}<span>{outline.length}</span></summary><div className="outline"><VirtualList items={outline} itemKey={item=>String(item.pos)} estimate={30} height={360} render={item=><button style={{paddingLeft:8+(item.depth-1)*10}} onClick={()=>jump(item.pos,item.label)}>{item.label}</button>}/>{!outline.length&&<p className="hint">{t("暂无标题")}</p>}</div></details><details open><summary>{t("反向链接")}{" "}<span>{related?.incoming.length||0}</span></summary>{related?.incoming.map((target:string)=><button className="relation-link" key={target} onClick={()=>onOpen(target)}><Link2 size={12}/>{name(target)}</button>)}</details><details><summary>{t("关联文档")}{" "}<span>{related?.outgoing.length||0}</span></summary>{related?.outgoing.map((target:string)=><button className="relation-link" key={target} onClick={()=>onOpen(target)}>{name(target)}</button>)}</details></aside>}</div></div>;
+   <LazyBoundary><Suspense fallback={<p className="pad subtle">{t("正在打开内容…")}</p>}>{ext==='md'&&mode!=='source'?<RichEditor key={path+'rich'} initial={text} path={path} root={vaultRoot} session={session} active={active} annotations={annotations} onAnnotation={requestAnnotation} onOpenAnnotation={openAnnotation} onChange={(value,meta)=>changeDocument(session,value,meta)} onOpen={onOpen} onRelease={releaseEditor} onReady={readyEditor} onSource={position=>{sessionStorage.setItem('cursor:'+path,String(position));setMode('source');}}/>:mode==='read'?(isHtml?active&&<HtmlPreview path={path} root={vaultRoot} draft={session.dirty?text:undefined} active/>:<pre className="plain-reading">{text}</pre>):<LiveEditor key={path+mode+(ext==='md'?'':session.externalEpoch)} initial={text} path={path} root={vaultRoot} active={active} annotations={annotations} onOpenAnnotation={openAnnotation} source={mode==='source'||ext!=='md'} session={ext==='md'?session:undefined} onChange={(value,meta)=>changeDocument(session,value,meta)} onOpen={onOpen} onRelease={releaseEditor} onReady={readyEditor}/>}</Suspense></LazyBoundary>
+  </div>{commentsOpen&&ext==='md'&&note&&<CommentsPanel annotations={annotations} source={session.text} selectedId={selectedAnnotation}
+   draft={annotationDraft} onDraft={value=>setAnnotationDraft(value&&{...value,exact:value.range?session.text.slice(value.range.from,value.range.to):undefined})}
+   onCreate={createComment} onReply={async(item,content)=>{await annotationWrite('annotations/'+item.id+'/messages',{content});}}
+   onEditMessage={async(item,message,content)=>{await annotationWrite('annotations/'+item.id+'/messages/'+message.id,{revision:message.revision,content},'PATCH');}}
+   onStatus={async(item,status)=>{await annotationWrite('annotations/'+item.id,{revision:item.revision,status},'PATCH');}}
+   onDelete={async(item)=>{await annotationWrite('annotations/'+item.id,{revision:item.revision},'DELETE');}}
+   onJump={item=>{const range=resolveAnchor(session.text,item.anchor);if(!range){notify(t('定位已失效，请重新关联'));return;}if(editor.current){editor.current.dispatch({selection:{anchor:range.from,head:range.to},scrollIntoView:true});}else jump(range.from);}}
+   onReanchor={reanchorAnnotation} onClose={()=>setCommentsOpen(false)}/>
+   }{side&&note&&<aside className="related-panel"  aria-label={t("文档信息")}><div className="info-heading"><strong>{t("文档信息")}</strong><button className="icon-button" aria-label={t("关闭文档信息")} onClick={()=>setSide(false)}>×</button></div><details open><summary>{t("属性")}</summary><Properties note={note} onUpdate={value=>{if(!applyProperties(session,value))notify(t("正文有未保存修改；属性已保存，请合并后再保存正文"));}} notify={notify}/></details><details open><summary>{t("文档目录")}{" "}<span>{outline.length}</span></summary><div className="outline"><VirtualList items={outline} itemKey={item=>String(item.pos)} estimate={30} height={360} render={item=><button style={{paddingLeft:8+(item.depth-1)*10}} onClick={()=>jump(item.pos,item.label)}>{item.label}</button>}/>{!outline.length&&<p className="hint">{t("暂无标题")}</p>}</div></details><details open><summary>{t("反向链接")}{" "}<span>{related?.incoming.length||0}</span></summary>{related?.incoming.map((target:string)=><button className="relation-link" key={target} onClick={()=>onOpen(target)}><Link2 size={12}/>{name(target)}</button>)}</details><details><summary>{t("关联文档")}{" "}<span>{related?.outgoing.length||0}</span></summary>{related?.outgoing.map((target:string)=><button className="relation-link" key={target} onClick={()=>onOpen(target)}>{name(target)}</button>)}</details></aside>}</div></div>;
 });
