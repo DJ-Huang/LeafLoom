@@ -18,7 +18,8 @@ class AttachmentWorkspaceTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory();self.home=Path(self.temp.name).resolve()
         self.root=self.home/'vault';self.root.mkdir()
         self.config=LocalConfig(self.home/'state');self.config.save({'root':str(self.root)})
-        self.app=create_app(self.config,start_background=False)
+        static=self.home/'static';static.mkdir();(static/'index.html').write_text('fixture')
+        self.app=create_app(self.config,start_background=False,static_dir=static)
         self.client=TestClient(self.app,base_url=self.app.state.websites.ui_origin)
         self.client.__enter__();self.client.get('/')
         self.headers={'X-Vault-CSRF':self.client.get('/api/session').json()['csrf']}
