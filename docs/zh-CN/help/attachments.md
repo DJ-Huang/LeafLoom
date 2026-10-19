@@ -6,6 +6,8 @@
 
 ## 开始前
 
+> **版本说明：** 此附件工作区与整理流程已通过 [PR #18](https://github.com/DJ-Huang/LeafLoom/pull/18) 合并到源码 `main`，但**不包含在已发布的 v0.1.3 安装包中**。请仅在包含 PR #18 的构建中按下列步骤操作；详见 [v0.1.3 发布说明](https://github.com/DJ-Huang/LeafLoom/releases/tag/v0.1.3)。
+
 先关联一个本机目录；建议用演示知识库练习。
 
 ## 操作步骤
