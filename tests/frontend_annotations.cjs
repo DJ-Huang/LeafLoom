@@ -99,6 +99,32 @@ let browser;
  await page.reload();await prose().waitFor();
  await page.locator('.document-toolbar [title="评论"]').click();
  await page.getByText('定位已失效').first().waitFor();
+ // Cross-paragraph selections are also anchored and rendered as separate inline decorations.
+ const crossText='First passage before.\n\nSecond passage after.\n';
+ const disk=await api('file?path='+encodeURIComponent(note));
+ await api('file',{path:note,root:disk.root,etag:disk.etag,text:crossText},'PUT');
+ await page.reload();await prose().waitFor();
+ await prose().evaluate(dom=>{
+  const editor=dom.editor;let from,to;
+  editor.state.doc.descendants((node,pos)=>{
+   if(node.isText&&node.text.includes('First passage'))from=pos;
+   if(node.isText&&node.text.includes('Second passage'))to=pos+6;
+  });
+  if(from===undefined||to===undefined)throw Error('No cross-paragraph positions');
+  editor.commands.setTextSelection({from,to});editor.view.focus();
+ });
+ await page.locator('.rich-format-popup .leafloom-color-button.leafloom-blue').click();
+ const updated=await waitRows(4),cross=updated[3];
+ assert.ok(cross.anchor.exact.includes('\n\n'),cross.anchor.exact);
+ await page.locator('[data-leafloom-annotation="'+cross.id+'"]').first().waitFor();
+ assert.ok(await prose().locator('[data-leafloom-annotation="'+cross.id+'"]').count()>=2,'Cross-paragraph annotation decorations missing');
+ // Annotation history is independent from Markdown history but shares toolbar undo/redo.
+ await page.locator('.document-toolbar button[title="撤销"]').click();
+ await waitRows(3);
+ await page.waitForFunction(id=>!document.querySelector('[data-leafloom-annotation="'+id+'"]'),cross.id);
+ await page.locator('.document-toolbar button[title="重做"]').click();
+ await waitRows(4);
+ await prose().locator('[data-leafloom-annotation="'+cross.id+'"]').first().waitFor();
  assert.deepEqual(errors,[],'Browser errors: '+errors.join('\n'));
- console.log('PASS annotations E2E: highlight, page and inline threads, replies, status, source decorations, persistence, quote reattachment and detachment');
+ console.log('PASS annotations E2E: highlight, page and inline threads, replies, status, source decorations, persistence, quote reattachment/detachment and cross-paragraph highlights');
 })().catch(e=>{console.error(e.stack||String(e));process.exitCode=1;}).finally(async()=>browser?.close());

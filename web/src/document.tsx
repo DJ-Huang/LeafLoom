@@ -1,14 +1,14 @@
 import {Diagnostic} from './i18n';
 import {t,useLocale} from './i18n';
 import React,{lazy,memo,Suspense,useCallback,useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
-import {BookOpen,Download,FileText,Code,Eye,Search,History,PanelRight,MessageCircle,Link2,MoreHorizontal,Maximize2,Minimize2} from 'lucide-react';
+import {BookOpen,Download,FileText,Code,Eye,Search,History,PanelRight,MessageCircle,Link2,MoreHorizontal,Maximize2,Minimize2,Undo2,Redo2} from 'lucide-react';
 import {api,affected,Change,media,Note,OpenNote} from './api';
 import {useApi} from './hooks';
 import {Action,ActionMenu,LazyBoundary,FormDialog} from './ui';
 import {VideoPlayer,AudioPlayer} from './media';
 import {HtmlPreview} from './html-preview';
 import {VirtualList} from './virtual';
-import {acceptDiskVersion,applyProperties,changeDocument,discardAiDraft,documentState,loadDocument,saveDocument} from './document-state';
+import {acceptDiskVersion,applyProperties,changeAnnotation,changeDocument,discardAiDraft,documentHistory,documentState,loadDocument,saveDocument,travelDocument} from './document-state';
 import {addAiReference} from './ai-context';
 import {MarkdownPreview} from './reader';
 import {Annotation,AnnotationColor,AnnotationSelection,makeAnchor,resolveAnchor} from './annotations';
@@ -36,7 +36,6 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
  const [side,setSide]=useState(()=>sessionStorage.getItem(viewKey+':side')==='true'),[more,setMore]=useState(false),[find,setFind]=useState(false),[search,setSearch]=useState(''),[match,setMatch]=useState(0);
  const [commentsOpen,setCommentsOpen]=useState(false),[annotations,setAnnotations]=useState<Annotation[]>([]);
  const [selectedAnnotation,setSelectedAnnotation]=useState<string>(),[annotationDraft,setAnnotationDraft]=useState<{range:AnnotationSelection|null,exact?:string}|null>(null);
- const [annotationVersion,setAnnotationVersion]=useState(0);
  const [,setResourceVersion]=useState(0);
  const visible=useRef(active);visible.current=active;
  const moreAnchor=useRef<HTMLElement|null>(null);
@@ -52,13 +51,9 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
    .then(value=>{if(!controller.signal.aborted)setAnnotations(value.annotations);})
    .catch(error=>{if(!controller.signal.aborted&&error.name!=='AbortError')notify(t('读取评论失败')+': '+error.message);});
   return()=>controller.abort();
- },[active,ext,vaultRoot,path,note?.etag,annotationVersion]);
+ },[active,ext,vaultRoot,path,note?.etag,session.annotationVersion]);
  useEffect(()=>{setAnnotations([]);setCommentsOpen(false);setAnnotationDraft(null);setSelectedAnnotation(undefined);},[viewKey]);
- const changedAnnotations=()=>setAnnotationVersion(value=>value+1);
- const annotationWrite=async(endpoint:string,body:Record<string,unknown>,method='POST')=>{
-  const result=await api(endpoint,{root:vaultRoot,path,...body},method);
-  changedAnnotations();return result;
- };
+ const annotationWrite=(endpoint:string,body:Record<string,unknown>,method='POST')=>changeAnnotation(session,endpoint,body,method);
  const stableNote=async()=>{
   if(session.manualSave)throw new Error(t('AI 草稿尚未保存，请先手动保存正文'));
   if(session.dirty)await saveDocument(session);
@@ -134,9 +129,15 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
  if(ext==='base')return <LazyBoundary><Suspense fallback={<p>{t("正在打开视图…")}</p>}><BaseViewer path={path} onOpen={onOpen} notify={notify}/></Suspense></LazyBoundary>;
  if(!textFile)return <div className="media-view"><div className="media-heading"><h2>{name(path)}</h2><a className="button" href={media(path,true)}><Download size={15}/> {" "}{t("下载原文件")}</a></div>{/^(png|jpg|jpeg|webp|gif|svg|avif)$/.test(ext)?<img src={media(path)} alt={name(path)} decoding="async"/>:/^(mp4|webm|mov|m4v)$/.test(ext)?<VideoPlayer path={path} active={active} stateKey={viewKey}/>:/^(mp3|m4a|wav|ogg|flac)$/.test(ext)?<AudioPlayer path={path} active={active} stateKey={viewKey}/>:ext==='pdf'?active&&<iframe className="pdf-view" src={media(path)} title={name(path)}/>:<div className="empty-state"><BookOpen size={40}/><h2>{t("文件已保存在本地")}</h2><p>{t("此格式可下载后使用对应程序打开。")}</p></div>}</div>;
  if(!note&&!(isHtml&&mode==='read'))return <div className={'empty-state '+(session.error?'error':'')}>{session.error||t("正在打开文档…")}{session.error&&<button onClick={()=>void loadDocument(session,undefined,true)}>{t("重试")}</button>}</div>;
- return <div className={'document'+(wide||isHtml?' wide-content':'')}><div className="document-toolbar"><div className="toolbar-actions"><span role="status" className={'save-state '+(session.state.includes(t("冲突"))||session.error?'error':'')}>{t(session.state)}</span>{ext==='md'?<button className={'source-toggle'+(mode==='source'?' active':'')} title={t(mode==='source'?'返回正文':'查看源码')} aria-pressed={mode==='source'} onClick={()=>setMode(mode==='source'?'live':'source')}><Code size={14}/><span>{t(mode==='source'?'返回正文':'查看源码')}</span></button>:<div className="segmented" aria-label={t("文档模式")}><button className={mode==='read'?'active':''} title={isHtml?t("网页"):t("阅读")} aria-pressed={mode==='read'} onClick={()=>setMode('read')}><Eye size={14}/><span>{isHtml?t("网页"):t("阅读")}</span></button>{!isHtml&&<button className={mode==='live'?'active':''} title={t("实时编辑")} aria-pressed={mode==='live'} onClick={()=>setMode('live')}><FileText size={14}/><span>{t("编辑")}</span></button>}<button className={mode==='source'?'active':''} title={t("源码")} aria-pressed={mode==='source'} onClick={()=>setMode('source')}><Code size={14}/><span>{t("源码")}</span></button></div>}{!isHtml&&onWidthChange&&<Action title={wide?t("标准宽度"):t("宽版阅读")} onClick={onWidthChange}>{wide?<Minimize2 size={15}/>:<Maximize2 size={15}/>}</Action>}{ext==='md'&&<Action title={t('评论')} onClick={()=>{setSide(false);setCommentsOpen(value=>!value);}}><MessageCircle size={16}/></Action>}<Action title={t("文档信息")} onClick={()=>{setCommentsOpen(false);setSide(value=>!value);}}><PanelRight size={16}/></Action><Action title={t("更多操作")} onClick={event=>{moreAnchor.current=event.currentTarget;setMore(true);}}><MoreHorizontal size={18}/></Action></div></div>
+ return <div className={'document'+(wide||isHtml?' wide-content':'')} onKeyDown={event=>{
+  if(!active||ext!=='md'||event.defaultPrevented||event.nativeEvent.isComposing||!(event.metaKey||event.ctrlKey)||event.altKey)return;
+  if(event.target instanceof Element&&event.target.closest('input,textarea,[contenteditable=true]'))return;
+  const key=event.key.toLowerCase();if(key!=='z'&&key!=='y')return;
+  event.preventDefault();travelDocument(session,key==='y'||event.shiftKey?'redo':'undo');
+ }}><div className="document-toolbar"><div className="toolbar-actions"><span role="status" className={'save-state '+(session.state.includes(t("冲突"))||session.error?'error':'')}>{t(session.state)}</span>{ext==='md'?<button className={'source-toggle'+(mode==='source'?' active':'')} title={t(mode==='source'?'返回正文':'查看源码')} aria-pressed={mode==='source'} onClick={()=>setMode(mode==='source'?'live':'source')}><Code size={14}/><span>{t(mode==='source'?'返回正文':'查看源码')}</span></button>:<div className="segmented" aria-label={t("文档模式")}><button className={mode==='read'?'active':''} title={isHtml?t("网页"):t("阅读")} aria-pressed={mode==='read'} onClick={()=>setMode('read')}><Eye size={14}/><span>{isHtml?t("网页"):t("阅读")}</span></button>{!isHtml&&<button className={mode==='live'?'active':''} title={t("实时编辑")} aria-pressed={mode==='live'} onClick={()=>setMode('live')}><FileText size={14}/><span>{t("编辑")}</span></button>}<button className={mode==='source'?'active':''} title={t("源码")} aria-pressed={mode==='source'} onClick={()=>setMode('source')}><Code size={14}/><span>{t("源码")}</span></button></div>}{!isHtml&&onWidthChange&&<Action title={wide?t("标准宽度"):t("宽版阅读")} onClick={onWidthChange}>{wide?<Minimize2 size={15}/>:<Maximize2 size={15}/>}</Action>}{ext==='md'&&<>{(['undo','redo'] as const).map(direction=><button key={direction} className="icon-button" title={t(direction==='undo'?'撤销':'重做')} aria-label={t(direction==='undo'?'撤销':'重做')} disabled={documentHistory(session).busy||!documentHistory(session)[direction].length} onClick={()=>travelDocument(session,direction)}>{direction==='undo'?<Undo2 size={16}/>:<Redo2 size={16}/>}</button>)}</>}{ext==='md'&&<Action title={t('评论')} onClick={()=>{setSide(false);setCommentsOpen(value=>!value);}}><MessageCircle size={16}/></Action>}<Action title={t("文档信息")} onClick={()=>{setCommentsOpen(false);setSide(value=>!value);}}><PanelRight size={16}/></Action><Action title={t("更多操作")} onClick={event=>{moreAnchor.current=event.currentTarget;setMore(true);}}><MoreHorizontal size={18}/></Action></div></div>
   {more&&moreAnchor.current&&<ActionMenu title={t("文档操作")} anchor={moreAnchor.current} onClose={()=>setMore(false)}><button onClick={()=>{void saveDocument(session);setMore(false);}}>{t("保存文档")}{" "}<kbd>⌘ / Ctrl S</kbd></button><button onClick={()=>{setMore(false);if(mode==='read'||ext==='md'&&mode==='live')setFind(value=>!value);else void import('./editor').then(module=>{if(editor.current)module.openSearchPanel(editor.current);});}}>{t("文内查找")}{" "}<kbd>⌘ / Ctrl F</kbd></button><button onClick={()=>{setMore(false);onRecord('history',path);}}>{t("版本历史")}</button><a href={media(path,true)}>{t("下载原文件")}</a></ActionMenu>}
 
+  {session.annotationError&&<div className="conflict-banner" role="alert"><Diagnostic message={session.annotationError}/></div>}
   {session.error&&<div className="conflict-banner">{<Diagnostic message={session.error}/>}{session.dirty&&<button onClick={()=>{const url=URL.createObjectURL(new Blob([session.text],{type:'text/plain;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download=name(path)+'.draft.txt';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>{t("下载当前草稿")}</button>}{session.state.includes(t("冲突"))&&<button onClick={async()=>{const latest=await api<Note>('file?path='+encodeURIComponent(path),undefined,undefined,{force:true});const original=window.open('','_blank');if(original){original.document.body.textContent=latest.text;original.document.title=t("磁盘版本 · ")+name(path);}if(confirm(t("核对磁盘版本后，使用当前编辑内容保存？"))){acceptDiskVersion(session,latest.etag);void saveDocument(session);}}}>{t("查看磁盘版本并合并")}</button>}</div>}
   {find&&(mode==='read'||ext==='md'&&mode==='live')&&<div className="reading-search"><input autoFocus aria-label={t("文内查找")} placeholder={t("查找正文…")} value={search} onChange={event=>{setSearch(event.target.value);setMatch(0);}} onKeyDown={event=>{if(event.key==='Enter'&&matches.length)jump(matches[match%matches.length]);if(event.key==='Escape')setFind(false);}}/><span>{matches.length?`${match%matches.length+1} / ${matches.length}`:t("0 个匹配")}</span><button onClick={()=>{if(matches.length){const next=(match+1)%matches.length;setMatch(next);jump(matches[next]);}}}>{t("下一个")}</button></div>}
   {session.manualSave&&<div className="ai-draft-banner" role="status"><span>{t("AI 草稿尚未写入文件")}</span><button onClick={()=>void saveDocument(session)}>{t("保存草稿")}</button><button onClick={()=>{if(confirm(t("丢弃当前 AI 草稿并恢复磁盘正文？")))void discardAiDraft(session).catch(error=>notify(error.message));}}>{t("丢弃草稿")}</button></div>}

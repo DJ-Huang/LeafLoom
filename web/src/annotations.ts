@@ -40,7 +40,12 @@ export function resolveAnchor(source:string,anchor:AnnotationAnchor|null):Annota
   if(candidates.length>1000)return null; // pathological repetition, never guess.
  }
  if(!candidates.length)return null;
- if(candidates.length===1)return {from:candidates[0].from,to:candidates[0].to};
+ if(candidates.length===1){
+  const match=candidates[0],contextLength=prefix.length+suffix.length;
+  // A matching phrase at an unrelated position is not proof it is the original passage.
+  if(match.from!==from&&(contextLength<4||match.context<Math.min(4,contextLength)))return null;
+  return {from:match.from,to:match.to};
+ }
  candidates.sort((a,b)=>b.score-a.score);
  if(candidates[0].context<4||candidates[0].score-candidates[1].score<6)return null;
  return {from:candidates[0].from,to:candidates[0].to};

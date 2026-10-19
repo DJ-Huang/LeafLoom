@@ -25,6 +25,16 @@ def add(root,files,store,kind="comment",content="Please expand"):
     etag,anchor=range_for(files)
     return store.create(root=str(root),path="note.md",kind=kind,anchor=anchor,etag=etag,content=content)["id"]
 
+def test_read_only_listing_does_not_create_database(fixture):
+    root, files, store = fixture
+    database = root / '.vault-rag' / 'annotations.sqlite'
+    assert not database.exists()
+    assert store.list(root=str(root), path='note.md') == {
+        'annotations': [], 'document_id': None,
+    }
+    assert not database.exists()
+
+
 def test_comments_replies_revisions_reopen(fixture):
     root,files,store=fixture
     assert store.list(root=str(root),path="note.md")["annotations"]==[]
@@ -109,8 +119,127 @@ def test_permanent_trash_clear_purges_annotation_data(fixture):
 
 def test_future_schema_rejected(fixture):
     root,files,store=fixture
-    store.list(root=str(root),path="note.md")
+    store.create(root=str(root),path="note.md",kind="comment",content="Page review")
     database=root/".vault-rag"/"annotations.sqlite"
     with sqlite3.connect(database) as conn:conn.execute("PRAGMA user_version=999")
     with pytest.raises(ValueError, match="更高版本"):
         store.list(root=str(root),path="note.md")
+
+
+def test_annotation_history_round_trip_preserves_thread_and_source(fixture):
+    root, files, store = fixture
+    scope = dict(root=str(root), path='note.md')
+    original = (root / 'note.md').read_bytes()
+    operations = []
+    created = store.create(**scope, kind='comment', content='First', author='Reviewer')
+    operations.append(created['history_id'])
+    ident = created['id']
+    thread = lambda: store.list(**scope)['annotations'][0]
+    initial = thread()
+    operations.append(store.message(**scope, annotation_id=ident, content='Reply',
+                                    parent_id=initial['messages'][0]['id'])['history_id'])
+    operations.append(store.edit_message(**scope, annotation_id=ident,
+        message_id=initial['messages'][0]['id'], revision=1, content='Edited')['history_id'])
+    etag, anchor = range_for(files)
+    operations.append(store.edit(**scope, annotation_id=ident, revision=thread()['revision'],
+        status='resolved', color='blue', anchor_update=True, anchor=anchor, etag=etag)['history_id'])
+    complete = thread()
+    operations.append(store.remove(**scope, annotation_id=ident,
+                                   revision=complete['revision'])['history_id'])
+    assert store.list(**scope)['annotations'] == []
+    # Undo delete, relink/status, edit, reply and creation, then redo in order.
+    for history_id in reversed(operations):
+        store.travel(**scope, history_id=history_id, direction='undo')
+    assert store.list(**scope)['annotations'] == []
+    for history_id in operations[:-1]:
+        store.travel(**scope, history_id=history_id, direction='redo')
+    restored = thread()
+    assert restored['id'] == complete['id']
+    assert restored['created_at'] == complete['created_at']
+    assert restored['revision'] > complete['revision']
+    assert restored['anchor'] == anchor
+    assert restored['status'] == 'resolved' and restored['color'] == 'blue'
+    for before, after in zip(complete['messages'], restored['messages']):
+        for key in ('id', 'parent_id', 'annotation_id', 'content', 'author', 'created_at'):
+            assert before[key] == after[key]
+        assert after['revision'] > before['revision']
+    # Repeated replay must rebase adjacent snapshots without reviving stale revisions.
+    store.travel(**scope, history_id=operations[-1], direction='redo')
+    store.travel(**scope, history_id=operations[-1], direction='undo')
+    assert thread()['revision'] > restored['revision']
+    assert (root / 'note.md').read_bytes() == original
+
+
+def test_annotation_history_conflict_and_identity_boundaries(fixture):
+    root, files, store = fixture
+    scope = dict(root=str(root), path='note.md')
+    created = store.create(**scope, kind='comment', content='Review')
+    message = store.list(**scope)['annotations'][0]['messages'][0]
+    # Another service/MCP edit must block undo of the original creation.
+    other = Annotations(store.config, files)
+    edited = other.edit_message(**scope, annotation_id=created['id'],
+        message_id=message['id'], revision=message['revision'], content='External edit')
+    with pytest.raises(ConflictError):
+        store.travel(**scope, history_id=created['history_id'], direction='undo')
+    assert store.list(**scope)['annotations'][0]['messages'][0]['content'] == 'External edit'
+    store.travel(**scope, history_id=edited['history_id'], direction='undo')
+    store.travel(**scope, history_id=created['history_id'], direction='undo')
+    with pytest.raises(ConflictError):
+        store.travel(**scope, history_id=created['history_id'], direction='undo')
+    (root / 'other.md').write_text('Unrelated', encoding='utf-8')
+    with pytest.raises(ConflictError):
+        store.travel(root=str(root), path='other.md', history_id=created['history_id'], direction='redo')
+    with pytest.raises(ConflictError):
+        store.travel(root=str(root / 'wrong'), path='note.md', history_id=created['history_id'], direction='redo')
+    files.delete('note.md')
+    (root / 'note.md').write_text('New identity', encoding='utf-8')
+    with pytest.raises(ConflictError):
+        store.travel(**scope, history_id=created['history_id'], direction='redo')
+
+
+def test_highlight_history_and_v1_upgrade(fixture):
+    root, files, store = fixture
+    scope = dict(root=str(root), path='note.md')
+    etag, anchor = range_for(files)
+    created = store.create(**scope, kind='highlight', anchor=anchor, etag=etag)
+    database = root / '.vault-rag' / 'annotations.sqlite'
+    # Model the schema before history support, preserving existing annotations.
+    with sqlite3.connect(database) as db:
+        db.execute('DROP TABLE annotation_history')
+        db.execute('PRAGMA user_version=1')
+    before = store.list(**scope)['annotations'][0]
+    edited = store.edit(**scope, annotation_id=created['id'], revision=before['revision'], color='pink')
+    store.travel(**scope, history_id=edited['history_id'], direction='undo')
+    assert store.list(**scope)['annotations'][0]['color'] == 'yellow'
+    store.travel(**scope, history_id=edited['history_id'], direction='redo')
+    assert store.list(**scope)['annotations'][0]['color'] == 'pink'
+    with sqlite3.connect(database) as db:
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 2
+
+
+def test_annotation_history_browser_api_and_csrf(fixture):
+    from starlette.testclient import TestClient
+    from vault_rag.knowledge import Runtime
+    from vault_rag.web_server import create_app
+    root, files, store = fixture
+    runtime = Runtime(store.config)
+    app = create_app(store.config, runtime, start_background=False)
+    try:
+        with TestClient(app, base_url='http://127.0.0.1:18080') as client:
+            token = (store.config.directory / 'auth-token').read_text().strip()
+            client.cookies.set('vault_session', token)
+            csrf = {'X-Vault-CSRF': app.state.csrf}
+            body = dict(root=str(root), path='note.md')
+            response = client.post('/api/annotations', headers=csrf,
+                json=dict(body, type='comment', content='Browser comment'))
+            assert response.status_code == 200, response.text
+            change = dict(body, history_id=response.json()['history_id'], direction='undo')
+            assert client.post('/api/annotations/history', json=change).status_code == 403
+            assert client.post('/api/annotations/history', headers=csrf, json=change).status_code == 200
+            assert store.list(**body)['annotations'] == []
+            change['direction'] = 'redo'
+            assert client.post('/api/annotations/history', headers=csrf, json=change).status_code == 200
+            assert store.list(**body)['annotations'][0]['messages'][0]['content'] == 'Browser comment'
+            assert client.post('/api/annotations/history', headers=csrf, json=change).status_code == 409
+    finally:
+        runtime.stop()

@@ -55,7 +55,7 @@ class Annotations:
             db.execute("PRAGMA foreign_keys=ON")
             db.execute("PRAGMA busy_timeout=8000")
             current = db.execute("PRAGMA user_version").fetchone()[0]
-            if current > 1:
+            if current > 2:
                 raise ValueError("标注数据库来自更高版本，拒绝覆盖")
             if current == 0:
                 db.executescript("""
@@ -93,6 +93,21 @@ class Annotations:
                     ON annotation_messages(annotation_id,created_at);
                 PRAGMA user_version=1;
                 """)
+            if current < 2:
+                db.executescript("""
+                CREATE TABLE IF NOT EXISTS annotation_history (
+                    id TEXT PRIMARY KEY,
+                    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                    annotation_id TEXT NOT NULL,
+                    before_json TEXT NOT NULL,
+                    after_json TEXT NOT NULL,
+                    undone INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS annotation_history_document
+                    ON annotation_history(document_id,created_at);
+                PRAGMA user_version=2;
+                """)
             with db:
                 yield db
         finally:
@@ -121,6 +136,83 @@ class Annotations:
     def _version(row, expected):
         if type(expected) is not int or expected != row["revision"]:
             raise ConflictError("标注已经被修改，请刷新评论后重试")
+
+    @staticmethod
+    def _snapshot(db, annotation_id):
+        row = db.execute("SELECT * FROM annotations WHERE id=?", (annotation_id,)).fetchone()
+        if row is None:
+            return "null"
+        value = dict(row)
+        value["messages"] = [dict(message) for message in db.execute(
+            "SELECT * FROM annotation_messages WHERE annotation_id=? ORDER BY created_at,id",
+            (annotation_id,))]
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+    def _record(self, db, doc_id, annotation_id, before):
+        after = self._snapshot(db, annotation_id)
+        key = uuid.uuid4().hex
+        db.execute("""INSERT INTO annotation_history
+            (id,document_id,annotation_id,before_json,after_json,created_at) VALUES(?,?,?,?,?,?)
+        """, (key, doc_id, annotation_id, before, after, time.time()))
+        # Match the editor's bounded history; these snapshots are user data, not an index.
+        db.execute("""DELETE FROM annotation_history WHERE id IN (
+            SELECT id FROM annotation_history WHERE document_id=? ORDER BY created_at DESC,id DESC
+            LIMIT -1 OFFSET 200)
+        """, (doc_id,))
+        return key
+
+    def travel(self, *, root, path, history_id, direction):
+        """Replay only server-owned snapshots, with full-thread conflict checks."""
+        if direction not in ("undo", "redo"):
+            raise ValueError("无效的撤销或重做操作")
+        with self.config.lock, self.lock:
+            path = self._validate_note(root, path)
+            with self._database(root) as db:
+                db.execute("BEGIN IMMEDIATE")
+                doc_id = self._document(db, path)
+                entry = db.execute("SELECT * FROM annotation_history WHERE id=? AND document_id=?",
+                                   (history_id, doc_id)).fetchone()
+                if entry is None:
+                    raise ConflictError("标注撤销记录已失效，请重新打开笔记")
+                undo = direction == "undo"
+                expected, target = (entry["after_json"], entry["before_json"]) if undo else (entry["before_json"], entry["after_json"])
+                if bool(entry["undone"]) == undo or self._snapshot(db, entry["annotation_id"]) != expected:
+                    raise ConflictError("标注已经被修改，无法撤销或重做；请刷新评论后重试")
+                current, replacement = json.loads(expected), json.loads(target)
+                db.execute("DELETE FROM annotations WHERE id=?", (entry["annotation_id"],))
+                if replacement is not None:
+                    count = db.execute("SELECT COUNT(*) FROM annotations WHERE document_id=?", (doc_id,)).fetchone()[0]
+                    if count >= MAX_ANNOTATIONS:
+                        raise ValueError("单篇文档的标注数量已达到上限")
+                    replacement["revision"] = max(replacement["revision"], (current or {}).get("revision", 0)) + 1
+                    replacement["updated_at"] = time.time()
+                    columns = [key for key in replacement if key != "messages"]
+                    db.execute(f"INSERT INTO annotations({','.join(columns)}) VALUES({','.join('?' for _ in columns)})",
+                               [replacement[key] for key in columns])
+                    current_messages = {m["id"]: m for m in (current or {}).get("messages", [])}
+                    # Parents may share timestamps; insert parents before their replies.
+                    pending = list(replacement["messages"])
+                    inserted = set()
+                    while pending:
+                        ready = [message for message in pending if not message["parent_id"] or message["parent_id"] in inserted]
+                        if not ready:
+                            raise ValueError("评论回复关系无效")
+                        for message in ready:
+                            message["revision"] = max(message["revision"], current_messages.get(message["id"], {}).get("revision", 0)) + 1
+                            message["updated_at"] = replacement["updated_at"]
+                            columns = list(message)
+                            db.execute(f"INSERT INTO annotation_messages({','.join(columns)}) VALUES({','.join('?' for _ in columns)})",
+                                       [message[key] for key in columns])
+                            inserted.add(message["id"])
+                            pending.remove(message)
+                restored = self._snapshot(db, entry["annotation_id"])
+                # Adjacent operations reference the same state. Rebase those exact
+                # snapshots so repeated undo/redo keeps monotonically newer revisions.
+                for column in ("before_json", "after_json"):
+                    db.execute(f"UPDATE annotation_history SET {column}=? WHERE document_id=? AND annotation_id=? AND {column}=?",
+                               (restored, doc_id, entry["annotation_id"], target))
+                db.execute("UPDATE annotation_history SET undone=? WHERE id=?", (int(undo), history_id))
+                return {"ok": True}
 
     def _anchor(self, path, root, anchor, etag):
         if anchor is None:
@@ -155,6 +247,10 @@ class Annotations:
     def list(self, *, root, path):
         with self.config.lock, self.lock:
             path = self._validate_note(root, path)
+            database = self.files.state_path('annotations.sqlite')
+            # Reads should work without initializing a database in a read-only vault.
+            if not database.exists() and not database.is_symlink():
+                return {'annotations': [], 'document_id': None}
             with self._database(root) as db:
                 doc_id = self._document(db, path)
                 if not doc_id:
@@ -197,6 +293,7 @@ class Annotations:
                 raise ValueError("评论作者无效")
             anchor_json = self._anchor(path, root, anchor, etag)
             with self._database(root) as db:
+                db.execute("BEGIN IMMEDIATE")
                 doc_id = self._document(db, path, create=True)
                 count = db.execute("SELECT COUNT(*) FROM annotations WHERE document_id=?", (doc_id,)).fetchone()[0]
                 if count >= MAX_ANNOTATIONS:
@@ -211,16 +308,18 @@ class Annotations:
                         INSERT INTO annotation_messages(id,annotation_id,parent_id,author,content,created_at,updated_at)
                         VALUES(?,?,NULL,?,?,?,?)
                     """, (uuid.uuid4().hex, key, author, content.strip(), now, now))
-                return {"id": key}
+                return {"id": key, "history_id": self._record(db, doc_id, key, "null")}
 
     def edit(self, *, root, path, annotation_id, revision, status=None,
              color=None, anchor_update=False, anchor=None, etag=None):
         with self.config.lock, self.lock:
             path = self._validate_note(root, path)
             with self._database(root) as db:
+                db.execute("BEGIN IMMEDIATE")
                 doc_id = self._document(db, path)
                 row = self._annotation(db, doc_id, annotation_id)
                 self._version(row, revision)
+                before = self._snapshot(db, annotation_id)
                 if status is not None and status not in ("open", "resolved"):
                     raise ValueError("评论状态无效")
                 if color is not None and color not in COLORS:
@@ -232,16 +331,19 @@ class Annotations:
                     WHERE id=?
                 """, (status or row["status"], color or row["color"],
                       anchor_json, time.time(), annotation_id))
-                return {"ok": True}
+                return {"ok": True, "history_id": self._record(db, doc_id, annotation_id, before)}
 
     def remove(self, *, root, path, annotation_id, revision):
         with self.config.lock, self.lock:
             path = self._validate_note(root, path)
             with self._database(root) as db:
-                row = self._annotation(db, self._document(db, path), annotation_id)
+                db.execute("BEGIN IMMEDIATE")
+                doc_id = self._document(db, path)
+                row = self._annotation(db, doc_id, annotation_id)
                 self._version(row, revision)
+                before = self._snapshot(db, annotation_id)
                 db.execute("DELETE FROM annotations WHERE id=?", (annotation_id,))
-                return {"ok": True}
+                return {"ok": True, "history_id": self._record(db, doc_id, annotation_id, before)}
 
     def message(self, *, root, path, annotation_id, content, author="Local user",
                 parent_id=None):
@@ -252,7 +354,9 @@ class Annotations:
             if not isinstance(author, str) or not 1 <= len(author) <= 120:
                 raise ValueError("评论作者无效")
             with self._database(root) as db:
+                db.execute("BEGIN IMMEDIATE")
                 row = self._annotation(db, self._document(db, path), annotation_id)
+                before = self._snapshot(db, annotation_id)
                 if row["kind"] != "comment":
                     raise ValueError("只有评论线程可以回复")
                 if parent_id and not db.execute(
@@ -267,7 +371,7 @@ class Annotations:
                 """, (key, annotation_id, parent_id, author, content.strip(), now, now))
                 db.execute("UPDATE annotations SET updated_at=?,revision=revision+1 WHERE id=?",
                            (now, annotation_id))
-                return {"id": key}
+                return {"id": key, "history_id": self._record(db, row["document_id"], annotation_id, before)}
 
     def edit_message(self, *, root, path, annotation_id, message_id, revision, content):
         with self.config.lock, self.lock:
@@ -275,7 +379,9 @@ class Annotations:
             if not isinstance(content, str) or not content.strip() or len(content) > MAX_MESSAGE:
                 raise ValueError("评论内容不能为空或超出限制")
             with self._database(root) as db:
-                self._annotation(db, self._document(db, path), annotation_id)
+                db.execute("BEGIN IMMEDIATE")
+                annotation = self._annotation(db, self._document(db, path), annotation_id)
+                before = self._snapshot(db, annotation_id)
                 row = db.execute(
                     "SELECT * FROM annotation_messages WHERE id=? AND annotation_id=?",
                     (message_id, annotation_id),
@@ -286,7 +392,9 @@ class Annotations:
                 db.execute("""
                     UPDATE annotation_messages SET content=?,revision=revision+1,updated_at=? WHERE id=?
                 """, (content.strip(), time.time(), message_id))
-                return {"ok": True}
+                db.execute("UPDATE annotations SET updated_at=?,revision=revision+1 WHERE id=?",
+                           (time.time(), annotation_id))
+                return {"ok": True, "history_id": self._record(db, annotation["document_id"], annotation_id, before)}
 
     def archive(self, *, root, path, trash_key):
         """Keep deleted note comments out of new files created at the same path."""

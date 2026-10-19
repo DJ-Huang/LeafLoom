@@ -1960,7 +1960,7 @@ AI 草稿尚未保存，请先手动保存正文|Save the AI draft manually befo
 添加评论|Add comment|コメントを追加
 添加页面评论|Add page comment|ページコメントを追加
 添加高亮|Highlight text|テキストをハイライト
-确定永久删除这条标注及回复？|Permanently delete this annotation and its replies?|この注釈と返信を完全に削除しますか？
+确定删除这条标注及回复？可在当前会话中撤销。|Delete this annotation and its replies? You can undo this in the current session.|この注釈と返信を削除しますか？現在のセッション内で元に戻せます。
 编辑评论|Edit comment|コメントを編集
 行内评论|Inline comment|行内コメント
 评论|Comments|コメント
@@ -1976,3 +1976,8 @@ AI 草稿尚未保存，请先手动保存正文|Save the AI draft manually befo
 重新打开|Reopen|再オープン
 页面评论|Page comment|ページコメント
 高亮标注|Text highlight|テキストのハイライト
+
+无效的撤销或重做操作|Invalid undo or redo action.|元に戻す・やり直す操作が無効です。
+标注撤销记录已失效，请重新打开笔记|Annotation undo history is no longer available. Reopen the note.|注釈の履歴が利用できなくなりました。メモを開き直してください。
+标注已经被修改，无法撤销或重做；请刷新评论后重试|The annotation has changed. Undo or redo was stopped; refresh comments and try again.|注釈が変更されたため操作を停止しました。コメントを更新してから再試行してください。
+评论回复关系无效|Invalid comment reply relationship.|コメントの返信関係が無効です。

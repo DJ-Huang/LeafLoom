@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Support undo/redo for highlights, comments, replies, edits, resolve/reopen, relinking and deletion in the shared rich/source document history. Add toolbar controls and guard replay against concurrent annotation changes.
+
 - Add local-first Markdown text highlights and threaded inline/page comments with reply, edit, resolve/reopen, source decorations, quoted-text reattachment and a right comment panel. Store durable annotations separately from Markdown in per-vault SQLite and preserve comment identity across LeafLoom note moves/trash/restore, including MCP operations. Add explicit permission-gated MCP annotation tools.
 
 ## Unreleased

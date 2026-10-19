@@ -333,6 +333,12 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
             anchor=body.get('anchor'),etag=body.get('etag'),
             color=body.get('color','yellow'),content=body.get('content',''),
             author=body.get('author','Local user')))
+    @app.post('/api/annotations/history')
+    async def travel_annotation_history(request:Request):
+        body=await request.json()
+        return json_response(await asyncio.to_thread(annotations.travel,
+            root=body.get('root'),path=body.get('path'),history_id=body.get('history_id'),
+            direction=body.get('direction')))
     @app.patch('/api/annotations/{annotation_id}')
     async def update_annotation(annotation_id:str,request:Request):
         body=await request.json()

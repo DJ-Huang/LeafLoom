@@ -55,7 +55,7 @@ function CommentItem({item,source,selected,props}:{item:Annotation,source:string
   <div className="leafloom-comment-actions">
    {item.type==='comment'&&<button disabled={working} onClick={()=>void perform(()=>props.onStatus(item,item.status==='open'?'resolved':'open'))}><Check size={13}/>{statusLabel(item)}</button>}
    {item.anchor&&!locate&&<button disabled={working} onClick={()=>void perform(()=>props.onReanchor(item))}><MapPin size={13}/>{t('关联到当前选区')}</button>}
-   <button disabled={working} title={t('删除标注')} onClick={()=>{if(confirm(t('确定永久删除这条标注及回复？')))void perform(()=>props.onDelete(item));}}><Trash2 size={13}/>{t('删除')}</button>
+   <button disabled={working} title={t('删除标注')} onClick={()=>{if(confirm(t('确定删除这条标注及回复？可在当前会话中撤销。')))void perform(()=>props.onDelete(item));}}><Trash2 size={13}/>{t('删除')}</button>
   </div>
   {error&&<p role="alert" className="leafloom-comment-error">{error}</p>}
  </article>;

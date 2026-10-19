@@ -1941,7 +1941,7 @@
   "添加评论": "Add comment",
   "添加页面评论": "Add page comment",
   "添加高亮": "Highlight text",
-  "确定永久删除这条标注及回复？": "Permanently delete this annotation and its replies?",
+  "确定删除这条标注及回复？可在当前会话中撤销。": "Delete this annotation and its replies? You can undo this in the current session.",
   "编辑评论": "Edit comment",
   "行内评论": "Inline comment",
   "评论": "Comments",
@@ -1956,5 +1956,9 @@
   "选区无效": "Invalid selection",
   "重新打开": "Reopen",
   "页面评论": "Page comment",
-  "高亮标注": "Text highlight"
+  "高亮标注": "Text highlight",
+  "无效的撤销或重做操作": "Invalid undo or redo action.",
+  "标注撤销记录已失效，请重新打开笔记": "Annotation undo history is no longer available. Reopen the note.",
+  "标注已经被修改，无法撤销或重做；请刷新评论后重试": "The annotation has changed. Undo or redo was stopped; refresh comments and try again.",
+  "评论回复关系无效": "Invalid comment reply relationship."
 }
