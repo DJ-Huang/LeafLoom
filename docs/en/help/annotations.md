@@ -6,6 +6,8 @@ Mark passages and discuss a selection or the entire note.
 
 ## Before you start
 
+> This feature is included in source `main` through [PR #22](https://github.com/DJ-Huang/LeafLoom/pull/22). Use a build that includes it; older installed versions may not provide these controls.
+
 Connect a local folder first. Practise in the demo vault if you prefer.
 
 ## Steps
