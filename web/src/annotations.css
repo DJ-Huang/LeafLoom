@@ -45,6 +45,7 @@
 .rich-format-bar .leafloom-highlight-actions { display: inline-flex; gap: 3px; align-items: center; }
 .rich-format-bar .leafloom-color-button { width: 21px; height: 21px; min-width: 21px; border: 1px solid #d3d1cb; border-radius: 50%; padding: 0; margin: 0 1px; }
 .rich-format-bar .leafloom-color-button[aria-label] { color: transparent; }
+.rich-format-bar .leafloom-clear-highlight { background: linear-gradient(135deg, white 46%, #9b9389 47%, #9b9389 53%, white 54%); }
 .rich-format-bar .leafloom-color-button.leafloom-yellow { background: #f7df84; }
 .rich-format-bar .leafloom-color-button.leafloom-green { background: #bee8ba; }
 .rich-format-bar .leafloom-color-button.leafloom-blue { background: #bfdcf4; }

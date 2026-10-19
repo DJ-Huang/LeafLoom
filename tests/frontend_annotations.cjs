@@ -125,6 +125,17 @@ let browser;
  await page.locator('.document-toolbar button[title="重做"]').click();
  await waitRows(4);
  await prose().locator('[data-leafloom-annotation="'+cross.id+'"]').first().waitFor();
+ // Clearing only the selected word preserves highlighting on both sides.
+ await select('passage');
+ await page.locator('.rich-format-popup [aria-label="清除高亮"]').click();
+ const cleared=await waitRows(5);
+ const fragments=cleared.filter(item=>item.type==='highlight'&&item.anchor&&
+   (item.anchor.exact==='First '||item.anchor.exact.includes(' before.')));
+ assert.equal(fragments.length,2,'Expected two surviving highlight fragments');
+ await page.locator('.document-toolbar button[title="撤销"]').click();
+ await waitRows(4);
+ await page.locator('.document-toolbar button[title="重做"]').click();
+ await waitRows(5);
  assert.deepEqual(errors,[],'Browser errors: '+errors.join('\n'));
  console.log('PASS annotations E2E: highlight, page and inline threads, replies, status, source decorations, persistence, quote reattachment/detachment and cross-paragraph highlights');
 })().catch(e=>{console.error(e.stack||String(e));process.exitCode=1;}).finally(async()=>browser?.close());

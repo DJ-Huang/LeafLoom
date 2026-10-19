@@ -11,7 +11,7 @@ import {VirtualList} from './virtual';
 import {acceptDiskVersion,applyProperties,changeAnnotation,changeDocument,discardAiDraft,documentHistory,documentState,loadDocument,saveDocument,travelDocument} from './document-state';
 import {addAiReference} from './ai-context';
 import {MarkdownPreview} from './reader';
-import {Annotation,AnnotationColor,AnnotationSelection,makeAnchor,resolveAnchor} from './annotations';
+import {Annotation,AnnotationAction,AnnotationColor,AnnotationSelection,makeAnchor,resolveAnchor,selectedHighlights} from './annotations';
 import {CommentsPanel} from './annotations-ui';
 const LiveEditor=lazy(()=>import('./editor').then(module=>({default:module.LiveEditor})));
 const RichEditor=lazy(()=>import('./rich-editor').then(module=>({default:module.RichEditor})));
@@ -64,9 +64,19 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
   setSelectedAnnotation(id);setCommentsOpen(true);setSide(false);
   requestAnimationFrame(()=>document.querySelector('[data-annotation-card="'+id+'"]')?.scrollIntoView({block:'nearest'}));
  };
- const requestAnnotation=(kind:'highlight'|'comment',color:AnnotationColor|undefined,range:AnnotationSelection)=>{
+ const requestAnnotation=(kind:AnnotationAction,color:AnnotationColor|undefined,range:AnnotationSelection)=>{
   if(kind==='comment'){
    setAnnotationDraft({range,exact:session.text.slice(range.from,range.to)});setCommentsOpen(true);setSide(false);return;
+  }
+  if(kind==='clear-highlight'){
+   const source=session.text;
+   void (async()=>{
+    const etag=await stableNote();
+    const latest=await api<{annotations:Annotation[]}>('annotations?root='+encodeURIComponent(vaultRoot)+'&path='+encodeURIComponent(path),undefined,undefined,{force:true});
+    if(session.text!==source)throw new Error(t('选中的文字已变化，请重新选择'));
+    const highlights=selectedHighlights(source,latest.annotations,range);
+    if(highlights.length)await annotationWrite('annotations/clear-highlights',{etag,selection:range,highlights});
+   })().catch(error=>notify(error.message));return;
   }
   void (async()=>{
    const expected=await stableNote(),anchor=makeAnchor(session.text,range,expected);
@@ -143,7 +153,7 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
   {session.manualSave&&<div className="ai-draft-banner" role="status"><span>{t("AI 草稿尚未写入文件")}</span><button onClick={()=>void saveDocument(session)}>{t("保存草稿")}</button><button onClick={()=>{if(confirm(t("丢弃当前 AI 草稿并恢复磁盘正文？")))void discardAiDraft(session).catch(error=>notify(error.message));}}>{t("丢弃草稿")}</button></div>}
   {selectionMenu&&<div className="ai-selection-menu" role="menu" style={{left:selectionMenu.x,top:selectionMenu.y}} onPointerDown={event=>event.stopPropagation()}>
    <button autoFocus role="menuitem" onClick={()=>{addAiReference({root:vaultRoot,path,text:selectionMenu.text});setSelectionMenu(undefined);}}>{t("添加到 AI 对话")}</button>
-   {ext==='md'&&selectionMenu.range&&<><button role="menuitem" onClick={()=>{requestAnnotation('highlight','yellow',selectionMenu.range!);setSelectionMenu(undefined);}}>{t('添加高亮')}</button><button role="menuitem" onClick={()=>{requestAnnotation('comment',undefined,selectionMenu.range!);setSelectionMenu(undefined);}}>{t('添加评论')}</button></>}
+   {ext==='md'&&selectionMenu.range&&<><button role="menuitem" onClick={()=>{requestAnnotation('highlight','yellow',selectionMenu.range!);setSelectionMenu(undefined);}}>{t('添加高亮')}</button><button role="menuitem" disabled={!selectedHighlights(session.text,annotations,selectionMenu.range).length} onClick={()=>{requestAnnotation('clear-highlight',undefined,selectionMenu.range!);setSelectionMenu(undefined);}}>{t('清除高亮')}</button><button role="menuitem" onClick={()=>{requestAnnotation('comment',undefined,selectionMenu.range!);setSelectionMenu(undefined);}}>{t('添加评论')}</button></>}
   </div>}
   <div className="document-body"><div ref={area} className={'writing-area'+(isHtml?' html-writing-area':'')} onContextMenu={event=>{
    if(!active||!['md','txt'].includes(ext))return;

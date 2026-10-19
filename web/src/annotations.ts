@@ -1,6 +1,7 @@
 /** Source-file-relative comments. Offsets are UTF-16, like browser editor offsets. */
 export type AnnotationColor='yellow'|'green'|'blue'|'pink'|'purple';
 export type AnnotationKind='highlight'|'comment';
+export type AnnotationAction=AnnotationKind|'clear-highlight';
 export type AnnotationAnchor={from:number,to:number,exact:string,prefix:string,suffix:string,etag:string};
 export type AnnotationMessage={
  id:string;annotation_id:string;parent_id:string|null;author:string;content:string;
@@ -13,6 +14,14 @@ export type Annotation={
 };
 export type AnnotationSelection={from:number,to:number};
 export const annotationColors:AnnotationColor[]=['yellow','green','blue','pink','purple'];
+
+export function selectedHighlights(source:string,annotations:Annotation[],selection:AnnotationSelection){
+ if(selection.from>=selection.to)return [];
+ return annotations.flatMap(item=>{
+  const range=item.type==='highlight'?resolveAnchor(source,item.anchor):null;
+  return range&&range.from<selection.to&&range.to>selection.from?[{id:item.id,revision:item.revision,...range}]:[];
+ });
+}
 
 export function makeAnchor(source:string,range:AnnotationSelection,etag:string):AnnotationAnchor|null{
  const from=Math.max(0,Math.min(source.length,range.from));

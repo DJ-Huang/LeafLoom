@@ -333,6 +333,12 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
             anchor=body.get('anchor'),etag=body.get('etag'),
             color=body.get('color','yellow'),content=body.get('content',''),
             author=body.get('author','Local user')))
+    @app.post('/api/annotations/clear-highlights')
+    async def clear_annotation_highlights(request:Request):
+        body=await request.json()
+        return json_response(await asyncio.to_thread(annotations.clear_highlights,
+            root=body.get('root'),path=body.get('path'),etag=body.get('etag'),
+            selection=body.get('selection'),highlights=body.get('highlights')))
     @app.post('/api/annotations/history')
     async def travel_annotation_history(request:Request):
         body=await request.json()

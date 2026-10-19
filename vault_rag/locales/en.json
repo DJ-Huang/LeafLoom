@@ -1960,5 +1960,7 @@
   "无效的撤销或重做操作": "Invalid undo or redo action.",
   "标注撤销记录已失效，请重新打开笔记": "Annotation undo history is no longer available. Reopen the note.",
   "标注已经被修改，无法撤销或重做；请刷新评论后重试": "The annotation has changed. Undo or redo was stopped; refresh comments and try again.",
-  "评论回复关系无效": "Invalid comment reply relationship."
+  "评论回复关系无效": "Invalid comment reply relationship.",
+  "清除高亮": "Clear highlight",
+  "无效的高亮清除选区": "Invalid selection for clearing highlights."
 }

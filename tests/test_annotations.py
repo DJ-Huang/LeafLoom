@@ -214,7 +214,7 @@ def test_highlight_history_and_v1_upgrade(fixture):
     store.travel(**scope, history_id=edited['history_id'], direction='redo')
     assert store.list(**scope)['annotations'][0]['color'] == 'pink'
     with sqlite3.connect(database) as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 2
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 3
 
 
 def test_annotation_history_browser_api_and_csrf(fixture):
@@ -241,5 +241,156 @@ def test_annotation_history_browser_api_and_csrf(fixture):
             assert client.post('/api/annotations/history', headers=csrf, json=change).status_code == 200
             assert store.list(**body)['annotations'][0]['messages'][0]['content'] == 'Browser comment'
             assert client.post('/api/annotations/history', headers=csrf, json=change).status_code == 409
+            etag, anchor = range_for(files)
+            response = client.post('/api/annotations', headers=csrf,
+                json=dict(body, type='highlight', anchor=anchor, etag=etag))
+            assert response.status_code == 200
+            ident = response.json()['id']
+            clear = dict(body, etag=etag, selection=anchor,
+                highlights=[dict(id=ident, revision=1, **{'from': anchor['from'], 'to': anchor['to']})])
+            assert client.post('/api/annotations/clear-highlights', json=clear).status_code == 403
+            response = client.post('/api/annotations/clear-highlights', headers=csrf, json=clear)
+            assert response.status_code == 200, response.text
+            assert [row['type'] for row in store.list(**body)['annotations']] == ['comment']
+            restored = client.post('/api/annotations/history', headers=csrf,
+                json=dict(body, history_id=response.json()['history_id'], direction='undo'))
+            assert restored.status_code == 200, restored.text
+            assert len(store.list(**body)['annotations']) == 2
     finally:
         runtime.stop()
+
+
+def clear_selection(root, files, store, start, end):
+    rows = store.list(root=str(root), path='note.md')['annotations']
+    return store.clear_highlights(root=str(root), path='note.md', etag=files.read('note.md')['etag'],
+        selection={'from': start, 'to': end}, highlights=[dict(id=row['id'], revision=row['revision'],
+            **{'from': row['anchor']['from'], 'to': row['anchor']['to']}) for row in rows
+            if row['type'] == 'highlight' and row['anchor']['from'] < end and row['anchor']['to'] > start])
+
+
+def test_clear_highlights_splits_selection_and_undoes_as_one_action(fixture):
+    root, files, store = fixture
+    scope = dict(root=str(root), path='note.md')
+    original = (root / 'note.md').read_bytes()
+    etag, anchor = range_for(files)
+    created = [store.create(**scope, kind='highlight', anchor=anchor, etag=etag, color=color)
+               for color in ('yellow', 'purple')]
+    comment = store.create(**scope, kind='comment', anchor=anchor, etag=etag, content='Keep this thread')
+    before = store.list(**scope)['annotations']
+    start, end = anchor['from']+2, anchor['to']-2
+    cleared = clear_selection(root, files, store, start, end)
+    rows = store.list(**scope)['annotations']
+    highlights = [row for row in rows if row['type'] == 'highlight']
+    assert sorted((row['color'], row['anchor']['exact']) for row in highlights) == [
+        ('purple', 'Le'), ('purple', 'om'), ('yellow', 'Le'), ('yellow', 'om')]
+    assert [row for row in rows if row['id'] == comment['id']] == [before[-1]]
+    for row in highlights:
+        assert row['anchor']['to'] <= start or row['anchor']['from'] >= end
+    # Restore both overlaps and both splits with one history token, preserving IDs.
+    store.travel(**scope, history_id=cleared['history_id'], direction='undo')
+    assert {row['id'] for row in store.list(**scope)['annotations']} == {row['id'] for row in before}
+    assert all(row['anchor']['exact'] == 'LeafLoom' for row in store.list(**scope)['annotations'])
+    # Earlier highlight actions remain reversible after a grouped clear replay.
+    store.travel(**scope, history_id=comment['history_id'], direction='undo')
+    for creation in reversed(created):
+        store.travel(**scope, history_id=creation['history_id'], direction='undo')
+    for creation in created:
+        store.travel(**scope, history_id=creation['history_id'], direction='redo')
+    store.travel(**scope, history_id=comment['history_id'], direction='redo')
+    store.travel(**scope, history_id=cleared['history_id'], direction='redo')
+    assert len(store.list(**scope)['annotations']) == 5
+    assert (root / 'note.md').read_bytes() == original
+
+
+@pytest.mark.parametrize('side', ['full', 'left', 'right'])
+def test_clear_highlight_full_and_edge_ranges(fixture, side):
+    root, files, store = fixture
+    scope = dict(root=str(root), path='note.md')
+    etag, anchor = range_for(files)
+    store.create(**scope, kind='highlight', anchor=anchor, etag=etag)
+    start, end = anchor['from'], anchor['to']
+    if side == 'left':
+        end = start+2
+    elif side == 'right':
+        start = end-2
+    result = clear_selection(root, files, store, start, end)
+    rows = store.list(**scope)['annotations']
+    assert [row['anchor']['exact'] for row in rows] == {
+        'full': [], 'left': ['afLoom'], 'right': ['LeafLo']}[side]
+    store.travel(**scope, history_id=result['history_id'], direction='undo')
+    assert store.list(**scope)['annotations'][0]['anchor']['exact'] == 'LeafLoom'
+
+
+def test_clear_highlight_rejects_conflicts_atomically(fixture):
+    root, files, store = fixture
+    scope = dict(root=str(root), path='note.md')
+    etag, anchor = range_for(files)
+    for _ in range(2):
+        store.create(**scope, kind='highlight', anchor=anchor, etag=etag)
+    before = store.list(**scope)['annotations']
+    targets = [dict(id=row['id'], revision=row['revision'], **{'from': anchor['from'], 'to': anchor['to']})
+               for row in before]
+    targets[-1]['revision'] = 0
+    with pytest.raises(ConflictError):
+        store.clear_highlights(**scope, etag=etag, selection=anchor, highlights=targets)
+    assert store.list(**scope)['annotations'] == before
+    result = clear_selection(root, files, store, anchor['from']+2, anchor['to']-2)
+    rows = store.list(**scope)['annotations']
+    # A failure late in grouped undo must roll back earlier fragment restorations too.
+    store.edit(**scope, annotation_id=rows[0]['id'], revision=rows[0]['revision'], color='pink')
+    changed = store.list(**scope)['annotations']
+    with pytest.raises(ConflictError):
+        store.travel(**scope, history_id=result['history_id'], direction='undo')
+    assert store.list(**scope)['annotations'] == changed
+    (root / 'note.md').write_text('External change', encoding='utf-8')
+    with pytest.raises(ConflictError):
+        store.clear_highlights(**scope, etag=etag, selection=anchor, highlights=targets)
+
+
+def test_clear_highlight_utf16_and_moved_quote(fixture):
+    root, files, store = fixture
+    scope = dict(root=str(root), path='note.md')
+    etag, anchor = range_for(files, '你好🚀 LeafLoom')
+    created = store.create(**scope, kind='highlight', anchor=anchor, etag=etag)
+    result = clear_selection(root, files, store, anchor['from']+2, anchor['from']+4)
+    assert sorted(row['anchor']['exact'] for row in store.list(**scope)['annotations']) == [' LeafLoom', '你好']
+    store.travel(**scope, history_id=result['history_id'], direction='undo')
+    row = store.list(**scope)['annotations'][0]
+    with pytest.raises(ValueError, match='Unicode'):
+        clear_selection(root, files, store, anchor['from']+2, anchor['from']+3)
+    disk = files.read('note.md')
+    files.save('note.md', 'Prefix. '+disk['text'], disk['etag'], expected_root=str(root))
+    etag = files.read('note.md')['etag']
+    moved = dict(id=created['id'], revision=row['revision'],
+                 **{'from': anchor['from']+8, 'to': anchor['to']+8})
+    store.clear_highlights(**scope, etag=etag, selection=moved, highlights=[moved])
+    assert store.list(**scope)['annotations'] == []
+
+
+def test_v2_history_upgrade_preserves_existing_receipts(fixture):
+    root, files, store = fixture
+    scope = dict(root=str(root), path='note.md')
+    created = store.create(**scope, kind='comment', content='Existing v2 comment')
+    with sqlite3.connect(root / '.vault-rag' / 'annotations.sqlite') as db:
+        db.execute('DROP INDEX annotation_history_group')
+        db.execute('ALTER TABLE annotation_history DROP COLUMN group_id')
+        db.execute('PRAGMA user_version=2')
+    store.travel(**scope, history_id=created['history_id'], direction='undo')
+    assert store.list(**scope)['annotations'] == []
+    store.travel(**scope, history_id=created['history_id'], direction='redo')
+    assert store.list(**scope)['annotations'][0]['messages'][0]['content'] == 'Existing v2 comment'
+
+
+def test_large_clear_history_keeps_whole_groups(fixture):
+    root, files, store = fixture
+    scope = dict(root=str(root), path='note.md')
+    etag, anchor = range_for(files)
+    # A group can contain more snapshots than the 200-action retention limit.
+    for _ in range(201):
+        store.create(**scope, kind='highlight', anchor=anchor, etag=etag)
+    result = clear_selection(root, files, store, anchor['from'], anchor['to'])
+    assert store.list(**scope)['annotations'] == []
+    store.travel(**scope, history_id=result['history_id'], direction='undo')
+    assert len(store.list(**scope)['annotations']) == 201
+    store.travel(**scope, history_id=result['history_id'], direction='redo')
+    assert store.list(**scope)['annotations'] == []

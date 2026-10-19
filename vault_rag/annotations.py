@@ -55,7 +55,7 @@ class Annotations:
             db.execute("PRAGMA foreign_keys=ON")
             db.execute("PRAGMA busy_timeout=8000")
             current = db.execute("PRAGMA user_version").fetchone()[0]
-            if current > 2:
+            if current > 3:
                 raise ValueError("标注数据库来自更高版本，拒绝覆盖")
             if current == 0:
                 db.executescript("""
@@ -108,6 +108,15 @@ class Annotations:
                     ON annotation_history(document_id,created_at);
                 PRAGMA user_version=2;
                 """)
+            if current < 3:
+                db.executescript("""
+                BEGIN IMMEDIATE;
+                ALTER TABLE annotation_history ADD COLUMN group_id TEXT;
+                UPDATE annotation_history SET group_id=id;
+                CREATE INDEX annotation_history_group ON annotation_history(document_id,group_id);
+                PRAGMA user_version=3;
+                COMMIT;
+                """)
             with db:
                 yield db
         finally:
@@ -148,18 +157,23 @@ class Annotations:
             (annotation_id,))]
         return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
-    def _record(self, db, doc_id, annotation_id, before):
+    @staticmethod
+    def _trim_history(db, doc_id):
+        # Prune whole actions, so a multi-highlight clear remains atomic to replay.
+        db.execute("""DELETE FROM annotation_history WHERE document_id=? AND group_id IN (
+            SELECT group_id FROM annotation_history WHERE document_id=? GROUP BY group_id
+            ORDER BY MAX(created_at) DESC,group_id DESC LIMIT -1 OFFSET 200)
+        """, (doc_id, doc_id))
+
+    def _record(self, db, doc_id, annotation_id, before, *, group_id=None):
         after = self._snapshot(db, annotation_id)
         key = uuid.uuid4().hex
         db.execute("""INSERT INTO annotation_history
-            (id,document_id,annotation_id,before_json,after_json,created_at) VALUES(?,?,?,?,?,?)
-        """, (key, doc_id, annotation_id, before, after, time.time()))
-        # Match the editor's bounded history; these snapshots are user data, not an index.
-        db.execute("""DELETE FROM annotation_history WHERE id IN (
-            SELECT id FROM annotation_history WHERE document_id=? ORDER BY created_at DESC,id DESC
-            LIMIT -1 OFFSET 200)
-        """, (doc_id,))
-        return key
+            (id,document_id,annotation_id,before_json,after_json,created_at,group_id) VALUES(?,?,?,?,?,?,?)
+        """, (key, doc_id, annotation_id, before, after, time.time(), group_id or key))
+        if group_id is None:
+            self._trim_history(db, doc_id)
+        return group_id or key
 
     def travel(self, *, root, path, history_id, direction):
         """Replay only server-owned snapshots, with full-thread conflict checks."""
@@ -170,49 +184,53 @@ class Annotations:
             with self._database(root) as db:
                 db.execute("BEGIN IMMEDIATE")
                 doc_id = self._document(db, path)
-                entry = db.execute("SELECT * FROM annotation_history WHERE id=? AND document_id=?",
-                                   (history_id, doc_id)).fetchone()
-                if entry is None:
+                entries = db.execute("""SELECT * FROM annotation_history WHERE group_id=? AND document_id=?
+                    ORDER BY created_at,rowid""", (history_id, doc_id)).fetchall()
+                if not entries:
                     raise ConflictError("标注撤销记录已失效，请重新打开笔记")
-                undo = direction == "undo"
-                expected, target = (entry["after_json"], entry["before_json"]) if undo else (entry["before_json"], entry["after_json"])
-                if bool(entry["undone"]) == undo or self._snapshot(db, entry["annotation_id"]) != expected:
-                    raise ConflictError("标注已经被修改，无法撤销或重做；请刷新评论后重试")
-                current, replacement = json.loads(expected), json.loads(target)
-                db.execute("DELETE FROM annotations WHERE id=?", (entry["annotation_id"],))
-                if replacement is not None:
-                    count = db.execute("SELECT COUNT(*) FROM annotations WHERE document_id=?", (doc_id,)).fetchone()[0]
-                    if count >= MAX_ANNOTATIONS:
-                        raise ValueError("单篇文档的标注数量已达到上限")
-                    replacement["revision"] = max(replacement["revision"], (current or {}).get("revision", 0)) + 1
-                    replacement["updated_at"] = time.time()
-                    columns = [key for key in replacement if key != "messages"]
-                    db.execute(f"INSERT INTO annotations({','.join(columns)}) VALUES({','.join('?' for _ in columns)})",
-                               [replacement[key] for key in columns])
-                    current_messages = {m["id"]: m for m in (current or {}).get("messages", [])}
-                    # Parents may share timestamps; insert parents before their replies.
-                    pending = list(replacement["messages"])
-                    inserted = set()
-                    while pending:
-                        ready = [message for message in pending if not message["parent_id"] or message["parent_id"] in inserted]
-                        if not ready:
-                            raise ValueError("评论回复关系无效")
-                        for message in ready:
-                            message["revision"] = max(message["revision"], current_messages.get(message["id"], {}).get("revision", 0)) + 1
-                            message["updated_at"] = replacement["updated_at"]
-                            columns = list(message)
-                            db.execute(f"INSERT INTO annotation_messages({','.join(columns)}) VALUES({','.join('?' for _ in columns)})",
-                                       [message[key] for key in columns])
-                            inserted.add(message["id"])
-                            pending.remove(message)
-                restored = self._snapshot(db, entry["annotation_id"])
-                # Adjacent operations reference the same state. Rebase those exact
-                # snapshots so repeated undo/redo keeps monotonically newer revisions.
-                for column in ("before_json", "after_json"):
-                    db.execute(f"UPDATE annotation_history SET {column}=? WHERE document_id=? AND annotation_id=? AND {column}=?",
-                               (restored, doc_id, entry["annotation_id"], target))
-                db.execute("UPDATE annotation_history SET undone=? WHERE id=?", (int(undo), history_id))
+                for entry in reversed(entries) if direction == "undo" else entries:
+                    self._travel_entry(db, doc_id, entry, direction)
+                count = db.execute("SELECT COUNT(*) FROM annotations WHERE document_id=?", (doc_id,)).fetchone()[0]
+                if count > MAX_ANNOTATIONS:
+                    raise ValueError("单篇文档的标注数量已达到上限")
                 return {"ok": True}
+
+    def _travel_entry(self, db, doc_id, entry, direction):
+        undo = direction == "undo"
+        expected, target = (entry["after_json"], entry["before_json"]) if undo else (entry["before_json"], entry["after_json"])
+        if bool(entry["undone"]) == undo or self._snapshot(db, entry["annotation_id"]) != expected:
+            raise ConflictError("标注已经被修改，无法撤销或重做；请刷新评论后重试")
+        current, replacement = json.loads(expected), json.loads(target)
+        db.execute("DELETE FROM annotations WHERE id=?", (entry["annotation_id"],))
+        if replacement is not None:
+            replacement["revision"] = max(replacement["revision"], (current or {}).get("revision", 0)) + 1
+            replacement["updated_at"] = time.time()
+            columns = [key for key in replacement if key != "messages"]
+            db.execute(f"INSERT INTO annotations({','.join(columns)}) VALUES({','.join('?' for _ in columns)})",
+                       [replacement[key] for key in columns])
+            current_messages = {m["id"]: m for m in (current or {}).get("messages", [])}
+            # Parents may share timestamps; insert parents before their replies.
+            pending = list(replacement["messages"])
+            inserted = set()
+            while pending:
+                ready = [message for message in pending if not message["parent_id"] or message["parent_id"] in inserted]
+                if not ready:
+                    raise ValueError("评论回复关系无效")
+                for message in ready:
+                    message["revision"] = max(message["revision"], current_messages.get(message["id"], {}).get("revision", 0)) + 1
+                    message["updated_at"] = replacement["updated_at"]
+                    columns = list(message)
+                    db.execute(f"INSERT INTO annotation_messages({','.join(columns)}) VALUES({','.join('?' for _ in columns)})",
+                               [message[key] for key in columns])
+                    inserted.add(message["id"])
+                    pending.remove(message)
+        restored = self._snapshot(db, entry["annotation_id"])
+        # Adjacent operations reference the same state. Rebase those exact
+        # snapshots so repeated undo/redo keeps monotonically newer revisions.
+        for column in ("before_json", "after_json"):
+            db.execute(f"UPDATE annotation_history SET {column}=? WHERE document_id=? AND annotation_id=? AND {column}=?",
+                       (restored, doc_id, entry["annotation_id"], target))
+        db.execute("UPDATE annotation_history SET undone=? WHERE id=?", (int(undo), entry["id"]))
 
     def _anchor(self, path, root, anchor, etag):
         if anchor is None:
@@ -243,6 +261,81 @@ class Annotations:
             "from": start, "to": end, "exact": exact, "prefix": prefix, "suffix": suffix,
             "etag": etag,
         }, ensure_ascii=False)
+
+    def clear_highlights(self, *, root, path, etag, selection, highlights):
+        """Clear only selected highlight text; preserve comments and outside fragments."""
+        if (not isinstance(selection, dict) or
+            type(selection.get('from')) is not int or type(selection.get('to')) is not int or
+            not isinstance(highlights, list) or not 1 <= len(highlights) <= MAX_ANNOTATIONS):
+            raise ValueError("无效的高亮清除选区")
+        with self.config.lock, self.lock:
+            path = self._validate_note(root, path)
+            note = self.files.read(path)
+            if note['root'] != root or note['etag'] != etag:
+                raise ConflictError("正文已修改，请保存或刷新笔记后重新标注")
+            utf16 = note['text'].encode('utf-16-le')
+            start, end = selection['from'], selection['to']
+
+            def text_between(a, b):
+                if not 0 <= a < b <= len(utf16) // 2:
+                    raise ValueError("无效的高亮清除选区")
+                try:
+                    return utf16[a*2:b*2].decode('utf-16-le')
+                except UnicodeDecodeError:
+                    raise ValueError("选区不能截断 Unicode 字符") from None
+
+            def anchor_for(a, b):
+                return json.dumps(dict(
+                    **{'from': a, 'to': b}, exact=text_between(a, b), etag=etag,
+                    prefix=utf16[max(0, a-48)*2:a*2].decode('utf-16-le', errors='ignore'),
+                    suffix=utf16[b*2:(b+48)*2].decode('utf-16-le', errors='ignore'),
+                ), ensure_ascii=False)
+
+            text_between(start, end)
+            with self._database(root) as db:
+                db.execute("BEGIN IMMEDIATE")
+                doc_id = self._document(db, path)
+                plan, seen = [], set()
+                for item in highlights:
+                    if not isinstance(item, dict) or not isinstance(item.get('id'), str) or item['id'] in seen:
+                        raise ValueError("无效的高亮清除选区")
+                    seen.add(item['id'])
+                    row = self._annotation(db, doc_id, item['id'])
+                    self._version(row, item.get('revision'))
+                    anchor = json.loads(row['anchor_json']) if row['anchor_json'] else None
+                    a, b = item.get('from'), item.get('to')
+                    if (row['kind'] != 'highlight' or not anchor or type(a) is not int or
+                        type(b) is not int or a >= end or b <= start):
+                        raise ValueError("无效的高亮清除选区")
+                    if text_between(a, b) != anchor['exact']:
+                        raise ConflictError("文字位置已变化，请重新选择")
+                    fragments = []
+                    if a < start:
+                        fragments.append(anchor_for(a, start))
+                    if b > end:
+                        fragments.append(anchor_for(end, b))
+                    plan.append((row, fragments))
+                count = db.execute("SELECT COUNT(*) FROM annotations WHERE document_id=?", (doc_id,)).fetchone()[0]
+                if count + sum(len(parts)-1 for _, parts in plan) > MAX_ANNOTATIONS:
+                    raise ValueError("单篇文档的标注数量已达到上限")
+                group_id, now = uuid.uuid4().hex, time.time()
+                for row, fragments in plan:
+                    before = self._snapshot(db, row['id'])
+                    if not fragments:
+                        db.execute("DELETE FROM annotations WHERE id=?", (row['id'],))
+                    else:
+                        db.execute("""UPDATE annotations SET anchor_json=?,updated_at=?,revision=revision+1
+                            WHERE id=?""", (fragments[0], now, row['id']))
+                    self._record(db, doc_id, row['id'], before, group_id=group_id)
+                    if len(fragments) == 2:
+                        key = uuid.uuid4().hex
+                        db.execute("""INSERT INTO annotations
+                            (id,document_id,kind,anchor_json,color,status,created_at,updated_at)
+                            VALUES(?,?,'highlight',?,?,?,?,?)""",
+                            (key, doc_id, fragments[1], row['color'], row['status'], row['created_at'], now))
+                        self._record(db, doc_id, key, 'null', group_id=group_id)
+                self._trim_history(db, doc_id)
+                return {'ok': True, 'history_id': group_id}
 
     def list(self, *, root, path):
         with self.config.lock, self.lock:

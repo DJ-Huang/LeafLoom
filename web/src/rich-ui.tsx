@@ -6,7 +6,7 @@ import type {Editor} from '@tiptap/core';
 import {formatCommands,InsertCommand,InsertId} from './editor-catalog';
 import {alignRichTable,blockAction,BlockTarget,convertRichBlock,selectedRowAsHeader} from './rich-commands';
 import {t} from './i18n';
-import {AnnotationColor,annotationColors} from './annotations';
+import {AnnotationAction,AnnotationColor,annotationColors} from './annotations';
 
 export type AnchorRect={left:number,right:number,top:number,bottom:number};
 const icons:Record<InsertId,LucideIcon>={text:FileText,h1:Heading1,h2:Heading2,h3:Heading3,bullet:List,ordered:ListOrdered,todo:CheckSquare,quote:Quote,divider:Minus,code:Code2,table:Table,image:Image,file:File,link:Link,wiki:Link2,math:Sigma,mermaid:Workflow};
@@ -56,7 +56,7 @@ export function WikiMenu({anchor,rows,selected,onSelected,onChoose,status,onClos
   {!rows.length&&<div className="rich-command-empty">{status}</div>}
  </div></RichPopup>;
 }
-export function FormatBar({editor,anchor,onLink,onAction,onAnnotate}:{editor:Editor,anchor:AnchorRect,onLink:()=>void,onAction:()=>void,onAnnotate?:(kind:'highlight'|'comment',color?:AnnotationColor)=>void}){
+export function FormatBar({editor,anchor,onLink,onAction,onAnnotate,canClearHighlight=false}:{editor:Editor,anchor:AnchorRect,onLink:()=>void,onAction:()=>void,onAnnotate?:(kind:AnnotationAction,color?:AnnotationColor)=>void,canClearHighlight?:boolean}){
  const current=editor.isActive('heading')?'h'+editor.getAttributes('heading').level:editor.isActive('taskList')?'todo':editor.isActive('bulletList')?'bullet':editor.isActive('orderedList')?'ordered':editor.isActive('blockquote')?'quote':'text';
  const options:InsertId[]=['text','h1','h2','h3','bullet','ordered','todo','quote'];
  const formatIcons={bold:Bold,italic:Italic,strike:Strikethrough,inlineCode:Code};
@@ -65,6 +65,7 @@ export function FormatBar({editor,anchor,onLink,onAction,onAnnotate}:{editor:Edi
   {formatCommands.map(command=>{const Icon=formatIcons[command.id],mark=command.id==='inlineCode'?'code':command.id;return <button key={command.id} type="button" title={t(command.label)} aria-label={t(command.label)} aria-pressed={editor.isActive(mark)} onClick={()=>{editor.chain().focus().toggleMark(mark).run();onAction();}}><Icon size={16}/></button>;})}
   <button type="button" title={t('网页链接')} aria-label={t('网页链接')} aria-pressed={editor.isActive('link')} onClick={onLink}><Link size={16}/></button>
   {onAnnotate&&<><span className="rich-menu-separator"/><span className="leafloom-highlight-actions">
+   <button type="button" title={t('清除高亮')} aria-label={t('清除高亮')} disabled={!canClearHighlight} className="leafloom-color-button leafloom-clear-highlight" onClick={()=>onAnnotate('clear-highlight')}/>
    {annotationColors.map(color=><button type="button" key={color} title={t('添加高亮')+' · '+color} aria-label={t('添加高亮')+' · '+color} className={'leafloom-color-button leafloom-'+color} onClick={()=>onAnnotate('highlight',color)}/>)}
   </span><button type="button" title={t('添加评论')} aria-label={t('添加评论')} onClick={()=>onAnnotate('comment')}><MessageCircle size={16}/></button></>}
  </div></RichPopup>;

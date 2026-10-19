@@ -1981,3 +1981,6 @@ AI 草稿尚未保存，请先手动保存正文|Save the AI draft manually befo
 标注撤销记录已失效，请重新打开笔记|Annotation undo history is no longer available. Reopen the note.|注釈の履歴が利用できなくなりました。メモを開き直してください。
 标注已经被修改，无法撤销或重做；请刷新评论后重试|The annotation has changed. Undo or redo was stopped; refresh comments and try again.|注釈が変更されたため操作を停止しました。コメントを更新してから再試行してください。
 评论回复关系无效|Invalid comment reply relationship.|コメントの返信関係が無効です。
+
+清除高亮|Clear highlight|ハイライトを解除
+无效的高亮清除选区|Invalid selection for clearing highlights.|ハイライト解除の選択範囲が無効です。

@@ -7,7 +7,7 @@ require(path.join(root,'web/node_modules/esbuild')).buildSync({
  entryPoints:[path.join(root,'web/src/annotations.ts')],outfile:out,
  bundle:true,platform:'node',format:'cjs',
 });
-const {makeAnchor,resolveAnchor}=require(out);
+const {makeAnchor,resolveAnchor,selectedHighlights}=require(out);
 let tests=0;
 function check(label,fn){fn();tests++;console.log('PASS',label);}
 check('UTF-16 emoji offsets and source prefix relocation',()=>{
@@ -50,5 +50,17 @@ check('Large pathological repetitions are bounded',()=>{
 check('Invalid or absent selections rejected',()=>{
  assert.equal(makeAnchor('test',{from:2,to:2},'v'),null);
  assert.equal(resolveAnchor('test',null),null);
+});
+check('Clear highlights targets only intersecting located highlights',()=>{
+ const source='Before selected passage after.',from=source.indexOf('selected'),to=from+8;
+ const anchor=makeAnchor(source,{from,to},'v1');
+ const highlight={id:'highlight',revision:3,type:'highlight',anchor};
+ const rows=[highlight,{...highlight,id:'comment',type:'comment'},
+  {...highlight,id:'lost',anchor:{...anchor,exact:'missing'}}];
+ assert.deepEqual(selectedHighlights(source,rows,{from:from+2,to:to-2}),[{id:'highlight',revision:3,from,to}]);
+ assert.deepEqual(selectedHighlights(source,rows,{from:to,to:to+1}),[]);
+ assert.deepEqual(selectedHighlights(source,rows,{from,to:from}),[]);
+ const moved='Prefix. '+source;
+ assert.deepEqual(selectedHighlights(moved,rows,{from:from+8,to:to+8}),[{id:'highlight',revision:3,from:from+8,to:to+8}]);
 });
 console.log('Annotation anchor tests: '+tests);
