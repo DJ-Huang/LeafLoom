@@ -22,7 +22,7 @@ class EditorUploadTests(unittest.TestCase):
         static.mkdir()
         (static / 'index.html').write_text('fixture')
         self.app = create_app(self.config, self.runtime, start_background=False, static_dir=static)
-        self.client = TestClient(self.app, base_url='http://127.0.0.1:18080')
+        self.client = TestClient(self.app, base_url=self.app.state.websites.ui_origin)
         self.client.__enter__()
         self.client.get('/')
         self.headers = {'X-Vault-CSRF': self.client.get('/api/session').json()['csrf']}

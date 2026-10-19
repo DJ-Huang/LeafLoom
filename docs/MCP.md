@@ -45,13 +45,15 @@ Markdown/TXT; neither full access nor saving a note expands that selection.
 | Managed design editing | `design_document`, `design_operations`, `design_history`, `design_import_asset` |
 | Shared design library and export | `design_library`, `design_publish_library`, `design_import_library`, `design_export` |
 | Synchronize | `vault_reindex` |
+| General file reads and downloads | `vault_files` |
+| General file uploads and management | `vault_files_update` |
 | Feishu account | `feishu_status` |
 | Feishu command discovery | `feishu_cli_inspect` |
 | Feishu business commands | `feishu_cli_read`, `feishu_cli_write` |
 | Feishu temporary files | `feishu_files` |
 
-The current surface contains 42 tools: the original 23 note tools, 14 Design Studio
-tools and five optional Feishu tools. Configure the external CLI in **Settings → AI connections → Feishu / Lark**,
+The surface includes note and Design Studio workflows, two general file tools,
+and five optional Feishu tools. Configure the external CLI in **Settings → AI connections → Feishu / Lark**,
 then grant Feishu reading/writing independently for local and Tunnel connections.
 These scopes share each connection's dedicated credential; disabling note access does
 not revoke separately granted Feishu access. Legacy clients gain no Feishu privileges.
@@ -115,6 +117,102 @@ safe Markdown TABLE/LIST grammar, including FROM/WHERE/GROUP BY/SORT/LIMIT; it
 does not execute SQL or scripts. Graphs are local to a note, with only edges
 whose endpoints appear on the returned page, capped at 200 with `links_truncated`
 when necessary; use `vault_links` to paginate all incoming/outgoing edges.
+
+## General file tools
+
+Local MCP and the LeafLoom ChatGPT plugin discover the same two tools. Existing
+workspace grants now cover notes, designs and attachments; Feishu grants remain
+separate. Legacy retrieval credentials gain no file access. Refresh the client
+tools after restarting the updated backend (rescan a plugin's tool snapshot if
+the host requires it). Inspect `vault_index_status.capabilities` to verify the
+actual connection grants.
+
+Both tools take `workspace_revision` and a typed `request` object. Reads use
+`vault_files`; writes use `vault_files_update`, which also requires a unique
+`operation_id`. Unsupported actions/fields are rejected. Identical write retries
+reuse a receipt; reusing an ID with different arguments is a conflict.
+
+| Tool | `request.action` | Parameters and result |
+| --- | --- | --- |
+| `vault_files` | `list` | Optional `query`, `kind`, `sort`, `order`, `limit`, `cursor`; searches filenames/paths, not OCR or file bodies. Defaults: modified descending, 50 items, maximum 200. |
+| `vault_files` | `stat` | `path`, optional `source_note`; returns file `revision`, metadata, protection status, Markdown link and image embed when applicable. |
+| `vault_files` | `read` | Exactly one `path` or ZIP `job_id`, `expected_revision`, optional byte `offset`/`limit`; returns Base64 bytes, `next_offset`, `eof`. Default 64 KiB, maximum 256 KiB. |
+| `vault_files` | `export` | `paths` (1–100); prepares a private ZIP task. |
+| `vault_files` | `status` | Without `job_id`, pages tasks and returns index/limits. With an ID, reads that task. Operation `section=moves/references/blockers/exclusions/results` returns a complete paginated `page`. |
+| `vault_files_update` | `upload` | `source=files/begin/chunk/commit/abort`; see below. |
+| `vault_files_update` | `move` | `paths`, `destination`; `destination_kind=folder` by default. Use `path` with one source to rename or move to an exact filename. Prepares a plan. |
+| `vault_files_update` | `trash` | `paths` (1–100); prepares a recoverable recycle plan without removing note links. |
+| `vault_files_update` | `organize` | Optional `destination` (default `_attachments`); prepares a consolidation plan. |
+| `vault_files_update` | `reindex` | Starts background attachment index initialization/refresh. |
+| `vault_files_update` | `job` | `job_id`, `command=execute/cancel/resume/undo`. Operations except cancel require current `expected_revision` and explicit `confirm=true`. Other job types support cancel. |
+
+For example, after obtaining a current workspace revision:
+
+```json
+{"request":{"action":"list","query":"report","kind":"pdf"},"workspace_revision":"<current-workspace-revision>"}
+```
+
+### Uploads
+
+ChatGPT uploads use `request={"action":"upload","source":"files"}` and a
+top-level `files` array. The tool advertises `_meta["openai/fileParams"]=["files"]`.
+Every file object declares `download_url`, `file_id`, `mime_type`, `file_name`;
+only `download_url` and `file_id` are required. Missing names use an opaque fallback
+with a MIME-derived extension when available.
+The host supplies the reference; no OpenAI API key is needed. Downloads stream
+in the background, with public HTTPS checks, DNS pinning, bounded redirects,
+size and timeout limits. Signed URLs are never saved in receipts or results.
+Read `status` using the returned `upload:` job ID. A failed batch can contain
+completed files: inspect `results` before uploading only the remaining files.
+
+Local clients read files using their own host permissions, then send bytes:
+
+1. `source=begin`, `name`, total `size`, `sha256`, optional `folder` returns `job_id`.
+2. `source=chunk`, `job_id`, byte `offset`, `data_base64` appends up to 256 KiB.
+   Exact repeated chunks are accepted; overlapping different bytes are rejected.
+3. `source=commit`, `job_id` verifies size/hash and publishes; `source=abort`
+   discards an unfinished upload. Use a distinct operation ID for each step and
+   retain that ID when retrying the same step.
+
+Both sources use the configured attachment folder unless `folder` specifies a
+safe relative directory. Same-name uploads get numbered copies and preserve
+original bytes. Markdown/TXT/Base use their note workflows. Uploads never edit a
+note automatically; insert a returned link with the existing note revision checks
+only when requested. `stat.source_note` returns a note-relative reference.
+`saved=true,index_pending=true` means the file exists but its index has not been
+updated. Upload/stat/read work without initialized metadata; `list` reports
+`initialization_required`, and `reindex` prepares the index without moving files.
+
+Uploads are limited to 256 MiB/file, 1 GiB of active staged bytes/credential,
+1024 retained transfers/credential and 24-hour expiry. Temporary bytes are
+process-local; restart can interrupt an upload. Durable receipts report already
+saved results without repeating publication. A revoked/rotated credential or
+changed workspace invalidates staged access. IDs never authorize another
+credential. ZIP jobs retain the existing one-hour expiry and disk-space checks;
+read them through the tool, not a private localhost URL.
+
+### File operation recovery
+
+`move`, `trash` and `organize` return an `operation:` task while planning. Poll
+`status` until ready, inspect blockers/references, and obtain its `revision`.
+Submit `job command=execute` only after authorization for that preview. Changed
+tasks or files require a new inspection. `resume` and `undo` also require a fresh
+revision and confirmation; cancellation is a stop request, not an undo. Upload,
+download and index IDs have their own prefixes and cannot be used as operation IDs.
+
+These commands reuse the browser's resource protection, reference repair and
+`.vault-rag/attachment-migrations/` journals. No permanent deletion is exposed.
+Undo refuses occupied destinations and later edits. Background MCP workers
+recheck grants and workspace versions at safe boundaries; automatic failure
+recovery preserves originals even when the initiating grant was revoked.
+An authenticated browser recovery action supplies its own authorization.
+Successful consolidation changes the upload folder and workspace revision;
+refresh `vault_index_status` before further calls.
+
+The isolated contracts are in `tests/test_file_tools.py`, including HTTP discovery,
+native file schemas, local/Tunnel scopes, binary integrity, retries, task recovery
+and download-address restrictions. This does not certify a live host's tool
+snapshot refresh or a real ChatGPT file-reference round trip.
 
 ## Editing contract
 

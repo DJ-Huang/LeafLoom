@@ -31,7 +31,7 @@ The public help center has 39 task guides and four full guide/release references
 - [Bound design content, language variants and static publishing](DESIGN_STUDIO.md#bound-content-variants-and-static-publishing)
 - [Folder organization and indexing scope](VAULT_ORGANIZATION.md)
 - [AI assistant implementation](AI_ASSISTANT.md)
-- [Complete MCP tools, credentials and note workflows](MCP.md)
+- [Complete MCP tools, credentials, note workflows and the two general file tools](MCP.md)
 - [Feishu / Lark connection, CLI ownership and MCP tools](FEISHU.md)
 - [Local access and privacy boundaries](SECURITY.md)
 - [Architecture and workflow](ARCHITECTURE.md)

@@ -74,8 +74,10 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     ai_app=ai_mcp.streamable_http_app()
     mcp_access=McpAccess(config)
     notes=NoteOperations(config,runtime)
+    from vault_rag.file_operations import FileOperations
+    file_operations=FileOperations(config,runtime,notes,attachments_workspace,migrations,index_jobs)
     feishu=Feishu(config)
-    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token,design=design,feishu=feishu)
+    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token,design=design,feishu=feishu,files=file_operations)
     mcp_app=mcp.streamable_http_app()
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -85,6 +87,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
             try:yield
             finally:
                 await ai.close()
+                await asyncio.to_thread(file_operations.stop)
                 await asyncio.to_thread(attachments_workspace.stop)
                 await asyncio.to_thread(migrations.stop)
                 await asyncio.to_thread(index_jobs.stop)
@@ -99,6 +102,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     app.state.attachment_migrations=migrations
     app.state.attachments_workspace=attachments_workspace
     app.state.attachment_index_jobs=index_jobs
+    app.state.file_operations=file_operations
     app.state.design=design
     app.state.local_dns=local_dns
     app.include_router(ai_router(ai))
@@ -441,46 +445,16 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         body=await request.json();return await asyncio.to_thread(runtime.files.restore,body['kind'],body['id'])
     @app.post('/api/upload')
     async def upload(request:Request,folder:str='',name:str='',root:str|None=None,create_folder:bool=False,central:bool=False,unique:bool=False):
-        # Stream to a staging file, then atomically publish without overwriting.
-        import uuid
-        if '/' in name or '\\' in name or not name:raise ValueError('文件名无效')
-        if (create_folder or central) and root is None:raise ValueError('创建附件目录需要指定关联目录')
-        with config.lock:
-            runtime.files.ensure_mutable()
-            if central:folder=config.data.get('attachment_folder','_attachments')
-            rel='/'.join(x for x in (folder,name) if x)
-            expected_root=str(config.root);revision=config.data.get('revision')
-            if root is not None and root!=expected_root:raise ConflictError('关联目录已切换，附件未写入')
-            dest=config.path_for(rel,writable=True)
-            if unique and root is None:raise ValueError('Unique uploads require a connected folder')
-            if dest.exists() and not unique:raise ConflictError('同名文件已存在')
-            if create_folder or central:dest.parent.mkdir(parents=True,exist_ok=True)
-            # Revalidate newly created directories before opening a staging file.
-            dest=config.path_for(rel,writable=True)
-            temp=dest.with_name('.upload-'+uuid.uuid4().hex)
-            stream=temp.open('xb')
+        from vault_rag.attachment_uploads import UploadTarget
+        target=UploadTarget(runtime,folder=folder,name=name,root=root,create_folder=create_folder,central=central,unique=unique)
         try:
-            with stream as f:
-                async for part in request.stream():f.write(part)
-                f.flush();os.fsync(f.fileno())
-            with config.lock,runtime.files.lock:
-                runtime.files.ensure_mutable()
-                if str(config.root)!=expected_root or config.data.get('revision')!=revision:
-                    raise ConflictError('关联目录已切换，附件未写入')
-                if config.path_for(rel,writable=True)!=dest:raise ConflictError('附件目录已变化，未写入')
-                if unique:
-                    original=dest;number=2
-                    while dest.exists():
-                        dest=original.with_name(original.stem+' ('+str(number)+')'+original.suffix);number+=1
-                        config.path_for(dest.relative_to(config.root).as_posix(),writable=True)
-                elif dest.exists():raise ConflictError('同名文件已存在')
-                os.link(temp,dest);temp.unlink()
-                rel=dest.relative_to(config.root).as_posix();runtime.files_changed(rel)
-        finally:temp.unlink(missing_ok=True)
+            async for part in request.stream():target.stream.write(part)
+            result=target.commit()
+        finally:target.close()
         if unique:
-            await asyncio.to_thread(runtime.files.attachments.apply,[rel])
-            runtime.publish('files',[rel])
-        return {'path':rel}
+            await asyncio.to_thread(runtime.files.attachments.apply,[result['path']])
+            runtime.publish('files',[result['path']])
+        return result
     @app.get('/api/media')
     async def media(request:Request,path:str,download:bool=False,root:str|None=None):
         def response():

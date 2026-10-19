@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 import ipaddress
 import json
 import logging
@@ -10,18 +11,19 @@ from typing import Any, Literal
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
-from vault_rag.local_state import ConflictError
+from vault_rag.local_state import ConflictError, digest
 from vault_rag.note_operations import NoteError
 from vault_rag.mcp_access import TUNNEL_AUTH_HEADER, McpAccessError
+from vault_rag.file_commands import ChatFile, ReadCommand, WriteCommand
 
 
-def build_workspace_mcp(config, runtime, operations, access, legacy_token, design=None, feishu=None):
+def build_workspace_mcp(config, runtime, operations, access, legacy_token, design=None, feishu=None, files=None):
     mcp = FastMCP('vault-rag', host='127.0.0.1', port=config.data.get('port', 18080),
                   stateless_http=True, json_response=True)
 
-    def tool(*, write=False, additive=False, external=False):
+    def tool(*, write=False, additive=False, external=False, meta=None):
         return mcp.tool(annotations=ToolAnnotations(readOnlyHint=not write,
-                        destructiveHint=write and not additive, openWorldHint=external), structured_output=False)
+                        destructiveHint=write and not additive, openWorldHint=external), meta=meta, structured_output=False)
 
     def principal(ctx):
         request = ctx.request_context.request
@@ -112,16 +114,77 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
     async def vault_index_status(ctx: Context) -> CallToolResult:
         """Read index/model/sync status, current workspace_revision and this connection's permissions."""
         def status():
-            return {**runtime.status(), 'workspace_revision': operations.workspace_revision,
+            result = {**runtime.status(), 'workspace_revision': operations.workspace_revision,
                     'capabilities': access.capabilities(principal(ctx)),
                     'supported_formats': ['markdown', 'txt', 'html'],
                     'workspace_access': 'all connected notes; retrieval uses selected directories only'}
+            if files is not None and result['capabilities']['read_workspace'] and config.data.get('root'):
+                result['attachments'] = {'index':files.index_jobs.status(),
+                    'folder':config.data.get('attachment_folder','_attachments'),
+                    'tools':['vault_files','vault_files_update']}
+            return result
         return await call(ctx, status, legacy=True)
 
     @tool()
     async def vault_list_directory(ctx: Context, path: str = '', limit: int = 50, cursor: str = '') -> CallToolResult:
         """List a connected folder, including notes, subfolders and attachment metadata. Paginated; no RAG selection required."""
         return await call(ctx, operations.list_directory, path, limit, cursor)
+
+    if files is not None:
+        async def file_call(ctx, command, workspace_revision, *, write=False, operation_id='', inputs=None):
+            def secured():
+                with access.lock:
+                    who = principal(ctx)
+                    access.require(who, write=write)
+                    generation = access.data[who]['token_hash'] if who == 'local' else access.tunnel_secret
+                    owner = digest('workspace:' + who + ':' + generation)
+                def check():
+                    # configure() atomically replaces data. A lock-free snapshot is
+                    # safe at worker boundaries and avoids config/access lock inversion.
+                    row = access.data.get(who, {})
+                    current = row.get('token_hash', '') if who == 'local' else access.tunnel_secret
+                    if not row.get('enabled') or (write and not row.get('write')) or current != generation:
+                        raise McpAccessError('File access was revoked; refresh this connection',
+                            connection=who, resource='workspace')
+                @contextmanager
+                def grant():
+                    with access.lock:
+                        check()
+                        yield
+                if write:
+                    if not isinstance(operation_id, str) or not 1 <= len(operation_id) <= 128:
+                        raise ValueError('Provide a unique operation_id of at most 128 characters')
+                    return files.write(command, workspace_revision, operation_id, inputs or [], owner, grant, check)
+                return files.read(command, workspace_revision, owner, grant, check)
+            # File workers acquire the grant only at short mutation boundaries.
+            # Never hold the global access lock while fetching a remote file.
+            return await call(ctx, secured)
+
+        @tool()
+        async def vault_files(request: ReadCommand, workspace_revision: str, ctx: Context) -> CallToolResult:
+            """Read connected files: request.action=list|stat|read|export|status.
+            list searches attachment metadata; stat returns revision and Markdown links.
+            read takes exactly one path or download job_id, expected_revision and byte offsets.
+            export prepares a ZIP; status reads a job or lists jobs/index/transfer limits.
+            Status sections paginate full operation previews. No note text/OCR search.
+            Use current workspace_revision from vault_index_status. Never expose localhost URLs.
+            """
+            return await file_call(ctx, request, workspace_revision)
+
+        @tool(write=True, external=True, meta={'openai/fileParams': ['files']})
+        async def vault_files_update(request: WriteCommand, workspace_revision: str, operation_id: str,
+                                     ctx: Context, files: list[ChatFile] = []) -> CallToolResult:
+            """Manage connected files with request.action=upload|move|trash|organize|reindex|job.
+            upload source=files consumes top-level ChatGPT files; begin/chunk/commit/abort
+            transfers local bytes (256 KiB/chunk), with declared size and SHA-256 at begin.
+            move destination_kind=path renames one file; folder moves up to 100 files.
+            move/trash/organize ONLY prepare a recoverable plan. Read its job and blockers,
+            then job command=execute with expected_revision and confirm=true after user authorization.
+            job also supports cancel/resume/undo; resume/undo require a fresh revision and confirmation.
+            Requires workspace write permission. Reuse operation_id only for identical retries.
+            Upload preserves duplicate names and returns links; edit notes separately when requested.
+            """
+            return await file_call(ctx, request, workspace_revision, write=True, operation_id=operation_id, inputs=files)
 
     @tool()
     async def vault_find_notes(ctx: Context, query: str = '', folder: str = '', tags: list[str] | None = None,

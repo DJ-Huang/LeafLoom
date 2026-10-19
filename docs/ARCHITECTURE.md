@@ -23,6 +23,12 @@ Tunnel 内部凭据通过 `X-LeafLoom-Tunnel-Authorization` 注入发现与业�
 - 健康检查：`/healthz`；启动入口随后使用本机令牌验证 `/api/status`，避免复用另一安装实例。
 - 文件写入采用版本校验、草稿保留、原子替换；历史、移动回滚和回收区位于知识目录的 `.vault-rag`。
 
+## 通用附件 MCP
+
+公共 HTTP MCP 与 ChatGPT Tunnel 共用 `vault_files`（只读）和 `vault_files_update`（修改）两个入口，参数由 `file_commands.py` 的可辨识联合类型限制。`file_operations.py` 适配现有附件索引、整理恢复日志与 ZIP 任务；共用 `attachment_uploads.py` 的流式暂存与不覆盖发布逻辑。ChatGPT 文件参数元数据随工具发现返回，宿主文件引用通过 `file_downloads.py` 进行有界 HTTPS 下载，逐跳验证公网地址并固定连接地址和 TLS 主机名。
+
+传输归属绑定连接凭据代际和知识库版本，原文件读取还绑定文件版本。后台任务在安全边界重新检查当前权限；恢复记录保留在原知识库。上传操作回执保存在 `.vault-rag/file-receipts/`，原始上传字节只在私有临时目录暂存。网络读取和大文件复制期间不持有全局权限锁，发布前短暂持锁重新校验。浏览器与 MCP 发起的恢复动作各自重新授权，内部失败恢复不依赖已撤销的旧连接。
+
 ## 飞书接入
 
 可选飞书接入由 `feishu.py` 包装使用者自行配置的原生 lark-cli，设置 API 和 HTTP MCP 共用一个适配器。CLI 负责登录与凭据；LeafLoom 的私有 `feishu.json` 仅保存接入选项和脱敏验证快照。按参数数组调用，文档正文经 stdin 传递；命令有超时与输出限制，固定使用 user 身份及所选 profile。本机与 Tunnel 的飞书读写权限独立于笔记权限，复用各连接的 MCP 专用凭据；旧配置不自动授权飞书。适配器在本实例内串行操作，不自动导入或索引远端内容。详见[飞书接入](FEISHU.md)。

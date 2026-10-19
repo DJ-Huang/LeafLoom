@@ -1,5 +1,7 @@
 # Deployment and data control
 
+The general file tools share the existing workspace grants: `vault_files` reads metadata/original bytes and prepares private ZIP caches; `vault_files_update` uploads and manages attachments with the separate write grant. Every request binds a workspace revision, and byte reads also require the file revision. Host-provided file URLs are downloaded over HTTPS with public-address validation and DNS pinning on every redirect; ambient proxy, cookie and bearer credentials are never forwarded. Upload staging is private to a credential generation and expires after 24 hours. Publishing rechecks authorization and preserves duplicate names; receipts support idempotent retries. Attachment moves/trash require a versioned preview and retain recoverable journals; background workers recheck live grants at safe boundaries. Browser recovery uses its own authenticated action. These tools do not grant arbitrary local-path access or expand RAG scope.
+
 [English](SECURITY.md) · [中文](#中文) · [日本語](#日本語)
 
 **Your knowledge. Your deployment. Your control.** Run LeafLoom on your own supported computer, under your own user account. Keep your note folder wherever you choose on a local drive. The MIT license permits adapting and deploying the application subject to its terms.

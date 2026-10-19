@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Add two general file tools, `vault_files` and `vault_files_update`, to local MCP and the LeafLoom ChatGPT plugin. Search/read/download attachments, upload chat files or local byte chunks, and preview/manage recoverable file operations through the same workspace grants, version checks and task journals.
+
 - Add a three-language public help center with 39 task guides and four guide/release references per language, full-text search, grouped navigation, article contents, previous/next links, image zoom and copyable examples. Link the website and app sidebar to localized help and publish documentation changes through Pages.
 
 - Add **Restart LeafLoom** to the application and tray menus, preserving draft checks and orderly backend shutdown. Dev keeps Vite running, refreshes locked Python dependencies and reopens the current source; canceling the unsaved-content prompt cancels restart.

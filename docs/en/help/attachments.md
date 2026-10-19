@@ -10,6 +10,8 @@ Connect a local folder first. Practise in the demo vault if you prefer.
 
 ## Steps
 
+AI clients can use the same attachment system through `vault_files` (read/download/status) and `vault_files_update` (upload/manage). Enable workspace access in **AI connections**, granting writes separately. Chat files upload in the background; local clients can transfer size/hash-verified byte chunks. Inspect completed results before retrying a failed batch. File reads require current versions, and move/trash operations retain previews and recovery records. See [MCP setup](mcp.md).
+
 Open **Attachments** in the sidebar for a dedicated workspace (`?view=attachments`). The header shows the total file count, storage used and index status. Search file names and relative paths across the vault; filter by type, sort by name, modification time or size, and switch between thumbnails and a list. The default is thumbnails, most recently modified first. Each page contains up to 100 items. Selection applies only to the current page and clears when paging, searching, filtering or sorting.
 
 Opening the page only checks status. On first use, choose **Set up & prepare** once: LeafLoom prepares or upgrades the metadata index, checks protected dependencies and builds an organization plan in the background. Browsing becomes available as soon as the index is ready, while analysis continues. Supported old indexes are backed up; unsupported versions are never overwritten. Unknown totals show activity and processed counts rather than a completion percentage. **Tasks** reconnects to saved work and shows dates, states and results. Index-only maintenance remains under advanced options.
