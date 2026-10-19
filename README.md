@@ -8,6 +8,8 @@
 
 **[Visit the website & download](https://dj-huang.github.io/LeafLoom/)** · Product screenshots, Windows and Mac installers, and release notes.
 
+**[Help center](https://dj-huang.github.io/LeafLoom/docs/en/)** · Searchable guides for notes, attachments, Design Studio, AI connections and recovery.
+
 Turn scattered notes, project docs and saved webpages into a connected knowledge base. **LeafLoom is an open-source, local-first knowledge management workspace and personal wiki** for Markdown and HTML, with source-linked search, a knowledge graph, MCP, Skills, AI Chat and ChatGPT integration.
 
 Your files and search indexes live on your computer. Browse, write and search locally; connect AI when you want your knowledge in the conversation.

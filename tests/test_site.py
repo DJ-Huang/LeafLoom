@@ -73,7 +73,9 @@ class WebsiteTests(unittest.TestCase):
                         self.assertIn(parsed.fragment, page.ids)
             tree = ET.parse(output / "sitemap.xml")
             urls = [node.text for node in tree.iter("{http://www.sitemaps.org/schemas/sitemap/0.9}loc")]
-            self.assertEqual(urls, [site.DEFAULT_URL + page for _, route, _ in site.LANGUAGES.values() for page in (route, route + "about/")])
+            self.assertEqual(urls[:6], [site.DEFAULT_URL + page for _, route, _ in site.LANGUAGES.values() for page in (route, route + "about/")])
+            self.assertEqual(len(urls), 6 + 3 * (1 + len(site.Documentation(site.DEFAULT_URL).slugs)))
+            self.assertIn(site.DEFAULT_URL + "docs/zh-CN/", urls)
 
     def test_missing_platform_does_not_offer_another_versions_installer(self):
         release = fixture()

@@ -1,0 +1,102 @@
+{
+  "groups": [
+    {
+      "id": "start",
+      "articles": [
+        "introduction",
+        "requirements",
+        "installation",
+        "first-vault",
+        "first-note",
+        "workspace"
+      ]
+    },
+    {
+      "id": "notes",
+      "articles": [
+        "editing",
+        "annotations",
+        "links-graph",
+        "templates-properties",
+        "tasks-queries",
+        "recovery"
+      ]
+    },
+    {
+      "id": "search",
+      "articles": [
+        "search-scope",
+        "search",
+        "model"
+      ]
+    },
+    {
+      "id": "assets",
+      "articles": [
+        "attachments",
+        "attachment-organization",
+        "html"
+      ]
+    },
+    {
+      "id": "design",
+      "articles": [
+        "design-studio",
+        "design-templates",
+        "design-motion",
+        "design-preview",
+        "design-publish",
+        "design-ai"
+      ]
+    },
+    {
+      "id": "ai",
+      "articles": [
+        "ai-chat",
+        "ai-drafts",
+        "chatgpt",
+        "mcp",
+        "permissions",
+        "feishu"
+      ]
+    },
+    {
+      "id": "settings",
+      "articles": [
+        "preferences",
+        "backup",
+        "updates",
+        "privacy"
+      ]
+    },
+    {
+      "id": "problems",
+      "articles": [
+        "installation-problems",
+        "search-problems",
+        "save-conflicts",
+        "connection-problems",
+        "faq"
+      ]
+    },
+    {
+      "id": "reference",
+      "articles": [
+        "guide",
+        "ai-guide",
+        "changelog",
+        "release-notes"
+      ]
+    }
+  ],
+  "sources": {
+    "guide": "docs/{lang}/GUIDE.md",
+    "ai-guide": "docs/{lang}/AI.md",
+    "changelog": {
+      "en": "CHANGELOG.md",
+      "zh-CN": "docs/zh-CN/CHANGELOG.md",
+      "ja": "docs/ja/CHANGELOG.md"
+    },
+    "release-notes": "docs/{lang}/RELEASE_NOTES_0.1.3.md"
+  }
+}

@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Add a three-language public help center with 39 task guides and four guide/release references per language, full-text search, grouped navigation, article contents, previous/next links, image zoom and copyable examples. Link the website and app sidebar to localized help and publish documentation changes through Pages.
+
 - Add **Restart LeafLoom** to the application and tray menus, preserving draft checks and orderly backend shutdown. Dev keeps Vite running, refreshes locked Python dependencies and reopens the current source; canceling the unsaved-content prompt cancels restart.
 
 - Replace the attachment dialog with a dedicated gallery/list workspace, global filename/path search, filters, sorting and inline media previews. Add one-click setup, clear background progress, safe duplicate-preserving uploads, reference-aware rename/move/recycle with recovery, and asynchronous ZIP downloads; keep project resources read-only and support narrow screens.
