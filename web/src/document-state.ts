@@ -1,6 +1,6 @@
 import {api,Note} from './api';
-import {createEditHistory,EditHistory,EditMeta,historyText,recordEdit} from './edit-history';
-export type DocumentState={root:string,path:string,key:string,text:string,etag:string,note?:Note,dirty:boolean,manualSave:boolean,stale?:boolean,pending?:Promise<void>,timer?:ReturnType<typeof setTimeout>,state:string,error:string,version:number,externalEpoch:number,readGeneration:number,listeners:Set<()=>void>,touched:number};
+import {createEditHistory,EditHistory,EditMeta,historyText,recordAction,recordEdit,trimHistory} from './edit-history';
+export type DocumentState={root:string,path:string,key:string,text:string,etag:string,note?:Note,dirty:boolean,manualSave:boolean,stale?:boolean,pending?:Promise<void>,timer?:ReturnType<typeof setTimeout>,state:string,error:string,version:number,annotationVersion?:number,annotationError?:string,externalEpoch:number,readGeneration:number,listeners:Set<()=>void>,touched:number};
 const sessions=new Map<string,DocumentState>();
 const histories=new WeakMap<DocumentState,EditHistory>();
 export function documentHistory(session:DocumentState){let history=histories.get(session);if(!history){history=createEditHistory();histories.set(session,history);}return history;}
@@ -34,8 +34,42 @@ export async function loadDocument(session:DocumentState,signal?:AbortSignal,for
 }
 export function changeDocument(session:DocumentState,text:string,meta:EditMeta={}){if(session.text===text)return;recordEdit(documentHistory(session),session.text,text,meta);session.text=text;session.dirty=true;session.state=session.manualSave?'AI 草稿 · 请手动保存':'待保存';persist(session);emit(session);clearTimeout(session.timer);session.timer=undefined;if(!session.manualSave)session.timer=setTimeout(()=>{session.timer=undefined;void saveDocument(session,false);},1000);}
 export function travelDocument(session:DocumentState,direction:'undo'|'redo'){
- const history=documentHistory(session),result=historyText(history,session.text,direction);if(!result)return false;
+ const history=documentHistory(session);if(history.busy)return false;
+ const entry=history[direction].at(-1);
+ if(entry?.action){
+  const generation=history.generation,undoIndex=history.undo.length;history.busy=true;history.sealed=true;emit(session);
+  void entry.action(direction).then(()=>{
+   const index=history[direction].indexOf(entry);if(index>=0)history[direction].splice(index,1);
+   // A new edit made while the request was pending starts a new branch.
+   if(history.generation===generation)history[direction==='undo'?'redo':'undo'].push(entry);
+   else if(direction==='redo')history.undo.splice(Math.min(undoIndex,history.undo.length),0,entry);
+   trimHistory(history);
+   session.annotationError='';
+  }).catch(error=>{session.annotationError=(error as Error).message;}).finally(()=>{history.busy=false;emit(session);});
+  return true;
+ }
+ const result=historyText(history,session.text,direction);if(!result)return false;
  history.replaying=true;try{changeDocument(session,result.text);session.externalEpoch++;emit(session);}finally{history.replaying=false;}return true;
+}
+const annotationWrites=new WeakMap<DocumentState,Promise<unknown>>();
+export async function changeAnnotation(session:DocumentState,endpoint:string,body:Record<string,unknown>,method='POST'){
+ const history=documentHistory(session);
+ const redo=history.redo,bytes=history.bytes;
+ // Reserve the step before the request: typing during a slow save stays after it.
+ const previous=annotationWrites.get(session);
+ const request=Promise.resolve(previous).catch(()=>{}).then(()=>api<{history_id:string}>(endpoint,{root:session.root,path:session.path,...body},method));
+ annotationWrites.set(session,request);
+ const refresh=()=>{session.annotationError='';session.annotationVersion=(session.annotationVersion||0)+1;emit(session);};
+ const entry=recordAction(history,async direction=>{
+  const result=await request;
+  await api('annotations/history',{root:session.root,path:session.path,history_id:result.history_id,direction});
+  refresh();
+ });
+ const generation=history.generation;
+ emit(session);
+ try{const result=await request;trimHistory(history);refresh();return result;}
+ catch(error){const index=history.undo.indexOf(entry);if(index>=0)history.undo.splice(index,1);if(history.generation===generation){history.redo=redo;history.bytes=bytes;}emit(session);throw error;}
+ finally{if(annotationWrites.get(session)===request)annotationWrites.delete(session);}
 }
 export async function saveDocument(session:DocumentState,explicit=true){
  if(session.manualSave&&!explicit)return;

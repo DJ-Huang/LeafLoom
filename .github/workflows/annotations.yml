@@ -1,0 +1,92 @@
+name: Markdown annotations
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'vault_rag/annotations.py'
+      - 'vault_rag/local_state.py'
+      - 'vault_rag/web_server.py'
+      - 'vault_rag/mcp_tools.py'
+      - 'web/src/annotations*'
+      - 'web/src/annotation-decorations.ts'
+      - 'web/src/document.tsx'
+      - 'web/src/document-state.ts'
+      - 'web/src/edit-history.ts'
+      - 'web/src/rich-editor.tsx'
+      - 'tests/test_annotation*.py'
+      - 'tests/frontend_annotation*.cjs'
+      - '.github/workflows/annotations.yml'
+  push:
+    branches: ['main']
+    paths:
+      - 'vault_rag/annotations.py'
+      - 'vault_rag/local_state.py'
+      - 'vault_rag/web_server.py'
+      - 'vault_rag/mcp_tools.py'
+      - 'web/src/annotations*'
+      - 'web/src/annotation-decorations.ts'
+      - 'web/src/document.tsx'
+      - 'web/src/document-state.ts'
+      - 'web/src/edit-history.ts'
+      - 'web/src/rich-editor.tsx'
+      - 'tests/test_annotation*.py'
+      - 'tests/frontend_annotation*.cjs'
+      - '.github/workflows/annotations.yml'
+permissions:
+  contents: read
+concurrency:
+  group: annotations-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.13.0'
+      - name: Install frontend and browser runner dependencies
+        run: |
+          npm ci --prefix web --no-audit --no-fund
+          npm ci --prefix desktop --ignore-scripts --no-audit --no-fund
+      - name: Compile Markdown editor and translations
+        run: npm run build --prefix web
+      - name: Install locked backend and pytest
+        run: |
+          uv sync --locked --no-dev
+          uv pip install --python .venv/bin/python pytest
+      - name: Python annotation, MCP permission and migration contracts
+        run: .venv/bin/python -m pytest -q tests/test_annotations.py tests/test_annotation_mcp.py
+      - name: Markdown, anchors and mixed history contracts
+        run: |
+          node tests/frontend_rich_markdown.cjs
+          node tests/frontend_annotation_anchors.cjs
+          node tests/frontend_annotation_history.cjs
+          node tests/test_ai_drafts.cjs
+      - name: Install isolated Chrome browser
+        run: npx --yes playwright@1.64.0 install --with-deps chrome
+      - name: Browser annotation interaction and source preservation
+        env:
+          LEAFLOOM_BROWSER_CHANNEL: chrome
+        run: |
+          set -euo pipefail
+          .venv/bin/python tests/editor_ui_server.py vault_rag/static > /tmp/leafloom-annotations-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:18087/ >/dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo 'Isolated editor fixture could not start'
+            exit 1
+          fi
+          node tests/frontend_annotations.cjs

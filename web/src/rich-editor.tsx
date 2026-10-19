@@ -13,6 +13,8 @@ import type {EditMeta,TextSelection as SourceSelection} from './edit-history';
 import {insertCommands,InsertId,safeLink} from './editor-catalog';
 import {MarkdownBridge,ParsedRichDocument,parseRichMarkdown} from './rich-markdown';
 import {richExtensions} from './rich-extensions';
+import {richAnnotationExtension} from './annotation-decorations';
+import {Annotation,AnnotationAction,AnnotationColor,AnnotationSelection,selectedHighlights} from './annotations';
 import {releaseRichRange,RichRange,richAnchorKey,trackRichRange,trackedRichRange} from './rich-anchors';
 import {blockAction,BlockTarget,CommandContext,convertRichBlock,insertRichAssets,insertRichCommand,matchingRichCommands,richBlock,richContext,setRichLink} from './rich-commands';
 import {uploadEditorAssets} from './editor-assets';
@@ -20,7 +22,7 @@ import {AnchorRect,BlockMenu,CommandMenu,CommandRow,FormatBar,LinkPopover,TableB
 import './rich-editor.css';
 
 type EditorFacade={state:{selection:{main:{from:number,to:number,head:number,empty:boolean}},doc:{length:number,sliceString:(from:number,to?:number)=>string}},dom:HTMLElement,dispatch:(spec:{selection?:{anchor:number,head?:number},scrollIntoView?:boolean})=>void,focus:()=>void};
-type Props={initial:string,path:string,root:string,session:DocumentState,active:boolean,onChange:(text:string,meta?:EditMeta)=>void,onOpen:OpenNote,onReady?:(view:EditorFacade)=>void,onRelease?:(view:EditorFacade)=>void,onSource:(position:number)=>void};
+type Props={initial:string,path:string,root:string,session:DocumentState,active:boolean,onChange:(text:string,meta?:EditMeta)=>void,onOpen:OpenNote,onReady?:(view:EditorFacade)=>void,onRelease?:(view:EditorFacade)=>void,onSource:(position:number)=>void,annotations?:Annotation[],onAnnotation?:(kind:AnnotationAction,color:AnnotationColor|undefined,range:AnnotationSelection)=>void,onOpenAnnotation?:(id:string)=>void};
 type ManualMenu={kind:'insert'|'block',anchor:AnchorRect,target:BlockTarget,query:string};
 type LinkState={id:string,label:string,target:string,wiki:boolean,anchor:AnchorRect};
 type DialogState={id:string,kind:'link'|'wiki'|'math'|'mermaid'|'query'|'inlineMath',label:string,value:string};
@@ -144,7 +146,7 @@ export function RichEditor(props:Props){
     onElementDragStart:()=>{setManual(undefined);setDismissed(handlers.current.contextKey);},
    });
    instance=new Editor({
-    element:host.current!,content:parsed.doc,editable:callbacks.current.active,extensions:[...richExtensions({path:props.path,onOpen:(target,anchor)=>callbacks.current.onOpen(target,anchor),onEdit:(pos,node)=>handlers.current.showSpecialDialog(pos,node),onSource:position=>{const source=bridgeRef.current?.toSource(instance!.state.doc,position)||0;callbacks.current.onSource(source);}}),drag],
+    element:host.current!,content:parsed.doc,editable:callbacks.current.active,extensions:[...richExtensions({path:props.path,onOpen:(target,anchor)=>callbacks.current.onOpen(target,anchor),onEdit:(pos,node)=>handlers.current.showSpecialDialog(pos,node),onSource:position=>{const source=bridgeRef.current?.toSource(instance!.state.doc,position)||0;callbacks.current.onSource(source);}}),richAnnotationExtension(()=>({source:callbacks.current.initial,annotations:callbacks.current.annotations||[]}),()=>bridgeRef.current,id=>callbacks.current.onOpenAnnotation?.(id)),drag],
     injectCSS:false,enableInputRules:true,enablePasteRules:true,
     editorProps:{
      attributes:{class:'markdown rich-prose',role:'textbox','aria-label':t('笔记正文'),'aria-multiline':'true','data-placeholder':t('输入 / 插入内容'),spellcheck:'true'},
@@ -155,6 +157,9 @@ export function RichEditor(props:Props){
       if(mod&&key==='z'){event.preventDefault();travelDocument(callbacks.current.session,event.shiftKey?'redo':'undo');return true;}
       if(mod&&key==='y'){event.preventDefault();travelDocument(callbacks.current.session,'redo');return true;}
       if(mod&&key==='d'){event.preventDefault();return blockAction(current,'duplicate');}
+      if(mod&&event.shiftKey&&key==='m'&&!current.state.selection.empty){
+       event.preventDefault();if(bridgeRef.current)callbacks.current.onAnnotation?.('comment',undefined,markdownSelection(current,bridgeRef.current));return true;
+      }
       if(mod&&event.shiftKey&&key==='k'){event.preventDefault();ui.showLinkDialog(view.state.selection,view.state.doc.textBetween(view.state.selection.from,view.state.selection.to));return true;}
       if(event.altKey&&event.shiftKey&&key==='f'){const button=document.querySelector<HTMLButtonElement>('.rich-format-bar button');if(button){button.focus();return true;}}
       const visible=actual&&actual.kind+':'+actual.from+':'+actual.query!==ui.dismissed&&!ui.manual&&!ui.dialog&&!ui.link;
@@ -270,6 +275,7 @@ export function RichEditor(props:Props){
   if(!props.active){cancelPending();setManual(undefined);setLink(undefined);setDialog(undefined);}
   current.setEditable(props.active&&!resyncing.current,false);refresh();
  },[props.active,editor]);
+ useEffect(()=>{if(editor&&!editor.isDestroyed)editor.view.dispatch(editor.state.tr.setMeta('leafloomAnnotationRefresh',true));},[editor,props.annotations,props.initial]);
  useEffect(()=>{
   if(!editor)return;editor.view.dom.setAttribute('aria-label',t('笔记正文'));editor.view.dom.setAttribute('data-placeholder',t('输入 / 插入内容'));
   const handle=host.current?.querySelector('.rich-block-handle');if(handle){const buttons=handle.querySelectorAll('button');buttons[0]?.setAttribute('title',t('插入内容'));buttons[0]?.setAttribute('aria-label',t('插入内容'));buttons[1]?.setAttribute('title',t('拖动或打开块操作'));buttons[1]?.setAttribute('aria-label',t('块操作'));}
@@ -296,7 +302,7 @@ export function RichEditor(props:Props){
   {editor&&props.active&&anchor&&automatic&&context?.kind==='wiki'&&<WikiMenu anchor={anchor} rows={wikiRows} selected={Math.min(selected,Math.max(0,wikiRows.length-1))} onSelected={setSelected} onChoose={chooseWiki} status={wikiStatus} onClose={()=>setDismissed(contextKey)}/>}
   {editor&&props.active&&manual?.kind==='insert'&&<CommandMenu anchor={manual.anchor} rows={rows} selected={Math.min(selected,Math.max(0,rows.length-1))} onSelected={setSelected} onChoose={chooseCommand} query={manual.query} onQuery={query=>setManual(value=>value?{...value,query}:undefined)} onClose={closeManual}/>}
   {editor&&props.active&&manual?.kind==='block'&&<BlockMenu editor={editor} target={manual.target} anchor={manual.anchor} onClose={closeManual} onInsert={()=>setManual({...manual,kind:'insert'})}/>}
-  {editor&&showFormat&&<FormatBar editor={editor} anchor={selectionRect(editor)} onLink={selectLink} onAction={refresh}/>}
+  {editor&&showFormat&&<FormatBar editor={editor} anchor={selectionRect(editor)} canClearHighlight={!!bridgeRef.current&&selectedHighlights(props.initial,props.annotations||[],markdownSelection(editor,bridgeRef.current)).length>0} onLink={selectLink} onAction={refresh} onAnnotate={(kind,color)=>{if(bridgeRef.current)callbacks.current.onAnnotation?.(kind,color,markdownSelection(editor,bridgeRef.current));}}/>}
   {editor&&tableAnchor&&<TableBar editor={editor} anchor={tableAnchor} onAction={refresh}/>}
   {editor&&props.active&&link&&<LinkPopover anchor={link.anchor} label={link.label} target={link.target} onClose={closePanels} onOpen={()=>{if(safeLink(link.target))window.open(link.target,'_blank','noopener,noreferrer');else props.onOpen(link.target);closePanels();}} onEdit={()=>{const range=trackedRichRange(editor,link.id);if(range)showLinkDialog(range,link.label,link.target,link.wiki?'wiki':'link',link.id);}} onRemove={()=>{const range=trackedRichRange(editor,link.id);if(range){if(link.wiki)editor.commands.insertContentAt(range,{type:'text',text:link.label});else editor.chain().focus().setTextSelection(range).unsetLink().run();}closePanels();}}/>}
   {status&&<div className={'editor-upload-status'+(status.error?' error':'')} role="status"><span>{status.message}</span><button type="button" aria-label={t('关闭')} onClick={()=>setStatus(undefined)}>×</button></div>}

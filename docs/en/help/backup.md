@@ -11,7 +11,7 @@ Save notes and AI drafts, pause external edits/sync, then quit normally.
 ## Steps
 
 1. Back up the complete vault, including hidden `.vault-rag/`, attachments, HTML and design projects.
-2. Versions with the upcoming [annotation feature](annotations.md) also store comments/highlights in `.vault-rag/annotations.sqlite`. History, trash and attachment-migration originals are recovery data, not disposable caches.
+2. `.vault-rag/annotations.sqlite` stores comments/highlights. History, trash and attachment-migration originals are recovery data, not disposable caches.
 3. Private settings, models, credentials and AI history live in Windows `%LOCALAPPDATA%\VaultRag` or Mac `~/Library/Application Support/VaultRag`, unless customized.
 4. Export any unique unsaved browser/desktop drafts separately and check backup readability.
 5. Restore to a new local folder for inspection before replacing existing material.

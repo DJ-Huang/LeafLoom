@@ -22,6 +22,7 @@ from vault_rag.i18n import error_code
 from vault_rag.mcp_access import McpAccess, TUNNEL_AUTH_HEADER
 from vault_rag.mcp_tools import build_workspace_mcp
 from vault_rag.note_operations import NoteOperations
+from vault_rag.annotations import Annotations
 from vault_rag.feishu import Feishu
 
 def json_response(value,status=200):
@@ -76,8 +77,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     notes=NoteOperations(config,runtime)
     from vault_rag.file_operations import FileOperations
     file_operations=FileOperations(config,runtime,notes,attachments_workspace,migrations,index_jobs)
+    annotations=Annotations(config,runtime.files)
+    # Keep browser routes, MCP note operations and other file-operation callers consistent.
+    runtime.files.annotation_changed=lambda action,**fields:getattr(annotations,action)(root=str(config.root),**fields)
     feishu=Feishu(config)
-    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token,design=design,feishu=feishu,files=file_operations)
+    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token,design=design,feishu=feishu,annotations=annotations,files=file_operations)
     mcp_app=mcp.streamable_http_app()
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -95,6 +99,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     app=FastAPI(lifespan=lifespan,docs_url=None,redoc_url=None)
     app.add_middleware(StaticCompression)
     app.state.runtime=runtime;app.state.csrf=csrf
+    app.state.annotations=annotations
     app.state.mcp_access=mcp_access;app.state.note_operations=notes
     app.state.ai=ai
     app.state.feishu=feishu
@@ -321,6 +326,57 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         response=json_response(value);response.headers['ETag']=etag;response.headers['Cache-Control']='private, no-cache'
         response.headers['Server-Timing']='file;dur='+str(round((time.perf_counter()-started)*1000,2))
         return response
+    @app.get('/api/annotations')
+    async def get_annotations(path:str,root:str):
+        return json_response(await asyncio.to_thread(annotations.list,root=root,path=path))
+    @app.post('/api/annotations')
+    async def create_annotation(request:Request):
+        body=await request.json()
+        return json_response(await asyncio.to_thread(annotations.create,
+            root=body.get('root'),path=body.get('path'),kind=body.get('type'),
+            anchor=body.get('anchor'),etag=body.get('etag'),
+            color=body.get('color','yellow'),content=body.get('content',''),
+            author=body.get('author','Local user')))
+    @app.post('/api/annotations/clear-highlights')
+    async def clear_annotation_highlights(request:Request):
+        body=await request.json()
+        return json_response(await asyncio.to_thread(annotations.clear_highlights,
+            root=body.get('root'),path=body.get('path'),etag=body.get('etag'),
+            selection=body.get('selection'),highlights=body.get('highlights')))
+    @app.post('/api/annotations/history')
+    async def travel_annotation_history(request:Request):
+        body=await request.json()
+        return json_response(await asyncio.to_thread(annotations.travel,
+            root=body.get('root'),path=body.get('path'),history_id=body.get('history_id'),
+            direction=body.get('direction')))
+    @app.patch('/api/annotations/{annotation_id}')
+    async def update_annotation(annotation_id:str,request:Request):
+        body=await request.json()
+        return json_response(await asyncio.to_thread(annotations.edit,
+            root=body.get('root'),path=body.get('path'),annotation_id=annotation_id,
+            revision=body.get('revision'),status=body.get('status'),
+            color=body.get('color'),anchor_update='anchor' in body,
+            anchor=body.get('anchor'),etag=body.get('etag')))
+    @app.delete('/api/annotations/{annotation_id}')
+    async def delete_annotation(annotation_id:str,request:Request):
+        body=await request.json()
+        return json_response(await asyncio.to_thread(annotations.remove,
+            root=body.get('root'),path=body.get('path'),annotation_id=annotation_id,
+            revision=body.get('revision')))
+    @app.post('/api/annotations/{annotation_id}/messages')
+    async def add_annotation_message(annotation_id:str,request:Request):
+        body=await request.json()
+        return json_response(await asyncio.to_thread(annotations.message,
+            root=body.get('root'),path=body.get('path'),annotation_id=annotation_id,
+            content=body.get('content'),author=body.get('author','Local user'),
+            parent_id=body.get('parent_id')))
+    @app.patch('/api/annotations/{annotation_id}/messages/{message_id}')
+    async def edit_annotation_message(annotation_id:str,message_id:str,request:Request):
+        body=await request.json()
+        return json_response(await asyncio.to_thread(annotations.edit_message,
+            root=body.get('root'),path=body.get('path'),annotation_id=annotation_id,
+            message_id=message_id,revision=body.get('revision'),content=body.get('content')))
+
     @app.post('/api/html-preview')
     async def html_preview(request:Request):
         body=await request.json()
@@ -428,9 +484,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         body=await request.json();return await asyncio.to_thread(runtime.files.create,body['path'],directory=bool(body.get('directory')),text=body.get('text',''))
     @app.post('/api/move')
     async def move(request:Request):
-        body=await request.json();return await asyncio.to_thread(runtime.files.move,body['source'],body['destination'])
+        body=await request.json()
+        return await asyncio.to_thread(runtime.files.move,body['source'],body['destination'])
     @app.post('/api/delete')
-    async def delete(request:Request):return await asyncio.to_thread(runtime.files.delete,(await request.json())['path'])
+    async def delete(request:Request):
+        return await asyncio.to_thread(runtime.files.delete,(await request.json())['path'])
     @app.get('/api/records')
     async def records(kind:str='history',path:str|None=None):return runtime.files.records(kind,path)
     @app.post('/api/trash/clear')
@@ -442,7 +500,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         except OSError as e:return json_response({'error':f'清空未完成，部分内容可能已删除，请重新打开回收区：{e}'},400)
     @app.post('/api/restore')
     async def restore(request:Request):
-        body=await request.json();return await asyncio.to_thread(runtime.files.restore,body['kind'],body['id'])
+        body=await request.json()
+        return await asyncio.to_thread(runtime.files.restore,body['kind'],body['id'])
     @app.post('/api/upload')
     async def upload(request:Request,folder:str='',name:str='',root:str|None=None,create_folder:bool=False,central:bool=False,unique:bool=False):
         from vault_rag.attachment_uploads import UploadTarget

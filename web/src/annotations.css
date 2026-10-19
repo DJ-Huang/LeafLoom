@@ -1,0 +1,54 @@
+.leafloom-annotation { cursor: pointer; border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.leafloom-highlight.leafloom-yellow { background: #fff1a6 !important; }
+.leafloom-highlight.leafloom-green { background: #d4f4d4 !important; }
+.leafloom-highlight.leafloom-blue { background: #d7eafa !important; }
+.leafloom-highlight.leafloom-pink { background: #fce0ed !important; }
+.leafloom-highlight.leafloom-purple { background: #ebdffc !important; }
+.leafloom-comment.leafloom-yellow { background: #fff8de; border-bottom: 2px solid #e8be43; }
+.leafloom-comment.leafloom-blue { background: #ebf4ff; border-bottom: 2px solid #94bcf1; }
+.leafloom-comment.leafloom-green { background: #edfaed; border-bottom: 2px solid #8dcc9c; }
+.leafloom-comment.leafloom-pink { background: #fff1f8; border-bottom: 2px solid #edb0ca; }
+.leafloom-comment.leafloom-purple { background: #f4edff; border-bottom: 2px solid #c2a2e8; }
+.leafloom-resolved.leafloom-comment { background: transparent; border-bottom: 1px dashed #bbb; }
+.leafloom-comments-panel { width: min(348px, 92vw); padding: 0; display: flex; flex-direction: column; color: var(--accent); }
+.leafloom-comments-panel .info-heading { padding: 16px 17px 8px; margin: 0; }
+.leafloom-comments-panel .info-heading strong { display: inline-flex; align-items: center; gap: 7px; color: var(--accent); font-size: 13px; }
+.leafloom-comment-head-actions { display: flex; padding: 7px 14px 12px; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); }
+.leafloom-comment-head-actions select { flex: 1; min-width: 0; padding: 7px 9px; background: white; border: 1px solid var(--line); border-radius: 6px; }
+.leafloom-comment-head-actions button { padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: white; white-space: nowrap; }
+.leafloom-comments-scroll { overflow: auto; flex: 1; min-height: 0; padding: 12px; }
+.leafloom-comment-card { border: 1px solid #e6e5e1; border-radius: 9px; padding: 12px; margin-bottom: 12px; background: white; overflow-wrap: anywhere; font-size: 12px; }
+.leafloom-comment-card.selected { border-color: #98add4; box-shadow: 0 0 0 2px #e4effd; }
+.leafloom-comment-card-head { display: flex; gap: 8px; align-items: center; margin-bottom: 9px; }
+.leafloom-comment-card-head strong { font-size: 12px; }
+.leafloom-comment-dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: #e8be43; }
+.leafloom-comment-dot.leafloom-blue { background: #94bcf1; }
+.leafloom-comment-dot.leafloom-green { background: #8dcc9c; }
+.leafloom-comment-dot.leafloom-pink { background: #edb0ca; }
+.leafloom-comment-dot.leafloom-purple { background: #c2a2e8; }
+.leafloom-resolved-label { margin-left: auto; color: var(--muted); }
+.leafloom-quoted { display: block; padding: 7px 10px; width: 100%; background: #f7f7f5; color: #6f6f67; border: 0; border-left: 3px solid #d1d0cc; border-radius: 3px; text-align: left; margin: 6px 0 11px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 120px; overflow: auto; }
+.leafloom-quoted:hover { background: #f0f0ed; }
+.leafloom-lost,.leafloom-comment-error { color: #b33a36; }
+.leafloom-message { padding: 8px 0; border-top: 1px solid #f0eeeb; }
+.leafloom-message-meta { display: flex; gap: 7px; align-items: baseline; justify-content: space-between; }
+.leafloom-message-meta time,.leafloom-minor { font-size: 11px; color: var(--muted); }
+.leafloom-message p { white-space: pre-wrap; line-height: 1.55; margin: 7px 0; }
+.leafloom-minor { border: 0; background: none; padding: 3px; }
+.leafloom-comment-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.leafloom-comment-actions button,.leafloom-comment-form button { display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); border-radius: 5px; background: white; padding: 5px 8px; font-size: 11px; }
+.leafloom-comment-actions button:hover,.leafloom-comment-form button:hover { background: var(--hover); }
+.leafloom-comment-form textarea,.leafloom-draft textarea { display: block; box-sizing: border-box; width: 100%; padding: 9px; resize: vertical; min-height: 55px; margin: 9px 0 5px; border: 1px solid var(--line); border-radius: 6px; font: inherit; line-height: 1.5; }
+.leafloom-draft { flex: none; margin: 10px 12px 0; border-color: #a9c8ea; }
+.leafloom-draft .leafloom-quoted { max-height: 70px; }
+.leafloom-comment-empty { padding: 15px 8px; }
+.rich-format-bar .leafloom-highlight-actions { display: inline-flex; gap: 3px; align-items: center; }
+.rich-format-bar .leafloom-color-button { width: 21px; height: 21px; min-width: 21px; border: 1px solid #d3d1cb; border-radius: 50%; padding: 0; margin: 0 1px; }
+.rich-format-bar .leafloom-color-button[aria-label] { color: transparent; }
+.rich-format-bar .leafloom-clear-highlight { background: linear-gradient(135deg, white 46%, #9b9389 47%, #9b9389 53%, white 54%); }
+.rich-format-bar .leafloom-color-button.leafloom-yellow { background: #f7df84; }
+.rich-format-bar .leafloom-color-button.leafloom-green { background: #bee8ba; }
+.rich-format-bar .leafloom-color-button.leafloom-blue { background: #bfdcf4; }
+.rich-format-bar .leafloom-color-button.leafloom-pink { background: #f2c8dc; }
+.rich-format-bar .leafloom-color-button.leafloom-purple { background: #dfc7f3; }
+@media (max-width: 740px) { .leafloom-comments-panel { position: absolute; right: 0; inset-block: 0; z-index: 15; box-shadow: -8px 0 24px #00000018; width: min(348px,94vw); } .rich-format-bar .leafloom-highlight-actions { gap: 1px; } }

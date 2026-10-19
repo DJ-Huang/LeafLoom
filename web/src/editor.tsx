@@ -18,6 +18,8 @@ import './editor.css';
 import {DocumentState,documentHistory,travelDocument} from './document-state';
 import {EditMeta,textChange} from './edit-history';
 import {editorOffset,editorText,sourceOffset} from './source-offsets';
+import {Annotation} from './annotations';
+import {sourceAnnotationExtensions} from './annotation-decorations';
 export const openSearchPanel=(view:any)=>cmOpenSearchPanel(view.sourceView||view);
 
 // IME confirmation belongs to the browser, including the interval before its
@@ -32,12 +34,12 @@ const compositionGuard=ViewPlugin.fromClass(class{
 });
 
 const phrases=()=>EditorState.phrases.of({'Find':t('查找'),'Replace':t('替换'),'next':t('下一个'),'previous':t('上一个'),'all':t('全部'),'match case':t('区分大小写'),'regexp':t('正则表达式'),'by word':t('整词'),'close':t('关闭'),'replace':t('替换'),'replace all':t('全部替换')});
-type Props={initial:string,path:string,root:string,onChange:(text:string,meta?:EditMeta)=>void,onOpen:OpenNote,source:boolean,session?:DocumentState,active?:boolean,onReady?:(view:any)=>void,onRelease?:(view:any)=>void};
-export function LiveEditor({initial,path,root,onChange,onOpen,source,session,active=true,onReady,onRelease}:Props){
+type Props={initial:string,path:string,root:string,onChange:(text:string,meta?:EditMeta)=>void,onOpen:OpenNote,source:boolean,session?:DocumentState,active?:boolean,onReady?:(view:any)=>void,onRelease?:(view:any)=>void,annotations?:Annotation[],onOpenAnnotation?:(id:string)=>void};
+export function LiveEditor({initial,path,root,onChange,onOpen,source,session,active=true,onReady,onRelease,annotations,onOpenAnnotation}:Props){
  const locale=useLocale(),host=useRef<HTMLDivElement>(null),view=useRef<EditorView|null>(null);
- const callbacks=useRef({onChange,onOpen,active});callbacks.current={onChange,onOpen,active};
+ const callbacks=useRef({onChange,onOpen,active,annotations,onOpenAnnotation});callbacks.current={onChange,onOpen,active,annotations,onOpenAnnotation};
  const attachments=useRef<ReturnType<typeof attachmentController>|undefined>(undefined);
- const language=useRef(new Compartment());
+ const language=useRef(new Compartment()),annotationCompartment=useRef(new Compartment());
  const syncing=useRef(false),composition=useRef(''),raw=useRef(initial);
  const [link,setLink]=useState<{id:string,label:string}>(),[status,setStatus]=useState<{message:string,error?:boolean}>();
  const closeLink=()=>{const current=view.current;if(current&&link){current.dispatch({effects:removeAnchor.of(link.id)});current.focus();}setLink(undefined);};
@@ -55,7 +57,7 @@ export function LiveEditor({initial,path,root,onChange,onOpen,source,session,act
    insertSnippet(editor,id,range);if(id==='wiki')startCompletion(editor);
   };
   const state=EditorState.create({doc:initial,extensions:[
-   editingMarkdown(),...(session?[]:[history()]),search(),compositionGuard,language.current.of(phrases()),EditorView.lineWrapping,
+   editingMarkdown(),...(session?[]:[history()]),search(),compositionGuard,language.current.of(phrases()),annotationCompartment.current.of(sourceAnnotationExtensions(()=>({source:raw.current,annotations:callbacks.current.annotations||[]}),id=>callbacks.current.onOpenAnnotation?.(id))),EditorView.lineWrapping,
    keymap.of([
     ...(session?[
      {key:'Mod-z',run:()=>{travelDocument(session,'undo');return true;}},
@@ -87,6 +89,7 @@ export function LiveEditor({initial,path,root,onChange,onOpen,source,session,act
   onReady?.(facade);
   return()=>{attachments.current?.destroy();attachments.current=undefined;onRelease?.(facade);view.current=null;editor.destroy();};
  },[path,root,source]);
+ useEffect(()=>{const current=view.current;if(current)current.dispatch({effects:annotationCompartment.current.reconfigure(sourceAnnotationExtensions(()=>({source:raw.current,annotations:callbacks.current.annotations||[]}),id=>callbacks.current.onOpenAnnotation?.(id)))});},[annotations,source]);
  useEffect(()=>{const current=view.current;if(!current||!session||initial===raw.current)return;const change=textChange(current.state.doc.toString(),editorText(initial));raw.current=initial;if(!change)return;const selection=documentHistory(session).bookmark;syncing.current=true;try{current.dispatch({changes:change,...(selection?{selection:EditorSelection.single(editorOffset(initial,selection.from),editorOffset(initial,selection.to)),scrollIntoView:true}:{})});}finally{syncing.current=false;}},[initial,session?.externalEpoch]);
  useEffect(()=>{const editor=view.current;if(editor){editor.dispatch({effects:[language.current.reconfigure(phrases()),...(!source?[refreshEditorUI.of(null)]:[])]});if(!source)closeCompletion(editor);}},[locale,source]);
  useEffect(()=>{const editor=view.current;if(editor&&!source){editor.dispatch({effects:editorVisible.of(active)});if(!active){closeCompletion(editor);attachments.current?.abortAll();setLink(undefined);}}},[active,source]);

@@ -3,8 +3,8 @@ export type TextSelection={from:number,to:number};
 export type EditMeta={kind?:'typing'|'command'|'source'|'external',group?:string,before?:TextSelection,after?:TextSelection};
 export type TextChange={from:number,to:number,insert:string};
 type Step={forward:TextChange,backward:TextChange};
-type Entry={steps:Step[],kind:string,group?:string,time:number,before:TextSelection,after:TextSelection};
-export type EditHistory={undo:Entry[],redo:Entry[],bookmark?:TextSelection,replaying:boolean,sealed:boolean,bytes:number};
+type Entry={steps:Step[],kind:string,group?:string,time:number,before:TextSelection,after:TextSelection,action?:(direction:'undo'|'redo')=>Promise<void>};
+export type EditHistory={undo:Entry[],redo:Entry[],bookmark?:TextSelection,replaying:boolean,sealed:boolean,bytes:number,busy?:boolean,generation?:number};
 export const createEditHistory=():EditHistory=>({undo:[],redo:[],replaying:false,sealed:false,bytes:0});
 export function textChange(before:string,after:string):TextChange|null{
  if(before===after)return null;
@@ -17,6 +17,20 @@ export function textChange(before:string,after:string):TextChange|null{
  return {from,to:end,insert:after.slice(from,nextEnd)};
 }
 export const applyTextChange=(text:string,change:TextChange)=>text.slice(0,change.from)+change.insert+text.slice(change.to);
+function branch(history:EditHistory){
+ history.bytes-=history.redo.reduce((n,entry)=>n+entry.steps.reduce((m,step)=>m+(step.forward.insert.length+step.backward.insert.length)*2,0),0);
+ history.redo=[];history.generation=(history.generation||0)+1;
+}
+export function trimHistory(history:EditHistory){
+ while(history.undo.length>200||history.bytes>8*1024*1024&&history.undo.length>1){
+  const removed=history.undo.shift()!;history.bytes-=removed.steps.reduce((n,s)=>n+(s.forward.insert.length+s.backward.insert.length)*2,0);
+ }
+}
+export function recordAction(history:EditHistory,action:NonNullable<Entry['action']>){
+ const selection=history.bookmark||{from:0,to:0};
+ const entry:Entry={steps:[],kind:'annotation',time:Date.now(),before:selection,after:selection,action};
+ history.undo.push(entry);branch(history);history.sealed=true;return entry;
+}
 export function recordEdit(history:EditHistory,before:string,after:string,meta:EditMeta={}){
  const forward=textChange(before,after);if(!forward||history.replaying)return;
  const time=Date.now(),kind=meta.kind||'command',last=history.undo.at(-1);
@@ -26,14 +40,12 @@ export function recordEdit(history:EditHistory,before:string,after:string,meta:E
  const typing=!meta.group&&!last?.group&&(kind==='typing'||kind==='source')&&last?.kind===kind&&time-last.time<800&&last.after.from===start.from&&last.after.to===start.to;
  if(last&&!history.sealed&&(sameComposition||typing)){last.steps.push({forward,backward});last.after=end;last.time=time;}
  else history.undo.push({steps:[{forward,backward}],kind,group:meta.group,time,before:start,after:end});
- history.bytes-=history.redo.reduce((n,entry)=>n+entry.steps.reduce((m,step)=>m+(step.forward.insert.length+step.backward.insert.length)*2,0),0);
- history.redo=[];history.sealed=false;history.bookmark=end;history.bytes+=(forward.insert.length+backward.insert.length)*2;
+ branch(history);history.sealed=false;history.bookmark=end;history.bytes+=(forward.insert.length+backward.insert.length)*2;
  // A long open document must not retain an unbounded second copy of its text.
- while(history.undo.length>200||history.bytes>8*1024*1024&&history.undo.length>1){
-  const removed=history.undo.shift()!;history.bytes-=removed.steps.reduce((n,s)=>n+(s.forward.insert.length+s.backward.insert.length)*2,0);
- }
+ trimHistory(history);
 }
 export function historyText(history:EditHistory,text:string,direction:'undo'|'redo'){
+ if(history.busy||history[direction].at(-1)?.action)return null;
  const entry=history[direction].pop();if(!entry)return null;
  const steps=direction==='undo'?[...entry.steps].reverse():entry.steps;
  for(const step of steps)text=applyTextChange(text,direction==='undo'?step.backward:step.forward);

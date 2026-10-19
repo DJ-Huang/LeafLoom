@@ -17,7 +17,7 @@ Prepare a local folder, or try the built-in fictional demo.
 
 ## What to expect
 
-Notes remain in their original folder. Its `.vault-rag/` holds indexes, history and trash.
+Notes remain in their original folder. Its `.vault-rag/` holds indexes, history, comments and trash.
 
 ## If it does not work
 
