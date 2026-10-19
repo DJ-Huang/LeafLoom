@@ -1,6 +1,6 @@
 {
   "name": "leafloom-desktop",
-  "version": "0.1.5",
+  "version": "0.1.4",
   "private": true,
   "description": "LeafLoom: a local-first knowledge base and personal wiki for Markdown and HTML, with MCP, Skills, AI Chat and ChatGPT integration",
   "author": "DJ Huang",
