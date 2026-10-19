@@ -15,7 +15,7 @@ from vault_rag.note_operations import NoteError
 from vault_rag.mcp_access import TUNNEL_AUTH_HEADER, McpAccessError
 
 
-def build_workspace_mcp(config, runtime, operations, access, legacy_token, design=None, feishu=None):
+def build_workspace_mcp(config, runtime, operations, access, legacy_token, design=None, feishu=None, annotations=None):
     mcp = FastMCP('vault-rag', host='127.0.0.1', port=config.data.get('port', 18080),
                   stateless_http=True, json_response=True)
 
@@ -214,6 +214,51 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         Rejects changes since preview, occupied trash destinations and edits made after a move.
         """
         return await call(ctx, operations.restore, kind, id, workspace_revision, expected_revision, record_revision, write=True)
+
+    if annotations is not None:
+        @tool()
+        async def vault_list_annotations(path: str, ctx: Context) -> CallToolResult:
+            """Read a note's separate highlights and comment threads. Does not change RAG content."""
+            return await call(ctx, annotations.list, root=str(config.root), path=path)
+
+        @tool(write=True, additive=True)
+        async def vault_add_annotation(path: str, workspace_revision: str, ctx: Context,
+                                       kind: Literal['highlight','comment'] = 'comment',
+                                       content: str = '', anchor: dict[str, Any] | None = None,
+                                       etag: str | None = None, color: str = 'yellow') -> CallToolResult:
+            """Create a page comment or text annotation after permission and revision checks.
+            For inline annotations provide UTF-16 from/to, exact text, prefix, suffix and raw file etag.
+            """
+            def execute():
+                operations.check_workspace(workspace_revision)
+                return {'ok': True, **annotations.create(
+                    root=str(config.root), path=path, kind=kind, content=content,
+                    anchor=anchor, etag=etag, color=color, author='AI assistant')}
+            return await call(ctx, execute, write=True)
+
+        @tool(write=True, additive=True)
+        async def vault_reply_annotation(path: str, annotation_id: str, content: str,
+                                         workspace_revision: str, ctx: Context,
+                                         parent_id: str | None = None) -> CallToolResult:
+            """Append to a comment thread with explicit note-write permission."""
+            def execute():
+                operations.check_workspace(workspace_revision)
+                return {'ok': True, **annotations.message(
+                    root=str(config.root), path=path, annotation_id=annotation_id,
+                    content=content, parent_id=parent_id, author='AI assistant')}
+            return await call(ctx, execute, write=True)
+
+        @tool(write=True)
+        async def vault_set_annotation_status(path: str, annotation_id: str,
+                                              revision: int, workspace_revision: str,
+                                              status: Literal['open','resolved'], ctx: Context) -> CallToolResult:
+            """Resolve/reopen an annotation using its read-time revision."""
+            def execute():
+                operations.check_workspace(workspace_revision)
+                return {'ok': True, **annotations.edit(
+                    root=str(config.root), path=path, annotation_id=annotation_id,
+                    revision=revision, status=status)}
+            return await call(ctx, execute, write=True)
 
     @tool()
     async def vault_links(path: str, ctx: Context, limit: int = 50, cursor: str = '') -> CallToolResult:

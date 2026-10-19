@@ -131,7 +131,7 @@ class LocalConfig:
 
 class Files:
     def __init__(self,config:LocalConfig):
-        self.config=config; self.lock=threading.RLock();self.changed=lambda *paths:None;self.migration_active=False
+        self.config=config; self.lock=threading.RLock();self.changed=lambda *paths:None;self.annotation_changed=lambda action,**kwargs:None;self.migration_active=False
         from vault_rag.attachment_index import AttachmentIndex
         self.attachments=AttachmentIndex(self)
     def ensure_mutable(self):
@@ -285,7 +285,7 @@ class Files:
             if expected_snapshot is not None and snapshot!=expected_snapshot:raise ConflictError('目录内容已变化，请重新预览')
             key=uuid.uuid4().hex;trash=self.state_path('trash',key);trash.mkdir(parents=True)
             atomic_write(trash/'record.json',json.dumps({'id':key,'path':rel,'time':time.time()},ensure_ascii=False).encode())
-            move_exclusive(p,trash/'content');self.changed(rel);return {'id':key,'path':rel}
+            move_exclusive(p,trash/'content');self.annotation_changed('archive',path=rel,trash_key=key);self.changed(rel);return {'id':key,'path':rel}
     def records(self,kind,rel=None,*,limit=200):
         if kind not in ('history','trash','operations'):raise ValueError('记录类型无效')
         d=self.state_path(kind);out=[]
@@ -305,7 +305,9 @@ class Files:
             if expected_root!=str(root):raise ConflictError('关联目录已切换，未清空回收区；请重新打开回收区')
             state=root/'.vault-rag';trash=state/'trash'
             if is_link(state) or is_link(trash):raise ValueError('回收区不能指向符号链接或 junction')
-            if not trash.exists():return {'deleted':0}
+            if not trash.exists():
+                self.annotation_changed('purge_trash')
+                return {'deleted':0}
             if not trash.is_dir():raise ValueError('回收区不是目录')
             entries=list(trash.iterdir())
             # Validate every entry before deleting anything; never traverse linked records.
@@ -313,6 +315,7 @@ class Files:
             for entry in entries:
                 if entry.is_dir():shutil.rmtree(entry)
                 else:entry.unlink()
+            self.annotation_changed('purge_trash')
             return {'deleted':len(entries)}
     def restore(self,kind,key):
         if kind not in ('history','trash','operations') or not re.fullmatch(r'[a-f0-9]{32}',key):raise ValueError('恢复记录无效')
@@ -333,6 +336,7 @@ class Files:
                 replacement=content.read_bytes();self._history(p)
                 if (p.read_bytes() if p.exists() else None)!=before:raise ConflictError('笔记在恢复前发生变化，未覆盖')
                 atomic_write(p,replacement)
+            if kind=='trash':self.annotation_changed('restore',trash_key=key)
             self.changed(record['path']);return {'path':record['path']}
     def resolve(self,target,source='',*,paths=None,names=None,canonical=None):
         target=unquote(split_link(target)[0]).strip().strip('<>')
@@ -487,6 +491,7 @@ class Files:
                     self.changed(source,destination,*edits)
                     raise ConflictError('移动未完成，已保留外部修改；操作记录：'+key) from None
                 shutil.rmtree(d);raise
+            self.annotation_changed('move',source=source,destination=destination)
             self.changed(source,destination,*edits);return {'path':destination,'updated_links':len(edits),'operation_id':key}
     def undo_move(self,d,record):
         if record.get('state','completed')!='completed':raise ConflictError('操作未完整完成，请检查操作记录并手动恢复')
@@ -526,4 +531,6 @@ class Files:
             atomic_write(d/'record.json',json.dumps(record,ensure_ascii=False).encode())
             self.changed(record['path'],record['destination'],*backups)
             raise ConflictError('恢复未完成，操作记录：'+record['id']) from None
-        shutil.rmtree(d);self.changed(record['path'],record['destination'],*[item['path'] for item in record['edits']]);return {'path':record['path']}
+        shutil.rmtree(d)
+        self.annotation_changed('move',source=record['destination'],destination=record['path'])
+        self.changed(record['path'],record['destination'],*[item['path'] for item in record['edits']]);return {'path':record['path']}

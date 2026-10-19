@@ -1,5 +1,9 @@
 # Complete note access over MCP
 
+## Annotation and comment MCP tools
+
+When the connected vault permits local note access, `vault_list_annotations(path)` retrieves Markdown/TXT highlights and independent comment threads. Explicit note-write permission is required for `vault_add_annotation(path,workspace_revision,kind,content,anchor,etag,color)`, `vault_reply_annotation(path,annotation_id,content,workspace_revision,parent_id)`, and `vault_set_annotation_status(path,annotation_id,revision,workspace_revision,status)`. Page comments need no text anchor; inline comments require a current raw file etag and UTF-16 source quote/position/context. The note is never automatically edited, and annotation text is never automatically added to RAG. See [annotation design](ANNOTATIONS.md).
+
 The production Streamable HTTP endpoint remains `http://127.0.0.1:18080/mcp`
 (port follows configuration). Existing clients retain the original five read-only
 capabilities. The internal assistant's `/ai-mcp` still uses its own session and

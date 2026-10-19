@@ -84,6 +84,14 @@ Hover beside a block to insert with **+**, or use its handle to convert, duplica
 
 Files remain ordinary Markdown; unchanged blocks and document properties retain their original source. The page and source views share undo history. Equations and Mermaid stay rendered and have dedicated editing panels. Complex or unsupported content is preserved for display and can be located in source. Changing the interface language keeps the editor and its history. Tables use simple Markdown structures, without merged cells or nested blocks inside cells.
 
+## Text highlights and comments
+
+In a Markdown document, select text to reveal five **highlight** colors and **Add comment** in the floating formatting bar. Choose a color to mark a passage. To restore plain text, select highlighted text and choose **Clear highlight** (the slashed circle before the colors), also available in the context menu. Only the selected highlight is removed; outside portions and comments remain. One clear action is one undo/redo step. Click comment (or press `Ctrl/⌘+Shift+M`) to begin a thread. Use the toolbar's **Comments** button to see the right panel, add a **Page comment** without selecting text, reply to threads, edit your messages, resolve/reopen, filter or delete.
+
+Click a quoted snippet to jump to the original passage. Comments try to follow moved text using the quote and its context; deleted or ambiguous quotes are flagged **Text no longer found**, so you can select a new range and **Relink to selected text**. The same decorations appear in Markdown source mode without modifying Markdown syntax. Highlights and comments share the page/source undo history: use the toolbar buttons or `Ctrl/⌘+Z` to undo and `Ctrl/⌘+Shift+Z` (or `Ctrl+Y`) to redo. Creation, deletion (including replies), message edits, resolve/reopen and relinking can be reversed in order with text edits during the current session. Comment input fields keep their own text undo. If another window or MCP changed a thread, undo/redo stops without overwriting it. Normal unsaved edits must save first; AI manual drafts must be saved explicitly.
+
+Highlights and comments are **user data**, not a disposable index: back up `.vault-rag/annotations.sqlite` alongside your notes. When moved or restored through LeafLoom, note comments retain their identity. The first iteration supports annotated Markdown (the API also supports plain TXT); HTML projects and Design Studio are not yet covered. See [annotation architecture](../ANNOTATIONS.md).
+
 ## Open HTML projects, websites and Design Studio
 
 1. Open a local `.html` or `.htm` file from the directory. Confirm its **Project folder** and choose **Save and open**. Select a folder containing the entry and all companion resources; the website's `/` maps to this folder. An empty folder value uses the connected knowledge folder's root.

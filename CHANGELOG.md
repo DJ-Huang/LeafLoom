@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+- Add **Clear highlight** to the floating toolbar and text context menu. Clear only selected highlight ranges, preserve outside colors and comment threads, and undo/redo a multi-highlight clear as one action.
+
+- Support undo/redo for highlights, comments, replies, edits, resolve/reopen, relinking and deletion in the shared rich/source document history. Add toolbar controls and guard replay against concurrent annotation changes.
+
+- Add local-first Markdown text highlights and threaded inline/page comments with reply, edit, resolve/reopen, source decorations, quoted-text reattachment and a right comment panel. Store durable annotations separately from Markdown in per-vault SQLite and preserve comment identity across LeafLoom note moves/trash/restore, including MCP operations. Add explicit permission-gated MCP annotation tools.
+
 - Add a three-language public help center with 39 task guides and four guide/release references per language, full-text search, grouped navigation, article contents, previous/next links, image zoom and copyable examples. Link the website and app sidebar to localized help and publish documentation changes through Pages.
 
 - Add **Restart LeafLoom** to the application and tray menus, preserving draft checks and orderly backend shutdown. Dev keeps Vite running, refreshes locked Python dependencies and reopens the current source; canceling the unsaved-content prompt cancels restart.
