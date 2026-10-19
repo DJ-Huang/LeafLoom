@@ -12,6 +12,13 @@ import time
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
+try:
+    from scripts.build_docs import Documentation
+except ModuleNotFoundError as error:
+    if error.name != "scripts":
+        raise
+    from build_docs import Documentation
+
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "https://github.com/DJ-Huang/LeafLoom"
 DEFAULT_URL = "https://dj-huang.github.io/LeafLoom/"
@@ -135,8 +142,7 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
             except KeyError:
                 raise ValueError(f"Missing {lang} translation: site.{key}") from None
 
-        guide_path = f"docs/{lang}/GUIDE.md"
-        guide_url = f"{REPO}/blob/main/{guide_path}"
+        guide_url = f"{base}docs/{lang}/"
         language_links = []
         alternates = []
         for other, (label, other_route, _) in LANGUAGES.items():
@@ -172,7 +178,8 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
             "about_url": escape(base + route + "about/"),
             "home": escape(base + route), "canonical": escape(base_url + route),
             "language_links": "".join(language_links), "alternates": "\n  ".join(alternates),
-            "guide_url": guide_url, "ai_url": f"{REPO}/blob/main/docs/{lang}/AI.md",
+            "guide_url": guide_url, "ai_url": f"{base}docs/{lang}/ai-chat/",
+            "privacy_url": f"{base}docs/{lang}/privacy/",
             "release_url": escape(info["url"]), "release_tag": escape(info["tag"]),
             "hero_downloads": download_button("windows") + download_button("macos", secondary=True),
             "platforms": "".join(platforms), "features": "\n".join(features), "principles": principles,
@@ -202,7 +209,9 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
         target.mkdir(exist_ok=True)
         for shot in SHOTS:
             shutil.copy2(ROOT / f"assets/screenshots/{lang}/{shot}.png", target / f"{shot}.png")
-    urls = "".join(f"<url><loc>{escape(base_url + route)}</loc></url>" for _, route, _ in LANGUAGES.values() for route in (route, route + "about/"))
+    help_urls = Documentation(base_url).build(output)
+    urls = "".join(f"<url><loc>{escape(url)}</loc></url>" for url in
+                   [base_url + page for _, route, _ in LANGUAGES.values() for page in (route, route + "about/")] + help_urls)
     (output / "sitemap.xml").write_text(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>\n', encoding="utf-8")
     (output / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {base_url}sitemap.xml\n", encoding="utf-8")
     (output / ".nojekyll").touch()

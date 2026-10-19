@@ -113,6 +113,19 @@ default history-list page size. Upload bytes remain in the project for redo.
 Workspace metadata/history and versioned shared items are under the same
 private `design-studio` directory.
 
+History ownership compares the vault-relative project directory; the absolute
+vault root retained in existing owner records is informational. A Windows/macOS
+root change after folder sync does not require a new project ID or rewrite the
+owner on reads. Duplicate IDs at different relative directories remain blocked,
+including during relocation and permanent trash deletion. Content-hash checks
+and interrupted-save recovery remain in force.
+
+For external folder sync, close LeafLoom on the sending device, sync the entire
+project (including assets) and its `.vault-rag/design-studio` history, then wait
+for completion before opening it on the receiving device. Keep the project at
+the same vault-relative path and use the fixed version on both devices. Do not
+edit on both devices simultaneously; file sync does not merge SQLite histories.
+
 Writes require the current project revision and a unique operation ID. Retrying
 an identical operation ID returns its receipt; reusing it for different work is
 rejected. External JSON changes and version conflicts stop overwrites. The UI

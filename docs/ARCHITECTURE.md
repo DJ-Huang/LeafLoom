@@ -2,6 +2,8 @@
 
 [架构与工作流程图](assets/workflow.svg)
 
+公开官网与帮助中心使用独立静态构建：`scripts/build_site.py` 调用 `scripts/build_docs.py`，从三语 Markdown、`docs/help/navigation.json` 和语言目录生成 `/docs/{en,zh-CN,ja}/`、搜索数据与 sitemap，再由 Pages 发布。`site/help/` 提供展示与渐进增强，搜索仅加载当前语言的公开文章 JSON，不调用应用 API 或访问知识库。应用侧栏只打开外部帮助链接。内容维护与构建依赖见[官网说明](WEBSITE.md#help-center)。
+
 ## 进程和接口
 
 Dev 和安装版共用 Tunnel 配置、应用启动／退出生命周期；存在已注册安装时，Dev 选择安装版的运行文件，纯源码环境使用已验证的仓库运行文件。`tunnel_owner.py` 用共享状态目录内的操作系统文件锁限制受管运行时单实例，随进程退出自动释放；`tunnel.py` 在退出和错误路径始终关闭持有的进程 Job。Windows Job 在后端异常退出时回收子进程。独立手动启动的旧 CLI 不会被当作已授权实例复用。
@@ -20,6 +22,12 @@ Tunnel 内部凭据通过 `X-LeafLoom-Tunnel-Authorization` 注入发现与业�
 - HTTP MCP：`http://127.0.0.1:18080/mcp`
 - 健康检查：`/healthz`；启动入口随后使用本机令牌验证 `/api/status`，避免复用另一安装实例。
 - 文件写入采用版本校验、草稿保留、原子替换；历史、移动回滚和回收区位于知识目录的 `.vault-rag`。
+
+## 通用附件 MCP
+
+公共 HTTP MCP 与 ChatGPT Tunnel 共用 `vault_files`（只读）和 `vault_files_update`（修改）两个入口，参数由 `file_commands.py` 的可辨识联合类型限制。`file_operations.py` 适配现有附件索引、整理恢复日志与 ZIP 任务；共用 `attachment_uploads.py` 的流式暂存与不覆盖发布逻辑。ChatGPT 文件参数元数据随工具发现返回，宿主文件引用通过 `file_downloads.py` 进行有界 HTTPS 下载，逐跳验证公网地址并固定连接地址和 TLS 主机名。
+
+传输归属绑定连接凭据代际和知识库版本，原文件读取还绑定文件版本。后台任务在安全边界重新检查当前权限；恢复记录保留在原知识库。上传操作回执保存在 `.vault-rag/file-receipts/`，原始上传字节只在私有临时目录暂存。网络读取和大文件复制期间不持有全局权限锁，发布前短暂持锁重新校验。浏览器与 MCP 发起的恢复动作各自重新授权，内部失败恢复不依赖已撤销的旧连接。
 
 ## 飞书接入
 

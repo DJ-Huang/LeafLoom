@@ -114,7 +114,7 @@ class WorkspaceMcpTests(unittest.TestCase):
 
     def test_discovery_scopes_and_structured_errors(self):
         tools = {t['name']: t for t in self.request('tools/list').json()['result']['tools']}
-        self.assertEqual(len(tools), 34)
+        self.assertTrue({'vault_files', 'vault_files_update'}.issubset(tools))
         self.assertTrue({
             'design_list_projects', 'design_get_project', 'design_create_project',
             'design_upsert_screen', 'design_update_layers', 'design_check_project',

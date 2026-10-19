@@ -2,13 +2,17 @@
 
 [Project home](../README.md) · [中文首页](zh-CN/README.md) · [日本語ホーム](ja/README.md)
 
+**Help center · 帮助中心 · ヘルプセンター:** [English](https://dj-huang.github.io/LeafLoom/docs/en/) · [中文](https://dj-huang.github.io/LeafLoom/docs/zh-CN/) · [日本語](https://dj-huang.github.io/LeafLoom/docs/ja/)
+
+The public help center has 39 task guides and four full guide/release references per language, with topic navigation, local full-text search, article contents, previous/next navigation, image zoom and copyable examples. Sources live in `docs/{en,zh-CN,ja}/help/`; [navigation.json](help/navigation.json) lists every article. The website build validates and publishes them with the existing guides. See [website maintenance](WEBSITE.md#help-center).
+
 ## Start here · 从这里开始 · はじめに
 
 | Topic / 主题 / 内容 | English | 中文 | 日本語 |
 | --- | --- | --- | --- |
 | Install, write Markdown, open HTML projects, recover drafts | [User guide](en/GUIDE.md) | [使用指南](zh-CN/GUIDE.md) | [利用ガイド](ja/GUIDE.md) |
 | Highlights, inline and page comments | [Annotations](ANNOTATIONS.md) | [标注与评论](zh-CN/GUIDE.md#行内标注与评论) | [ハイライトとコメント](ja/GUIDE.md#ハイライトとコメント) |
-| AI Chat, MCP and Skills| AI Chat, MCP and Skills | [AI connections](en/AI.md) | [AI 接入](zh-CN/AI.md) | [AI 連携](ja/AI.md) |
+| AI Chat, MCP and Skills | [AI connections](en/AI.md) | [AI 接入](zh-CN/AI.md) | [AI 連携](ja/AI.md) |
 | Attachment workspace, previews, organization and recovery | [Attachments](en/GUIDE.md#attachment-manager) | [附件管理](zh-CN/GUIDE.md#附件管理) | [添付ファイル](ja/GUIDE.md#添付ファイルの管理) |
 | Change history | [Changelog](../CHANGELOG.md) | [更新记录](zh-CN/CHANGELOG.md) | [変更履歴](ja/CHANGELOG.md) |
 | LeafLoom 0.1.3 release notes | [Release notes](en/RELEASE_NOTES_0.1.3.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.3.md) | [リリースノート](ja/RELEASE_NOTES_0.1.3.md) |
@@ -28,7 +32,7 @@
 - [Bound design content, language variants and static publishing](DESIGN_STUDIO.md#bound-content-variants-and-static-publishing)
 - [Folder organization and indexing scope](VAULT_ORGANIZATION.md)
 - [AI assistant implementation](AI_ASSISTANT.md)
-- [Complete MCP tools, credentials and note workflows](MCP.md)
+- [Complete MCP tools, credentials, note workflows and the two general file tools](MCP.md)
 - [Feishu / Lark connection, CLI ownership and MCP tools](FEISHU.md)
 - [Local access and privacy boundaries](SECURITY.md)
 - [Architecture and workflow](ARCHITECTURE.md)

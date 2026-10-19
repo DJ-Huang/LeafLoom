@@ -55,6 +55,7 @@ class AttachmentMigrations:
         self.lock = threading.RLock()
         self.threads = {}
         self.cancels = {}
+        self.guards = {}
 
     def _files(self):
         with self.config.lock:
@@ -109,6 +110,7 @@ class AttachmentMigrations:
         result['blockers'] = job.get('blockers',[])[:200]
         result['exclusions'] = job.get('exclusions',[])[:200]
         result['preview_limited'] = len(job.get('moves',[])) > 200
+        result['revision'] = job.get('revision') or digest(json.dumps(job,sort_keys=True,ensure_ascii=False))
         return result
 
     def list(self):
@@ -139,7 +141,7 @@ class AttachmentMigrations:
             self.threads[job['id']]=thread;thread.start()
         return self._public(job)
 
-    def create(self,root,destination='_attachments',*,selection=None,kind='organize',destinations=None):
+    def create(self,root,destination='_attachments',*,selection=None,kind='organize',destinations=None,guard=None):
         self._guard(root);files=self._files();destination=relative(destination)
         if kind not in {'organize','move','rename','trash'}:raise ValueError('Invalid attachment operation')
         if selection is not None:
@@ -156,10 +158,13 @@ class AttachmentMigrations:
              'previous_attachment_folder':self.config.data.get('attachment_folder','_attachments'),
              'kind':kind,'selection':selection,'destinations':destinations or {},'results':[]}
         self._directory(files,key).mkdir(parents=True,mode=0o700)
+        if guard is not None:self.guards[key]=guard
         return self._start(files,job,'plan')
 
-    def action(self,key,action,root,confirm=False):
+    def action(self,key,action,root,confirm=False,*,expected_revision=None,guard=None):
         self._guard(root);files=self._files();job=self._load(files,key)
+        if expected_revision is not None and expected_revision!=self._public(job)['revision']:
+            raise ConflictError('Attachment task changed; read its preview again')
         if action=='cancel':
             if job['state'] in ACTIVE:
                 self.cancels.get(key,threading.Event()).set()
@@ -172,6 +177,10 @@ class AttachmentMigrations:
         if action not in allowed or job['state'] not in allowed[action]:
             raise ConflictError('Migration is not ready for this action')
         if job.get('blockers'):raise ConflictError('Resolve preview blockers before migrating')
+        # A browser action has its own authorization; a new MCP action binds a
+        # fresh grant. Do not retain the previous initiator's expired grant.
+        if guard is None:self.guards.pop(key,None)
+        else:self.guards[key]=guard
         if action=='resume' and job['phase']=='planning':
             return self._start(files,job,'plan')
         if action=='resume' and job['phase']=='rollback':
@@ -180,6 +189,7 @@ class AttachmentMigrations:
 
     def _check(self,job,cancel):
         self._guard(job['root'])
+        if job['id'] in self.guards:self.guards[job['id']]()
         if cancel.is_set():raise InterruptedError('Migration cancelled')
 
     def _plan(self, files, job, cancel):
@@ -403,8 +413,9 @@ class AttachmentMigrations:
         self._reindex(job,strict=True)
         job['state']='completed';job['phase']='completed';self._save(files,job)
 
-    def _rollback(self,files,job):
-        if job.get('kind')=='trash':return self._rollback_trash(files,job)
+    def _rollback(self,files,job,*,authorized=False):
+        if authorized:self._check(job,self.cancels[job['id']])
+        if job.get('kind')=='trash':return self._rollback_trash(files,job,authorized=authorized)
         self._guard(job['root']);self._validate_documents(files,job)
         # Preflight all paths before restoring anything. Never overwrite a later edit.
         for move in job['moves']:
@@ -420,15 +431,18 @@ class AttachmentMigrations:
         job['phase']='rollback';self._save(files,job)
         # Restore original attachments before reverting references.
         for move in job['moves']:
+            if authorized:self._check(job,self.cancels[job['id']])
             self._guard(job['root']);source=files.config.path_for(move['source'],writable=True);backup=self._backup(files,job,move)
             if not source.exists():source.parent.mkdir(parents=True,exist_ok=True);move_exclusive(backup,source)
         for edit in job['edits']:
             with self.config.lock,self.runtime.files.lock:
+                if authorized:self._check(job,self.cancels[job['id']])
                 self._guard(job['root']);p=files.config.path_for(edit['path'],writable=True);current=file_hash(p)
                 if current==edit['after_hash']:atomic_write(p,self._note_bytes(files,job,edit,'before'))
                 elif current!=edit['before_hash']:raise ConflictError('Document changed during rollback')
         # Retain migrated copies too; no irreversible deletion is part of rollback.
         for move in job['moves']:
+            if authorized:self._check(job,self.cancels[job['id']])
             self._guard(job['root']);dest=files.config.path_for(move['destination'],writable=True)
             if dest.exists():
                 if file_hash(dest)!=move['sha256']:raise ConflictError('Destination changed during rollback')
@@ -466,10 +480,11 @@ class AttachmentMigrations:
         job.pop('current_path',None)
         self._reindex(job,strict=True);job['state']='completed';job['phase']='completed';self._save(files,job)
 
-    def _rollback_trash(self,files,job):
+    def _rollback_trash(self,files,job,*,authorized=False):
         self._guard(job['root']);job['phase']='rollback';self._save(files,job)
         for index,move in enumerate(job['moves']):
             with self.config.lock,self.runtime.files.lock:
+                if authorized:self._check(job,self.cancels[job['id']])
                 self._guard(job['root']);source=files.config.path_for(move['source'],writable=True)
                 content=files.state_path('trash',move['trash_id'],'content')
                 if source.exists():
@@ -498,7 +513,7 @@ class AttachmentMigrations:
         job.pop('current_path',None)
         try:
             if action=='plan':self._plan(files,job,cancel)
-            elif action=='rollback':self._rollback(files,job)
+            elif action=='rollback':self._rollback(files,job,authorized=True)
             else:self._execute(files,job,cancel)
         except Exception as error:
             job['error']=str(error)

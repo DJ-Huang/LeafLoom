@@ -26,6 +26,8 @@ For public media, see [media production](docs/MEDIA.md). Keep user data out of a
 
 Browse the [documentation index](docs/README.md) for user guides, feature references and validation records.
 
+The public [help center](https://dj-huang.github.io/LeafLoom/docs/en/) uses three-language task articles in `docs/{en,zh-CN,ja}/help/`, with topic order in `docs/help/navigation.json`. Maintain affected task articles alongside the complete guides when behavior changes. See [help-center authoring and checks](docs/WEBSITE.md#help-center).
+
 ## Repository layout
 
 Keep the root limited to product entry points, dependency manifests and project documentation.

@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+- Fix Design Studio rejecting projects synced between computers with different vault root paths, including Windows-to-Mac transfers. Preserve document IDs and history ownership on reads, retain duplicate-directory/content-conflict guards, and support synced project moves, restore and trash cleanup.
+
+- Add two general file tools, `vault_files` and `vault_files_update`, to local MCP and the LeafLoom ChatGPT plugin. Search/read/download attachments, upload chat files or local byte chunks, and preview/manage recoverable file operations through the same workspace grants, version checks and task journals.
+
+- Add a three-language public help center with 39 task guides and four guide/release references per language, full-text search, grouped navigation, article contents, previous/next links, image zoom and copyable examples. Link the website and app sidebar to localized help and publish documentation changes through Pages.
+
 - Add **Clear highlight** to the floating toolbar and text context menu. Clear only selected highlight ranges, preserve outside colors and comment threads, and undo/redo a multi-highlight clear as one action.
 
 - Support undo/redo for highlights, comments, replies, edits, resolve/reopen, relinking and deletion in the shared rich/source document history. Add toolbar controls and guard replay against concurrent annotation changes.

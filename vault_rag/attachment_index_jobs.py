@@ -82,7 +82,7 @@ class AttachmentIndexJobs:
         self._guard(root)
         return result
 
-    def start(self, root):
+    def start(self, root, *, guard=None):
         self._guard(root)
         with self.lock:
             if self.thread and self.thread.is_alive():
@@ -96,19 +96,21 @@ class AttachmentIndexJobs:
             self.cancel = threading.Event()
             self.job = job
             self._save(files, job)
-            self.thread = threading.Thread(target=self._worker, args=(files, job, self.cancel), daemon=True)
+            self.thread = threading.Thread(target=self._worker, args=(files, job, self.cancel, guard), daemon=True)
             self.thread.start()
         return self.status(root)
 
-    def _worker(self, files, job, cancel):
+    def _worker(self, files, job, cancel, guard=None):
         try:
             def progress(done):
+                if guard is not None:guard()
                 self._guard(job['root'])
                 with self.lock:
                     job['done'] = done
                     self._save(files, job)
             # Bind root before refresh snapshots it, and serialize with lazy lookup.
             with self.index.lock:
+                if guard is not None:guard()
                 self._guard(job['root'])
                 self.index.refresh(cancel=cancel, progress=progress)
             job['state'] = 'ready'
