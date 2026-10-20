@@ -6,7 +6,7 @@ Search attachments, preview media and download originals in a dedicated workspac
 
 ## Before you start
 
-> **Availability:** This attachment workspace and organization workflow are included in source `main` after [PR #18](https://github.com/DJ-Huang/LeafLoom/pull/18), but are **not included in the published v0.1.3 installers**. Follow these steps only in a build that includes PR #18; see the [v0.1.3 release notes](https://github.com/DJ-Huang/LeafLoom/releases/tag/v0.1.3).
+> **Availability:** This attachment workspace and organization workflow are included in the [v0.1.4 installers](https://github.com/DJ-Huang/LeafLoom/releases/tag/v0.1.4). They are not included in v0.1.3. If you use an older version, back up your vault and update before following these steps.
 
 Connect a local folder first. Practise in the demo vault if you prefer.
 
