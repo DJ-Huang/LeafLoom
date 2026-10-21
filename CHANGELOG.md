@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+## 0.1.4 — 2026-10-19
+
 - Fix Design Studio rejecting projects synced between computers with different vault root paths, including Windows-to-Mac transfers. Preserve document IDs and history ownership on reads, retain duplicate-directory/content-conflict guards, and support synced project moves, restore and trash cleanup.
 
 
