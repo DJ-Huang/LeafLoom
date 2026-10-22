@@ -13,7 +13,7 @@ The public help center has 39 task guides and four full guide/release references
 | Install, write Markdown, open HTML projects, recover drafts | [User guide](en/GUIDE.md) | [使用指南](zh-CN/GUIDE.md) | [利用ガイド](ja/GUIDE.md) |
 | Highlights, inline and page comments | [Annotations](ANNOTATIONS.md) | [标注与评论](zh-CN/GUIDE.md#行内标注与评论) | [ハイライトとコメント](ja/GUIDE.md#ハイライトとコメント) |
 | AI Chat, MCP and Skills | [AI connections](en/AI.md) | [AI 接入](zh-CN/AI.md) | [AI 連携](ja/AI.md) |
-| Attachment workspace, previews, organization and recovery | [Attachments](en/GUIDE.md#attachment-manager) | [附件管理](zh-CN/GUIDE.md#附件管理) | [添付ファイル](ja/GUIDE.md#添付ファイルの管理) |
+| Attachment workspace, remote storage, previews, organization and recovery | [Attachments](en/GUIDE.md#attachment-manager) | [附件管理](zh-CN/GUIDE.md#附件管理) | [添付ファイル](ja/GUIDE.md#添付ファイルの管理) |
 | Change history | [Changelog](../CHANGELOG.md) | [更新记录](zh-CN/CHANGELOG.md) | [変更履歴](ja/CHANGELOG.md) |
 | LeafLoom 0.1.3 release notes | [Release notes](en/RELEASE_NOTES_0.1.3.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.3.md) | [リリースノート](ja/RELEASE_NOTES_0.1.3.md) |
 | Contributing | [Contributing](../CONTRIBUTING.md) | [参与贡献](zh-CN/COMMUNITY.md) | [貢献ガイド](ja/COMMUNITY.md) |
@@ -31,6 +31,9 @@ The public help center has 39 task guides and four full guide/release references
 - [Design Studio workflows, portable documents, scripts and validation boundaries](DESIGN_STUDIO.md)
 - [Bound design content, language variants and static publishing](DESIGN_STUDIO.md#bound-content-variants-and-static-publishing)
 - [Folder organization and indexing scope](VAULT_ORGANIZATION.md)
+- [Remote attachment storage, metadata, local cache, offline uploads and credential ownership](ARCHITECTURE.md#通用远程附件存储)
+- [Official Zspace attachment bridge: static investigation and recovery boundaries](ATTACHMENT_OFFICIAL_BRIDGE.md)
+- [Unity product collection script and partial Chinese metadata updates](MCP.md#batch-script)
 - [AI assistant implementation](AI_ASSISTANT.md)
 - [Complete MCP tools, credentials, note workflows and the two general file tools](MCP.md)
 - [Feishu / Lark connection, CLI ownership and MCP tools](FEISHU.md)

@@ -4,6 +4,33 @@
 
 ## Unreleased
 
+- Add user-defined attachment tabs with manual/rule membership, vault persistence and verified NAS event synchronization with explicit conflict resolution. Replace the fixed product view with file browsing enriched by existing source metadata and covers. Add a separate Downloads page for staged attachments and ZIP tasks, preserving existing jobs and moving staging capacity into download settings. Extend MCP with group queries and revision-checked edits.
+
+- Support official product pages without JSON-LD when their structured product and publisher identities are verified; continue rejecting ambiguous or inconsistent identities.
+- Reuse HTTP clients and verified directory checks during product synchronization to reduce repeated requests; the official-client bridge can use separate connections for compatibility. Retain per-item read-back verification and pending items after failures. Bound parallel synchronization to four small metadata objects, preserving dependency and authorization checks. Reuse a batch snapshot of locally verified events for large-catalog startup/background checks to reduce repeated disk reads, retaining identity, authorization and unverified-event SHA checks.
+
+- Add a local batch script to start/resume official product collection, monitor saved progress and apply partial Chinese metadata with revision checks while preserving personal fields; official collection success and Chinese completion remain separate. Interrupted collection preserves completed review-needed decisions and retries blocked/network failures; background sync resumes pending uploads from a verified checkpoint before its remote check, while first/explicit sync checks remote first.
+- Keep the last catalog sync result when normal shutdown interrupts a background check, instead of saving a service error for the next startup.
+- Reuse the current transaction for catalog authorization checks to avoid database lock failures with large product metadata, while retaining checks before commit.
+
+- Let official product collection reuse a supported existing macOS loopback HTTP proxy while retaining official-host restrictions, TLS verification and response limits, without changing system settings. Preserve Chinese text on refresh and mark changed source facts for translation updates; keep local product queries responsive while NAS synchronization waits on the network.
+
+- Add an Asset products view for existing Unity packages, separate official/personal metadata, reviewable official URL associations and explicit collection progress. Keep multiple package versions, NAS-backed catalog metadata and independently limited 20 GiB verified download staging; no automatic Unity import or purchase verification.
+
+- Restore saved attachment credentials in the background with asynchronous system-encryption APIs where available, so key-store recovery does not block opening the workspace. Coalesce retries and discard results for retired backend connections.
+
+- Support per-directory server `leafloom.ignore` rules with Gitignore-style patterns, child overrides and `!` reinclusion; require the `# leafloom-ignore v1` first-line header. Successful refreshes report excluded entries and remove them from attachment discovery and totals while preserving IDs, tags, references and cache; rules are read without NAS write permission.
+
+- Add an explicit per-server directory refresh in Attachments, with metadata-only progress and completion. Only complete successful scans hide missing NAS files from lists and size totals; IDs, tags and old references remain, and failed scans retain prior records.
+
+- Show local and server attachment-original sizes separately for all sources, and only the selected source's size when filtered. Local cache is excluded from these totals.
+
+- Add bounded attachment-credential recovery after 1/3/10/30 seconds, unlock/wake retries and status/manual recovery in Settings. NAS network and 502–504 failures back off from 2 to 60 seconds; 401/403 pauses automatic attempts with the same credentials. Health probes touch only configured URLs, existing tasks still check owner/credential revisions, and official attachment windows must stay open without automatic session rebuilding.
+
+- Add an attachment-source dropdown for all, local, server or individual-server browsing. HTTP and MCP lists share server-side source filtering, pagination, storage totals and type counts.
+
+- Add generic multi-server WebDAV attachment storage, system-encrypted desktop credentials, memory-only browser credentials, bounded local cache and a separate pending-upload queue. Add reviewed local-to-server migration with readback verification and stable LeafLoom references, plus editable asset tags/categories/descriptions and source/cache status. Official-client bridges remain dependent on their open attachment window and configured port.
+
 - Add SHA-256-verified, single-request Base64 attachment uploads up to 2 MiB, image embeds in upload results, and discoverable upload capabilities with client tool-directory refresh guidance. Preserve the existing two-tool API, chunk transfers and ChatGPT file inputs.
 
 - Fix Design Studio rejecting projects synced between computers with different vault root paths, including Windows-to-Mac transfers. Preserve document IDs and history ownership on reads, retain duplicate-directory/content-conflict guards, and support synced project moves, restore and trash cleanup.

@@ -25,11 +25,17 @@ class ListFiles(Command):
     order: Literal['asc', 'desc'] = 'desc'
     limit: int = Field(default=50, ge=1, le=200)
     cursor: str = ''
+    source: Literal['all', 'local', 'remote'] = 'all'
+    storage_id: str = ''
+    tags: list[str] = Field(default_factory=list, max_length=100)
+    category: str = ''
+    group_id: str = ''
 
 
 class StatFile(Command):
     action: Literal['stat']
-    path: str
+    path: str = ''
+    asset_id: str = ''
     source_note: str = ''
 
 
@@ -37,6 +43,7 @@ class ReadFile(Command):
     action: Literal['read']
     expected_revision: str
     path: str = ''
+    asset_id: str = ''
     job_id: str = ''
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=65536, ge=1, le=262144)
@@ -55,13 +62,42 @@ class FileStatus(Command):
     cursor: str = ''
 
 
-ReadCommand = Annotated[Union[ListFiles, StatFile, ReadFile, ExportFiles, FileStatus], Field(discriminator='action')]
+class ListProducts(Command):
+    action: Literal['products']
+    query: str = Field(default='', max_length=500)
+    status: str = Field(default='', max_length=100)
+    limit: int = Field(default=50, ge=1, le=200)
+    cursor: str = ''
+
+
+class ProductDetails(Command):
+    action: Literal['product']
+    product_id: str = Field(min_length=1, max_length=200)
+
+
+class PrepareAssetDownload(Command):
+    action: Literal['prepare_download']
+    asset_id: str = Field(min_length=1, max_length=200)
+
+
+class AssetDownloadStatus(Command):
+    action: Literal['download_status']
+    job_id: str = ''
+
+
+class ListAttachmentGroups(Command):
+    action: Literal['groups']
+
+
+ReadCommand = Annotated[Union[ListAttachmentGroups, ListFiles, StatFile, ReadFile, ExportFiles, FileStatus,
+    ListProducts, ProductDetails, PrepareAssetDownload, AssetDownloadStatus], Field(discriminator='action')]
 
 
 class UploadFiles(Command):
     action: Literal['upload']
     source: Literal['files']
     folder: str = ''
+    storage_id: str = ''
 
 
 class InlineUpload(Command):
@@ -71,6 +107,7 @@ class InlineUpload(Command):
     data_base64: str = Field(max_length=2796204)
     sha256: str = Field(pattern=r'^[a-fA-F0-9]{64}$')
     folder: str = ''
+    storage_id: str = ''
 
 
 class BeginUpload(Command):
@@ -80,6 +117,7 @@ class BeginUpload(Command):
     size: int = Field(ge=0, le=268435456)
     sha256: str = Field(pattern=r'^[a-fA-F0-9]{64}$')
     folder: str = ''
+    storage_id: str = ''
 
 
 class AppendUpload(Command):
@@ -118,6 +156,17 @@ class OrganizeFiles(Command):
 
 class ReindexFiles(Command):
     action: Literal['reindex']
+    storage_id: str = ''
+
+
+class UpdateFileMetadata(Command):
+    action: Literal['metadata']
+    path: str = ''
+    asset_id: str = ''
+    expected_revision: str
+    tags: list[str] = Field(default_factory=list, max_length=100)
+    category: str = Field(default='', max_length=200)
+    description: str = Field(default='', max_length=10000)
 
 
 class UpdateJob(Command):
@@ -128,4 +177,24 @@ class UpdateJob(Command):
     confirm: bool = False
 
 
-WriteCommand = Annotated[Union[UploadCommand, MoveFiles, TrashFiles, OrganizeFiles, ReindexFiles, UpdateJob], Field(discriminator='action')]
+class UpdateProduct(Command):
+    action: Literal['product_update']
+    operation: Literal['initialize', 'sync', 'rebuild', 'official', 'bind', 'personal', 'review',
+                       'official_url', 'enrich', 'resolve', 'release_download', 'retry_download']
+    product_id: str = ''
+    asset_id: str = ''
+    storage_id: str = ''
+    job_id: str = ''
+    url: str = Field(default='', max_length=2000)
+    expected_revision: str = ''
+    payload: dict = Field(default_factory=dict)
+
+
+class UpdateAttachmentGroup(Command):
+    action: Literal['group_update']
+    operation: Literal['create','update','delete','members']
+    payload: dict = Field(default_factory=dict)
+
+
+WriteCommand = Annotated[Union[UpdateAttachmentGroup, UploadCommand, MoveFiles, TrashFiles, OrganizeFiles, ReindexFiles,
+    UpdateFileMetadata, UpdateJob, UpdateProduct], Field(discriminator='action')]

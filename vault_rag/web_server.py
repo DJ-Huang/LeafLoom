@@ -1,6 +1,6 @@
 """One ASGI application serving the local UI, file API and shared HTTP MCP."""
 from __future__ import annotations
-import asyncio, contextlib, hashlib, hmac, ipaddress, json, logging, mimetypes, os, secrets, subprocess, threading, time
+import asyncio, contextlib, hashlib, hmac, ipaddress, json, logging, mimetypes, os, secrets, shutil, subprocess, threading, time, uuid
 from pathlib import Path
 from fastapi import FastAPI, Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
@@ -75,11 +75,54 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     ai_app=ai_mcp.streamable_http_app()
     mcp_access=McpAccess(config)
     notes=NoteOperations(config,runtime)
+    from vault_rag.remote_attachments import RemoteAttachments
+    from vault_rag.attachment_catalog import AttachmentCatalog
+    from vault_rag.attachment_storage_routes import attachment_storage_router, public_job
+    from vault_rag.remote_webdav import RemoteStorageError
+    remote_attachments=RemoteAttachments(config,runtime)
+    def authorize_remote_owner(root,owner,revision):
+        if str(config.root)!=root or config.data.get('revision')!=revision:return False
+        if owner=='local':return True
+        # Match the original MCP generation without holding its global lock over
+        # any network request. configure() atomically replaces this snapshot.
+        for who,row in mcp_access.data.items():
+            generation=row.get('token_hash','') if who=='local' else mcp_access.tunnel_secret
+            if row.get('enabled') and row.get('write') and hmac.compare_digest(owner,
+                    hashlib.sha256(('workspace:'+who+':'+generation).encode()).hexdigest()):return True
+        return False
+    remote_attachments.authorize_owner=authorize_remote_owner
+    def authorize_remote_reader(root,owner,revision):
+        if str(config.root)!=root or config.data.get('revision')!=revision:return False
+        if owner=='local':return True
+        for who,row in mcp_access.data.items():
+            generation=row.get('token_hash','') if who=='local' else mcp_access.tunnel_secret
+            if row.get('enabled') and hmac.compare_digest(owner,
+                    hashlib.sha256(('workspace:'+who+':'+generation).encode()).hexdigest()):return True
+        return False
+    remote_attachments.authorize_reader=authorize_remote_reader
+    from vault_rag.asset_library import AssetLibrary
+    from vault_rag.asset_downloads import AssetDownloads
+    from vault_rag.unity_asset_store import AssetEnrichment
+    from vault_rag.asset_library_routes import asset_library_router
+    asset_library=AssetLibrary(remote_attachments)
+    asset_downloads=AssetDownloads(remote_attachments)
+    asset_enrichment=AssetEnrichment(asset_library)
+    from vault_rag.attachment_groups import AttachmentGroups
+    from vault_rag.attachment_presentation import AttachmentPresentation
+    attachment_groups=AttachmentGroups(remote_attachments,asset_library)
+    attachment_presentation=AttachmentPresentation(attachment_groups,asset_library)
+    attachments_workspace.remote=remote_attachments
+    runtime.files.attachments=AttachmentCatalog(runtime.files.attachments,remote_attachments)
+    runtime.files.attachments.presentation=attachment_presentation
+    runtime.remote_attachments=remote_attachments
     from vault_rag.file_operations import FileOperations
-    file_operations=FileOperations(config,runtime,notes,attachments_workspace,migrations,index_jobs)
+    file_operations=FileOperations(config,runtime,notes,attachments_workspace,migrations,index_jobs,remote_attachments,
+        asset_library=asset_library,asset_downloads=asset_downloads,asset_enrichment=asset_enrichment,attachment_groups=attachment_groups)
     annotations=Annotations(config,runtime.files)
     # Keep browser routes, MCP note operations and other file-operation callers consistent.
     runtime.files.annotation_changed=lambda action,**fields:getattr(annotations,action)(root=str(config.root),**fields)
+    from vault_rag.attachment_metadata_hooks import install_attachment_metadata_hooks
+    install_attachment_metadata_hooks(runtime,remote_attachments)
     feishu=Feishu(config)
     mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token,design=design,feishu=feishu,annotations=annotations,files=file_operations)
     mcp_app=mcp.streamable_http_app()
@@ -92,6 +135,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
             finally:
                 await ai.close()
                 await asyncio.to_thread(file_operations.stop)
+                await asyncio.to_thread(attachment_groups.stop)
+                await asyncio.to_thread(asset_enrichment.stop)
+                await asyncio.to_thread(asset_downloads.stop)
+                await asyncio.to_thread(asset_library.stop)
+                await asyncio.to_thread(remote_attachments.stop)
                 await asyncio.to_thread(attachments_workspace.stop)
                 await asyncio.to_thread(migrations.stop)
                 await asyncio.to_thread(index_jobs.stop)
@@ -108,9 +156,22 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     app.state.attachments_workspace=attachments_workspace
     app.state.attachment_index_jobs=index_jobs
     app.state.file_operations=file_operations
+    app.state.remote_attachments=remote_attachments
+    app.state.attachment_groups=attachment_groups
+    app.state.asset_library=asset_library
+    app.state.asset_downloads=asset_downloads
+    app.state.asset_enrichment=asset_enrichment
     app.state.design=design
     app.state.local_dns=local_dns
     app.include_router(ai_router(ai))
+    app.include_router(attachment_storage_router(remote_attachments,runtime,attachments_workspace))
+    app.include_router(asset_library_router(asset_library,asset_downloads,asset_enrichment))
+    @app.exception_handler(RemoteStorageError)
+    async def remote_error(request,error):
+        if error.state=='missing':
+            return json_response({'error':'Attachment is missing or unavailable on the server','error_code':error.code,'state':error.state},404)
+        return json_response({'error':'Attachment server is unavailable','error_code':error.code,'state':error.state},
+                             503 if error.state=='unreachable' else 409)
     from vault_rag.design_routes import design_router
     app.include_router(design_router(design))
     @app.middleware('http')
@@ -153,6 +214,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
                 response=await dev.response(path,request.url.query)
             else:response=await call_next(request)
         except ConflictError as e:return json_response({'error':str(e),'error_code':'write_conflict','conflict':True},409)
+        except PermissionError:return json_response({'error':'Attachment operation is not authorized','error_code':'permission_denied'},403)
         except FileNotFoundError as e:return json_response({'error':str(e),'error_code':'not_found'},400)
         except UnicodeDecodeError as e:return json_response({'error':str(e),'error_code':'invalid_text_encoding'},400)
         except ValueError as e:return json_response({'error':str(e),'error_code':'invalid_request'},400)
@@ -271,7 +333,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         return await asyncio.to_thread(migrations.action,key,action,body['root'],body.get('confirm',False))
     @app.get('/api/attachments/details')
     async def attachment_details(root:str,path:str):
-        return await asyncio.to_thread(attachments_workspace.details,root,path)
+        value=await asyncio.to_thread(attachments_workspace.details,root,path)
+        return await asyncio.to_thread(attachment_presentation.enrich,root,value)
     @app.get('/api/attachments/thumbnail')
     async def attachment_thumbnail(request:Request,root:str,path:str):
         target=await asyncio.to_thread(attachments_workspace.thumbnail,root,path)
@@ -283,6 +346,25 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     @app.post('/api/attachments/downloads')
     async def attachment_download(request:Request):
         body=await request.json();return await asyncio.to_thread(attachments_workspace.download,body['root'],body['paths'])
+    @app.get('/api/attachment-downloads')
+    async def unified_downloads(root:str):
+        staged=await asyncio.to_thread(asset_downloads.list,root)
+        archives=await asyncio.to_thread(attachments_workspace.list_downloads,root)
+        return {'staged':staged['jobs'],'archives':archives['jobs']}
+    @app.get('/api/attachment-downloads/settings')
+    async def download_settings(root:str):
+        return {**await asyncio.to_thread(asset_downloads.settings,root),'usage':await asyncio.to_thread(asset_downloads.usage,root)}
+    @app.put('/api/attachment-downloads/settings')
+    async def save_download_settings(request:Request):
+        body=await request.json()
+        if not body.get('revision'):raise ValueError('Download settings revision is required')
+        return await asyncio.to_thread(asset_downloads.configure,body['root'],body['max_bytes'],body['revision'])
+    @app.get('/api/attachments/downloads')
+    async def attachment_download_list(root:str):
+        return await asyncio.to_thread(attachments_workspace.list_downloads,root)
+    @app.delete('/api/attachments/downloads/{key}')
+    async def attachment_download_release(key:str,root:str):
+        return await asyncio.to_thread(attachments_workspace.release_download,root,key)
     @app.get('/api/attachments/downloads/{key}')
     async def attachment_download_status(key:str,root:str):
         return await asyncio.to_thread(attachments_workspace.download_status,root,key)
@@ -293,6 +375,13 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     async def attachment_download_file(key:str,root:str):
         target=await asyncio.to_thread(attachments_workspace.download_file,root,key)
         return FileResponse(target,filename='LeafLoom-attachments.zip',media_type='application/zip')
+    @app.get('/api/attachment-groups')
+    async def attachment_group_list(root:str):
+        return await asyncio.to_thread(attachment_groups.listing,root)
+    @app.post('/api/attachment-groups')
+    async def attachment_group_update(request:Request):
+        body=await request.json()
+        return await asyncio.to_thread(attachment_groups.update,body['root'],body['operation'],body.get('payload',{}))
     @app.get('/api/attachments/status')
     async def attachment_status(root:str=''):
         return {**await asyncio.to_thread(index_jobs.status,root),'folder':config.data.get('attachment_folder','_attachments')}
@@ -307,11 +396,12 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         body=await request.json()
         return await asyncio.to_thread(index_jobs.cancel_job,body['root'])
     @app.get('/api/attachments')
-    async def attachments(query:str='',after:str='',limit:int=100,root:str='',kind:str='all',sort:str='path',order:str='asc',cursor:str=''):
+    async def attachments(query:str='',after:str='',limit:int=100,root:str='',kind:str='all',sort:str='path',order:str='asc',cursor:str='',source:str='all',storage_id:str='',tags:str='',category:str='',group_id:str=''):
         status=await asyncio.to_thread(index_jobs.status,root)
         if not status['usable']:
             return json_response({'error':'Initialize the attachment index first','initialization_required':True},409)
-        result=await asyncio.to_thread(runtime.files.attachments.listing,query,after,limit,kind=kind,sort=sort,order=order,cursor=cursor)
+        result=await asyncio.to_thread(runtime.files.attachments.listing,query,after,limit,kind=kind,sort=sort,order=order,cursor=cursor,
+            source=source,storage_id=storage_id,tags=[tag.strip() for tag in tags.split(',') if tag.strip()],category=category,group_id=group_id)
         if root:migrations._guard(root)
         return result
     @app.get('/api/tree')
@@ -503,7 +593,35 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         body=await request.json()
         return await asyncio.to_thread(runtime.files.restore,body['kind'],body['id'])
     @app.post('/api/upload')
-    async def upload(request:Request,folder:str='',name:str='',root:str|None=None,create_folder:bool=False,central:bool=False,unique:bool=False):
+    async def upload(request:Request,folder:str='',name:str='',root:str|None=None,create_folder:bool=False,central:bool=False,unique:bool=False,storage_id:str=''):
+        settings=remote_attachments._settings(root)
+        selected=storage_id or settings['default_source']
+        if selected!='local':
+            from vault_rag.local_state import relative
+            if root is None:raise ValueError('Select the connected folder before uploading')
+            if not name or name.startswith('.') or '/' in name or '\\' in name or any(ord(c)<32 for c in name) or len(name.encode())>200:
+                raise ValueError('Use a plain attachment filename')
+            folder=relative(config.data.get('attachment_folder','_attachments') if central or not folder else folder)
+            logical='/'.join((folder,uuid.uuid4().hex,name))
+            config.path_for(logical,writable=True)
+            directory=runtime.files.state_path('remote-upload-staging');directory.mkdir(parents=True,exist_ok=True,mode=0o700)
+            stage=runtime.files.state_path('remote-upload-staging',uuid.uuid4().hex+'.blob')
+            revision=config.data.get('revision')
+            def guard():
+                if str(config.root)!=root or config.data.get('revision')!=revision:raise ConflictError('Connected folder changed')
+            try:
+                written=0
+                with stage.open('xb') as stream:
+                    async for part in request.stream():
+                        guard();written+=len(part)
+                        if written>settings['outbox_max_bytes'] or shutil.disk_usage(directory).free<len(part)+1024**3:
+                            raise ValueError('Attachment upload staging space is full')
+                        stream.write(part)
+                    stream.flush();os.fsync(stream.fileno())
+                value=await asyncio.to_thread(remote_attachments.queue_upload,root,selected,logical,stage,guard=guard)
+                runtime.publish('files',[logical])
+                return public_job(value)
+            finally:stage.unlink(missing_ok=True)
         from vault_rag.attachment_uploads import UploadTarget
         target=UploadTarget(runtime,folder=folder,name=name,root=root,create_folder=create_folder,central=central,unique=unique)
         try:
@@ -516,6 +634,15 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         return result
     @app.get('/api/media')
     async def media(request:Request,path:str,download:bool=False,root:str|None=None):
+        remote_attachments._root(root)
+        if Path(path).suffix.lower() in {'.md','.markdown','.txt','.base'} and config.path_for(path).is_file():
+            item=None
+        else:
+            try:item=await asyncio.to_thread(remote_attachments.stat,str(config.root),path)
+            except FileNotFoundError:item=None
+        if item and item.get('storage_id',item.get('source_id','local'))!='local':
+            from vault_rag.attachment_storage_routes import remote_media
+            return await remote_media(remote_attachments,request,item,str(config.root),download)
         def response():
             with config.lock:
                 if root is not None and root!=str(config.root):raise ConflictError('Connected folder changed')

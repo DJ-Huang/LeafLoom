@@ -22,6 +22,7 @@ export const settingsEntries:{section:SettingsSection,id:string,title:string,des
  {section:'general',id:'homepage',get title(){return t("知识库首页");},get description(){return t("默认首页文件路径");}},
  {section:'general',id:'app-update',get title(){return t('update.title');},get description(){return t('update.search');}},
  {section:'files',id:'create',get title(){return t("新建笔记与目录");},get description(){return t("创建文件、新建目录、文件夹、目标位置");}},
+ {section:'files',id:'attachment-storage',get title(){return t('as.title');},get description(){return t('as.search');}},
  {section:'files',id:'upload',get title(){return t("上传文件");},get description(){return t("导入本地文件、附件");}},
  {section:'files',id:'template-create',get title(){return t("从模板新建");},get description(){return t("选择模板创建笔记");}},
  {section:'templates',id:'templates',get title(){return t("模板与日记目录");},get description(){return t("模板目录、今日笔记、日记位置");}},

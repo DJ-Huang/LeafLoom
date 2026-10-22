@@ -1,5 +1,9 @@
 # Organize attachments and recover a task
 
+
+Preview and execute server migration separately in **Settings → Files & import → Attachment storage**. It releases local originals only after upload, readback verification and durable old-path mapping, without adding a permanent local `originals/` archive. The `.vault-rag/attachment-migrations/` recovery directories below belong to local organization; existing history and recycle records are not removed automatically. Old links resolve inside LeafLoom; other editors are not guaranteed to support them. See [server attachments and cache](attachments.md).
+
+
 ## Your goal
 
 Review the proposed migration, consolidate attachments and retain recovery material.

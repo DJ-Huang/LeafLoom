@@ -2,7 +2,7 @@ import {Diagnostic} from './i18n';
 import {getLocale,t,useLocale} from './i18n';
 import React,{lazy,Suspense,useCallback,useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {BookOpen,Calendar,Home,PanelLeft,Plus,RefreshCw,Search,Settings,ArrowLeft,Network,MessageSquare,Globe,Paperclip,Palette} from 'lucide-react';
+import {BookOpen,Calendar,Home,PanelLeft,Plus,RefreshCw,Search,Settings,ArrowLeft,Network,MessageSquare,Globe,Paperclip,Palette,Download} from 'lucide-react';
 import {api,applySession,invalidate,media,Config,OpenNote,Session} from './api';
 import {DirectoryTree,FolderView} from './tree';
 import {Action,ActionMenu,Modal,LoadingShell,LazyBoundary,FormDialog,FormField} from './ui';
@@ -18,6 +18,7 @@ import {setLocale} from './i18n';
 import {Logo} from './brand';
 import {StorageMigrationNotice} from './storage-migration';
 import {HtmlPreview} from './html-preview';
+const AttachmentDownloads=lazy(()=>import('./attachment-downloads').then(module=>({default:module.AttachmentDownloads})));
 const Attachments=lazy(()=>import('./attachments').then(module=>({default:module.Attachments})));
 const DesignStudio=lazy(()=>import('./design-studio').then(module=>({default:module.DesignStudio})));
 
@@ -33,7 +34,7 @@ const FileSearch=lazy(()=>import('./search').then(module=>({default:module.FileS
 const KnowledgeSearch=lazy(()=>import('./search').then(module=>({default:module.KnowledgeSearch})));
 const GraphPage=lazy(()=>import('./graph').then(module=>({default:module.GraphPage})));
 const AiPanel=lazy(()=>import('./ai-panel').then(module=>({default:module.AiPanel})));
-type View='home'|'document'|'knowledge'|'folder'|'graph'|'web'|'design'|'attachments';
+type View='home'|'document'|'knowledge'|'folder'|'graph'|'web'|'design'|'attachments'|'downloads';
 type FileOperation={kind:'file'|'rename'|'move'|'delete',path?:string};
 const folderOf=(path:string)=>path.includes('/')?path.slice(0,path.lastIndexOf('/')):'';
 const within=(path:string,parent:string)=>path===parent||path.startsWith(parent+'/');
@@ -51,6 +52,8 @@ function App(){
  const [config,setConfig]=useState<Config>(),[suggestion,setSuggestion]=useState(''),[tabs,setTabs]=useState<string[]>([]),[active,setActive]=useState(''),[view,setView]=useState<View>('home'),[knowledgeVisited,setKnowledgeVisited]=useState(false),[backToKnowledge,setBackToKnowledge]=useState(false);
  const [currentFolder,setCurrentFolder]=useState(''),[refresh,setRefresh]=useState(0),[settings,setSettings]=useState<SettingsLocation>(),[quickSearch,setQuickSearch]=useState(false),[toast,setToast]=useState(''),[menu,setMenu]=useState<string>(),[operation,setOperation]=useState<FileOperation>(),[candidates,setCandidates]=useState<string[]>(),[connectionError,setConnectionError]=useState(''),[mobileOpen,setMobileOpen]=useState(false);
  const [attachmentsVisited,setAttachmentsVisited]=useState(false);
+ const [downloadsVisited,setDownloadsVisited]=useState(false);
+ const showDownloads=()=>{setView('downloads');setDownloadsVisited(true);setMobileOpen(false);history.replaceState(null,'','/?view=downloads');};
  const [graphVisited,setGraphVisited]=useState(false),[backToGraph,setBackToGraph]=useState(false);
  const [designCreateFolder,setDesignCreateFolder]=useState<string|undefined>();
  const [aiOpen,setAiOpen]=useState(()=>sessionStorage.getItem('ai-open')==='true'),[aiVisited,setAiVisited]=useState(()=>sessionStorage.getItem('ai-open')==='true'),[aiSelection,setAiSelection]=useState<{id:string,reference:AiSelectionEvent['reference']}>();
@@ -65,11 +68,11 @@ function App(){
  useEffect(()=>()=>clearTimeout(toastTimer.current),[]);
  useEffect(()=>{const media=window.matchMedia('(max-width:900px)'),change=()=>{setNarrow(media.matches);setMobileOpen(false);};media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
  const changed=useCallback(()=>setRefresh(value=>value+1),[]);
- const resetWorkspace=useCallback(()=>{setAttachmentsVisited(false);setTabs([]);setActive('');setView('home');setKnowledgeVisited(false);setBackToKnowledge(false);setGraphVisited(false);setBackToGraph(false);setCurrentFolder('');setQuickSearch(false);setOperation(undefined);setMenu(undefined);setCandidates(undefined);setMobileOpen(false);history.replaceState(null,'','/');},[]);
+ const resetWorkspace=useCallback(()=>{setDownloadsVisited(false);setAttachmentsVisited(false);setTabs([]);setActive('');setView('home');setKnowledgeVisited(false);setBackToKnowledge(false);setGraphVisited(false);setBackToGraph(false);setCurrentFolder('');setQuickSearch(false);setOperation(undefined);setMenu(undefined);setCandidates(undefined);setMobileOpen(false);history.replaceState(null,'','/');},[]);
  const loadSession=useCallback(async()=>{
   const request=++sessionRequest.current;
   try{const next=await api<Session>('session');if(request!==sessionRequest.current)return;const previous=session.current,scopeChanged=applySession(next);session.current=next;setConfig(value=>JSON.stringify(value)===JSON.stringify(next.config)?value:next.config);setSuggestion(next.suggested_root);setConnectionError('');
-   if(!previous){const params=new URLSearchParams(location.search),target=params.get('note'),folder=params.get('folder');if(target&&next.config.root){setTabs([target]);setActive(target);setView('document');}else if(folder!==null&&next.config.root){setCurrentFolder(folder);setView('folder');}else if(params.get('view')==='knowledge'){setView('knowledge');setKnowledgeVisited(true);}else if(params.get('view')==='attachments'){setView('attachments');setAttachmentsVisited(true);}else if(params.get('view')==='web'){setView('web');}else if(params.get('view')==='design'){setView('design');}else if(params.get('view')==='graph'){setView('graph');setGraphVisited(true);}}
+   if(!previous){const params=new URLSearchParams(location.search),target=params.get('note'),folder=params.get('folder');if(target&&next.config.root){setTabs([target]);setActive(target);setView('document');}else if(folder!==null&&next.config.root){setCurrentFolder(folder);setView('folder');}else if(params.get('view')==='knowledge'){setView('knowledge');setKnowledgeVisited(true);}else if(params.get('view')==='downloads'){setView('downloads');setDownloadsVisited(true);}else if(params.get('view')==='attachments'){setView('attachments');setAttachmentsVisited(true);}else if(params.get('view')==='web'){setView('web');}else if(params.get('view')==='design'){setView('design');}else if(params.get('view')==='graph'){setView('graph');setGraphVisited(true);}}
    else if(previous.config.root!==next.config.root)resetWorkspace();
    if(scopeChanged&&previous)invalidate({reset:true});
    const [status,userPreferences]=await Promise.all([api('status'),api<UserPreferences>('preferences')]);if(request===sessionRequest.current){updateStatus(status);setLocale(userPreferences.locale);setGuide(userPreferences.guide);setDemoMode(!!next.demo);}
@@ -141,6 +144,7 @@ function App(){
     <button className={view==='design'?'active':''} onClick={()=>showDesign()}><Palette size={17}/>{t('设计工作台')}</button>
     <button className={view==='web'?'active':''} onClick={()=>{setView('web');setMobileOpen(false);history.replaceState(null,'','/?view=web');}}><Globe size={17}/>{t('网页')}</button>
     <button className={view==='attachments'?'active':''} onClick={()=>{setView('attachments');setAttachmentsVisited(true);setMobileOpen(false);history.replaceState(null,'','/?view=attachments');}}><Paperclip size={17}/>{t('attachments.title')}</button>
+    <button className={view==='downloads'?'active':''} onClick={showDownloads}><Download size={17}/>{t('dl.title')}</button>
     <button onClick={()=>void daily()}><Calendar size={17}/>{t("今日笔记")}</button>
    </nav>
    <div className="section-label"><span>{t("文件目录")}</span><div><Action title={t("刷新数据")} onClick={refreshData}><RefreshCw size={14}/></Action><Action title={t("新建笔记")} onClick={()=>newFile('file')}><Plus size={15}/></Action></div></div>
@@ -151,7 +155,8 @@ function App(){
    {connectionError&&<div role="status" className="connection-banner">{<Diagnostic message={connectionError}/>}<button onClick={refreshData}>{t("刷新数据")}</button></div>}
    <div className="workspace-topbar"><button className="icon-button sidebar-toggle" aria-label={t("切换导航")} aria-controls="workspace-sidebar" aria-expanded={narrow?mobileOpen:!preferences.sidebarCollapsed} onClick={toggleSidebar}><PanelLeft size={17}/></button><PathNavigation view={view} path={view==='document'?active:currentFolder} onFolder={showFolder}/><button className="ai-open-button" aria-expanded={aiOpen} onClick={()=>setAiOpen(value=>!value)}><MessageSquare size={15}/>{t("AI 对话")}</button></div>
    {view==='home'&&<Dashboard config={config} recent={preferences.recent} onOpen={openFile} onCreate={()=>newFile('file')} onKnowledge={showKnowledge} onDaily={()=>void daily()} onDesign={()=>showDesign()} guideContent={<GettingStarted guide={guide} onGuide={saveGuide} onAction={action=>{if(action==='create')newFile('file');else if(action==='search'||action==='source')showKnowledge();else if(action==='graph')showGraph();else if(action==='ai'){setAiOpen(true);setAiVisited(true);}else if(config.homepage)openFile(config.homepage);else showFolder('');}}/>}/>}
-   {attachmentsVisited&&<LazyBoundary><Suspense fallback={view==='attachments'?<p className="pad subtle">{t('aw.loading')}</p>:null}><Attachments key={config.root} root={config.root!} active={view==='attachments'} onOpen={path=>openFile(path)} onChanged={changed}/></Suspense></LazyBoundary>}
+   {attachmentsVisited&&<LazyBoundary><Suspense fallback={view==='attachments'?<p className="pad subtle">{t('aw.loading')}</p>:null}><Attachments key={config.root} root={config.root!} active={view==='attachments'} onDownloads={showDownloads} onOpen={path=>openFile(path)} onChanged={changed}/></Suspense></LazyBoundary>}
+   {downloadsVisited&&<LazyBoundary><Suspense fallback={view==='downloads'?<p className="pad subtle">{t('aw.loading')}</p>:null}><AttachmentDownloads key={config.root} root={config.root!} active={view==='downloads'}/></Suspense></LazyBoundary>}
    {view==='web'&&<HtmlPreview path="" root={config.root} active/>}
    {view==='design'&&<LazyBoundary><Suspense fallback={<p className="pad subtle">{t('正在加载设计工作台画板…')}</p>}><DesignStudio root={config.root} active={view==='design'} initialFolder={currentFolder} createInFolder={designCreateFolder} onClearCreateInFolder={()=>setDesignCreateFolder(undefined)} onOpenNote={openFile} onOpenFolder={showFolder} notify={notify} refresh={refresh}/></Suspense></LazyBoundary>}
    {view==='folder'&&<FolderView key={config.root+'\n'+currentFolder} path={currentFolder} onOpen={openFile} onFolder={showFolder} onCreate={()=>newFile('file')} onCreateDesign={folder=>showDesign(folder)} refresh={refresh} manage={manage}/>}

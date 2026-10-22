@@ -62,8 +62,11 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
             if failed:
                 value.setdefault('error_code', 'retrieval_failed')
         except Exception as error:
+            from vault_rag.remote_webdav import RemoteStorageError
             if isinstance(error, NoteError):
                 code, details = error.code, error.details
+            elif isinstance(error, RemoteStorageError):
+                code,details=error.code,{'state':error.state,'retryable':error.state in {'unreachable','auth_required'}}
             else:
                 code = ('permission_denied' if isinstance(error, PermissionError) else
                         'write_conflict' if isinstance(error, ConflictError) else
@@ -73,6 +76,8 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
                 details = error.details if isinstance(error, McpAccessError) else {}
             # Do not reflect arbitrary request headers or internal exception paths.
             message = str(error) if isinstance(error, (NoteError, ConflictError, PermissionError, ValueError)) else code.replace('_', ' ')
+            if isinstance(error,RemoteStorageError) and error.state=='missing':
+                message='Attachment is missing or unavailable on the server'
             if header:
                 message = message.replace(header, '[credential]').replace(header.removeprefix('Bearer '), '[credential]')
             value = {'ok': False, 'error_code': code, 'error': message, **details}
@@ -167,10 +172,18 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
 
         @tool()
         async def vault_files(request: ReadCommand, workspace_revision: str, ctx: Context) -> CallToolResult:
-            """Read connected files: request.action=list|stat|read|export|status.
-            list searches attachment metadata; stat returns revision and Markdown links.
-            read takes exactly one path or download job_id, expected_revision and byte offsets.
+            """Read connected files: request.action=list|stat|read|export|status|groups|products|product|prepare_download|download_status.
+            list searches names, tags, categories and descriptions; storage_id filters a configured source.
+            stat takes path or asset_id and returns file/metadata revisions and Markdown links.
+            read takes exactly one path, asset_id or download job_id, expected_revision and byte offsets.
             export prepares a ZIP; status reads a job or lists jobs/index/transfer limits.
+            products queries the local Unity product catalog, including metadata and review states.
+            product takes product_id (or a candidate ID) and lists all linked versions/copies.
+            prepare_download takes asset_id and streams a remote attachment in the backend, outside preview cache.
+            download_status takes job_id (or lists jobs). Only ready jobs have verified 24-hour handles;
+            queued/paused does not mean saved to the user device.
+            Prepared attachments are delivered through the controlled Downloads page, never Base64 chunks.
+            read(job_id) is for legacy ZIP exports only, not staged attachment downloads.
             Status sections paginate full operation previews. No note text/OCR search.
             Use current workspace_revision from vault_index_status. Never expose localhost URLs.
             """
@@ -179,13 +192,23 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         @tool(write=True, external=True, meta={'openai/fileParams': ['files']})
         async def vault_files_update(request: WriteCommand, workspace_revision: str, operation_id: str,
                                      ctx: Context, files: list[ChatFile] = []) -> CallToolResult:
-            """Manage connected files with request.action=upload|move|trash|organize|reindex|job.
+            """Manage connected files with request.action=upload|metadata|move|trash|organize|reindex|job|group_update|product_update.
             Upload ordinary knowledge-base attachments/images to the configured _attachments
             folder or a vault-relative folder such as Comics/Project/assets.
             source=files consumes top-level ChatGPT files (preferred); source=base64 takes
             name, data_base64, sha256 in request for a single file up to 2 MiB.
             begin/chunk/commit/abort transfers larger local bytes (256 KiB/chunk),
             with declared size and SHA-256 at begin. Never invent missing file bytes/URLs.
+            Upload storage_id selects a configured server; omitted uses the configured default.
+            Remote uploads return a durable job. Queued is not saved: wait for remote_saved=true.
+            metadata edits tags/category/description using path or asset_id and the current
+            metadata_revision as expected_revision. It never edits the attachment bytes.
+            groups lists user-defined attachment groups; list accepts group_id.
+            group_update creates/edits/deletes groups and manages manual membership using revision checks.
+            product_update initializes/syncs the NAS product catalog, edits official or personal data,
+            confirms product/file associations, records review decisions, or releases/retries prepared downloads.
+            Use operation, product_id/asset_id, expected_revision and payload. Official refresh never replaces personal fields.
+            A matched product ID is not proof of ownership. Preserve all package versions and duplicate originals.
             move destination_kind=path renames one file; folder moves up to 100 files.
             move/trash/organize ONLY prepare a recoverable plan. Read its job and blockers,
             then job command=execute with expected_revision and confirm=true after user authorization.
