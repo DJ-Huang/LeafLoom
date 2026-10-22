@@ -64,6 +64,15 @@ class UploadFiles(Command):
     folder: str = ''
 
 
+class InlineUpload(Command):
+    action: Literal['upload']
+    source: Literal['base64']
+    name: str
+    data_base64: str = Field(max_length=2796204)
+    sha256: str = Field(pattern=r'^[a-fA-F0-9]{64}$')
+    folder: str = ''
+
+
 class BeginUpload(Command):
     action: Literal['upload']
     source: Literal['begin']
@@ -87,7 +96,7 @@ class FinishUpload(Command):
     job_id: str
 
 
-UploadCommand = Annotated[Union[UploadFiles, BeginUpload, AppendUpload, FinishUpload], Field(discriminator='source')]
+UploadCommand = Annotated[Union[UploadFiles, InlineUpload, BeginUpload, AppendUpload, FinishUpload], Field(discriminator='source')]
 
 
 class MoveFiles(Command):

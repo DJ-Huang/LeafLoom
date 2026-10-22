@@ -121,7 +121,12 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
             if files is not None and result['capabilities']['read_workspace'] and config.data.get('root'):
                 result['attachments'] = {'index':files.index_jobs.status(),
                     'folder':config.data.get('attachment_folder','_attachments'),
-                    'tools':['vault_files','vault_files_update']}
+                    'tools':['vault_files','vault_files_update'],
+                    'upload': {'tool': 'vault_files_update', 'action': 'upload',
+                        'sources': ['files', 'base64', 'begin', 'chunk', 'commit', 'abort'],
+                        'inline_max_bytes': files.INLINE_MAX, 'chunk_max_bytes': files.CHUNK,
+                        'folder': 'Optional vault-relative directory, e.g. Comics/Project/assets',
+                        'client_hint': 'If either file tool is missing in the client, refresh/rescan its plugin tool directory after restarting the updated backend; Design Studio and Feishu transfers are separate.'}}
             return result
         return await call(ctx, status, legacy=True)
 
@@ -175,8 +180,12 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         async def vault_files_update(request: WriteCommand, workspace_revision: str, operation_id: str,
                                      ctx: Context, files: list[ChatFile] = []) -> CallToolResult:
             """Manage connected files with request.action=upload|move|trash|organize|reindex|job.
-            upload source=files consumes top-level ChatGPT files; begin/chunk/commit/abort
-            transfers local bytes (256 KiB/chunk), with declared size and SHA-256 at begin.
+            Upload ordinary knowledge-base attachments/images to the configured _attachments
+            folder or a vault-relative folder such as Comics/Project/assets.
+            source=files consumes top-level ChatGPT files (preferred); source=base64 takes
+            name, data_base64, sha256 in request for a single file up to 2 MiB.
+            begin/chunk/commit/abort transfers larger local bytes (256 KiB/chunk),
+            with declared size and SHA-256 at begin. Never invent missing file bytes/URLs.
             move destination_kind=path renames one file; folder moves up to 100 files.
             move/trash/organize ONLY prepare a recoverable plan. Read its job and blockers,
             then job command=execute with expected_revision and confirm=true after user authorization.

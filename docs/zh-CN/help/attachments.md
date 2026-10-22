@@ -12,6 +12,14 @@
 
 ## 操作步骤
 
+Base64 一次上传需要包含此改动的源码版或后续版本。
+
+知识库普通附件使用 `vault_files_update`，设置 `request.action="upload"`。ChatGPT 优先使用 `source="files"` 和宿主提供的顶层 `files` 数组。本地客户端也可用 `source="base64"`、`name`、`data_base64`、原始字节的 `sha256` 一次上传不超过 2 MiB 的文件；更大的文件使用 begin/chunk/commit。省略 `folder` 时使用配置的附件目录，也可指定知识库内相对目录，例如 `Comics/Project/assets`。
+
+先从 `vault_index_status` 获取 `workspace_revision`，每次写入使用唯一 `operation_id`，相同请求重试时保留原 ID。上传结果返回实际路径、大小、SHA-256、版本及 `markdown_link`，图片另返回 `markdown_embed`。通过 `vault_files` 的 stat 和 `source_note` 获取相对文档的引用，再按当前文档版本写入 Markdown。同名原文件会保留。
+
+如果客户端只显示 Design Studio 导入或飞书临时传输，检查服务端 `tools/list` 是否包含 `vault_files` 和 `vault_files_update`。更新后重启后端，并刷新／重新扫描客户端插件工具目录；仅重启 LeafLoom 不会刷新客户端缓存。另行检查知识库写入权限，无需为普通附件授权飞书。详见 [MCP 文件工具](mcp.md)。
+
 AI 客户端可通过同一附件系统使用 `vault_files`（读取、下载、状态）和 `vault_files_update`（上传、管理）。在 **AI 连接** 启用知识库访问，写入单独授权。聊天文件在后台上传，本机客户端可传输经大小与哈希校验的字节分块；批次失败后先检查已完成结果，再重试剩余文件。文件读取要求当前版本，移动和回收保留影响预览与恢复记录。详见 [MCP 接入](mcp.md)。
 
 点击侧栏 **附件管理**，进入独立工作区（`?view=attachments`）。顶部显示附件总数、占用空间和索引状态。可搜索全库文件名与相对路径，按类型筛选，按名称、修改时间或大小排序，切换缩略图网格与列表；默认缩略图、最近修改优先。每页最多 100 项，全选仅作用于当前页；翻页、搜索、筛选或排序时清空批量选择。

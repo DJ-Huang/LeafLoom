@@ -143,7 +143,7 @@ reuse a receipt; reusing an ID with different arguments is a conflict.
 | `vault_files` | `read` | Exactly one `path` or ZIP `job_id`, `expected_revision`, optional byte `offset`/`limit`; returns Base64 bytes, `next_offset`, `eof`. Default 64 KiB, maximum 256 KiB. |
 | `vault_files` | `export` | `paths` (1–100); prepares a private ZIP task. |
 | `vault_files` | `status` | Without `job_id`, pages tasks and returns index/limits. With an ID, reads that task. Operation `section=moves/references/blockers/exclusions/results` returns a complete paginated `page`. |
-| `vault_files_update` | `upload` | `source=files/begin/chunk/commit/abort`; see below. |
+| `vault_files_update` | `upload` | `source=files/base64/begin/chunk/commit/abort`; see below. |
 | `vault_files_update` | `move` | `paths`, `destination`; `destination_kind=folder` by default. Use `path` with one source to rename or move to an exact filename. Prepares a plan. |
 | `vault_files_update` | `trash` | `paths` (1–100); prepares a recoverable recycle plan without removing note links. |
 | `vault_files_update` | `organize` | Optional `destination` (default `_attachments`); prepares a consolidation plan. |
@@ -169,6 +169,19 @@ size and timeout limits. Signed URLs are never saved in receipts or results.
 Read `status` using the returned `upload:` job ID. A failed batch can contain
 completed files: inspect `results` before uploading only the remaining files.
 
+For a single file up to 2 MiB, a build containing this change also accepts
+`request={"action":"upload","source":"base64","name":"concept.png","data_base64":"<original-file-base64>","sha256":"<sha256-of-original-bytes>","folder":"Comics/Project/assets"}`.
+Supply the current `workspace_revision` and a unique `operation_id` at the top level.
+The server validates the hash before publication; use host file inputs or chunks
+for larger files or client request limits. Uploads return `markdown_link` and, for
+images, `markdown_embed`. Use `stat.source_note` for a note-relative reference.
+
+`vault_index_status.attachments.upload` advertises the upload tool, sources,
+limits and client refresh guidance. File `status` also exposes `upload_sources`
+and `limits.inline_bytes`. If the server lists both file tools but the client
+only has Design Studio/Feishu tools, refresh/rescan the client plugin tool directory;
+this is a stale client catalog, not a missing attachment API.
+
 Local clients read files using their own host permissions, then send bytes:
 
 1. `source=begin`, `name`, total `size`, `sha256`, optional `folder` returns `job_id`.
@@ -178,7 +191,7 @@ Local clients read files using their own host permissions, then send bytes:
    discards an unfinished upload. Use a distinct operation ID for each step and
    retain that ID when retrying the same step.
 
-Both sources use the configured attachment folder unless `folder` specifies a
+All upload sources use the configured attachment folder unless `folder` specifies a
 safe relative directory. Same-name uploads get numbered copies and preserve
 original bytes. Markdown/TXT/Base use their note workflows. Uploads never edit a
 note automatically; insert a returned link with the existing note revision checks

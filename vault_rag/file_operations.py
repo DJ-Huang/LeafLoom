@@ -29,6 +29,7 @@ from vault_rag.platform_support import protect_private_directory, is_link
 
 class FileOperations:
     CHUNK = 256 * 1024
+    INLINE_MAX = 2 * 1024 * 1024
     MAX_FILE = 256 * 1024 * 1024
     MAX_TOTAL = 1024 * 1024 * 1024
     TTL = 24 * 60 * 60
@@ -236,7 +237,8 @@ class FileOperations:
         return {**self.notes.page(rows, request.limit, request.cursor, key='file-jobs'),
                 'index': self.index_jobs.status(root),
                 'attachment_folder': self.config.data.get('attachment_folder', '_attachments'),
-                'limits': dict(chunk_bytes=self.CHUNK, file_bytes=self.MAX_FILE, temporary_bytes=self.MAX_TOTAL, ttl_seconds=self.TTL)}
+                'upload_sources': ['files', 'base64', 'begin', 'chunk', 'commit', 'abort'],
+                'limits': dict(chunk_bytes=self.CHUNK, inline_bytes=self.INLINE_MAX, file_bytes=self.MAX_FILE, temporary_bytes=self.MAX_TOTAL, ttl_seconds=self.TTL)}
 
     def _receipt_path(self, owner, operation_id):
         return self.runtime.files.state_path('file-receipts', digest(owner + ':' + operation_id) + '.json')
@@ -300,7 +302,7 @@ class FileOperations:
                             previous = {**previous, 'state':'interrupted',
                                 'error':'Temporary transfer is unavailable; inspect saved results before uploading remaining files'}
                     return {'ok': True, **previous, 'workspace_revision': revision, 'replayed': True}
-            if request.action == 'upload' and request.source == 'commit':
+            if request.action == 'upload' and request.source in {'commit', 'base64'}:
                 value = self._upload(request, revision, operation_id, fingerprint, files, owner, grant, check)
             else:
                 with grant(), self.config.lock, self.lock:
@@ -393,6 +395,33 @@ class FileOperations:
 
     def _upload(self, request, revision, operation_id, fingerprint, files, owner, grant, check):
         source = request.source
+        if source == 'base64':
+            try:
+                data = base64.b64decode(request.data_base64, validate=True)
+            except ValueError:
+                raise ValueError('Invalid Base64 file content') from None
+            if len(data) > self.INLINE_MAX:
+                raise ValueError('Inline upload exceeds 2 MiB; use files or begin/chunk/commit')
+            sha256 = hashlib.sha256(data).hexdigest()
+            if sha256 != request.sha256.lower():
+                raise ValueError('Upload SHA-256 mismatch; file is not saved')
+            with grant(), self.config.lock, self.lock:
+                self.notes.check_workspace(revision)
+                self._quota(owner, len(data))
+                row = self._allocate(revision, owner, request.name, len(data), sha256, request.folder)
+                p = self.directory / row['id']
+            try:
+                p.write_bytes(data)
+                with self.lock:
+                    row['size'] = len(data)
+                result = self._publish(row, p, row['name'], operation_id, fingerprint, grant, check)
+                row.update(state='completed', results=[result])
+                return {**self._transfer_info(row), **result}
+            finally:
+                if row['state'] != 'interrupted':
+                    if row['state'] != 'completed':
+                        row['state'] = 'failed'
+                    p.unlink(missing_ok=True)
         if source == 'begin':
             self._quota(owner, request.size)
             return self._transfer_info(self._allocate(revision, owner, request.name, request.size, request.sha256, request.folder))
@@ -497,6 +526,8 @@ class FileOperations:
                 result.update(size=p.stat().st_size,
                     sha256=sha.hexdigest(),
                     markdown_link='[' + name.replace('[', '\\[').replace(']', '\\]') + '](<' + quote(result['path'], safe='/') + '>)')
+                if (mimetypes.guess_type(name)[0] or '').startswith('image/'):
+                    result['markdown_embed'] = '!' + result['markdown_link']
                 info = p.stat()
                 self._save_receipt(owner, operation_id, fingerprint, result, state='published',
                     staging_name=target.temp.name, published_identity=[info.st_dev,info.st_ino], upload_id=row['id'])

@@ -239,3 +239,13 @@ HTML／源码项目、独立脚本目录、原生工程及相关共享资源保�
 新建项目时选择 **ATELIER**，可获得三个灯具营销画板、可编辑文字、原创雕塑感图形，以及完整的中英日变体。在“数据”中编辑绑定源文案或切换变体；空白、FORMA 和 Motion 模板继续适用于其他通用设计工作。
 
 工作台将编辑工具与导出、发布分组。页面排序、复制、删除收纳在页面属性的“页面操作”中。批量发布的操作栏始终可见，选择页面、变体、格式后核对摘要，再检查所选输出并发布。已完成项目以可展开的紧凑行显示，失败项展开诊断；文字适配限制与检查说明可按需展开。静态检查不能代替字体与版式的目视复核。 窄窗口下可使用画布工具栏的“隐藏面板”扩大画布；“显示面板”会恢复原来的属性与图层选择。
+
+## 通过 MCP 上传图片与普通附件
+
+知识库普通附件使用 `vault_files_update`，设置 `request.action="upload"`。ChatGPT 优先使用 `source="files"` 和宿主提供的顶层 `files` 数组。本地客户端也可用 `source="base64"`、`name`、`data_base64`、原始字节的 `sha256` 一次上传不超过 2 MiB 的文件；更大的文件使用 begin/chunk/commit。省略 `folder` 时使用配置的附件目录，也可指定知识库内相对目录，例如 `Comics/Project/assets`。
+
+先从 `vault_index_status` 获取 `workspace_revision`，每次写入使用唯一 `operation_id`，相同请求重试时保留原 ID。上传结果返回实际路径、大小、SHA-256、版本及 `markdown_link`，图片另返回 `markdown_embed`。通过 `vault_files` 的 stat 和 `source_note` 获取相对文档的引用，再按当前文档版本写入 Markdown。同名原文件会保留。
+
+如果客户端只显示 Design Studio 导入或飞书临时传输，检查服务端 `tools/list` 是否包含 `vault_files` 和 `vault_files_update`。更新后重启后端，并刷新／重新扫描客户端插件工具目录；仅重启 LeafLoom 不会刷新客户端缓存。另行检查知识库写入权限，无需为普通附件授权飞书。详见 [MCP 文件工具](../MCP.md#general-file-tools)。
+
+Base64 一次上传需要包含此改动的源码版或后续版本。

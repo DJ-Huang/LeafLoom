@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Add SHA-256-verified, single-request Base64 attachment uploads up to 2 MiB, image embeds in upload results, and discoverable upload capabilities with client tool-directory refresh guidance. Preserve the existing two-tool API, chunk transfers and ChatGPT file inputs.
+
 - Fix Design Studio rejecting projects synced between computers with different vault root paths, including Windows-to-Mac transfers. Preserve document IDs and history ownership on reads, retain duplicate-directory/content-conflict guards, and support synced project moves, restore and trash cleanup.
 
 
