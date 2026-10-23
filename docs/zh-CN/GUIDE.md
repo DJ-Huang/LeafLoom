@@ -239,7 +239,7 @@ AI/MCP 的 `vault_files` 使用 `groups` 列出分组，`list` 支持 `group_id`
 
 部分官方商品页没有 JSON-LD 标记；采集仍可读取其官方结构化商品与发布者数据，但必须核对商品 ID 和发布者身份，不能仅凭标题或封面确认。
 
-保持 LeafLoom 运行并配置好商品目录，在仓库中用[采集脚本](../../../scripts/collect_unity_catalog.py)指定同一知识库：
+保持 LeafLoom 运行并配置好商品目录，在仓库中用[采集脚本](../../scripts/collect_unity_catalog.py)指定同一知识库：
 
 ```sh
 python3 scripts/collect_unity_catalog.py --root /path/to/vault --start --wait --interval 10 --report /path/to/collection-report.json
@@ -247,7 +247,7 @@ python3 scripts/collect_unity_catalog.py --root /path/to/vault --status --report
 python3 scripts/collect_unity_catalog.py --root /path/to/vault --apply-chinese /path/to/chinese.json --report /path/to/chinese-report.json
 ```
 
-脚本控制本机后台，不操作浏览器、不使用商店账号 Cookie，也不下载资源包原件。中断续跑保留已完成的待核对判断，访问受阻和网络失败项仍重试。后台同步在已有核验检查点时先恢复待传，再检查远端，合并重复扫描；首次或主动同步仍先读取远端。采集沿用后台保存的进度，Ctrl-C 只停止监控，不取消后台任务。`succeeded` 表示官方资料取得成功，不代表中文整理完成，需另行检查中文简介与翻译状态。报告中的 `legacy_unresolved` 是旧断点缺少身份信息的未核实计数，不算成功；完整进度以资源包库存核对。中文输入只局部更新明确提供的官方翻译字段，保留个人标签和笔记。[输入格式与连接选项](../../MCP.md#batch-script)见 MCP 文档。
+脚本控制本机后台，不操作浏览器、不使用商店账号 Cookie，也不下载资源包原件。中断续跑保留已完成的待核对判断，访问受阻和网络失败项仍重试。后台同步在已有核验检查点时先恢复待传，再检查远端，合并重复扫描；首次或主动同步仍先读取远端。采集沿用后台保存的进度，Ctrl-C 只停止监控，不取消后台任务。`succeeded` 表示官方资料取得成功，不代表中文整理完成，需另行检查中文简介与翻译状态。报告中的 `legacy_unresolved` 是旧断点缺少身份信息的未核实计数，不算成功；完整进度以资源包库存核对。中文输入只局部更新明确提供的官方翻译字段，保留个人标签和笔记。[输入格式与连接选项](../MCP.md#batch-script)见 MCP 文档。
 
 ### 整理与恢复
 
@@ -311,3 +311,10 @@ HTML／源码项目、独立脚本目录、原生工程及相关共享资源保�
 如果客户端只显示 Design Studio 导入或飞书临时传输，检查服务端 `tools/list` 是否包含 `vault_files` 和 `vault_files_update`。更新后重启后端，并刷新／重新扫描客户端插件工具目录；仅重启 LeafLoom 不会刷新客户端缓存。另行检查知识库写入权限，无需为普通附件授权飞书。详见 [MCP 文件工具](../MCP.md#general-file-tools)。
 
 Base64 一次上传需要包含此改动的源码版或后续版本。
+
+
+### AI 素材检索与交付
+
+检索前，先在所需附件分组的编辑窗口勾选 **用于 AI 素材检索**。全部分组默认关闭，只收录已选分组的成员并集；未选择时返回 `scope_not_configured`，不回退到全库。开关随分组资料同步到 NAS，有冲突的分组暂不收录，需明确解决。普通附件浏览和笔记引用不受影响。
+
+在 **下载 → 下载设置** 配置素材交付目录，并按需启用已准备本地模型的素材语义索引。AI 使用 `vault_files` 的 `search_assets`、`asset_details`、`asset_preview` 查找已有本地／NAS 素材、核对版本及查看真实预览，再用 `vault_files_update` 的 `deliver_asset` 下载并轮询 `delivery_status`。只有完成后返回服务所在机器的完整路径；交付文件不随缓存清理，由 AI 自行接入工程。没有模型仍可关键词检索；本版不索引包内资源或图片外观相似度。

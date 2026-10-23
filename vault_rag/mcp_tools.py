@@ -9,7 +9,7 @@ import logging
 from typing import Any, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
-from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from mcp.types import CallToolResult, TextContent, ImageContent, ToolAnnotations
 
 from vault_rag.local_state import ConflictError, digest
 from vault_rag.note_operations import NoteError
@@ -83,8 +83,9 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
             value = {'ok': False, 'error_code': code, 'error': message, **details}
             failed = True
         # JSON-roundtrip also normalizes YAML dates/other metadata for MCP JSON.
+        preview = value.pop('_image', None) if isinstance(value, dict) and not failed else None
         text = json.dumps(value, ensure_ascii=False, default=str, allow_nan=False)
-        return CallToolResult(content=[TextContent(type='text', text=text)], structuredContent=json.loads(text), isError=failed)
+        return CallToolResult(content=[TextContent(type='text', text=text)] + ([ImageContent(type='image', data=preview, mimeType='image/webp')] if preview else []), structuredContent=json.loads(text), isError=failed)
 
     @tool()
     async def vault_search(query: str, ctx: Context, top_k: int = 3, note_type: str | None = None,
@@ -125,6 +126,7 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
                     'workspace_access': 'all connected notes; retrieval uses selected directories only'}
             if files is not None and result['capabilities']['read_workspace'] and config.data.get('root'):
                 result['attachments'] = {'index':files.index_jobs.status(),
+                    'asset_search':files.asset_search.status(),
                     'folder':config.data.get('attachment_folder','_attachments'),
                     'tools':['vault_files','vault_files_update'],
                     'upload': {'tool': 'vault_files_update', 'action': 'upload',
@@ -173,6 +175,14 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         @tool()
         async def vault_files(request: ReadCommand, workspace_revision: str, ctx: Context) -> CallToolResult:
             """Read connected files: request.action=list|stat|read|export|status|groups|products|product|prepare_download|download_status.
+            Prefer search_assets for existing materials, textures, models and Unity packages before sourcing new assets.
+            Only groups explicitly enabled for AI asset search participate; group_id narrows this scope and never expands it.
+            No enabled groups returns scope_not_configured; ask the user to select groups, never fall back to all files automatically.
+            search_assets returns compact keyword/hybrid candidates and recorded metadata; optional source/storage_id/group_id/formats/pipeline filters.
+            asset_details takes result_id and returns all actual versions/copies and selectable file paths/revisions.
+            asset_preview takes result_id and expected_revision, returning a real product cover or file thumbnail as a native image.
+            delivery_status takes job_id; only completed deliveries expose a stable local_path on the identified SERVICE HOST.
+            A path is not proof this client runs on that machine. Download success is not engine import.
             list searches names, tags, categories and descriptions; storage_id filters a configured source.
             stat takes path or asset_id and returns file/metadata revisions and Markdown links.
             read takes exactly one path, asset_id or download job_id, expected_revision and byte offsets.
@@ -193,6 +203,10 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         async def vault_files_update(request: WriteCommand, workspace_revision: str, operation_id: str,
                                      ctx: Context, files: list[ChatFile] = []) -> CallToolResult:
             """Manage connected files with request.action=upload|metadata|move|trash|organize|reindex|job|group_update|product_update.
+            deliver_asset copies one path from asset_details with expected_revision into the configured delivery directory;
+            use a unique operation_id and poll vault_files delivery_status for the actual completed local_path.
+            No destination paths or engine operations are accepted. delivery_control retries/cancels with job_id, command and expected_revision.
+            Delivered originals persist independently of temporary download caches. Select actual package versions after reading details.
             Upload ordinary knowledge-base attachments/images to the configured _attachments
             folder or a vault-relative folder such as Comics/Project/assets.
             source=files consumes top-level ChatGPT files (preferred); source=base64 takes
@@ -205,6 +219,8 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
             metadata_revision as expected_revision. It never edits the attachment bytes.
             groups lists user-defined attachment groups; list accepts group_id.
             group_update creates/edits/deletes groups and manages manual membership using revision checks.
+            Explicit create/update search_enabled controls asset search membership (default false); updates require search_scope_revision.
+            Resolve scope conflicts with resolve_search_scope=true only after reviewing the branches. Old requests omitting the flag preserve it.
             product_update initializes/syncs the NAS product catalog, edits official or personal data,
             confirms product/file associations, records review decisions, or releases/retries prepared downloads.
             Use operation, product_id/asset_id, expected_revision and payload. Official refresh never replaces personal fields.

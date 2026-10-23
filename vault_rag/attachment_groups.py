@@ -31,6 +31,7 @@ class AttachmentGroups:
     def __init__(self, remote, library):
         self.remote, self.library = remote, library
         self.lock = threading.RLock()
+        self.scope_changed = lambda: None
         self.wake, self.stopped = threading.Event(), threading.Event()
         self.thread = threading.Thread(target=self._loop, daemon=True, name='attachment-groups')
         self.thread.start()
@@ -48,7 +49,9 @@ class AttachmentGroups:
             db.row_factory = sqlite3.Row
             db.executescript('''CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, entity TEXT NOT NULL,
                 parents TEXT NOT NULL,payload TEXT NOT NULL,data BLOB NOT NULL,synced INTEGER NOT NULL DEFAULT 0);
-                CREATE TABLE IF NOT EXISTS state(key TEXT PRIMARY KEY,value TEXT NOT NULL);''')
+                CREATE TABLE IF NOT EXISTS state(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS scope_events(id TEXT PRIMARY KEY, entity TEXT NOT NULL,
+                parents TEXT NOT NULL,payload TEXT NOT NULL,data BLOB NOT NULL,synced INTEGER NOT NULL DEFAULT 0);''')
             db.execute('INSERT OR IGNORE INTO state VALUES(?,?)', ('device', uuid.uuid4().hex))
             yield db
 
@@ -60,6 +63,7 @@ class AttachmentGroups:
         for event in events:
             entities.setdefault(event['entity'], []).append(event)
         groups = []
+        scopes = AttachmentGroups._scopes(db)
         for key, rows in entities.items():
             parents = {p for row in rows for p in json.loads(row['parents'])}
             heads = sorted(row['id'] for row in rows if row['id'] not in parents)
@@ -70,20 +74,59 @@ class AttachmentGroups:
             # A delete concurrent with an edit remains visible for resolution.
             if value['deleted'] and len(heads) == 1 and complete:
                 continue
-            groups.append({**value, 'id': key, 'revision': digest([heads,complete]),
+            groups.append({**value, **scopes.get(key, AttachmentGroups._empty_scope()), 'id': key, 'revision': digest([heads,complete]),
                 'conflicts': [{'head': h, 'value': json.loads(by_id[h]['payload'])} for h in heads] if len(heads) > 1 or not complete else [],
                 'heads': heads})
         return sorted(groups, key=lambda g: (g['position'], g['name'].casefold(), g['id']))
+
+    @staticmethod
+    def _empty_scope():
+        return {'search_enabled':False,'search_scope_revision':digest([]),
+                'search_scope_conflicts':[],'scope_heads':[]}
+
+    @staticmethod
+    def _scopes(db):
+        events = [dict(row) for row in db.execute('SELECT * FROM scope_events')]
+        by_id = {row['id']:row for row in events}
+        entities = {}
+        for row in events:
+            entities.setdefault(row['entity'],[]).append(row)
+        scopes = {}
+        for key, rows in entities.items():
+            parents = {p for row in rows for p in json.loads(row['parents'])}
+            heads = sorted(row['id'] for row in rows if row['id'] not in parents)
+            complete = all(p in by_id and by_id[p]['entity']==key for row in rows for p in json.loads(row['parents']))
+            conflict = len(heads)!=1 or not complete
+            scopes[key] = {'search_enabled':bool(heads) and not conflict and json.loads(by_id[heads[0]]['payload'])['search_enabled'],
+                'search_scope_revision':digest([heads,complete]),'scope_heads':heads,
+                'search_scope_conflicts':[{'head':h,'value':json.loads(by_id[h]['payload'])} for h in heads] if conflict else []}
+        return scopes
+
+    def search_scope(self, root):
+        """Read only local committed group projections; never enumerate attachments or contact NAS."""
+        with self.lock, self._db(root) as db:
+            groups = self._groups(db)
+            sync_row = db.execute("SELECT value FROM state WHERE key='sync'").fetchone()
+            pending = sum(db.execute(f'SELECT COUNT(*) FROM {table} WHERE synced=0').fetchone()[0] for table in ('events','scope_events'))
+        configured = bool(self.library.settings(root)['storage_id'])
+        enabled = [g for g in groups if g['search_enabled'] and not g['conflicts'] and not g['search_scope_conflicts']]
+        conflicts = [g['id'] for g in groups if g['search_scope_conflicts'] or (g['search_enabled'] and g['conflicts'])]
+        return {'sync':json.loads(sync_row[0]) if sync_row and configured else {'state':'local_only'},
+                'pending':pending if configured else 0, 'group_ids':sorted(g['id'] for g in enabled),
+                'groups':[{'id':g['id'],'name':g['name']} for g in enabled],
+                'scope_revision':digest(sorted((g['id'],g['revision'],g['search_scope_revision']) for g in groups)),
+                'scope_state':'ready' if enabled else 'scope_conflict' if conflicts else 'scope_not_configured',
+                'conflict_group_ids':sorted(conflicts)}
 
     def listing(self, root):
         self.reconcile_members(root)
         with self.lock, self._db(root) as db:
             groups = self._groups(db)
-            pending = db.execute('SELECT COUNT(*) FROM events WHERE synced=0').fetchone()[0]
+            pending = sum(db.execute(f'SELECT COUNT(*) FROM {table} WHERE synced=0').fetchone()[0] for table in ('events','scope_events'))
             status = db.execute("SELECT value FROM state WHERE key='sync'").fetchone()
         self.wake.set()
         configured=bool(self.library.settings(root)['storage_id'])
-        return {'groups': [{k: v for k, v in g.items() if k != 'heads'} for g in groups],
+        return {'groups': [{k: v for k, v in g.items() if k not in {'heads','scope_heads'}} for g in groups],
                 'sync': json.loads(status[0]) if status and configured else {'state': 'local_only'}, 'pending': pending if configured else 0}
 
     @staticmethod
@@ -137,7 +180,9 @@ class AttachmentGroups:
     def update(self, root, operation, payload):
         if operation not in {'create', 'update', 'delete', 'members'} or not isinstance(payload, dict):
             raise ValueError('Invalid group operation')
-        if 'resolve' in payload and type(payload['resolve']) is not bool:raise ValueError('Explicit conflict resolution must be boolean')
+        if any(k in payload and type(payload[k]) is not bool for k in ('resolve','resolve_search_scope')):raise ValueError('Explicit conflict resolution must be boolean')
+        if 'search_enabled' in payload and (operation not in {'create','update'} or type(payload['search_enabled']) is not bool):
+            raise ValueError('Search scope must be an explicit boolean on group create/update')
         members = []
         if operation == 'members':
             if payload.get('mode') not in {'include', 'exclude', 'reset'}:
@@ -176,11 +221,25 @@ class AttachmentGroups:
             self._validate(value)
             event_id = uuid.uuid4().hex
             event = {'schema': 1, 'id': event_id, 'entity': key, 'parents': current['heads'] if current else [], 'payload': value}
-            self._accept(db, event, encoded(event), False)
+            # A scope-only edit must not manufacture a concurrent membership/rules branch.
+            original = {k:current[k] for k in value} if current else None
+            if operation!='update' or 'search_enabled' not in payload or value!=original or current['conflicts']:
+                self._accept(db, event, encoded(event), False)
+            if 'search_enabled' in payload:
+                scope = current or self._empty_scope()
+                if current and payload.get('search_scope_revision')!=scope['search_scope_revision']:
+                    raise ConflictError('Group search scope changed; reload before saving')
+                if scope['search_scope_conflicts'] and not payload.get('resolve_search_scope'):
+                    raise ConflictError('Resolve search scope conflicts explicitly')
+                scope_event = {'schema':1,'id':uuid.uuid4().hex,'entity':key,'parents':scope['scope_heads'],
+                               'payload':{'search_enabled':payload['search_enabled']}}
+                self._accept(db,scope_event,encoded(scope_event),False,scope=True)
         self.wake.set()
+        self.scope_changed()
         return self.listing(root)
 
-    def _accept(self, db, event, data, synced):
+    def _accept(self, db, event, data, synced, *, scope=False):
+        table = 'scope_events' if scope else 'events'
         if set(event) != {'schema', 'id', 'entity', 'parents', 'payload'} or event['schema'] != 1:
             raise ValueError('Invalid group event')
         if any(not isinstance(event[k], str) or not re.fullmatch('[0-9a-f]{32}', event[k]) for k in ('id', 'entity')):
@@ -188,20 +247,24 @@ class AttachmentGroups:
         parents = event['parents']
         if not isinstance(parents, list) or len(parents) > 100 or event['id'] in parents or any(not isinstance(p, str) or not re.fullmatch('[0-9a-f]{32}', p) for p in parents):
             raise ValueError('Invalid group event parents')
-        self._validate(event['payload'])
+        if scope:
+            if not isinstance(event['payload'],dict) or set(event['payload'])!={'search_enabled'} or type(event['payload']['search_enabled']) is not bool:
+                raise ValueError('Invalid search scope event')
+        else:
+            self._validate(event['payload'])
         pending=list(parents);seen=set()
         while pending:
             parent=pending.pop()
             if parent==event['id']:raise ValueError('Cyclic group history')
             if parent in seen:continue
             seen.add(parent)
-            previous=db.execute('SELECT entity,parents FROM events WHERE id=?',(parent,)).fetchone()
+            previous=db.execute(f'SELECT entity,parents FROM {table} WHERE id=?',(parent,)).fetchone()
             if previous:
                 if previous['entity']!=event['entity']:raise ValueError('Group parent belongs to another group')
                 pending.extend(json.loads(previous['parents']))
-        old = db.execute('SELECT data FROM events WHERE id=?', (event['id'],)).fetchone()
+        old = db.execute(f'SELECT data FROM {table} WHERE id=?', (event['id'],)).fetchone()
         if old and bytes(old[0]) != data: raise ConflictError('Immutable group event changed')
-        db.execute('INSERT OR IGNORE INTO events VALUES(?,?,?,?,?,?)', (event['id'], event['entity'], json.dumps(parents), encoded(event['payload']).decode(), data, int(synced)))
+        db.execute(f'INSERT OR IGNORE INTO {table} VALUES(?,?,?,?,?,?)', (event['id'], event['entity'], json.dumps(parents), encoded(event['payload']).decode(), data, int(synced)))
 
     def reconcile_members(self, root):
         """Follow only explicit manifest identities, never basename guesses.
@@ -234,6 +297,7 @@ class AttachmentGroups:
                 if not latest or latest['revision']!=group['revision']:continue
                 event={'schema':1,'id':uuid.uuid4().hex,'entity':group['id'],'parents':latest['heads'],'payload':value}
                 self._accept(db,event,encoded(event),False)
+            self.scope_changed()
 
     def sync(self, root):
         settings = self.library.settings(root)
@@ -267,40 +331,46 @@ class AttachmentGroups:
             with self.lock,self._db(root) as db:
                 self.library._check(context)
                 db.execute('INSERT OR IGNORE INTO state VALUES(?,?)',('remote_identity',marker['library_id']))
-            try: entries = provider.scan(directory, max_files=20000, max_depth=1, prune_reserved=False, read_ignore=False)
-            except RemoteStorageError as error:
-                if error.code != 'remote_not_found': raise
-                entries = []
-            with self.lock, self._db(root) as db:
-                known = {row['id']: hashlib.sha256(row['data']).hexdigest() for row in db.execute('SELECT id,data FROM events')}
-            pulled=0
-            for item in entries:
-                match = re.fullmatch(re.escape(directory) + r'/([0-9a-f]{32})-([0-9a-f]{64})\.json', item['path'])
-                if not match or item['size'] > 2 * 1024**2: raise ValueError('Invalid remote group event')
-                if match[1] in known:
-                    if known[match[1]] != match[2]: raise ConflictError('Immutable group event changed')
-                    continue
-                self.library._check(context)
-                if pulled+item['size']>64*1024**2:raise RemoteStorageError('group_sync_batch_limit')
-                data = provider.read_bytes(item['path'], max_bytes=2 * 1024**2)
-                pulled+=len(data)
-                if hashlib.sha256(data).hexdigest() != match[2]: raise ValueError('Group checksum mismatch')
-                event = json.loads(data)
-                if event.get('id') != match[1]: raise ValueError('Group event identity mismatch')
-                with self.lock, self._db(root) as db:
-                    self.library._check(context)
-                    self._accept(db, event, data, True)
-            with self.lock, self._db(root) as db:
-                queued = [dict(row) for row in db.execute('SELECT id,data FROM events WHERE synced=0')]
-            directories=set()
-            for row in queued:
-                self.library._check(context)
-                data = bytes(row['data'])
-                provider.put_immutable(directory + '/' + row['id'] + '-' + hashlib.sha256(data).hexdigest() + '.json', data, max_bytes=2 * 1024**2,verified_directories=directories)
-                self.library._check(context)
-                with self.lock, self._db(root) as db: db.execute('UPDATE events SET synced=1 WHERE id=?', (row['id'],))
+            self._sync_events(root,context,provider,directory)
+            self._sync_events(root,context,provider,context['metadata_directory']+'/attachment-groups/search-scope/events',scope=True)
         with self.lock, self._db(root) as db:
             db.execute('INSERT OR REPLACE INTO state VALUES(?,?)', ('sync', json.dumps({'state': 'synced', 'at': time.time()})))
+
+    def _sync_events(self, root, context, provider, directory, *, scope=False):
+        table = 'scope_events' if scope else 'events'
+        try: entries = provider.scan(directory, max_files=20000, max_depth=1, prune_reserved=False, read_ignore=False)
+        except RemoteStorageError as error:
+            if error.code != 'remote_not_found': raise
+            entries = []
+        with self.lock, self._db(root) as db:
+            known = {row['id']: hashlib.sha256(row['data']).hexdigest() for row in db.execute(f'SELECT id,data FROM {table}')}
+        pulled=0
+        for item in entries:
+            match = re.fullmatch(re.escape(directory) + r'/([0-9a-f]{32})-([0-9a-f]{64})\.json', item['path'])
+            if not match or item['size'] > 2 * 1024**2: raise ValueError('Invalid remote group event')
+            if match[1] in known:
+                if known[match[1]] != match[2]: raise ConflictError('Immutable group event changed')
+                continue
+            self.library._check(context)
+            if pulled+item['size']>64*1024**2:raise RemoteStorageError('group_sync_batch_limit')
+            data = provider.read_bytes(item['path'], max_bytes=2 * 1024**2)
+            pulled+=len(data)
+            if hashlib.sha256(data).hexdigest() != match[2]: raise ValueError('Group checksum mismatch')
+            event = json.loads(data)
+            if event.get('id') != match[1]: raise ValueError('Group event identity mismatch')
+            with self.lock, self._db(root) as db:
+                self.library._check(context)
+                self._accept(db, event, data, True, scope=scope)
+            self.scope_changed()
+        with self.lock, self._db(root) as db:
+            queued = [dict(row) for row in db.execute(f'SELECT id,data FROM {table} WHERE synced=0')]
+        directories=set()
+        for row in queued:
+            self.library._check(context)
+            data = bytes(row['data'])
+            provider.put_immutable(directory + '/' + row['id'] + '-' + hashlib.sha256(data).hexdigest() + '.json', data, max_bytes=2 * 1024**2,verified_directories=directories)
+            self.library._check(context)
+            with self.lock, self._db(root) as db: db.execute(f'UPDATE {table} SET synced=1 WHERE id=?', (row['id'],))
 
     def _loop(self):
         while not self.stopped.is_set():

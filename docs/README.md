@@ -33,6 +33,7 @@ The public help center has 39 task guides and four full guide/release references
 - [Folder organization and indexing scope](VAULT_ORGANIZATION.md)
 - [Remote attachment storage, metadata, local cache, offline uploads and credential ownership](ARCHITECTURE.md#通用远程附件存储)
 - [Official Zspace attachment bridge: static investigation and recovery boundaries](ATTACHMENT_OFFICIAL_BRIDGE.md)
+- [AI asset search, real previews and stable local delivery](ASSET_WORKFLOWS.md)
 - [Unity product collection script and partial Chinese metadata updates](MCP.md#batch-script)
 - [AI assistant implementation](AI_ASSISTANT.md)
 - [Complete MCP tools, credentials, note workflows and the two general file tools](MCP.md)

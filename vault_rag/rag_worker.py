@@ -1,6 +1,6 @@
 """Serial private model/index worker. EOF is the lifetime of the owning service."""
 from __future__ import annotations
-import contextlib, json, logging, os, queue, sys, threading, time
+import contextlib, itertools, json, logging, os, queue, sys, threading, time
 from pathlib import Path
 
 OUTPUT=sys.stdout
@@ -14,7 +14,7 @@ def main():
     config=LocalConfig();model=EmbeddedModel(config.directory)
     from vault_rag.control_pipe import ControlPipe
     control=ControlPipe(sys.stdin)
-    requests=queue.Queue();stopping=threading.Event();gate=threading.Event();gate.set();urgent=threading.Event()
+    sequence=itertools.count();requests=queue.PriorityQueue();stopping=threading.Event();gate=threading.Event();gate.set();urgent=threading.Event()
     current={'knowledge':None,'state':'idle','stop':threading.Event()}
     def cancel():
         current['stop'].set()
@@ -24,12 +24,12 @@ def main():
             for line in control.lines():
                 value=json.loads(line);kind=value.get('type')
                 if kind=='request':
-                    if value['operation'] in ('dense','prepare'):urgent.set();cancel()
-                    requests.put(value)
+                    if value['operation'] in ('dense','prepare','asset_dense'):urgent.set();cancel()
+                    requests.put((0 if value['operation'] in ('dense','prepare','asset_dense') else 1 if value['operation']=='asset_build' else 2,next(sequence),value))
                 elif kind=='pause':gate.clear()
                 elif kind=='resume':gate.set()
                 elif kind=='cancel':cancel()
-                elif kind=='shutdown':cancel();stopping.set();gate.set();requests.put(None);return
+                elif kind=='shutdown':cancel();stopping.set();gate.set();requests.put((-1,next(sequence),None));return
         finally:
             # The model may be stuck in a native import. Never orphan it after EOF.
             os._exit(0)
@@ -42,7 +42,7 @@ def main():
     logging.basicConfig(level=logging.INFO,stream=sys.stderr,force=True)
     emit({'type':'status','state':'idle','model':model.status(),'progress':{}})
     while not stopping.is_set():
-        value=requests.get()
+        _,_,value=requests.get()
         if value is None:break
         identifier=value['id'];operation=value['operation'];current['state']=operation
         current['stop']=threading.Event();current['knowledge']=None
@@ -52,6 +52,9 @@ def main():
             elif urgent.is_set():raise InterruptedError('cancelled')
             with contextlib.redirect_stdout(sys.stderr):
                 if operation=='prepare':result=model.prepare()
+                elif operation in ('asset_build','asset_dense'):
+                    from vault_rag.asset_vectors import execute
+                    result=execute(config,model,value)
                 elif operation=='dense':
                     import lancedb
                     root=config.root;directory=Path(value['directory']).resolve()

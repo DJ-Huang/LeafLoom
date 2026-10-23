@@ -10,7 +10,7 @@ Search attachments, preview media and download originals in a dedicated workspac
 
 Connect a local folder first. Practise in the demo vault if you prefer.
 
-## Server attachments, local cache and migration
+### Server attachments, local cache and migration
 
 This feature requires a build containing server attachment support; the original v0.1.4 installers do not include it.
 
@@ -76,6 +76,11 @@ Use **Upload** or drop multiple files onto the page. Uploads use the configured 
 
 Rename and move first prepare a plan, including supported static Markdown inline/reference links and wiki links/embeds. Review the discovered referring notes, paths and blockers, then confirm once to apply. Recycling a referenced attachment also shows the discovered notes and requires confirmation; it does not delete or rewrite note links. Restore the attachment when those links are needed again. “Discovered references” describes the analysis results, not proof that all references have been found. Office conversion, content/OCR search, deduplication and bulk naming templates are outside this version.
 
+### AI asset search and delivery
+
+Before searching, enable **Use for AI asset search** in each desired attachment group. All groups start off; only the selected groups’ union enters keyword/semantic retrieval, and no selection returns `scope_not_configured` without a full-library fallback. This choice syncs to NAS with group metadata. Conflicted groups are excluded until explicitly resolved. Normal attachment browsing and note references remain available.
+
+In **Downloads → Download settings**, set the **Asset delivery directory** and optionally enable semantic asset indexing with your prepared local model. AI can search existing local/NAS assets through `vault_files` actions `search_assets`, `asset_details` and `asset_preview`, then use `vault_files_update.deliver_asset` and poll `delivery_status`. Only completed deliveries return an absolute path on the identified service computer. Delivered files remain independently of cache cleanup; the calling AI handles project integration. Keyword search works without a model; package contents and visual similarity are not indexed.
 
 ## What to expect
 

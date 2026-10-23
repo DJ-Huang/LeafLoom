@@ -89,7 +89,35 @@ class ListAttachmentGroups(Command):
     action: Literal['groups']
 
 
-ReadCommand = Annotated[Union[ListAttachmentGroups, ListFiles, StatFile, ReadFile, ExportFiles, FileStatus,
+class SearchAssets(Command):
+    action: Literal['search_assets']
+    query: str = Field(min_length=1, max_length=4096)
+    mode: Literal['hybrid', 'keyword'] = 'hybrid'
+    source: Literal['all', 'local', 'remote'] = 'all'
+    storage_id: str = ''
+    group_id: str = ''
+    formats: list[str] = Field(default_factory=list, max_length=30)
+    pipeline: Literal['', 'builtin', 'urp', 'hdrp', 'unknown'] = ''
+    limit: int = Field(default=5, ge=1, le=20)
+
+
+class AssetDetails(Command):
+    action: Literal['asset_details']
+    result_id: str = Field(min_length=1, max_length=200)
+
+
+class AssetPreview(Command):
+    action: Literal['asset_preview']
+    result_id: str = Field(min_length=1, max_length=200)
+    expected_revision: str
+
+
+class DeliveryStatus(Command):
+    action: Literal['delivery_status']
+    job_id: str = Field(pattern=r'^[0-9a-f]{32}$')
+
+
+ReadCommand = Annotated[Union[SearchAssets, AssetDetails, AssetPreview, DeliveryStatus, ListAttachmentGroups, ListFiles, StatFile, ReadFile, ExportFiles, FileStatus,
     ListProducts, ProductDetails, PrepareAssetDownload, AssetDownloadStatus], Field(discriminator='action')]
 
 
@@ -196,5 +224,18 @@ class UpdateAttachmentGroup(Command):
     payload: dict = Field(default_factory=dict)
 
 
-WriteCommand = Annotated[Union[UpdateAttachmentGroup, UploadCommand, MoveFiles, TrashFiles, OrganizeFiles, ReindexFiles,
+class DeliverAsset(Command):
+    action: Literal['deliver_asset']
+    path: str = Field(min_length=1, max_length=8192)
+    expected_revision: str
+
+
+class DeliveryControl(Command):
+    action: Literal['delivery_control']
+    job_id: str = Field(pattern=r'^[0-9a-f]{32}$')
+    command: Literal['retry', 'cancel']
+    expected_revision: str
+
+
+WriteCommand = Annotated[Union[DeliverAsset, DeliveryControl, UpdateAttachmentGroup, UploadCommand, MoveFiles, TrashFiles, OrganizeFiles, ReindexFiles,
     UpdateFileMetadata, UpdateJob, UpdateProduct], Field(discriminator='action')]

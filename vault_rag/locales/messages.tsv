@@ -2359,3 +2359,33 @@ dl.state.completed|可保存到本机|Ready to save|端末に保存可能
 dl.state.interrupted|已中断，请重新发起|Interrupted; start a new download|中断しました。再度開始してください
 ag.save|保存分组|Save group|グループを保存
 ag.syncConflict|资料同步发生冲突，请核对服务器及目录设置|Metadata sync conflict; check the server and directory settings|メタデータ同期に競合があります。サーバーと保存先を確認してください
+asset.workflow|AI 素材检索与交付|AI asset search and delivery|AI 素材検索と受け渡し
+asset.directory|素材交付目录|Asset delivery directory|素材の保存先
+asset.deliveryHelp|AI 选择的素材保存到此目录，完成后返回本机完整路径。文件不随缓存清理，不代表已导入工程。|Assets selected by AI are saved here and return an absolute path on this service's computer. Cache cleanup does not remove them. Delivery does not import assets into a project.|AI が選択した素材をここに保存し、サービスが動作する端末の絶対パスを返します。キャッシュ削除の対象外で、プロジェクトへのインポートは行いません。
+asset.semantic|启用素材语义索引|Enable semantic asset indexing|素材の意味検索インデックスを有効化
+asset.semanticHelp|仅索引已有文字资料，复用已准备的本地模型；不下载模型或素材原包。模型不可用时使用关键词。|Index existing text metadata with the prepared local model. No models or original asset packages are downloaded. Keyword search remains available.|準備済みのローカルモデルで既存の文字情報のみを索引化します。モデルや素材パッケージはダウンロードせず、利用できない場合はキーワード検索を使用します。
+asset.index|素材语义索引|Semantic asset index|素材の意味検索インデックス
+asset.index.not_built|尚未构建|Not built|未作成
+asset.index.building|构建中|Building|作成中
+asset.index.ready|已就绪|Ready|準備完了
+asset.index.failed|构建失败，关键词检索仍可用|Build failed; keyword search is available|作成に失敗しました。キーワード検索は利用できます
+asset.deliveries|AI 素材交付|AI asset deliveries|AI 素材の受け渡し
+asset.deliveryState.queued|等待交付|Queued|待機中
+asset.deliveryState.downloading|正在取得原文件|Downloading original|元ファイルを取得中
+asset.deliveryState.copying|正在保存|Saving|保存中
+asset.deliveryState.verifying|正在校验|Verifying|検証中
+asset.deliveryState.completed|已保存到交付目录|Saved to delivery directory|保存先に保存済み
+asset.deliveryState.paused|交付已暂停|Delivery paused|一時停止中
+asset.deliveryState.failed|交付失败|Delivery failed|保存に失敗
+asset.deliveryState.cancelled|交付已取消|Delivery cancelled|キャンセル済み
+asset.deliveryState.unavailable|交付文件已移除或变更|Delivered file removed or changed|保存したファイルが削除または変更されました
+asset.rebuild|重建素材语义索引|Rebuild semantic asset index|素材の意味検索インデックスを再作成
+ag.searchEnabled|用于 AI 素材检索|Use for AI asset search|AI 素材検索の対象にする
+ag.searchHelp|默认不收录。仅勾选分组的成员进入关键词检索和语义索引；此选择随分组资料同步到 NAS，不影响普通附件浏览或笔记引用。|Off by default. Only selected groups enter keyword search and semantic indexing. This choice syncs with group metadata to NAS and does not affect attachment browsing or note references.|既定では対象外です。選択したグループのメンバーのみをキーワード検索と意味検索の対象にします。設定は NAS に同期され、通常の添付閲覧やノート参照には影響しません。
+ag.searchConflict|素材检索范围存在冲突|Asset search scope conflict|素材検索範囲に競合があります
+ag.searchConflictHelp|此分组暂不参与素材检索。核对各端选择，设置上方开关并明确解决冲突。|This group is temporarily excluded from asset search. Review each version, choose the switch value above and explicitly resolve the conflict.|このグループは一時的に検索対象外です。各端末の変更を確認し、上のスイッチを選択して競合を解決してください。
+ag.resolveSearch|按当前开关选择解决检索范围冲突|Resolve search scope using the current switch value|現在のスイッチの値で検索範囲の競合を解決する
+asset.scopeHelp|仅检索已启用的附件分组。分组成员或开关变更会更新索引，未选择分组不会回退到全部附件。|Search only enabled attachment groups. Changes to membership or switches update the index. No selection never falls back to all attachments.|有効な添付グループのみを検索します。メンバーやスイッチの変更で索引を更新し、未選択時に全添付へ切り替えることはありません。
+asset.scopeEmpty|尚未选择素材检索分组，请在分组编辑中勾选“用于 AI 素材检索”。|No asset search groups selected. Enable “Use for AI asset search” in the group editor.|検索対象のグループがありません。グループ編集で「AI 素材検索の対象にする」を有効にしてください。
+asset.scopeManage|设置附件分组|Manage attachment groups|添付グループを設定
+ag.searchSyncWaiting|检索范围资料等待服务器连接；当前使用已保存的选择|Search scope metadata is waiting for a server connection; saved selections remain active|検索範囲の情報はサーバー接続を待っています。保存済みの選択を使用します

@@ -47,6 +47,12 @@ class FileOperations:
         self.directory = Path(self.temp.name)
         protect_private_directory(self.directory)
         self.transfers, self.threads, self.stops = {}, {}, {}
+        from vault_rag.asset_search import AssetSearch
+        from vault_rag.asset_deliveries import AssetDeliveries
+        self.asset_search = AssetSearch(self)
+        if attachment_groups is not None:
+            attachment_groups.scope_changed = self.asset_search.refresh_scope
+        self.asset_deliveries = AssetDeliveries(self)
 
     def _check(self, revision, check):
         check()
@@ -214,7 +220,15 @@ class FileOperations:
         self._check(revision, check)
         root = str(self.config.root)
         action = request.action
-        if action == 'groups':
+        if action == 'search_assets':
+            value = self.asset_search.search(request)
+        elif action == 'asset_details':
+            value = self.asset_search.details(request.result_id)
+        elif action == 'asset_preview':
+            value = self.asset_search.preview(request.result_id, request.expected_revision)
+        elif action == 'delivery_status':
+            value = self.asset_deliveries.status(request.job_id, owner, lambda:self._check(revision,check),grant)
+        elif action == 'groups':
             if not self.attachment_groups:raise ValueError('Attachment groups unavailable')
             value=self.attachment_groups.listing(root)
         elif action == 'products':
@@ -408,6 +422,24 @@ class FileOperations:
         self._check(revision, check)
         if files and not (request.action == 'upload' and request.source == 'files'):
             raise ValueError('files is only accepted for upload source=files')
+        # Delivery has its own durable journal, including the destination settings in its idempotency key.
+        if request.action in {'deliver_asset', 'delivery_control'}:
+            guard = lambda:self._check(revision,check)
+            with grant():guard()
+            with self.requests:
+                placement = self.asset_deliveries.settings() if request.action == 'deliver_asset' else None
+                fingerprint = digest(json.dumps([revision,request.model_dump(),placement],sort_keys=True))
+                previous = self._receipt(owner,operation_id,fingerprint)
+                if previous is not None:
+                    value = self.asset_deliveries.status(previous['job_id'],owner,guard,grant)
+                    return {'ok':True,**value,'workspace_revision':revision,'replayed':True}
+                if request.action == 'deliver_asset':
+                    value = self.asset_deliveries.create(request,revision,operation_id,owner,guard,grant)
+                else:
+                    value = self.asset_deliveries.control(request,owner,guard,operation_id=operation_id,grant=grant)
+                guard()
+                self._save_receipt(owner,operation_id,fingerprint,value)
+                return {'ok':True,**value,'workspace_revision':revision}
         # Signed URLs are ephemeral; identity and placement determine the receipt.
         identity = [{k: f[k] for k in ('file_id', 'file_name', 'mime_type') if k in f} for f in files]
         fingerprint = digest(json.dumps([revision, request.model_dump(), identity], sort_keys=True))
@@ -792,6 +824,8 @@ class FileOperations:
                     self._save_receipt(row['owner'], operation_id, fingerprint, self._transfer_info(row))
 
     def stop(self):
+        self.asset_deliveries.stop()
+        self.asset_search.stop()
         for event in self.stops.values():
             event.set()
         for thread in self.threads.values():

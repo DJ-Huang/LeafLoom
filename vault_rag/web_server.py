@@ -166,6 +166,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     app.include_router(ai_router(ai))
     app.include_router(attachment_storage_router(remote_attachments,runtime,attachments_workspace))
     app.include_router(asset_library_router(asset_library,asset_downloads,asset_enrichment))
+    from vault_rag.asset_workflow_routes import asset_workflow_router
+    app.include_router(asset_workflow_router(file_operations))
     @app.exception_handler(RemoteStorageError)
     async def remote_error(request,error):
         if error.state=='missing':
@@ -350,7 +352,9 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     async def unified_downloads(root:str):
         staged=await asyncio.to_thread(asset_downloads.list,root)
         archives=await asyncio.to_thread(attachments_workspace.list_downloads,root)
-        return {'staged':staged['jobs'],'archives':archives['jobs']}
+        return {'staged':staged['jobs'],'archives':archives['jobs'],
+                'deliveries':await asyncio.to_thread(file_operations.asset_deliveries.listing,root),
+                'asset_index':file_operations.asset_search.status()}
     @app.get('/api/attachment-downloads/settings')
     async def download_settings(root:str):
         return {**await asyncio.to_thread(asset_downloads.settings,root),'usage':await asyncio.to_thread(asset_downloads.usage,root)}

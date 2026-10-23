@@ -1,0 +1,61 @@
+// Targeted interactions against production frontend and a disposable backend.
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),net=require('node:net'),{spawn}=require('node:child_process');
+const root=path.resolve(__dirname,'..');
+const {chromium}=require(path.join(root,'desktop/node_modules/playwright-core'));
+const executable=process.env.CHROMIUM_PATH||['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge'].find(p=>fs.existsSync(p));
+let server,browser,logs='';
+(async()=>{
+ const port=await new Promise(resolve=>{const s=net.createServer();s.listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(()=>resolve(p));});});
+ server=spawn(process.env.LEAFLOOM_TEST_PYTHON||path.join(root,'.cache/desktop-dev/.venv/bin/python'),['-u',path.join(root,'tests/asset_workflow_server.py'),path.join(root,'vault_rag/static')],{cwd:root,env:{...process.env,LEAFLOOM_ATTACHMENT_TEST_PORT:String(port)},stdio:['ignore','pipe','pipe']});
+ server.stdout.on('data',d=>logs+=d);server.stderr.on('data',d=>logs+=d);
+ let info;
+ for(let i=0;i<100;i++){
+  const line=logs.split('\n').find(s=>s.startsWith('{"fixture": true'));
+  if(line){info=JSON.parse(line);try{await fetch(info.ui);break;}catch{}}
+  if(server.exitCode!==null)throw new Error(logs.slice(-2000));
+  await new Promise(r=>setTimeout(r,100));
+ }
+ assert.ok(info?.fixture,logs.slice(-2000));
+ browser=await chromium.launch({executablePath:executable,headless:true,args:['--no-sandbox','--no-proxy-server']});
+ const page=await browser.newPage({viewport:{width:1360,height:900}});page.setDefaultTimeout(15000);
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(info.ui+'/?view=downloads');
+ await page.getByRole('heading',{name:'AI asset deliveries',exact:true}).waitFor();
+ await page.getByText('Saved to delivery directory',{exact:false}).waitFor();
+ assert.match(await page.locator('.attachment-downloads code').innerText(),/石头\.fbx$/);
+ await page.getByRole('button',{name:'Download settings',exact:true}).click();
+ const input=page.getByRole('textbox',{name:'Asset delivery directory'});await input.waitFor();
+ await page.waitForFunction(expected=>document.querySelector('input[aria-label="Asset delivery directory"]')?.value===expected,info.output);
+ assert.equal(await input.inputValue(),info.output);
+ await input.fill(info.output+'/next');
+ const workflow=page.locator('section').filter({has:page.getByRole('heading',{name:'AI asset search and delivery',exact:true})}).last();
+ await workflow.getByRole('button',{name:'Save settings',exact:true}).click();
+ await workflow.getByRole('status').first().waitFor();
+ const toggle=page.getByRole('checkbox',{name:'Enable semantic asset indexing'});
+ await toggle.check();await page.waitForFunction(()=>{const el=[...document.querySelectorAll('input[type=checkbox]')].find(e=>e.checked);return el&&!el.disabled;});
+ const persisted=await page.evaluate(async root=>{const r=await fetch('/api/asset-workflows/settings?'+new URLSearchParams({root}));return r.json();},info.root);
+ assert.equal(persisted.delivery.directory,info.output+'/next');assert.equal(persisted.search.enabled,true);
+ await workflow.getByRole('button',{name:'Rebuild semantic asset index',exact:true}).click();
+ await toggle.uncheck();
+ await workflow.getByRole('link',{name:'Manage attachment groups',exact:true}).click();
+ await page.getByRole('button',{name:/^Asset models/}).click();
+ await page.getByRole('button',{name:'Edit group',exact:true}).click();
+ let dialog=page.getByRole('dialog');
+ await dialog.getByRole('checkbox',{name:'Use for AI asset search',exact:true}).uncheck();
+ await dialog.getByRole('button',{name:'Save group',exact:true}).click();
+ await dialog.waitFor({state:'hidden'});
+ let scoped=await page.evaluate(async root=>(await fetch('/api/asset-workflows/settings?'+new URLSearchParams({root}))).json(),info.root);
+ assert.equal(scoped.index.scope_state,'scope_not_configured');
+ await page.getByRole('button',{name:'All attachments',exact:true}).click();
+ await page.getByText('reference.png',{exact:true}).first().waitFor();
+ await page.getByRole('button',{name:/^Asset models/}).click();
+ await page.getByRole('button',{name:'Edit group',exact:true}).click();
+ dialog=page.getByRole('dialog');
+ await dialog.getByRole('checkbox',{name:'Use for AI asset search',exact:true}).check();
+ await dialog.getByRole('button',{name:'Save group',exact:true}).click();await dialog.waitFor({state:'hidden'});
+ scoped=await page.evaluate(async root=>(await fetch('/api/asset-workflows/settings?'+new URLSearchParams({root}))).json(),info.root);
+ assert.deepEqual(scoped.index.groups.map(g=>g.name),['Asset models']);
+ assert.deepEqual(errors,[]);
+ console.log('Asset workflow UI: delivery location, directory settings, semantic toggle, group scope, ordinary attachments and runtime checks passed.');
+})().catch(e=>{console.error(e);console.error(logs.slice(-1800));process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();if(server)server.kill('SIGTERM');});

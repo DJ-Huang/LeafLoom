@@ -243,7 +243,7 @@ For AI/MCP, `vault_files` supports `groups`, `list` with `group_id`, source-enri
 
 Some official pages omit JSON-LD. Collection can still read the official structured product and publisher entities when their IDs agree; a title or preview image alone is insufficient.
 
-With LeafLoom running and the catalog configured, run the repository's [collection script](../../../scripts/collect_unity_catalog.py) against the same vault:
+With LeafLoom running and the catalog configured, run the repository's [collection script](../../scripts/collect_unity_catalog.py) against the same vault:
 
 ```sh
 python3 scripts/collect_unity_catalog.py --root /path/to/vault --start --wait --interval 10 --report /path/to/collection-report.json
@@ -251,7 +251,7 @@ python3 scripts/collect_unity_catalog.py --root /path/to/vault --status --report
 python3 scripts/collect_unity_catalog.py --root /path/to/vault --apply-chinese /path/to/chinese.json --report /path/to/chinese-report.json
 ```
 
-The script controls the local backend; it does not automate a browser, use store-account cookies or download package originals. Collection resumes the backend's saved progress, preserving completed review-needed judgments after interruption while retrying blocked access and network failures. Background synchronization coalesces repeated scans and resumes pending uploads before checking the remote catalog when a verified checkpoint is available; first-time or explicit synchronization still checks the remote catalog first. Stopping the monitor with Ctrl-C does not cancel the backend task. `succeeded` counts obtained official facts, not completed Chinese summaries; check Chinese summaries and translation status separately. A reported `legacy_unresolved` count is unverified work from an older checkpoint without sufficient identity data, not a success count; reconcile complete progress with the package inventory. Chinese input updates only supplied official translation fields and preserves personal tags and notes. See the [input format and connection options](../../MCP.md#batch-script).
+The script controls the local backend; it does not automate a browser, use store-account cookies or download package originals. Collection resumes the backend's saved progress, preserving completed review-needed judgments after interruption while retrying blocked access and network failures. Background synchronization coalesces repeated scans and resumes pending uploads before checking the remote catalog when a verified checkpoint is available; first-time or explicit synchronization still checks the remote catalog first. Stopping the monitor with Ctrl-C does not cancel the backend task. `succeeded` counts obtained official facts, not completed Chinese summaries; check Chinese summaries and translation status separately. A reported `legacy_unresolved` count is unverified work from an older checkpoint without sufficient identity data, not a success count; reconcile complete progress with the package inventory. Chinese input updates only supplied official translation fields and preserves personal tags and notes. See the [input format and connection options](../MCP.md#batch-script).
 
 ### Organization and recovery
 
@@ -327,3 +327,10 @@ Read `workspace_revision` from `vault_index_status` and use a unique `operation_
 If only Design Studio import or Feishu temporary transfers appear, check the server's `tools/list`: it must include `vault_files` and `vault_files_update`. Restart an updated backend and refresh/rescan the client's plugin tool directory. Restarting LeafLoom alone does not refresh a cached client directory. Check workspace-write permission separately; these uploads do not require Feishu authorization. See [MCP file tools](../MCP.md#general-file-tools).
 
 The single-request Base64 path requires a build containing this change.
+
+
+### AI asset search and delivery
+
+Before searching, enable **Use for AI asset search** in each desired attachment group. All groups start off; only the selected groups’ union enters keyword/semantic retrieval, and no selection returns `scope_not_configured` without a full-library fallback. This choice syncs to NAS with group metadata. Conflicted groups are excluded until explicitly resolved. Normal attachment browsing and note references remain available.
+
+In **Downloads → Download settings**, set the **Asset delivery directory** and optionally enable semantic asset indexing with your prepared local model. AI can search existing local/NAS assets through `vault_files` actions `search_assets`, `asset_details` and `asset_preview`, then use `vault_files_update.deliver_asset` and poll `delivery_status`. Only completed deliveries return an absolute path on the identified service computer. Delivered files remain independently of cache cleanup; the calling AI handles project integration. Keyword search works without a model; package contents and visual similarity are not indexed.

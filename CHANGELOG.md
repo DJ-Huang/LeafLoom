@@ -4,6 +4,11 @@
 
 ## Unreleased
 
+- Add opt-in, NAS-synchronized per-group AI asset search scope. No selection returns empty results, group conflicts stay excluded, and product details cannot expose out-of-scope package copies.
+
+- Add metadata-only AI asset search with optional local semantic ranking, real image previews and persistent original-file delivery to a configured directory. Completed owner-scoped jobs return a verified path on the identified service host; existing downloads and engine integration remain separate.
+
+- Fix attachment details crashing the entire attachment view when Unity Asset compatibility metadata is an object. Support string, array and object values, including nested data, and omit empty compatibility information.
 - Add user-defined attachment tabs with manual/rule membership, vault persistence and verified NAS event synchronization with explicit conflict resolution. Replace the fixed product view with file browsing enriched by existing source metadata and covers. Add a separate Downloads page for staged attachments and ZIP tasks, preserving existing jobs and moving staging capacity into download settings. Extend MCP with group queries and revision-checked edits.
 
 - Support official product pages without JSON-LD when their structured product and publisher identities are verified; continue rejecting ambiguous or inconsistent identities.
