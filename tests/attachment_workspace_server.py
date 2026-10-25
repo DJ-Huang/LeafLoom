@@ -65,6 +65,21 @@ app=create_app(config,runtime,start_background=False,static_dir=Path(sys.argv[1]
 # The fixture uses a literal loopback host so Node's request client needs no local DNS.
 app.state.websites.ui_host='127.0.0.1'
 app.state.websites.ui_origin=f'http://127.0.0.1:{port}'
+if os.environ.get('LEAFLOOM_ATTACHMENT_MODE_TEST')=='1':
+    import httpx
+    from tests.test_remote_attachments import FakeDAV,SOURCE,SECRET
+    (other/'Other local.bin').write_bytes(b'other-local-original')
+    fixture_dav=FakeDAV();fixture_dav.files['Incoming/Server specimen.bin']=b'fictional-server-original'
+    app.state.remote_attachments.transports[SOURCE]=httpx.MockTransport(fixture_dav)
+    @app.post('/api/attachment-fixture/server')
+    async def enable_fixture_server():
+        current=str(config.root);remote=app.state.remote_attachments
+        remote.save(current,{'sources':[{'id':SOURCE,'name':'Fictional NAS','type':'webdav',
+            'base_url':'https://files.example.invalid/','username':'leafloom','upload_directory':'Incoming','enabled':True}],
+            'default_source':SOURCE})
+        remote.set_credentials(SOURCE,'leafloom',SECRET)
+        remote.scan(current,SOURCE)
+        return {'fixture':True,'storage_id':SOURCE,'remote_path':'_attachments/_remote/'+SOURCE+'/Incoming/Server specimen.bin'}
 @app.get('/api/attachment-fixture')
 async def fixture():return {'fixture':True,'root':str(root),'other_root':str(other),'ui':app.state.websites.ui_origin,'port':port}
 print(json.dumps({'fixture':True,'ui':app.state.websites.ui_origin,'port':port}),flush=True)

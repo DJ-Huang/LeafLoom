@@ -52,12 +52,30 @@ class AttachmentCatalog:
             return None
         return self._remote.manifest_path(str(files.config.root))
 
-    def server_managed(self, root):
-        settings = self._remote._settings(str(root)) if self._remote else {}
-        return settings.get('default_source', 'local') != 'local'
-
     @staticmethod
-    def _catalog_connection(local, files):
+    def _local_ready(files):
+        path = files.state_path('attachments.sqlite')
+        for suffix in ('-journal', '-wal', '-shm'):
+            files.state_path('attachments.sqlite' + suffix)
+        if not path.is_file():
+            return False
+        try:
+            with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=1)) as db:
+                return db.execute('PRAGMA user_version').fetchone()[0] == 1 and bool(
+                    db.execute('SELECT 1 FROM state WHERE root=?', (str(files.config.root),)).fetchone())
+        except sqlite3.Error:
+            return False
+
+    @classmethod
+    def _catalog_connection(cls, local, files):
+        if not cls._local_ready(files):
+            # A server catalog remains browsable before local setup, including
+            # when an incompatible local index is preserved for a newer app.
+            db = sqlite3.connect(':memory:', uri=True)
+            db.executescript('''CREATE TABLE assets(path TEXT PRIMARY KEY,path_key TEXT,name TEXT,name_key TEXT,
+                size INTEGER,mtime_ns INTEGER,mime TEXT,attachment INTEGER);
+                CREATE TABLE state(root TEXT PRIMARY KEY,scanned_at REAL);''')
+            return db
         # Retain the native index's schema and sidecar validation, then enable
         # URI parsing explicitly. Some bundled SQLite builds disable URI names
         # on ordinary connections, including for ATTACH statements.
@@ -67,7 +85,7 @@ class AttachmentCatalog:
         return sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=10)
 
     @staticmethod
-    def _attach(db, path):
+    def _attach(db, path, files):
         for suffix in ('-journal', '-wal', '-shm'):
             if path.with_name(path.name + suffix).is_symlink():
                 raise ValueError('Attachment manifest sidecar cannot be a link')
@@ -75,13 +93,24 @@ class AttachmentCatalog:
         db.row_factory = sqlite3.Row
         db.create_function('catalog_path_key', 1, path_key, deterministic=True)
         db.create_function('catalog_basename', 1, lambda p: PurePosixPath(p).name, deterministic=True)
+        existing = {}
+        def exists(path):
+            if path in existing:
+                return existing[path]
+            try:
+                existing[path] = files.config.path_for(path).is_file()
+            except (ValueError, OSError):
+                existing[path] = False
+            return existing[path]
+        db.create_function('catalog_local_exists', 1, exists)
 
     @staticmethod
     def _cte():
         # Aliases are authoritative once a verified migration has released its
         # local source. A pending migration keeps the existing local entry.
         return '''WITH alias_choice AS (
-            SELECT asset_id,MIN(path) AS logical_path FROM manifest.aliases GROUP BY asset_id
+            SELECT asset_id,MIN(path) AS logical_path FROM manifest.aliases
+            WHERE NOT catalog_local_exists(path) GROUP BY asset_id
         ), catalog AS (
             SELECT l.path,l.name,l.name_key,l.size,l.mtime_ns,l.mime,
                 COALESCE(m.id,'') AS asset_id,'local' AS storage_id,
@@ -91,11 +120,7 @@ class AttachmentCatalog:
                 'complete' AS cache_state
             FROM main.assets l LEFT JOIN manifest.assets m
                 ON m.source_id='local' AND m.path=l.path
-            WHERE l.attachment=1 AND NOT EXISTS (
-                SELECT 1 FROM manifest.aliases x JOIN manifest.assets a ON a.id=x.asset_id
-                WHERE x.path=l.path AND a.source_id!='local'
-                    AND a.state!='migration_pending'
-            )
+            WHERE l.attachment=1 AND catalog_local_exists(l.path)
             UNION ALL
             SELECT COALESCE(x.logical_path,? || a.source_id || '/' || a.path) AS path,
                 catalog_basename(COALESCE(x.logical_path,a.path)) AS name,
@@ -111,7 +136,7 @@ class AttachmentCatalog:
                 LEFT JOIN manifest.cache c ON c.asset_id=a.id
             WHERE a.source_id!='local' AND a.state NOT IN ('missing','excluded') AND (a.state!='migration_pending' OR NOT EXISTS (
                 SELECT 1 FROM manifest.aliases pending JOIN main.assets l
-                    ON l.path=pending.path AND l.attachment=1
+                    ON l.path=pending.path AND l.attachment=1 AND catalog_local_exists(l.path)
                 WHERE pending.asset_id=a.id
             ))
         ) '''
@@ -207,30 +232,22 @@ class AttachmentCatalog:
             # never invokes network or content methods while holding it.
             with self._remote.lock:
                 local._check_root(root)
-                managed = self.server_managed(root)
-                if managed:
-                    # The server catalog is sufficient. Opening it must not scan
-                    # this computer's notes or plan a local organization task.
-                    with closing(local._connect(files)):
-                        pass
-                else:
-                    local._ensure()
                 local._check_root(root)
                 files = local._snapshot()
                 settings = self._remote._settings(str(root))
                 stamp = self._settings_stamp(files, settings)
                 prefix = files.config.data.get('attachment_folder', '_attachments') + '/_remote/'
                 with closing(self._catalog_connection(local, files)) as db:
-                    self._attach(db, path)
+                    self._attach(db, path, files)
                     view_stamp = presentation.prepare(db,str(root),group_id) if presentation else ''
                     db.execute('BEGIN')
                     scanned = db.execute('SELECT scanned_at FROM main.state WHERE root=?', (str(root),)).fetchone()
                     generation = db.execute('SELECT generation FROM manifest.catalog_state WHERE id=1').fetchone()[0]
+                    presence = [row[0] for row in db.execute('SELECT path FROM main.assets WHERE attachment=1 AND catalog_local_exists(path) '
+                        'UNION SELECT path FROM manifest.aliases WHERE catalog_local_exists(path) ORDER BY path')]
                     scope = self._scope([str(root), stamp, scanned[0] if scanned else None, local.generation,
-                                         generation, query, kind, sort, order, source, storage_id, sorted(set(tags)), category, group_id, view_stamp])
+                                         generation, presence, query, kind, sort, order, source, storage_id, sorted(set(tags)), category, group_id, view_stamp])
                     origins, origin_args = ['1=1'], [prefix]
-                    if managed:
-                        origins.append("storage_id!='local'")
                     if source == 'local':
                         origins.append("storage_id='local'")
                     elif source == 'remote':
@@ -318,18 +335,32 @@ class AttachmentCatalog:
                  'enabled': item.get('enabled', True)} for item in settings['sources']]
 
     def resolve(self, target, source=''):
-        if self.server_managed(self._local_index.files.config.root):
-            result = self._resolve_remote(target, source)
-            if result:
-                return result
-            if PurePosixPath(target).suffix.lower() not in {'', '.md', '.markdown', '.txt', '.base'}:
-                return []
-        result = self._local_index.resolve(target, source)
-        if result or self._remote is None:
-            return result
-        return self._resolve_remote(target, source)
+        if not isinstance(target, str) or len(target) > 4096 or re.match(r'^[a-zA-Z]+:', target):
+            return []
+        files = self._local_index._snapshot()
+        self._local_index._check_root(files.config.root)
+        # Exact local paths retain precedence, even while another computer's
+        # migration/deletion is still arriving through folder sync.
+        for candidate in (str(PurePosixPath(source).parent / target), target):
+            try:
+                rel = relative(posixpath.normpath(candidate))
+                if files.config.path_for(rel).is_file():
+                    self._local_index._check_root(files.config.root)
+                    return [rel]
+            except (ValueError, OSError):
+                continue
+        remote = self._resolve_remote(target, source, exact_only=True) if self._remote else []
+        if remote:
+            return remote
+        if ('/' in target or '\\' in target) and PurePosixPath(target).suffix.lower() not in {'', '.md', '.markdown', '.txt', '.base'}:
+            return []
+        local = self._local_index.resolve(target, source)
+        remote = self._resolve_remote(target, source) if self._remote else []
+        # Changing the upload destination must never choose a different
+        # same-name attachment. Exact paths above are the disambiguation.
+        return [] if local and remote else local or remote
 
-    def _resolve_remote(self, target, source=''):
+    def _resolve_remote(self, target, source='', *, exact_only=False):
         if not isinstance(target, str) or len(target) > 4096 or re.match(r'^[a-zA-Z]+:', target):
             return []
         local = self._local_index
@@ -350,13 +381,13 @@ class AttachmentCatalog:
             if not candidates:
                 return []
             with self._remote.lock, closing(self._catalog_connection(local, files)) as db:
-                self._attach(db, path)
+                self._attach(db, path, files)
                 prefix = files.config.data.get('attachment_folder', '_attachments') + '/_remote/'
                 for candidate in candidates:
                     rows = db.execute('SELECT a.id,x.path FROM manifest.aliases x JOIN manifest.assets a ON a.id=x.asset_id '
                                       "WHERE a.source_id!='local' AND x.path=? LIMIT 2", (candidate,)).fetchall()
                     if not rows:
-                        rows = db.execute('SELECT a.id,COALESCE((SELECT MIN(path) FROM manifest.aliases WHERE asset_id=a.id),'
+                        rows = db.execute('SELECT a.id,COALESCE((SELECT MIN(path) FROM manifest.aliases WHERE asset_id=a.id AND NOT catalog_local_exists(path)),'
                             '? || a.source_id || \'/\' || a.path) AS path FROM manifest.assets a '
                             "WHERE a.source_id!='local' AND (a.path=? OR ? || a.source_id || '/' || a.path=?) LIMIT 2",
                             (prefix, candidate, prefix, candidate)).fetchall()
@@ -364,9 +395,9 @@ class AttachmentCatalog:
                         return self._resolved(files, root, rows)
                 # A basename is safe only when exactly one remote asset matches;
                 # multiple aliases for that same asset do not create ambiguity.
-                if '/' in target or '\\' in target:
+                if exact_only or '/' in target or '\\' in target:
                     return []
-                rows = db.execute('SELECT a.id,COALESCE((SELECT MIN(path) FROM manifest.aliases WHERE asset_id=a.id),'
+                rows = db.execute('SELECT a.id,COALESCE((SELECT MIN(path) FROM manifest.aliases WHERE asset_id=a.id AND NOT catalog_local_exists(path)),'
                     '? || a.source_id || \'/\' || a.path) AS path FROM manifest.assets a '
                     "WHERE a.source_id!='local' AND (catalog_path_key(a.name)=? OR EXISTS ("
                     'SELECT 1 FROM manifest.aliases x WHERE x.asset_id=a.id AND catalog_path_key(catalog_basename(x.path))=?)) LIMIT 2',

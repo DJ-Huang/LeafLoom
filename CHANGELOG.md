@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Keep both local and server attachments visible when switching the new-upload destination. Separate local catalog readiness from server browsing, preserve exact paths across same-name files, retain peer originals until synced deletion, and clarify offline behavior and folder-sync limits in all three languages.
+
 - Use server attachment catalogs directly when a server is selected, separating local catalog setup from optional organization. Isolate attachment SQLite, settings, caches and transfer queues in device-private application data with a non-destructive legacy snapshot upgrade. Publish verified immutable server references before upload completion or original release; other devices restore old paths and IDs without syncing SQLite. Report conflicting references explicitly and add a one-time legacy-reference sync action.
 
 - Support numeric shared-network VPN attachment addresses (`100.64.0.0/10`), including Tailscale, in the existing private HTTP configuration flow. Keep explicit source opt-in and reject public HTTP endpoints.

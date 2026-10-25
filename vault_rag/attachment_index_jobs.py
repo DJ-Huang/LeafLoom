@@ -33,13 +33,6 @@ class AttachmentIndexJobs:
         self._guard(root)
         files = self.index._snapshot()
         root = str(files.config.root)
-        remote = getattr(self.runtime, 'remote_attachments', None)
-        if remote:
-            settings = remote._settings(root)
-            default = settings['default_source']
-            if default != 'local' and any(s['id'] == default and s.get('enabled', True) for s in settings['sources']):
-                return dict(state='ready', usable=True, storage_mode='server', default_storage_id=default,
-                            schema_version=None, current_version=1)
         result = dict(state='uninitialized', schema_version=None, current_version=1, usable=False)
         path = files.state_path('attachments.sqlite')
         try:
@@ -61,7 +54,7 @@ class AttachmentIndexJobs:
         except (OSError, ValueError, sqlite3.Error) as error:
             result.update(state='failed', error=str(error))
         if result['state'] == 'unsupported':
-            return result
+            return self._workspace_status(result, root)
         with self.lock:
             job = self.job if self.job and self.job['root'] == root else None
             if job is None:
@@ -87,6 +80,20 @@ class AttachmentIndexJobs:
                 if state != 'ready' and job.get('error'):
                     result['error'] = job['error']
         self._guard(root)
+        return self._workspace_status(result, root)
+
+    def _workspace_status(self, local, root):
+        """Upload destination never hides an already configured catalog."""
+        remote = getattr(self.runtime, 'remote_attachments', None)
+        settings = remote._settings(root) if remote else {}
+        default = settings.get('default_source', 'local')
+        result = {**local, 'local_index': dict(local), 'storage_mode': 'local' if default == 'local' else 'server',
+                  'default_storage_id': default}
+        if settings.get('sources'):
+            result['usable'] = True
+            if not local['usable'] and local['state'] != 'building':
+                result['state'] = 'ready'
+                result.pop('error', None)
         return result
 
     def start(self, root, *, guard=None):
@@ -95,7 +102,7 @@ class AttachmentIndexJobs:
             if self.thread and self.thread.is_alive():
                 raise ConflictError('Attachment index build already running')
             self.runtime.files.ensure_mutable()
-            if self.status(root)['state'] == 'unsupported':
+            if self.status(root)['local_index']['state'] == 'unsupported':
                 raise ValueError('Attachment index requires a newer LeafLoom; database preserved')
             files = self.index._snapshot()
             job = dict(id=uuid.uuid4().hex, root=str(files.config.root), state='building', done=0,

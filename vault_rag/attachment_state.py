@@ -21,7 +21,7 @@ _MIGRATE_DIRECTORIES = _DIRECTORIES | {'asset-downloads', 'attachment-downloads'
 def device_attachment_state(parts):
     return bool(parts) and (parts[0] in _DIRECTORIES or parts[0] in {
         'attachment-index-job.json', 'attachment-thumbnails', 'remote-attachment-thumbnails',
-        'attachment-downloads', 'asset-downloads',
+        'attachment-downloads', 'asset-downloads', 'remote-upload-staging',
     } or parts[0].startswith(('attachments.sqlite', 'attachments-before-v1-'))) and not (
         parts[0] == 'remote-attachments' and len(parts) > 1 and parts[1] == 'release')
 

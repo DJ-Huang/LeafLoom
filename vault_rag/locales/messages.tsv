@@ -1787,20 +1787,20 @@ HTML project has custom base or dynamic markup; manual dependency review require
 Preserved HTML project resource or shared runtime dependency|保留原位的项目资源或共享依赖（不参与迁移）|Project resource or shared dependency retained in place (excluded from migration)|プロジェクト素材・共有依存を元の場所に保持（移行対象外）
 aw.library|附件资料库|ASSET LIBRARY|添付ライブラリ
 aw.subtitle|浏览、预览和整理，文件始终由你掌握。|Browse, preview and organize. Your files stay yours.|閲覧もプレビューも整理も、ファイルはいつもあなたの手元に。
-aw.ready|索引已就绪|Index ready|索引の準備完了
+aw.ready|目录可浏览|Catalog available|目録を閲覧可能
 aw.tasks|任务|Tasks|タスク
 aw.upload|上传附件|Upload|アップロード
 aw.organize|整理附件|Organize|添付を整理
 aw.initialize|建立本机目录缓存|Prepare local catalog|ローカル目録を準備
-aw.total|全部附件|TOTAL FILES|すべての添付
+aw.total|当前结果|Current results|現在の結果
 aw.space|占用空间|STORAGE USED|使用容量
 aw.local|保存在你的知识库|Stored in your workspace|ワークスペースに保存
 aw.localHint|原文件、本地预览、可恢复操作|Original files. Local previews. Recoverable changes.|元ファイル、ローカルプレビュー、復元可能な操作
 aw.preparing|正在准备你的附件库|Preparing your library|添付ライブラリを準備中
 aw.startTitle|让每个附件，都触手可及。|Everything you need, within reach.|必要な添付が、すぐ手元に。
-aw.startHint|建立本机目录缓存后即可搜索和预览，不会生成整理方案。已有服务器附件时，在设置中将保存位置设为服务器即可直接使用。|Prepare a local catalog to browse and preview, without an organization plan. For existing server attachments, select the server as the save location in settings.|ローカル目録を準備すると検索とプレビューができます。整理案は作成しません。既存のサーバー添付は設定で保存先をサーバーにすると利用できます。
+aw.startHint|建立本机目录缓存后即可搜索和预览，不会准备整理方案。已有服务器附件可在配置并扫描服务器后浏览；新附件保存位置只影响后续上传。|Prepare the local catalog to browse and preview without an organization plan. Configure and scan a server to browse its existing attachments; the save destination only affects future uploads.|端末の目録を準備すると検索・プレビューができ、整理案は作成しません。既存のサーバー添付は設定・走査後に閲覧でき、保存先は今後のアップロードのみに適用します。
 aw.viewTask|查看任务|View task|タスクを見る
-aw.previewOnly|初始化和分析不会移动原文件|Setup and analysis do not move originals|初期化と解析で元ファイルは移動しません
+aw.previewOnly|建立目录缓存不移动原件、不改写引用|Catalog setup does not move originals or rewrite references|目録の準備で原本の移動や参照の更新は行いません
 aw.searchPlaceholder|搜索文件名或路径…|Search names or paths…|ファイル名・パスを検索…
 aw.clearSearch|清除搜索|Clear search|検索をクリア
 aw.sort|排序方式|Sort by|並べ替え
@@ -1883,9 +1883,9 @@ aw.stop|请求停止|Request stop|停止をリクエスト
 aw.restore|恢复／撤销此任务|Restore / undo task|復元・取り消し
 aw.technical|技术信息与恢复位置|Technical & recovery details|技術情報と復元場所
 aw.organizeSettings|整理位置与资源保护|Destination & resource protection|保存先と素材の保護
-aw.newPlan|生成新的整理预览|Prepare a new plan|新しい整理案を準備
+aw.newPlan|生成本地整理预览|Preview local organization|ローカル整理をプレビュー
 aw.confirmTitle|核对后，确认执行|Review and confirm|内容を確認して実行
-aw.executeHint|请核对文件数量和目标位置。受支持的笔记引用会同步更新，原附件与笔记恢复资料会保留。|Review the file count and destination. Supported note links are updated; recovery originals and note backups are retained.|件数と移動先を確認してください。対応リンクを更新し、元ファイルとノートの復元資料を保持します。
+aw.executeHint|请核对文件数量和目标位置；多电脑使用时，先暂停同步并停止其他电脑的编辑或整理，完成后再恢复同步。受支持的引用会更新，原附件与笔记恢复资料会保留。|Review file counts and destinations. With multiple devices, pause folder sync and stop editing or organizing on other devices; resume sync after completion. Supported references are updated and recovery material is retained.|件数と保存先を確認してください。複数端末では同期を一時停止し、他の端末での編集・整理を止め、完了後に同期を再開します。対応する参照を更新し、復元資料を保持します。
 aw.confirmContinue|确认继续|Confirm & continue|確認して続ける
 aw.result.pending|等待中|Queued|待機中
 aw.result.uploading|上传中|Uploading|アップロード中
@@ -2041,7 +2041,7 @@ as.description|配置通用 WebDAV 服务器。附件设置在此单独保存；
 as.storageFoot|笔记在本机，附件可连接服务器|Local notes, optional attachment servers|ノートはローカル、添付はサーバーにも対応
 as.localNote|笔记与历史保存在本机；附件可使用服务器与本地缓存。|Notes and history stay local; attachments can use a server and local cache.|ノートと履歴はローカルに保存され、添付にはサーバーとローカルキャッシュを利用できます。
 as.default|新附件保存位置|Save new attachments to|新しい添付の保存先
-as.defaultHelp|选择服务器后，附件页直接使用服务器目录，新上传也保存到服务器。本机只保留可清理缓存和待上传队列；已有本地原件仍需预览迁移。|Selecting a server makes the attachment workspace and new uploads use it. This device retains disposable cache and pending uploads; preview migration to release existing local originals.|サーバーを選ぶと添付画面と新規アップロードがサーバーを使用します。端末にはキャッシュと未送信キューを保持し、既存の原本は移行を確認して解放します。
+as.defaultHelp|只影响后续新上传；已有本地与服务器附件仍可浏览。切换不会移动、删除、重新上传或自动下载已有原件；迁移需单独预览和执行。|Applies only to future uploads. Existing local and server attachments remain browsable. Switching does not move, delete, re-upload or download originals; migration requires a separate preview and execution.|今後のアップロード先のみ変更します。既存のローカル・サーバー添付は閲覧でき、原本の移動・削除・再送信・自動取得は行いません。移行は別途確認して実行します。
 as.local|本地知识库|Local workspace|ローカルワークスペース
 as.unnamed|未命名服务器|Unnamed server|名称未設定のサーバー
 as.enabled|启用|Enabled|有効
@@ -2075,7 +2075,7 @@ as.outboxLimit|待上传空间上限|Pending upload space limit|アップロー�
 as.outboxHelp|连接中断时保留已接收文件与任务；恢复连接或补充认证后重试。只有服务器确认完成才显示已保存。|Accepted files and tasks remain during a connection outage. Retry after reconnecting or restoring authentication. Saved means confirmed by the server.|接続中断中も受信したファイルとタスクを保持します。再接続や認証の復旧後に再試行してください。サーバーで確認できた場合にのみ保存済みと表示します。
 as.usage|缓存 {cache}（{files} 个文件）；待上传 {outbox}（{pending} 项）|Cache: {cache} ({files} files); pending uploads: {outbox} ({pending} tasks)|キャッシュ：{cache}（{files} ファイル）、アップロード待ち：{outbox}（{pending} 件）
 as.save|保存附件设置|Save attachment settings|添付設定を保存
-as.saved|附件设置已保存。请测试连接，再扫描需要浏览的服务器附件。|Attachment settings saved. Test the connection, then scan server attachments to browse them.|添付設定を保存しました。接続をテストし、閲覧するサーバーの添付をスキャンしてください。
+as.saved|附件设置已保存，已有附件位置不变。如已配置服务器，可按需单独测试连接或刷新目录。|Attachment settings saved; existing attachments stay in place. Configured servers can be tested or refreshed separately when needed.|添付設定を保存しました。既存の添付は元の場所に残ります。設定済みのサーバーは必要に応じて個別に接続確認・目録更新できます。
 as.credentialsPending|设置与凭据已保存，后台暂未接收凭据；连接恢复后重试测试。|Settings and credentials saved; the backend has not received the credentials yet. Retry the connection test after it recovers.|設定と認証情報を保存しましたが、バックエンドにはまだ反映されていません。復旧後に接続テストを再試行してください。
 as.tested|连接测试已完成，请查看服务器连接状态。|Connection test finished. Check the server connection status.|接続テストが完了しました。サーバーの接続状態を確認してください。
 as.scanned|已提交服务器附件扫描。|Server attachment scan requested.|サーバーの添付スキャンを要求しました。
@@ -2158,7 +2158,7 @@ as.recovery.scheduled|已自动重试 {attempts} 次，约 {seconds} 秒后再�
 aw.localOriginalBytes|本地附件原件大小|Local attachment originals|ローカル添付の原本サイズ
 aw.remoteOriginalBytes|服务器附件原件大小|Server attachment originals|サーバー添付の原本サイズ
 aw.serverOriginalBytes|此服务器附件原件大小|Originals on this server|このサーバーの原本サイズ
-aw.originalBytesHelp|仅统计附件原件大小，不含本地缓存；缓存用量见附件存储设置。|Original attachment sizes only, excluding local cache. See Attachment storage settings for cache usage.|添付の原本サイズのみを集計し、ローカルキャッシュは含みません。キャッシュ使用量は添付ストレージ設定で確認できます。
+aw.originalBytesHelp|大小统计对应当前筛选结果中的已收录原件，不含缓存；未准备本机目录时，本地大小未知。缓存用量见附件存储设置。|Sizes cover cataloged originals in the current filtered results, excluding cache. Local size is unknown until its catalog is ready. See attachment storage settings for cache usage.|容量は現在の絞り込み結果に含まれる登録済み原本のみで、キャッシュを含みません。端末の目録が未準備ならローカル容量は不明です。キャッシュ使用量は添付ストレージ設定で確認できます。
 aw.serverRefresh|刷新服务器目录|Refresh server directory|サーバーのディレクトリを更新
 aw.serverRefreshHint|仅扫描所选服务器的目录元数据。各目录可放首行为 # leafloom-ignore v1 的 leafloom.ignore，支持 Gitignore 风格规则；只读取得。完整成功后才隐藏缺失或排除项，失败保留旧记录。|Scan only the selected server's directory metadata. Optional leafloom.ignore files must start with # leafloom-ignore v1 and support Gitignore-style rules; they are read only. Missing or excluded entries are hidden only after a complete successful scan; failures retain existing records.|選択したサーバーのディレクトリ情報のみを確認します。各ディレクトリの leafloom.ignore は先頭行 # leafloom-ignore v1 が必須で、Gitignore 形式に対応し、読み取りのみで取得します。全体の確認成功後のみ欠落・除外項目を非表示にし、失敗時は既存記録を保持します。
 aw.serverRefreshChoose|选择要刷新的服务器|Choose a server to refresh|更新するサーバーを選択
@@ -2394,3 +2394,11 @@ aw.serverTasks|服务器附件任务|Server attachment tasks|サーバー添付�
 aw.serverRefreshHelp|更新服务器目录缓存，不扫描或整理本地附件；旧路径映射可在附件存储设置中同步。|Refresh the server catalog without scanning or organizing local attachments. Sync legacy references in attachment storage settings.|ローカル添付の走査や整理をせずにサーバー目録を更新します。旧パスの対応は添付ストレージ設定で同期できます。
 as.syncReferences|同步旧附件引用|Sync legacy references|旧添付参照を同期
 as.referencesSynced|旧引用已写入并校验服务器元数据；其他电脑扫描同一服务器后可恢复引用。|Legacy references were saved and verified on the server. Other devices can restore them by scanning the same server.|旧参照をサーバーに保存して検証しました。他の端末は同じサーバーを走査して復元できます。
+aw.catalogHelp|本地与服务器的已有附件按来源浏览；新附件保存位置不会改变旧附件或引用。|Browse existing local and server attachments by source. The save destination does not change existing attachments or references.|既存のローカル・サーバー添付を出所別に閲覧できます。新しい保存先は既存の添付や参照を変更しません。
+aw.saveLocal|新附件保存到：本地知识库|New attachments save to: local workspace|新しい添付の保存先：ローカルワークスペース
+aw.saveServer|新附件保存到服务器：{name}|New attachments save to server: {name}|新しい添付の保存先：サーバー {name}
+aw.organizeLocal|整理本地附件|Organize local attachments|ローカル添付を整理
+aw.localCatalogMissing|本机附件目录缓存尚未就绪，当前列表可能不含全部本地附件。建立缓存只读取文件元数据，不移动文件或修改引用。|The local catalog is not ready, so some local attachments may be absent. Setup reads file metadata without moving files or changing references.|端末の目録が未準備のため、一部のローカル添付が表示されない場合があります。準備ではメタデータのみ読み取り、移動や参照変更は行いません。
+aw.localCatalogBuilding|正在更新本机附件目录缓存；已收录的附件仍可浏览，文件和引用不会因缓存更新而移动或改写。|Updating the local catalog. Existing cataloged attachments remain browsable; catalog updates do not move files or rewrite references.|端末の目録を更新中です。登録済みの添付は閲覧でき、ファイル移動や参照更新は行いません。
+al.saveSettings|保存商品目录与下载设置|Save catalog and download settings|カタログとダウンロード設定を保存
+al.settingsSaved|商品目录与下载设置已保存，附件原件保存位置不变。|Catalog and download settings saved. Attachment original destinations are unchanged.|カタログとダウンロード設定を保存しました。添付原本の保存先は変更しません。

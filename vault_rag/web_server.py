@@ -394,10 +394,6 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     @app.post('/api/attachments/refresh')
     async def initialize_attachments(request:Request):
         body=await request.json()
-        status=await asyncio.to_thread(index_jobs.status,body['root'])
-        if status.get('storage_mode')=='server':
-            await asyncio.to_thread(remote_attachments.start_scan,body['root'],status['default_storage_id'])
-            return status
         return await asyncio.to_thread(index_jobs.start,body['root'])
     @app.post('/api/attachments/index-cancel')
     async def cancel_attachment_index(request:Request):

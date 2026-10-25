@@ -127,9 +127,15 @@ def pull(remote, root, source_id, provider):
             key = assets.get(physical)
             if not key or identity == key:
                 continue
-            current = db.execute('SELECT id FROM assets WHERE id=?', (identity,)).fetchone()
+            current = db.execute('SELECT id,source_id,path FROM assets WHERE id=?', (identity,)).fetchone()
             old = db.execute('SELECT asset_id FROM reference_ids WHERE old_id=?', (identity,)).fetchone()
             if current or (old and old[0] != key):
+                if (current and current['source_id'] == 'local' and aliases.get(current['path']) == physical):
+                    # A peer can still have the original or a copied legacy ID.
+                    # Bind the explicit old path but keep that file authoritative
+                    # until its deletion arrives; never delete it during a scan.
+                    remote._record_redirect(db,identity,key,current['path'],'server-reference')
+                    continue
                 # Existing local IDs use the migration redirect table instead.
                 redirected = db.execute('SELECT new_id FROM asset_redirects WHERE old_id=?', (identity,)).fetchone()
                 if not redirected or redirected[0] != key:

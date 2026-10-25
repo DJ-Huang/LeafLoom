@@ -93,12 +93,17 @@ class AttachmentStorageApiTests(unittest.TestCase):
         while time.monotonic() < deadline:
             status = self.request('GET', '/api/attachments/status',
                                   params={'root': str(self.root)}).json()
+            status = status.get('local_index', status)
             if status['usable']:
                 return
             if status['state'] in {'failed', 'unsupported', 'cancelled'}:
                 self.fail(f'Fixture index failed: {status}')
             time.sleep(.01)
         self.fail('Fixture index did not finish')
+
+    def original_files(self):
+        prefix=self.remote._source(SOURCE,str(self.root))['metadata_directory']+'/'
+        return {path:data for path,data in self.dav.files.items() if not path.startswith(prefix)}
 
     def scan(self):
         result = self.request('POST', '/api/attachments/storage/scan', json={
@@ -390,7 +395,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.assertFalse(done['pending'])
         self.assertEqual(done['path'], result['path'])
         self.assertEqual(self.details(result['path'])['name'], name)
-        self.assertEqual(list(self.dav.files.values()), [content])
+        self.assertEqual(list(self.original_files().values()), [content])
         self.assertTrue(next(iter(self.dav.files)).endswith('-' + name))
         self.assertEqual(self.settings()['outbox']['used_bytes'], 0)
         self.assertFalse((self.root / result['path']).exists())
@@ -612,8 +617,8 @@ class AttachmentStorageApiTests(unittest.TestCase):
         result = self.wait_job(plan['job_id'])
         self.assertEqual(result['state'], 'completed', result)
         self.assertFalse(original.exists())
-        self.assertEqual(list(self.dav.files.values()), [content])
-        self.assertEqual(sum(method == 'PUT' for method, _ in self.dav.calls), 1)
+        self.assertEqual(list(self.original_files().values()), [content])
+        self.assertEqual(sum(method == 'PUT' and '/LeafLoomCatalog/' not in url for method, url in self.dav.calls), 1)
         self.assertFalse(any(method == 'DELETE' for method, _ in self.dav.calls))
 
     def test_mcp_remote_upload_retries_durable_queue_after_receipt_failure_once(self):
@@ -700,8 +705,8 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.assertEqual(confirmed['job_id'], first['job_id'])
         self.assertEqual(confirmed['path'], first['path'])
         self.assertEqual(len(self.remote.jobs(str(self.root), owner=first['owner'])), 1)
-        self.assertEqual(list(self.dav.files.values()), [content])
-        self.assertEqual(sum(method == 'PUT' for method, _ in self.dav.calls), 1)
+        self.assertEqual(list(self.original_files().values()), [content])
+        self.assertEqual(sum(method == 'PUT' and '/LeafLoomCatalog/' not in url for method, url in self.dav.calls), 1)
         self.assertFalse((self.root / first['path']).exists())
 
 

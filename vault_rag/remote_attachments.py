@@ -800,6 +800,8 @@ class RemoteAttachments:
 
     def stat(self,root,path='',*,asset_id='',source_id=''):
         self._root(root)
+        if not asset_id and not source_id and path and self.config.path_for(relative(path)).is_file():
+            source_id='local'
         with self.lock,self._db(root) as db:
             try:row=self._resolve(db,path,asset_id,source_id)
             except FileNotFoundError:

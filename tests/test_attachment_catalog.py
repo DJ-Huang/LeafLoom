@@ -121,6 +121,7 @@ class AttachmentCatalogTests(unittest.TestCase):
         self.put('same.png', 4, 800000000000)
         self.put('z.png', 1, 200000000000)
         self.prepare()
+        (self.root / 'same.png').unlink()  # Released original, stale filename index.
         self.remote.add('incoming/x.png', alias='same.png', size=8)
         # The remote alias supersedes the old local index entry.
         self.remote.add('same.png', source=SOURCE_B, size=2, mtime=900000000000)
@@ -183,6 +184,7 @@ class AttachmentCatalogTests(unittest.TestCase):
         self.prepare()
         key = self.remote.add('Incoming/object.png', alias='old.png', size=12, state='migration_pending')
         self.assertEqual([(i['storage_id'], i['size']) for i in self.catalog.listing()['items']], [('local', 3)])
+        (self.root / 'old.png').unlink()
         with self.remote.db() as db:
             db.execute("UPDATE assets SET state='ready' WHERE id=?", (key,))
         self.assertEqual([(i['storage_id'], i['size']) for i in self.catalog.listing()['items']], [(SOURCE_A, 12)])
@@ -191,6 +193,7 @@ class AttachmentCatalogTests(unittest.TestCase):
         self.put('old.png', 5)
         self.put('keep.png', 7)
         self.prepare()
+        (self.root / 'old.png').unlink()
         missing = self.remote.add('Incoming/old.png', alias='old.png', size=9, tags=['keep-metadata'])
         self.remote.add('Incoming/active.png', alias='active.png', size=11)
         cursor = self.catalog.listing(limit=1)['cursor']
@@ -213,6 +216,7 @@ class AttachmentCatalogTests(unittest.TestCase):
         self.put('old.png', 5)
         self.put('keep.png', 7)
         self.prepare()
+        (self.root / 'old.png').unlink()
         excluded = self.remote.add('Incoming/old.png', alias='old.png', size=9,
                                    tags=['kept-tag'], description='Kept for old references', state='excluded')
         self.remote.add('Incoming/active.png', alias='active.png', size=11)
@@ -298,7 +302,8 @@ class AttachmentCatalogTests(unittest.TestCase):
         self.remote.add('literal.png', alias='assets/100%25#raw.png')
         self.remote.add('a/duplicate.png')
         self.remote.add('b/duplicate.png', source=SOURCE_B)
-        self.assertEqual(self.catalog.resolve('same.png'), ['local/same.png'])
+        self.assertEqual(self.catalog.resolve('same.png'), [])
+        self.assertEqual(self.catalog.resolve('local/same.png'), ['local/same.png'])
         self.assertEqual(self.catalog.resolve('remote.png', 'notes/doc.md'), ['notes/remote.png'])
         self.assertEqual(self.catalog.resolve('../notes/remote.png', 'other/doc.md'), ['notes/remote.png'])
         self.assertEqual(self.catalog.resolve('100%25#raw.png'), ['assets/100%25#raw.png'])
