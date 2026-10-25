@@ -19,6 +19,15 @@ import httpx
 from vault_rag.remote_ignore import IGNORE_NAME,MAX_IGNORE_BYTES,RemoteIgnore,IgnoreRuleError
 
 logger=logging.getLogger(__name__)
+_SHARED_IPV4 = ipaddress.ip_network('100.64.0.0/10')
+
+
+def is_private_http_host(host):
+    """Allow numeric local/private hosts, including RFC 6598 VPN addresses."""
+    try:address=ipaddress.ip_address(host)
+    except (ValueError,TypeError):return False
+    return (not address.is_unspecified and not address.is_multicast and
+            (address.is_loopback or address.is_private or address in _SHARED_IPV4))
 
 
 class RemoteStorageError(Exception):
@@ -56,8 +65,7 @@ def validate_source(source):
         if url.scheme != 'https':
             if url.scheme != 'http' or result.get('allow_private_http') is not True:
                 raise ValueError
-            address = ipaddress.ip_address(url.hostname)
-            if not (address.is_loopback or address.is_private) or address.is_unspecified or address.is_multicast:
+            if not is_private_http_host(url.hostname):
                 raise ValueError
         if url.port is not None and not 1 <= url.port <= 65535:raise ValueError
         base = unquote(url.path)

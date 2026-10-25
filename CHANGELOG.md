@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+- Use server attachment catalogs directly when a server is selected, separating local catalog setup from optional organization. Isolate attachment SQLite, settings, caches and transfer queues in device-private application data with a non-destructive legacy snapshot upgrade. Publish verified immutable server references before upload completion or original release; other devices restore old paths and IDs without syncing SQLite. Report conflicting references explicitly and add a one-time legacy-reference sync action.
+
+- Support numeric shared-network VPN attachment addresses (`100.64.0.0/10`), including Tailscale, in the existing private HTTP configuration flow. Keep explicit source opt-in and reject public HTTP endpoints.
+
+- Fix saving older attachment server profiles that omit the metadata-directory field. Address changes now preserve the derived directory and existing credentials instead of failing with a server error.
+
 - Add opt-in, NAS-synchronized per-group AI asset search scope. No selection returns empty results, group conflicts stay excluded, and product details cannot expose out-of-scope package copies.
 
 - Add metadata-only AI asset search with optional local semantic ranking, real image previews and persistent original-file delivery to a configured directory. Completed owner-scoped jobs return a verified path on the identified service host; existing downloads and engine integration remain separate.

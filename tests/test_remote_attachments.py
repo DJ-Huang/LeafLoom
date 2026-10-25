@@ -26,7 +26,7 @@ SECRET='fixture-password-never-persist'
 
 class FakeDAV:
     def __init__(self):
-        self.files={};self.calls=[];self.offline=False;self.redirect=False
+        self.files={};self.directories=set();self.calls=[];self.offline=False;self.redirect=False
         self.corrupt=False;self.after_put=None;self.bad_range=False
         self.interrupt_put=False
         self.failure_status=None
@@ -42,7 +42,7 @@ class FakeDAV:
         path=unquote(request.url.path).strip('/')
         if request.method=='PROPFIND':
             assert request.headers['depth']=='1'
-            directories={''}
+            directories={'', *self.directories}
             for name in self.files:
                 for parent in Path(name).parents:
                     if str(parent)!='.':directories.add(parent.as_posix())
@@ -57,6 +57,9 @@ class FakeDAV:
                 kind='<collection/>' if directory else ''
                 items.append('<response><href>'+xml.sax.saxutils.escape(href)+'</href><propstat><prop><resourcetype>'+kind+'</resourcetype><getcontentlength>'+str(size)+'</getcontentlength><getlastmodified>Wed, 21 Oct 2026 00:00:00 GMT</getlastmodified><getetag>"fixture"</getetag><getcontenttype>application/octet-stream</getcontenttype></prop><status>HTTP/1.1 200 OK</status></propstat></response>')
             return httpx.Response(207,content=('<multistatus xmlns="DAV:">'+''.join(items)+'</multistatus>').encode())
+        if request.method=='MKCOL':
+            if path in self.directories:return httpx.Response(405)
+            self.directories.add(path);return httpx.Response(201)
         if request.method=='PUT':
             assert path not in self.files
             assert request.headers['if-none-match']=='*'
@@ -66,6 +69,7 @@ class FakeDAV:
                 raise httpx.ReadError('fixture interrupted after partial save',request=request)
             if self.after_put:self.after_put()
             return httpx.Response(201)
+        if path in self.directories and request.method=='HEAD':return httpx.Response(200,headers={'content-length':'0'})
         if path not in self.files:return httpx.Response(404)
         data=self.files[path]
         headers={'content-length':str(len(data)),'etag':'"fixture"','last-modified':'Wed, 21 Oct 2026 00:00:00 GMT','content-type':'application/octet-stream'}
@@ -117,6 +121,18 @@ class RemoteAttachmentTests(unittest.TestCase):
         self.assertEqual(provider.read_range('Incoming/a.bin',2,5)[0],b'2345')
         self.dav.bad_range=True
         with self.assertRaises(RemoteStorageError):provider.read_range('Incoming/a.bin',2,5)
+
+    def test_shared_vpn_http_addresses_require_opt_in_and_remain_bounded(self):
+        source=self.manager._source(SOURCE)
+        for host in ('100.64.0.1','100.127.255.254','[fd7a:115c:a1e0::1]'):
+            with self.subTest(host=host):
+                url='http://'+host+':8068/'
+                self.assertEqual(validate_source({**source,'base_url':url})['base_url'],url)
+                with self.assertRaises(ValueError):
+                    validate_source({**source,'base_url':url,'allow_private_http':False})
+        for host in ('100.63.255.255','100.128.0.1','8.8.8.8','0.0.0.0','224.0.0.1','[::]','[ff02::1]','nas.example.invalid'):
+            with self.subTest(host=host),self.assertRaises(ValueError):
+                validate_source({**source,'base_url':'http://'+host+':8068/'})
 
     def test_upload_pending_alias_restart_and_streamed_readback(self):
         self.dav.offline=True
@@ -223,6 +239,7 @@ class RemoteAttachmentTests(unittest.TestCase):
         self.assertEqual(self.manager.read_range(str(self.root),path,3,4)[0],b'34')
         self.assertEqual(self.manager.read_range(str(self.root),path,100,110)[0],b'')
         self.dav.offline=False
+        self.assertEqual(self.manager.test(str(self.root),SOURCE)['state'],'ready')
         self.assertEqual(self.manager.read_range(str(self.root),path,6,13)[0],b'6789abcd')
         self.assertLessEqual(self.manager.status(str(self.root))['cache']['used_bytes'],8)
         self.manager.clear_cache(str(self.root))
@@ -848,7 +865,7 @@ class RemoteAttachmentTests(unittest.TestCase):
         self.assertTrue(self.manager.scan(str(self.root),SOURCE)['ok'])
         after=self.manager.stat(str(self.root),asset_id=job['asset_id'])
         self.assertEqual(after['etag'],before['etag']);self.assertEqual(after['sha256'],before['sha256'])
-        self.assertFalse(any(method=='GET' for method,_ in self.dav.calls))
+        self.assertFalse(any(method=='GET' and 'LeafLoomCatalog/' not in url for method,url in self.dav.calls))
 
     def test_range_head_metadata_replaces_weak_row_before_cache_commit(self):
         self.dav.files['Incoming/new.bin']=b'new!'

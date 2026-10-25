@@ -33,6 +33,13 @@ class AttachmentIndexJobs:
         self._guard(root)
         files = self.index._snapshot()
         root = str(files.config.root)
+        remote = getattr(self.runtime, 'remote_attachments', None)
+        if remote:
+            settings = remote._settings(root)
+            default = settings['default_source']
+            if default != 'local' and any(s['id'] == default and s.get('enabled', True) for s in settings['sources']):
+                return dict(state='ready', usable=True, storage_mode='server', default_storage_id=default,
+                            schema_version=None, current_version=1)
         result = dict(state='uninitialized', schema_version=None, current_version=1, usable=False)
         path = files.state_path('attachments.sqlite')
         try:

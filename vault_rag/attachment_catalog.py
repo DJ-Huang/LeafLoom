@@ -52,6 +52,10 @@ class AttachmentCatalog:
             return None
         return self._remote.manifest_path(str(files.config.root))
 
+    def server_managed(self, root):
+        settings = self._remote._settings(str(root)) if self._remote else {}
+        return settings.get('default_source', 'local') != 'local'
+
     @staticmethod
     def _catalog_connection(local, files):
         # Retain the native index's schema and sidecar validation, then enable
@@ -203,7 +207,14 @@ class AttachmentCatalog:
             # never invokes network or content methods while holding it.
             with self._remote.lock:
                 local._check_root(root)
-                local._ensure()
+                managed = self.server_managed(root)
+                if managed:
+                    # The server catalog is sufficient. Opening it must not scan
+                    # this computer's notes or plan a local organization task.
+                    with closing(local._connect(files)):
+                        pass
+                else:
+                    local._ensure()
                 local._check_root(root)
                 files = local._snapshot()
                 settings = self._remote._settings(str(root))
@@ -218,6 +229,8 @@ class AttachmentCatalog:
                     scope = self._scope([str(root), stamp, scanned[0] if scanned else None, local.generation,
                                          generation, query, kind, sort, order, source, storage_id, sorted(set(tags)), category, group_id, view_stamp])
                     origins, origin_args = ['1=1'], [prefix]
+                    if managed:
+                        origins.append("storage_id!='local'")
                     if source == 'local':
                         origins.append("storage_id='local'")
                     elif source == 'remote':
@@ -305,9 +318,18 @@ class AttachmentCatalog:
                  'enabled': item.get('enabled', True)} for item in settings['sources']]
 
     def resolve(self, target, source=''):
+        if self.server_managed(self._local_index.files.config.root):
+            result = self._resolve_remote(target, source)
+            if result:
+                return result
+            if PurePosixPath(target).suffix.lower() not in {'', '.md', '.markdown', '.txt', '.base'}:
+                return []
         result = self._local_index.resolve(target, source)
         if result or self._remote is None:
             return result
+        return self._resolve_remote(target, source)
+
+    def _resolve_remote(self, target, source=''):
         if not isinstance(target, str) or len(target) > 4096 or re.match(r'^[a-zA-Z]+:', target):
             return []
         local = self._local_index
@@ -342,6 +364,8 @@ class AttachmentCatalog:
                         return self._resolved(files, root, rows)
                 # A basename is safe only when exactly one remote asset matches;
                 # multiple aliases for that same asset do not create ambiguity.
+                if '/' in target or '\\' in target:
+                    return []
                 rows = db.execute('SELECT a.id,COALESCE((SELECT MIN(path) FROM manifest.aliases WHERE asset_id=a.id),'
                     '? || a.source_id || \'/\' || a.path) AS path FROM manifest.assets a '
                     "WHERE a.source_id!='local' AND (catalog_path_key(a.name)=? OR EXISTS ("

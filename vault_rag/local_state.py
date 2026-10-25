@@ -138,10 +138,14 @@ class Files:
         if self.migration_active:raise ConflictError('附件整理或回滚期间暂停文件修改，请等待完成')
     def state_path(self,*parts):
         """Internal records are trusted only after validating every path component."""
-        root=self.config.root;path=root
-        for part in ('.vault-rag',*parts):
+        from vault_rag.attachment_state import device_attachment_state, attachment_state_root
+        for part in parts:
             if not isinstance(part,str) or not part or '/' in part or '\\' in part or part in ('.','..'):
                 raise ValueError('恢复记录路径无效')
+        private=device_attachment_state(parts)
+        root=attachment_state_root(self.config) if private else self.config.root
+        path=root
+        for part in (parts if private else ('.vault-rag',*parts)):
             path=path/part
             if is_link(path):raise ValueError('历史和回收区不能指向符号链接或 junction')
         if not path.resolve().is_relative_to(root):raise ValueError('恢复记录越出关联目录')

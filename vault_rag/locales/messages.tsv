@@ -1446,7 +1446,7 @@ migration.state.rolled_back|已回滚|Rolled back|ロールバック完了
 migration.state.conflict|检测到冲突，请手动检查|Conflict detected; manual review needed|競合を検出、手動確認が必要
 migration.htmlExcluded|本阶段保留 HTML 文件、项目资源和与 HTML 共享的资源，不移动它们或改写 HTML/CSS。|HTML files, project assets and resources shared with HTML are preserved in place in this stage; HTML/CSS is not rewritten.|この段階では HTML ファイル、プロジェクト素材、HTML と共有する素材を元の位置に保持し、HTML/CSS を書き換えません。
 attachments.database|附件数据库|Attachment database|添付データベース
-attachments.initializeSafety|仅维护索引：只扫描文件元数据，不整理目录、不移动附件、不改写链接。通常使用下方统一整理流程即可。|Index-only maintenance scans file metadata without organizing folders, moving attachments or rewriting links. The unified workflow below includes index setup.|索引のみの保守ではメタデータを走査し、フォルダー整理、添付の移動、リンク更新は行いません。下の統合フローには索引の準備が含まれます。
+attachments.initializeSafety|只更新本机目录缓存，不移动附件、不改写链接。整理和服务器迁移是独立操作。|Refreshes only this device’s catalog, without moving files or rewriting links. Organization and server migration are separate actions.|この端末の目録のみ更新し、ファイルの移動やリンク更新は行いません。整理とサーバー移行は別の操作です。
 attachments.checking|正在检查附件数据库状态…|Checking attachment database status…|添付データベースの状態を確認中…
 attachments.scanned|已扫描 {count} 个文件|{count} files scanned|{count} ファイルを走査済み
 attachments.version|数据库版本 {version}，当前支持版本 {current}|Database version {version}; supported version {current}|データベースのバージョン {version}、対応バージョン {current}
@@ -1791,14 +1791,14 @@ aw.ready|索引已就绪|Index ready|索引の準備完了
 aw.tasks|任务|Tasks|タスク
 aw.upload|上传附件|Upload|アップロード
 aw.organize|整理附件|Organize|添付を整理
-aw.initialize|初始化并准备整理|Set up & prepare|初期化して整理を準備
+aw.initialize|建立本机目录缓存|Prepare local catalog|ローカル目録を準備
 aw.total|全部附件|TOTAL FILES|すべての添付
 aw.space|占用空间|STORAGE USED|使用容量
 aw.local|保存在你的知识库|Stored in your workspace|ワークスペースに保存
 aw.localHint|原文件、本地预览、可恢复操作|Original files. Local previews. Recoverable changes.|元ファイル、ローカルプレビュー、復元可能な操作
 aw.preparing|正在准备你的附件库|Preparing your library|添付ライブラリを準備中
 aw.startTitle|让每个附件，都触手可及。|Everything you need, within reach.|必要な添付が、すぐ手元に。
-aw.startHint|一次点击建立附件索引并分析整理方案。就绪后即可搜索和预览，实际移动文件前会请你确认。|One click builds the index and prepares an organization plan. Browse as soon as the index is ready; review before files move.|ワンクリックで索引と整理案を準備。索引ができ次第、検索・プレビューができます。移動前に内容を確認できます。
+aw.startHint|建立本机目录缓存后即可搜索和预览，不会生成整理方案。已有服务器附件时，在设置中将保存位置设为服务器即可直接使用。|Prepare a local catalog to browse and preview, without an organization plan. For existing server attachments, select the server as the save location in settings.|ローカル目録を準備すると検索とプレビューができます。整理案は作成しません。既存のサーバー添付は設定で保存先をサーバーにすると利用できます。
 aw.viewTask|查看任务|View task|タスクを見る
 aw.previewOnly|初始化和分析不会移动原文件|Setup and analysis do not move originals|初期化と解析で元ファイルは移動しません
 aw.searchPlaceholder|搜索文件名或路径…|Search names or paths…|ファイル名・パスを検索…
@@ -2041,7 +2041,7 @@ as.description|配置通用 WebDAV 服务器。附件设置在此单独保存；
 as.storageFoot|笔记在本机，附件可连接服务器|Local notes, optional attachment servers|ノートはローカル、添付はサーバーにも対応
 as.localNote|笔记与历史保存在本机；附件可使用服务器与本地缓存。|Notes and history stay local; attachments can use a server and local cache.|ノートと履歴はローカルに保存され、添付にはサーバーとローカルキャッシュを利用できます。
 as.default|新附件保存位置|Save new attachments to|新しい添付の保存先
-as.defaultHelp|只影响新上传；已有附件需先预览迁移，再明确执行。|Applies to new uploads. Preview and explicitly execute a migration for existing attachments.|新しいアップロードに適用されます。既存の添付は移行をプレビューしてから実行してください。
+as.defaultHelp|选择服务器后，附件页直接使用服务器目录，新上传也保存到服务器。本机只保留可清理缓存和待上传队列；已有本地原件仍需预览迁移。|Selecting a server makes the attachment workspace and new uploads use it. This device retains disposable cache and pending uploads; preview migration to release existing local originals.|サーバーを選ぶと添付画面と新規アップロードがサーバーを使用します。端末にはキャッシュと未送信キューを保持し、既存の原本は移行を確認して解放します。
 as.local|本地知识库|Local workspace|ローカルワークスペース
 as.unnamed|未命名服务器|Unnamed server|名称未設定のサーバー
 as.enabled|启用|Enabled|有効
@@ -2389,3 +2389,8 @@ asset.scopeHelp|仅检索已启用的附件分组。分组成员或开关变更�
 asset.scopeEmpty|尚未选择素材检索分组，请在分组编辑中勾选“用于 AI 素材检索”。|No asset search groups selected. Enable “Use for AI asset search” in the group editor.|検索対象のグループがありません。グループ編集で「AI 素材検索の対象にする」を有効にしてください。
 asset.scopeManage|设置附件分组|Manage attachment groups|添付グループを設定
 ag.searchSyncWaiting|检索范围资料等待服务器连接；当前使用已保存的选择|Search scope metadata is waiting for a server connection; saved selections remain active|検索範囲の情報はサーバー接続を待っています。保存済みの選択を使用します
+aw.serverSubtitle|原件保存在服务器；本机目录与下载缓存不参与知识库同步。HTML 项目及依赖保持原位。|Originals stay on the server. Device catalogs and download cache stay outside workspace sync. HTML projects and dependencies remain in place.|原本はサーバーに保存。端末の目録とダウンロードキャッシュはワークスペース同期の対象外です。HTML プロジェクトと依存物は元の場所に残ります。
+aw.serverTasks|服务器附件任务|Server attachment tasks|サーバー添付タスク
+aw.serverRefreshHelp|更新服务器目录缓存，不扫描或整理本地附件；旧路径映射可在附件存储设置中同步。|Refresh the server catalog without scanning or organizing local attachments. Sync legacy references in attachment storage settings.|ローカル添付の走査や整理をせずにサーバー目録を更新します。旧パスの対応は添付ストレージ設定で同期できます。
+as.syncReferences|同步旧附件引用|Sync legacy references|旧添付参照を同期
+as.referencesSynced|旧引用已写入并校验服务器元数据；其他电脑扫描同一服务器后可恢复引用。|Legacy references were saved and verified on the server. Other devices can restore them by scanning the same server.|旧参照をサーバーに保存して検証しました。他の端末は同じサーバーを走査して復元できます。

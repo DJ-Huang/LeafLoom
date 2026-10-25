@@ -140,6 +140,8 @@ class RemoteAttachments:
                     description TEXT NOT NULL DEFAULT '',tags TEXT NOT NULL DEFAULT '[]',category TEXT NOT NULL DEFAULT '',
                     metadata_revision TEXT NOT NULL,updated REAL NOT NULL,UNIQUE(source_id,path));
                 CREATE TABLE IF NOT EXISTS aliases(path TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES assets(id));
+                CREATE TABLE IF NOT EXISTS reference_ids(old_id TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES assets(id));
+                CREATE TABLE IF NOT EXISTS reference_records(digest TEXT PRIMARY KEY,data BLOB NOT NULL);
                 CREATE TABLE IF NOT EXISTS asset_redirects(old_id TEXT PRIMARY KEY REFERENCES assets(id),
                     new_id TEXT NOT NULL REFERENCES assets(id),source_path TEXT NOT NULL,job_id TEXT NOT NULL,
                     active INTEGER NOT NULL DEFAULT 0,created REAL NOT NULL,CHECK(old_id!=new_id));
@@ -170,7 +172,7 @@ class RemoteAttachments:
             cache_columns={r[1] for r in connection.execute('PRAGMA table_info(cache)')}
             if 'verified' not in cache_columns:connection.execute('ALTER TABLE cache ADD COLUMN verified REAL NOT NULL DEFAULT 0')
             if 'identity' not in cache_columns:connection.execute("ALTER TABLE cache ADD COLUMN identity TEXT NOT NULL DEFAULT ''")
-            for table in ('assets','aliases','cache','ranges','asset_redirects'):
+            for table in ('assets','aliases','cache','ranges','asset_redirects','reference_ids'):
                 for action in ('INSERT','UPDATE','DELETE'):
                     connection.execute(f'CREATE TRIGGER IF NOT EXISTS catalog_{table}_{action.lower()} AFTER {action} ON {table} BEGIN UPDATE catalog_state SET generation=generation+1 WHERE id=1; END')
             private_file_mode(path)
@@ -619,6 +621,8 @@ class RemoteAttachments:
                         if error.code!='remote_not_found':raise
                         confirmed.add(asset_id)
                 provider.verify_ignore()
+                from vault_rag.attachment_server_references import pull
+                pull(self,root,source_id,provider)
                 # Only a complete view can prove absence. Check the same
                 # source/credential view again while committing the decision.
                 stale_files=[]
@@ -753,6 +757,8 @@ class RemoteAttachments:
     def _resolve(self,db,path='',asset_id='',source_id=''):
         if asset_id:
             if not re.fullmatch('[0-9a-f]{32}',asset_id):raise ValueError('Invalid attachment asset ID')
+            shared=db.execute('SELECT asset_id FROM reference_ids WHERE old_id=?',(asset_id,)).fetchone()
+            if shared:asset_id=shared[0]
             seen=set()
             for _ in range(32):
                 if asset_id in seen:raise ConflictError('Attachment identity redirect cycle')
@@ -782,7 +788,7 @@ class RemoteAttachments:
                     storage,separator,physical=path[len(prefix):].partition('/')
                     if separator and (not source_id or source_id==storage):
                         rows=db.execute('SELECT * FROM assets WHERE source_id=? AND path=?',(storage,physical)).fetchall()
-            if not rows and not source_id:
+            if not rows and not source_id and '/' not in path:
                 rows=db.execute("SELECT * FROM assets WHERE name=? AND state!='redirected'",(PurePosixPath(path).name,)).fetchall()
         if len(rows)>1:raise ConflictError('Attachment path is ambiguous; specify a storage source or asset ID')
         if not rows:raise FileNotFoundError('Attachment metadata is unavailable')
@@ -1285,6 +1291,10 @@ class RemoteAttachments:
         self._check_job(value)
         with self.lock,self._db(root) as db:
             self._upsert(db,value['source_id'],result,asset_id=value['asset_id'],sha256=value['sha256'])
+        from vault_rag.attachment_server_references import publish
+        publish(self,root,value['source_id'],value['asset_id'],provider)
+        self._check_job(value)
+        with self.lock,self._db(root) as db:
             value['state']='completed';value['verified']=True;value.pop('error',None)
             for field in ('retry_attempts','next_retry_at','retry_paused'):value.pop(field,None)
             self._job_save(db,value)
@@ -1442,6 +1452,8 @@ class RemoteAttachments:
                     raise ConflictError('Source changed during migration release')
                 if source.exists():raise ConflictError('A new local source appeared during migration')
                 self._check_job(value)
+                from vault_rag.attachment_server_references import publish
+                publish(self,root,value['source_id'],item['asset_id'],self._provider(value['source_id'],root,guard=lambda:self._check_job(value)))
                 with self.lock,self._db(root) as db:self._activate_redirects(db,item['asset_id'])
                 claim.unlink();self._finish_release(value,item);return
             if item['state']=='releasing' and not source.exists():self._finish_release(value,item);return
@@ -1483,6 +1495,9 @@ class RemoteAttachments:
                     self._record_redirect(db,old[0],asset_id,item['path'],value['id'])
                 db.execute('INSERT OR REPLACE INTO aliases VALUES(?,?)',(item['path'],asset_id))
                 item['state']='mapped';self._job_save(db,value)
+        self._check_job(value)
+        from vault_rag.attachment_server_references import publish
+        publish(self,root,value['source_id'],item['asset_id'],self._provider(value['source_id'],root,guard=lambda:self._check_job(value)))
         self._check_job(value)
         # Re-hash and version-check after the remote round trip. A temporary
         # same-filesystem claim prevents deleting a replacement pathname.

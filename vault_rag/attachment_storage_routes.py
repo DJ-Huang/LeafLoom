@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import copy
 import hashlib
-import ipaddress
 import json
 import re
 import threading
@@ -19,7 +18,7 @@ from fastapi import APIRouter, Request
 from starlette.responses import Response, StreamingResponse
 
 from vault_rag.local_state import ConflictError
-from vault_rag.remote_webdav import RemoteStorageError
+from vault_rag.remote_webdav import RemoteStorageError, validate_source, is_private_http_host
 from vault_rag.http_cache import conditional_file
 
 
@@ -67,11 +66,11 @@ def save_settings(remote, body):
         key = storage_id(source.get('storage_id'))
         value = {key:value for key,value in source.items() if key!='storage_id'}
         if 'metadata_directory' not in value and key in existing:
-            value['metadata_directory']=existing[key]['metadata_directory']
+            value['metadata_directory']=validate_source(existing[key])['metadata_directory']
         value.update(id=key,type='webdav',secret_ref='attachment:'+key)
         try:
             address = urlsplit(value.get('base_url',''))
-            value['allow_private_http'] = address.scheme=='http' and ipaddress.ip_address(address.hostname).is_private
+            value['allow_private_http'] = address.scheme=='http' and is_private_http_host(address.hostname)
         except (ValueError, TypeError):
             value['allow_private_http'] = False
         sources.append(value)
@@ -232,6 +231,12 @@ def attachment_storage_router(remote, runtime, workspace):
     async def scan(request:Request):
         body=await request.json()
         return await asyncio.to_thread(remote.start_scan,body['root'],storage_id(body['storage_id']))
+
+    @router.post('/api/attachments/storage/references')
+    async def sync_references(request:Request):
+        from vault_rag.attachment_server_references import sync
+        body=await request.json()
+        return await asyncio.to_thread(sync,remote,body['root'],storage_id(body['storage_id']))
 
     @router.post('/api/attachments/cache/clear')
     async def clear(request:Request):

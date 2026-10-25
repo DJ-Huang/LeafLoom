@@ -159,6 +159,43 @@ class AttachmentStorageApiTests(unittest.TestCase):
             time.sleep(.01)
         self.fail('Fixture storage task did not finish')
 
+    def test_legacy_settings_can_change_address_without_metadata_directory(self):
+        self.configure(default=SOURCE)
+        path = self.remote._state('settings.json')
+        legacy = json.loads(path.read_text())
+        legacy['sources'][0].pop('metadata_directory')
+        path.write_text(json.dumps(legacy))
+        original_credentials = dict(self.remote.credentials)
+        current = self.settings()
+        profile = current['storages'][0]
+        profile.pop('metadata_directory')  # Older clients omit this field too.
+        profile.pop('password_saved')
+        profile.pop('connection')
+        profile['base_url'] = 'http://192.168.1.20:8068/'
+        saved = self.request('PUT', '/api/attachments/storage', json={
+            key: value for key, value in current.items() if key not in {'cache', 'outbox'}
+        }).json()
+        self.assertEqual(saved['storages'][0]['base_url'], profile['base_url'])
+        self.assertEqual(saved['storages'][0]['metadata_directory'], 'Incoming/LeafLoomCatalog/v1')
+        self.assertEqual(saved['default_storage_id'], SOURCE)
+        self.assertEqual(self.remote.credentials, original_credentials)
+        self.assertEqual(json.loads(path.read_text())['sources'][0]['id'], SOURCE)
+
+    def test_tailnet_address_can_be_saved_but_public_http_still_rejected(self):
+        self.configure(default=SOURCE)
+        current=self.settings()
+        allowed={'storage_id','name','base_url','remote_root','upload_directory','metadata_directory','username','enabled','connection_hint'}
+        current['storages']=[{k:v for k,v in profile.items() if k in allowed} for profile in current['storages']]
+        body={k:v for k,v in current.items() if k not in {'cache','outbox'}}
+        body['storages'][0]['base_url']='http://100.100.1.20:8068/'
+        saved=self.request('PUT','/api/attachments/storage',json=body).json()
+        self.assertEqual(saved['storages'][0]['base_url'],body['storages'][0]['base_url'])
+        self.assertTrue(saved['storages'][0]['password_saved'])
+        body['revision']=saved['revision']
+        body['storages'][0]['base_url']='http://100.128.0.1:8068/'
+        self.request('PUT','/api/attachments/storage',json=body,expected=400)
+        self.assertEqual(self.settings()['storages'][0]['base_url'],'http://100.100.1.20:8068/')
+
     def test_settings_credentials_are_private_csrf_guarded_and_atomically_replaced(self):
         saved = self.configure()
         self.assertEqual(saved['storages'][0]['base_url'], BASE_URL)

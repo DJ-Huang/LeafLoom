@@ -128,7 +128,7 @@ job-scoped and retain accepted results and the frozen revision.
 
 ## 附件元数据索引与管理入口
 
-`vault_rag/attachment_index.py` 在关联目录的 `.vault-rag/attachments.sqlite` 保存可重建的路径、文件名、大小、修改时间与 MIME 元数据；原文件仍为事实来源，不迁移文件、不改写链接。附件管理器先只读检查状态，首次初始化或已知旧版升级必须点击按钮；后台刷新与文件变更批次用于核对可用索引；扫描不解析笔记或读取附件正文，独立于 RAG。名称索引也服务于文件名解析。
+`vault_rag/attachment_index.py` 在应用私有数据目录的 `attachment-workspaces/<workspace-key>/attachments.sqlite` 保存可重建的路径、文件名、大小、修改时间与 MIME 元数据；原文件仍为事实来源，不迁移文件、不改写链接。附件管理器先只读检查状态，首次初始化或已知旧版升级必须点击按钮；后台刷新与文件变更批次用于核对可用索引；扫描不解析笔记或读取附件正文，独立于 RAG。名称索引也服务于文件名解析。
 
 `GET /api/attachments?query=&after=&limit=100` 保留旧的路径升序行为；新增 `root`、`kind`、`sort`、`order`、`cursor`，按排序值与路径稳定分页，并返回全库数量、空间与类型汇总。游标绑定根目录、查询、筛选、排序、扫描版本与本服务的增量变更代次，过期时要求重新加载。`GET /api/attachments/status` 只读返回状态、目录与索引作业；显式 `initialize`、`rebuild`、`index-cancel` 管理后台索引。已知旧版本先备份，未知版本拒绝覆盖。列表只包含 `.md`、`.txt`、`.base` 之外的可浏览文件。
 
@@ -148,7 +148,7 @@ job-scoped and retain accepted results and the frozen revision.
 
 ## 通用远程附件存储
 
-设置入口为“设置 → 文件与导入 → 附件存储”。`attachment_storage_routes.py` 提供同一工作区认证下的 `/api/attachments/storage` 设置、连接测试和显式扫描、元数据编辑、缓存清理与后台任务接口；`file_operations.py` 让公共 MCP 使用相同的来源和任务，并继续按连接检查读取与修改授权。来源使用 UUID、WebDAV 服务地址、服务器根目录和上传子目录，配置及默认上传目标按关联知识库保存在 `.vault-rag/remote-attachments/settings.json`。打开设置或列出已有资产不会触发 NAS 扫描。显式扫描在后台逐目录提交元数据，不读取附件正文；页面和 MCP 的 `vault_files status.attachment_storage` 返回扫描数量和连接状态，失败保留已发现记录。
+设置入口为“设置 → 文件与导入 → 附件存储”。`attachment_storage_routes.py` 提供同一工作区认证下的 `/api/attachments/storage` 设置、连接测试和显式扫描、元数据编辑、缓存清理与后台任务接口；`file_operations.py` 让公共 MCP 使用相同的来源和任务，并继续按连接检查读取与修改授权。来源使用 UUID、WebDAV 服务地址、服务器根目录和上传子目录，配置及默认上传目标按关联知识库保存在 应用私有目录的 `attachment-workspaces/<workspace-key>/remote-attachments/settings.json`。打开设置或列出已有资产不会触发 NAS 扫描。显式扫描在后台逐目录提交元数据，不读取附件正文；页面和 MCP 的 `vault_files status.attachment_storage` 返回扫描数量和连接状态，失败保留已发现记录。
 
 `remote_attachments.py` 在该目录的 `manifest.sqlite` 保存稳定 `asset_id`、来源、服务器物理路径、逻辑别名、标签、分类、简介、对象版本、缓存记录与上传／迁移日志。用户元数据不是可随意删除的派生索引。`attachment_catalog.py` 将本地路径索引与 manifest 在 SQLite 内合并、筛选、汇总和分页，只将当前页交给 Python；游标同时绑定来源配置、本地索引和 manifest 代次。验证并释放本地原件后，迁移别名覆盖本地旧索引残留；迁移尚未完成时保留本地入口。远程 Markdown、HTML 和明确源码扩展默认不参与附件发现；它们不会自动加入笔记读取或检索范围。
 
@@ -214,3 +214,14 @@ NAS 迁移使用 `/api/attachments/storage/migrations`：先预览候选文件�
 分组查询增加 `search_enabled`、`search_scope_revision`、`search_scope_conflicts`，默认关闭。范围布尔值通过同一 SQLite 内独立 `scope_events` 记录，与分组修改同事务提交；旧请求省略开关保留原值。NAS 事件单独存放于 `attachment-groups/search-scope/events/`，复用原资料库身份、父修订、不可变校验及读回确认，不改变原 `events/` 格式，避免旧客户端覆盖新开关。范围或成员分叉未解决时该分组不参与检索。
 
 素材检索先读取有效组，再逐组取得成员并集，不为范围判断枚举全库；无启用组时直接返回 `scope_not_configured`，不启动模型。商品关联文件及嵌套详情只保留范围内副本。组事件更新／同步通知素材索引刷新；范围修订贯穿检索和构建，发布前再次核对范围及当前文档指纹，范围变化废弃旧投影。升级时移除旧全库派生清单，保留原件和不参与召回的历史向量缓存。此范围不改变普通附件读写授权、笔记引用或下载权限。
+
+
+### 服务器附件模式与跨设备状态
+
+`attachment_state.py` 将附件数据库、服务器配置、缓存、上传队列、商品投影和分组状态路由到 `LocalConfig.directory/attachment-workspaces/<sha256(path_key(root))>/`，不受知识库目录同步覆盖。首次访问使用 SQLite Backup API 和普通文件版本检查取得旧 `.vault-rag` 状态快照，完整目录原子发布；不删除旧状态、恢复材料或原件。缓存字节不复制，缓存表同步清空。临时 `remote-attachments/release/` 仍在知识库侧，保证原件声明使用同文件系统 rename。更换本地目录需重新关联服务器，不能借用其他目录的传输授权。
+
+默认附件源为服务器时，状态直接可用；附件列表只查询服务器 manifest，本地 SQLite 仅需空 schema 支持分页查询，不触发本地扫描。原有本地初始化只建目录缓存，整理仍通过独立的确认流程执行。笔记文件、HTML 项目和依赖不因服务器模式迁移。
+
+`attachment_server_references.py` 在配置的元数据目录 `attachments/v1/<sha256>.json` 保存不含密码或本地绝对路径的不可变引用，包含服务器相对物理路径、逻辑别名与公开资产 ID。写入经独立读回校验；失败保留上传队列和迁移原件。显式服务器扫描下载受限的引用元数据并在单事务中恢复 aliases/reference_ids，支持不同本地目录和附件配置 ID。相同别名／身份指向不同对象或不同源时报告冲突，完整路径失效不降级为同名远程文件。旧版已迁移的引用由 `/api/attachments/storage/references` 显式回填。商品事件、分组事件仍按各自协议同步；这些本机数据库包含未同步用户数据，不能当作纯缓存随意删除。离线读取仍以已有完整／分段缓存为限。
+
+旧引用回填最多使用四个独立 HTTP 会话并行写入，小批次复用已核实目录；所有不可变记录仍读回校验。`reference_records` 只复用摘要校验正确、位于当前服务目录列表中的引用记录，后续扫描无需重复 GET 同一记录；限制单记录 128 KiB、每次总量 16 MiB、最多一万个引用记录。跨操作系统或本地绝对目录变化时，仅导入公开服务器配置，不接管其他根目录的未完成队列或恢复任务；仍需本机密码授权与服务器扫描。
