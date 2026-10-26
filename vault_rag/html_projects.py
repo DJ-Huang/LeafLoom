@@ -17,7 +17,7 @@ import secrets
 import threading
 from urllib.parse import quote, urlencode, urlsplit
 
-from starlette.responses import HTMLResponse, Response, RedirectResponse
+from starlette.responses import HTMLResponse, JSONResponse, Response, RedirectResponse
 
 from vault_rag.http_cache import conditional_file
 from vault_rag.local_state import ConflictError, atomic_write, relative
@@ -271,6 +271,9 @@ class HtmlProjects:
                 return Response(status_code=404, headers=headers)
             if session['draft'] is not None and p == base / session['entry']:
                 return HTMLResponse(session['draft'], headers={**headers, 'Cache-Control': 'no-store'})
+            if p == base / 'Design' / 'studio' / 'project.json':
+                from vault_rag.design_presenter import audience_document
+                return JSONResponse(audience_document(json.loads(p.read_text(encoding='utf-8'))), headers={**headers, 'Cache-Control': 'no-store'})
             # No decoding or charset injection: BOM/meta/@charset retain their usual meaning.
             media_type = MIME.get(p.suffix.lower(), mimetypes.guess_type(p.name)[0] or 'application/octet-stream')
             response = conditional_file(p, request, headers=headers, identity=session['vault'] + str(session['revision']), media_type=media_type)

@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -355,6 +357,58 @@ class WorkspaceMcpTests(unittest.TestCase):
         tools = {t['name'] for t in self.request('tools/list').json()['result']['tools']}
         self.assertFalse(tools & {'feishu_docs_read', 'feishu_docs_write', 'feishu_base_read', 'feishu_base_write'})
 
+    def test_design_import_server_files_small_requests_and_access_boundaries(self):
+        import base64, hashlib
+        directory = 'Web/Studio'
+        (self.root / directory).mkdir()
+        current = self.app.state.design.documents.create(directory, 'Media')
+        source = self.root / 'Archive/video.mp4'
+        content = b'fictional-video-frame' * 220000
+        source.write_bytes(content)
+        args = {'directory': directory, 'name': 'video.mp4', 'source_path': 'Archive/video.mp4',
+                'expected_revision': current['revision'], 'operation_id': 'import-server-video',
+                'workspace_revision': self.ws, 'include_document': False,
+                'expected_sha256': hashlib.sha256(content).hexdigest()}
+        self.assertLess(len(json.dumps(args)), 1000)
+        result = self.call('design_import_asset', args)
+        self.assertNotIn('document', result)
+        self.assertLess(len(json.dumps(result)), 3000)
+        self.assertEqual((self.root / directory / result['asset']['path']).read_bytes(), content)
+        self.assertTrue(self.call('design_import_asset', args)['replayed'])
+        current = result
+        for path in ('../outside.mp4', str(source)):
+            self.call('design_import_asset', {**args, 'source_path': path, 'operation_id': 'escape-' + path,
+                'expected_revision': current['revision']}, error='invalid_request')
+        self.call('design_import_asset', {**args, 'data_base64': 'YWJj',
+            'operation_id': 'mixed-sources', 'expected_revision': current['revision']}, error='invalid_request')
+        self.configure('local', enabled=True, write=False)
+        self.call('design_import_asset', args, error='permission_denied')
+        self.configure('local', enabled=True, write=True)
+        # Existing Base64 callers still receive the complete document by default.
+        current = self.call('design_import_asset', {'directory': directory, 'name': 'old.mp4',
+            'data_base64': base64.b64encode(b'legacy').decode(), 'expected_revision': current['revision'],
+            'operation_id': 'legacy-import', 'workspace_revision': self.ws})
+        self.assertIn('document', current)
+        self.configure('local', enabled=True, write=False, resource='feishu')
+        access = self.app.state.mcp_access
+        temp = self.app.state.feishu.files.register(access.file_owner('local'), source)
+        file_args = {'directory': directory, 'name': 'downloaded.mp4', 'source_file_id': temp['file_id'],
+            'expected_revision': current['revision'], 'operation_id': 'import-cli-output',
+            'workspace_revision': self.ws, 'include_document': False}
+        current = self.call('design_import_asset', file_args)
+        self.assertEqual(current['asset']['sha256'], hashlib.sha256(content).hexdigest())
+        self.assertEqual((self.root / directory / current['asset']['path']).read_bytes(), content)
+        self.configure('tunnel', enabled=True, write=True)
+        self.configure('tunnel', enabled=True, write=False, resource='feishu')
+        self.call('design_import_asset', {**file_args, 'operation_id': 'foreign-file',
+            'expected_revision': current['revision']}, token=access.tunnel_authorization(), error='not_found')
+        incomplete = self.app.state.feishu.files.allocate(access.file_owner('local'), 'unfinished.mp4')
+        self.call('design_import_asset', {**file_args, 'source_file_id': incomplete,
+            'operation_id': 'unfinished-file', 'expected_revision': current['revision']}, error='invalid_request')
+        self.configure('local', enabled=False, write=False, resource='feishu')
+        self.call('design_import_asset', {**file_args, 'operation_id': 'revoked-file',
+            'expected_revision': current['revision']}, error='permission_denied')
+
     def test_feishu_high_risk_needs_both_live_permission_and_confirmation(self):
         import sys
         service = self.app.state.feishu
@@ -440,6 +494,52 @@ class WorkspaceMcpTests(unittest.TestCase):
         self.assertFalse((self.root / 'Archive/too-big.md').exists())
         with self.assertRaises(ValueError):self.runtime.files.save(path, oversized, read['revision'])
         self.assertEqual(self.read(path)['revision'], read['revision'])
+
+    def test_save_receipt_and_editor_do_not_wait_for_catalog_worker(self):
+        locked, release = threading.Event(), threading.Event()
+
+        def catalog_worker():
+            # Model a metadata/attachment worker holding the catalog lock before
+            # it snapshots config. Old save code waited here after committing.
+            with self.runtime.catalog.update_lock:
+                locked.set()
+                release.wait(5)
+                with self.config.lock:
+                    pass
+
+        worker = threading.Thread(target=catalog_worker, daemon=True)
+        worker.start()
+        self.assertTrue(locked.wait(1))
+
+        def edit():
+            saved = self.update('Web/page.html', text='<h1>Saved promptly</h1>')
+            self.assertTrue(saved['saved'])
+            self.assertTrue(saved['history_id'])
+            self.assertEqual(saved['revision'], digest(b'<h1>Saved promptly</h1>'))
+            self.assertEqual(self.read('Web/page.html')['revision'], saved['revision'])
+            # A stale retry cannot silently overwrite the successful commit.
+            self.call('vault_update_note', {'path': 'Web/page.html', 'workspace_revision': self.ws,
+                      'expected_revision': 'stale', 'text': 'lost edit'}, error='write_conflict')
+            # The same Files API used by the editor and permission controls must
+            # remain usable while the catalog worker is still busy.
+            self.runtime.files.save('Web/page.html', '<h1>Editor continues</h1>', saved['revision'])
+            self.configure('local', enabled=True, write=False)
+            return saved
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(edit)
+            try:
+                future.result(timeout=2)
+            finally:
+                release.set()
+                worker.join(2)
+        self.assertFalse(worker.is_alive())
+        self.assertFalse(self.runtime.catalog.metadata_ready)
+        with self.runtime.pending_lock:
+            self.assertIn('Web/page.html', self.runtime.pending)
+        self.runtime.catalog.apply(['Web/page.html'])
+        self.assertEqual(self.read('Web/page.html')['text'], '<h1>Editor continues</h1>')
+        self.assertTrue(self.runtime.files.records('history', 'Web/page.html'))
 
     def test_folder_trash_pagination_root_daily_and_credential_persistence(self):
         self.put('Folder/a.md', 'A')

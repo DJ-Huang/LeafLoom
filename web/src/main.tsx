@@ -18,6 +18,7 @@ import {setLocale} from './i18n';
 import {Logo} from './brand';
 import {StorageMigrationNotice} from './storage-migration';
 import {HtmlPreview} from './html-preview';
+import {PresenterAudience} from './design-presenter-audience';
 const AttachmentDownloads=lazy(()=>import('./attachment-downloads').then(module=>({default:module.AttachmentDownloads})));
 const Attachments=lazy(()=>import('./attachments').then(module=>({default:module.Attachments})));
 const DesignStudio=lazy(()=>import('./design-studio').then(module=>({default:module.DesignStudio})));
@@ -176,4 +177,4 @@ function App(){
   {toast&&<div role="status" className="toast">{toast}</div>}
  </div>;
 }
-createRoot(document.getElementById('root')!).render(<App/>);
+createRoot(document.getElementById('root')!).render(new URLSearchParams(location.search).get('view')==='presenter-output'&&window.leafloomAudience?<PresenterAudience/>:<App/>);

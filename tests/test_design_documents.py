@@ -2,6 +2,7 @@
 import base64
 import copy
 import json
+import hashlib
 from pathlib import Path
 import shutil
 import tempfile
@@ -522,6 +523,102 @@ class DesignDocumentTests(unittest.TestCase):
         self.assertIn(asset['id'], self.current['document']['assets'])
         with self.assertRaises(ValueError):
             self.apply({'type': 'asset.register', 'asset': {'id': 'escape', 'path': '../outside.png'}})
+
+    def test_connected_asset_file_import_compact_replay_and_undo(self):
+        source = self.root / 'clip.mp4'
+        content = b'fictional-video-frame' * 220000
+        source.write_bytes(content)
+        revision = self.current['revision']
+        args = (self.directory, 'clip.mp4', 'clip.mp4', revision, 'import-local-clip')
+        result = self.service.import_workspace_asset(*args, expected_sha256=hashlib.sha256(content).hexdigest(),
+                                                     include_document=False)
+        self.assertNotIn('document', result)
+        self.assertLess(len(json.dumps(result)), 3000)
+        target = self.root / self.directory / result['asset']['path']
+        self.assertEqual(target.read_bytes(), content)
+        self.assertEqual(source.read_bytes(), content)
+        self.assertTrue(self.service.import_workspace_asset(*args, include_document=False)['replayed'])
+        self.current = self.service.read(self.directory)
+        self.history('undo')
+        self.assertNotIn(result['asset']['id'], self.current['document']['assets'])
+        self.assertEqual(target.read_bytes(), content)
+
+    def test_connected_asset_file_rejects_escape_links_hash_and_size(self):
+        source = self.root / 'clip.mp4'
+        source.write_bytes(b'original')
+        outside = self.home / 'outside.mp4'
+        outside.write_bytes(b'outside')
+        for path in ('../outside.mp4', str(outside), '.hidden.mp4'):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self.service.import_workspace_asset(self.directory, 'clip.mp4', path,
+                    self.current['revision'], 'invalid-' + path)
+        link = self.root / 'link.mp4'
+        link.symlink_to(outside)
+        with self.assertRaises(ValueError):
+            self.service.import_workspace_asset(self.directory, 'clip.mp4', 'link.mp4',
+                self.current['revision'], 'linked')
+        with self.assertRaisesRegex(ConflictError, 'SHA-256'):
+            self.service.import_workspace_asset(self.directory, 'clip.mp4', 'clip.mp4',
+                self.current['revision'], 'wrong-hash', expected_sha256='0' * 64)
+        with patch('vault_rag.design_documents.MAX_ASSET_BYTES', 2), self.assertRaises(ValueError):
+            self.service.import_workspace_asset(self.directory, 'clip.mp4', 'clip.mp4',
+                self.current['revision'], 'too-large')
+        self.assertEqual(self.service.read(self.directory)['revision'], self.current['revision'])
+        self.assertFalse((self.root / self.directory / 'Design/Assets/Imported').exists())
+
+    def test_asset_file_changed_during_copy_is_not_registered(self):
+        source = (self.root / 'clip.mp4').resolve()
+        source.write_bytes(b'original')
+        original_open = Path.open
+        class ChangingReader:
+            def __init__(self, stream):
+                self.stream = stream
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                self.stream.close()
+            def fileno(self):
+                return self.stream.fileno()
+            def read(self, limit):
+                content = self.stream.read(limit)
+                source.write_bytes(content + b'changed')
+                return content
+        def open_file(path, mode='r', *args, **kwargs):
+            stream = original_open(path, mode, *args, **kwargs)
+            return ChangingReader(stream) if path == source and mode == 'rb' else stream
+        with patch.object(Path, 'open', open_file), self.assertRaisesRegex(ConflictError, 'changed while copying'):
+            self.service.import_workspace_asset(self.directory, 'clip.mp4', 'clip.mp4',
+                self.current['revision'], 'source-changed')
+        self.assertEqual(self.service.read(self.directory)['revision'], self.current['revision'])
+
+    def test_asset_source_parent_link_swap_is_rechecked_before_registration(self):
+        folder = (self.root / 'Source').resolve()
+        folder.mkdir()
+        source = folder / 'clip.mp4'
+        source.write_bytes(b'original')
+        moved = (self.home / 'moved-source').resolve()
+        original_open = Path.open
+        class SwappingReader:
+            def __init__(self, stream):
+                self.stream = stream
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                self.stream.close()
+            def fileno(self):
+                return self.stream.fileno()
+            def read(self, limit):
+                data = self.stream.read(limit)
+                folder.rename(moved)
+                folder.symlink_to(moved, target_is_directory=True)
+                return data
+        def open_file(path, mode='r', *args, **kwargs):
+            stream = original_open(path, mode, *args, **kwargs)
+            return SwappingReader(stream) if path == source and mode == 'rb' else stream
+        with patch.object(Path, 'open', open_file), self.assertRaises(ValueError):
+            self.service.import_workspace_asset(self.directory, 'clip.mp4', 'Source/clip.mp4',
+                self.current['revision'], 'source-parent-changed')
+        self.assertEqual(self.service.read(self.directory)['revision'], self.current['revision'])
 
     def test_asset_replace_and_delete_track_native_paths_css_without_rewriting_comments(self):
         for key in ('old', 'new'):

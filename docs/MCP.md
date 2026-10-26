@@ -34,6 +34,8 @@ links/junctions and paths outside the folder remain inaccessible. HTML is source
 text, not executed by the tools. RAG continues to use only selected, eligible
 Markdown/TXT; neither full access nor saving a note expands that selection.
 
+Note writes acknowledge durable file/history changes with `saved:true` and the committed revision before catalog/attachment maintenance. Catalog updates use the existing runtime queue; they never run synchronously while note workflows hold configuration/file locks. Exact-path reads and revision-checked writes do not wait for catalog preparation. Global metadata queries can return `metadata_pending` until their background refresh finishes; retry the query, not an already successful mutation. `index_pending` remains the existing search-index eligibility/pending hint, not a persistence status.
+
 ## Tools
 
 | Workflow | Tools |
@@ -91,8 +93,39 @@ references, components, scripts and animation settings. Identical request retrie
 reuse their receipt; stale versions and conflicting operation IDs save nothing.
 
 `design_history` pages persistent history or executes versioned undo/redo;
-`design_import_asset` accepts original bytes as base64 and retains those bytes
-when registration is undone. `design_library` lists published personal items;
+`design_import_asset` accepts exactly one source: `source_path` for a file relative
+to the connected vault, `source_file_id` for an owned `feishu_files` / CLI download,
+or the existing `data_base64`. Prefer file references for videos and other large
+assets: the service copies and hashes the original locally instead of sending it
+out through MCP and uploading it again. Paths are on the **service host**, must
+remain inside the connected vault, and cannot traverse links or hidden/protected
+directories. Temporary IDs require current Feishu read permission, the same
+credential owner, a complete file and valid original-source access. Optional
+`expected_sha256` pins the input bytes; changed files, stale revisions and source
+mismatches save no asset. The 128 MiB asset limit remains; HTTP clients/proxies can
+reject much smaller Base64 request bodies before this limit is checked.
+
+Use `include_document:false` to return only the asset, revision, workspace revision
+and undo state, without returning the complete project after every media import.
+The default remains `true` for existing clients. For example, call
+`design_import_asset` with:
+
+```json
+{
+  "directory": "Projects/Training",
+  "name": "sky.mp4",
+  "source_path": "Projects/Training/SourceMedia/sky.mp4",
+  "expected_revision": "<design_document revision>",
+  "workspace_revision": "<current workspace_revision>",
+  "operation_id": "import-sky-unique-id",
+  "include_document": false
+}
+```
+
+For a Feishu download, replace `source_path` with `source_file_id` returned by
+`feishu_cli_read`; there is no need to call `feishu_files.get` to transfer the
+bytes back to the caller. Import still registers one undoable operation, and
+original bytes are retained when registration is undone. `design_library` lists published personal items;
 `design_publish_library` publishes a versioned component/asset/style/script and
 `design_import_library` explicitly imports or updates it with local dependency
 copies. `design_export` creates an independent HTML ZIP. Reading requires full
@@ -453,3 +486,15 @@ The default API is `http://127.0.0.1:18080`; use `--api-url` only for a differen
 The existing file tools support `search_assets`, `asset_details`, native-image `asset_preview`, `deliver_asset`, `delivery_status` and `delivery_control`. Read existing assets first, inspect actual file versions and deliver selected originals to the configured directory. Completed jobs return an absolute path on the identified service host; the calling AI handles engine integration. Old temporary download handles still hide staging paths. See [configuration, action schemas and recovery](ASSET_WORKFLOWS.md).
 
 AI asset search is now opt-in per attachment group. `groups` includes `search_enabled`, `search_scope_revision` and `search_scope_conflicts`; explicit `group_update` flag updates require the scope revision. Scope conflict resolution uses `resolve_search_scope=true` after review. Unselected groups are excluded from keyword and semantic search; no enabled groups returns `scope_not_configured`. Do not automatically bypass it with a full attachment listing. `group_id` only narrows the enabled union. See [group configuration and NAS synchronization](ASSET_WORKFLOWS.md#select-groups-before-searching).
+
+### Presenter notes in managed designs
+
+Local `design_document` reads optional page `presenterNotes` objects. Save them
+with normal revision-checked `design_operations` commands:
+`{type: "page.update", page_id, patch: {presenterNotes: {overview, cues}}}`.
+`cues` maps stable step/case IDs to Markdown text. Use the read-time revision,
+workspace revision and a unique operation ID; initialize only blank sections.
+Notes participate in normal undo/redo and copies. Audience runtime documents,
+project-origin `Design/studio/project.json`, HTML ZIPs and static-publish snapshots
+omit notes. Presenter window control is a desktop-only main-frame interface,
+not a general MCP or project-script debugging endpoint.

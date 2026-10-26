@@ -74,6 +74,8 @@ mode may still fail to load separate named project origins; the management shell
 alone does not prove that the rendered canvas works. Do not weaken origin, cookie
 or CSRF boundaries to make a preview load.
 
+Full-screen presenting uses the same isolated preview iframe and saved document. The workbench hides its chrome and requests native fullscreen from the user gesture, with a window-filling fallback. A session-checked `studio-presentation` message changes only runtime viewport fitting (no padding, aspect ratio preserved) and the presentation background; it does not remount scripts or write design operations. Page navigation keeps preview mode. Esc or the floating exit control returns to ordinary preview, and the existing edit camera and selection restoration remain separate.
+
 ## Portable document and durable history
 
 The editable source of truth is `Design/studio/project.json`, not generated
@@ -163,7 +165,13 @@ The same service backs public MCP `design_document`, `design_operations`,
 `design_history`, `design_import_asset`, `design_library`,
 `design_publish_library`, `design_import_library` and `design_export`. Full note
 access governs project reads, and the connection's separate write grant governs
-mutations. The legacy six `design_*` tools remain available. See [MCP](MCP.md).
+mutations. Asset import can reference a connected-vault file (`source_path`) or
+an authenticated Feishu temporary file (`source_file_id`) instead of putting
+Base64 media into the HTTP request. `include_document:false` keeps the receipt
+small; existing callers retain full responses by default. The copy checks source
+identity, size and optional SHA-256 before the same versioned registration, so
+undo/redo and retained-original behavior are unchanged. The legacy six
+`design_*` tools remain available. See [MCP](MCP.md).
 
 Commands use `type` as their discriminator:
 
@@ -560,3 +568,45 @@ assets, including unused ones. Use PNG/JPEG/static SVG artwork or a separate
 static-output project; the original interactive preview and HTML ZIP preserve
 these media. Missing-glyph warnings still require visual proofing. These limits
 are explicit errors, not silently omitted layers.
+
+## Desktop presenter contract
+
+Presenter mode keeps the complete saved visual document immutable for a session.
+The management renderer owns notes and receives only audience-window captures
+(maximum edge 1280, active/media 15 fps, idle 3 fps, one capture and one unacknowledged
+frame). Audience preload exposes only ready/report/subscribe; project scripts never
+receive desktop IPC. Management IPC is restricted to its main frame. Pointer and
+key events become allowlisted CDP Input commands bound to the audience WebContents;
+there is no generic debugger endpoint and controller focus is retained. Native
+display removal and heartbeat loss hide/mute/pause the audience until reconnection.
+
+Optional script API:
+
+```js
+const release = ctx.presenter?.register({
+  getState: () => ({stepId: 'step:intro', stepIndex: 0, stepCount: 3, label: 'Intro'}),
+  next() {}, previous() {}, goTo(indexOrLast) {},
+  closeDetail() { return false; }, // true consumes this navigation command
+  onCommand({action, paused, black}) {} // optional custom simulation pause hook
+});
+ctx.presenter?.update({contextId: 'case:fog', contextLabel: 'Fog', parameter: 'Density: 2'});
+```
+
+`stepId` and `contextId` must persist across reorderings; parameter changes keep the
+same context ID. Registered providers own page-local advancement; page-edge and
+page-directory navigation remain runtime responsibilities. Without a provider,
+next/previous navigate whole pages. Runtime-managed animation frames, intervals,
+Web Animations and media pause; custom unmanaged simulations use `onCommand`.
+
+Optional page field `presenterNotes: {overview: string, cues: {[stableId]: string}}`
+uses existing page.update operations, revision guards, autosave queue and history.
+Old projects require no migration. Copies keep notes; audience snapshots, raw
+project-origin project.json responses, HTML exports and static-publication
+manifests strip them. The console retains drafts on failure and does not rebuild
+the audience when notes, scroll position or text size change.
+
+The bound audience channel enables Chromium focus emulation for native control
+drags without activating the audience OS window, and serializes press/move/release
+commands. The preview retains the pressed button through a captured drag.
+This setup is internal; the exposed interface still accepts input events only.
+See the [upstream focus-emulation contract](https://github.com/ChromeDevTools/devtools-protocol/blob/master/pdl/domains/Emulation.pdl).

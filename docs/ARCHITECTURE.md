@@ -22,12 +22,19 @@ Tunnel 内部凭据通过 `X-LeafLoom-Tunnel-Authorization` 注入发现与业�
 - HTTP MCP：`http://127.0.0.1:18080/mcp`
 - 健康检查：`/healthz`；启动入口随后使用本机令牌验证 `/api/status`，避免复用另一安装实例。
 - 文件写入采用版本校验、草稿保留、原子替换；历史、移动回滚和回收区位于知识目录的 `.vault-rag`。
+- 笔记工作流在配置／文件锁内仅完成文件、历史与回执，不同步调用 `Catalog.apply`。目录工作线程持有 `update_lock` 后会读取配置快照，反向等待会造成已落盘保存的回执死锁。变更通过 `Runtime.files_changed` 合并排队，并立即通知界面、使全局元数据失效；精确路径读取不依赖目录就绪，全局查询沿用 `metadata_pending` 与后台准备流程。
 
 ## 通用附件 MCP
 
 公共 HTTP MCP 与 ChatGPT Tunnel 共用 `vault_files`（只读）和 `vault_files_update`（修改）两个入口，参数由 `file_commands.py` 的可辨识联合类型限制。`file_operations.py` 适配现有附件索引、整理恢复日志与 ZIP 任务；共用 `attachment_uploads.py` 的流式暂存与不覆盖发布逻辑。ChatGPT 文件参数元数据随工具发现返回，宿主文件引用通过 `file_downloads.py` 进行有界 HTTPS 下载，逐跳验证公网地址并固定连接地址和 TLS 主机名。
 
 传输归属绑定连接凭据代际和知识库版本，原文件读取还绑定文件版本。后台任务在安全边界重新检查当前权限；恢复记录保留在原知识库。上传操作回执保存在 `.vault-rag/file-receipts/`，原始上传字节只在私有临时目录暂存。网络读取和大文件复制期间不持有全局权限锁，发布前短暂持锁重新校验。浏览器与 MCP 发起的恢复动作各自重新授权，内部失败恢复不依赖已撤销的旧连接。
+
+## 设计素材的服务端引用导入
+
+`design_import_asset` 保留 Base64 入口，并可用 `source_path` 引用已关联知识库内的文件，或用 `source_file_id` 引用飞书 CLI / 临时文件池返回的文件。MCP 只传小型引用，避免媒体经过调用方往返及 Base64 膨胀；`include_document:false` 也避免每个素材重复返回完整项目。文件读取有 128 MiB 上限、普通文件与前后身份检查，可用 SHA-256 固定内容，之后复用现有设计资产注册事务与撤销历史。
+
+相对路径继续经过 `LocalConfig.path_for`，不开放任意服务主机路径。飞书文件 ID 在当前连接身份下重新检查飞书读取权限、凭据归属、完成状态及原知识库来源授权；ID 本身不授予额外访问。旧 Base64 参数与默认完整返回兼容，外层 HTTP 请求限制不因此扩大。
 
 ## 飞书接入
 
@@ -234,3 +241,11 @@ NAS 迁移使用 `/api/attachments/storage/migrations`：先预览候选文件�
 服务器引用导入遇到仍存在的同路径本地身份时，建立不激活的 `asset_redirects`，不删除或重命名原件。同步删除到达前按本地身份读取，删除后同一旧身份跟随服务器对象。已排队上传保留 source_id，切换默认目标只影响以后创建的上传。HTTP 服务器上传临时文件也放在本机应用数据目录，避免进入知识库同步。
 
 目录同步不能给多电脑的整理／重命名／迁移提供事务隔离，界面确认和三语指南要求一次只在一台电脑操作，期间暂停外部编辑与文件同步。纯本地原文件的同步也不等于本机标签、分组、未同步元数据和队列的同步；后者必须保留，不能以“缓存”为由删除。服务器原件在切回本地后仍需服务器或已有缓存，未实现自动反向迁移。
+
+Desktop Design presenter mode has one audience BrowserWindow with a minimal
+audience-only preload, plus the existing management window as the console.
+A complete saved document is frozen at start, while notes keep using the normal
+versioned save queue. The console receives bounded captures of that window only
+and forwards allowlisted, normalized Chromium Input events through a debugger
+attached exclusively to its WebContents. Project code never receives desktop
+permissions. Display loss or missed heartbeats mute, pause and hide output.

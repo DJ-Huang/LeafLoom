@@ -161,7 +161,10 @@
     let readOnly = !!settings.readOnly || !!variantId;
     let model = !settings.alreadyResolved && (variantId || Object.keys(canonical.bindings || {}).length) ? projectDocument(canonical, variantId) : canonical;
     let currentPageId = settings.pageId || (model.pages[0] && model.pages[0].id);
-    let mode = settings.mode;
+    let mode = settings.mode, presenting = false;
+    let presenterProvider = null, presenterInfo = {}, presenterPaused = false, presenterBlack = false, presenterLast = '', presenterLanding = null;
+    let presenterPages = Array.isArray(settings.presenterPageIds) ? settings.presenterPageIds : model.pages.map(page => page.id);
+    const pausedMedia = new Set(), pausedMotion = new Set();
     let selected = new Set(settings.selectedIds || []);
     let decorated = new Set();
     let generation = 0;
@@ -200,6 +203,12 @@
     chrome.className = 'studio-canvas-chrome';
     viewport.appendChild(chrome);
     root.replaceChildren(viewport);
+    const quietMedia = event => {
+      if (mode === 'preview' && !presenterPaused) return;
+      const media = event.target;
+      if (media && typeof media.pause === 'function') { if (presenterPaused) pausedMedia.add(media); media.pause(); }
+    };
+    stage.addEventListener('play', quietMedia, true);
 
     function report(error, nodeId, lineOffset) {
       const message = error && error.message ? error.message : String(error);
@@ -633,7 +642,8 @@
       const page = model.pages.find(item => item.id === currentPageId);
       if (!page || disposed) return;
       const width = Math.max(1, finite(page.width, 1280)), height = Math.max(1, finite(page.height, 720));
-      cameras.set(cameraKey(), { zoom: Math.min(1.5, clampZoom(Math.min((viewport.clientWidth - 80) / width, (viewport.clientHeight - 80) / height))), x: width / 2, y: height / 2, automatic: true });
+      const padding = presenting && mode === 'preview' ? 0 : 80;
+      cameras.set(cameraKey(), { zoom: Math.min(presenting ? 8 : 1.5, clampZoom(Math.min((viewport.clientWidth - padding) / width, (viewport.clientHeight - padding) / height))), x: width / 2, y: height / 2, automatic: true });
       applyCamera();
     }
 
@@ -698,12 +708,51 @@
       }
     }
 
+    function presenterState() {
+      let supplied = {};
+      try { supplied = presenterProvider && typeof presenterProvider.getState === 'function' ? presenterProvider.getState() || {} : {}; } catch (error) { report(error); }
+      return Object.assign({}, presenterInfo, supplied, { pageId: currentPageId, supported: !!presenterProvider, paused: presenterPaused, black: presenterBlack,
+        playing: [...stage.querySelectorAll('video,audio')].some(media => !media.paused && !media.ended),
+        inputFocused: !!(doc.activeElement && doc.activeElement.matches('input,textarea,select,[contenteditable="true"],[role="slider"],[role="spinbutton"],[role="combobox"],[role="listbox"],video[controls],audio[controls]')) });
+    }
+    function publishPresenter() {
+      if (mode !== 'preview') return;
+      const state = presenterState(), serialized = JSON.stringify(state);
+      if (serialized !== presenterLast) { presenterLast = serialized; emit('studio-presenter-state', { state }); }
+    }
+    function freezePresenter() {
+      stage.querySelectorAll('video,audio').forEach(media => { if (!media.paused) { pausedMedia.add(media); media.pause(); } });
+      stage.getAnimations({ subtree: true }).forEach(animation => { if (animation.playState === 'running') { pausedMotion.add(animation); animation.pause(); } });
+    }
+    function presenterCommand(command) {
+      const action = command && command.action;
+      if (action === 'pause' || action === 'black' && command.enabled) {
+        presenterPaused = true; if (action === 'black') presenterBlack = true; freezePresenter();
+      } else if (action === 'black') { presenterBlack = false; }
+      else if (action === 'resume' && !presenterBlack) {
+        presenterPaused = false;
+        pausedMedia.forEach(media => { if (media.isConnected) void media.play().catch(() => {}); }); pausedMedia.clear();
+        pausedMotion.forEach(animation => { if (animation.playState === 'paused') animation.play(); }); pausedMotion.clear();
+      } else if (action === 'page') {
+        if (presenterPages.includes(command.pageId)) navigate(command.pageId);
+      } else if ((action === 'next' || action === 'previous') && !presenterPaused && !presenterBlack) {
+        if (presenterProvider && typeof presenterProvider.closeDetail === 'function' && presenterProvider.closeDetail()) { publishPresenter(); return; }
+        const state = presenterState(), direction = action === 'next' ? 1 : -1;
+        if (presenterProvider && Number.isInteger(state.stepIndex) && (direction > 0 ? state.stepIndex + 1 < state.stepCount : state.stepIndex > 0) && typeof presenterProvider[action] === 'function') presenterProvider[action]();
+        else { const target = presenterPages[presenterPages.indexOf(currentPageId) + direction]; if (target) { navigate(target); if (direction < 0) { presenterLanding = 'last'; if (presenterProvider && typeof presenterProvider.goTo === 'function') { presenterProvider.goTo('last'); presenterLanding = null; } } } }
+      }
+      if (presenterProvider && typeof presenterProvider.onCommand === 'function') presenterProvider.onCommand({ action, paused: presenterPaused, black: presenterBlack });
+      publishPresenter();
+    }
+    const presenterTimer = typeof win.setInterval === 'function' ? win.setInterval(() => { if (presenterPaused) freezePresenter(); publishPresenter(); }, 250) : null;
+
     function releasePreview() {
       generation += 1;
       cleanup.splice(0).reverse().forEach(fn => { try { fn(); } catch (error) { report(error); } });
       urls.splice(0).forEach(url => win.URL.revokeObjectURL(url));
       overlayEntries = [];
       overlayStop = null;
+      presenterProvider = null; presenterInfo = {}; presenterLast = ''; presenterLanding = null; pausedMedia.clear(); pausedMotion.clear();
       Object.keys(runtimeState).forEach(key => delete runtimeState[key]);
       stage.querySelectorAll('.studio-overlay').forEach(el => el.remove());
     }
@@ -731,6 +780,7 @@
       const scope = makeScope('page_' + page.id, page.nodes, page.authoredContext);
       pageStyles(page, stage, scope);
       renderNodes(page.nodes, pageRoot(page, stage, scope), scope, new Set(['page:' + page.id]), null, false, renderedEntries);
+      if (mode !== 'preview') stage.querySelectorAll('video,audio').forEach(media => { media.pause(); media.muted = true; media.removeAttribute('autoplay'); });
       freezeStaticMotion();
       select([...selected], false);
       restoreCamera();
@@ -1219,7 +1269,7 @@
       let frameId = 0;
       const tick = time => {
         if (disposed || groupDisposed || token !== generation) return;
-        frameCallbacks.forEach(item => { try { item.fn(time); } catch (error) { report(error, item.nodeId); } });
+        if (!presenterPaused) frameCallbacks.forEach(item => { try { item.fn(time); } catch (error) { report(error, item.nodeId); } });
         frameId = frameCallbacks.size ? win.requestAnimationFrame(tick) : 0;
       };
       groupCleanup.push(() => {
@@ -1268,10 +1318,20 @@
           state: runtimeState[stateKey], console: logger,
           find: id => { const found = entry.scope.refs.get(id); return found ? found.visual : null; },
           on, animate,
+          presenter: {
+            register: provider => {
+              if (!provider || typeof provider !== 'object') throw new Error('Invalid presenter controller');
+              presenterProvider = provider;
+              if (presenterLanding && typeof provider.goTo === 'function') { const landing = presenterLanding; presenterLanding = null; provider.goTo(landing); }
+              publishPresenter();
+              return own(() => { if (presenterProvider === provider) { presenterProvider = null; presenterInfo = {}; publishPresenter(); } });
+            },
+            update: guard(state => { if (state && typeof state === 'object') { presenterInfo = Object.assign({}, presenterInfo, state); publishPresenter(); } })
+          },
           onEvent: (name, fn) => on(sharedEvents, name, event => fn(event.detail)),
           emit: (name, detail) => sharedEvents.dispatchEvent(new win.CustomEvent(name, { detail })),
           setTimeout: (fn, delay) => { let stop; const id = win.setTimeout(guard(() => { stop(); fn(); }), delay); stop = own(() => win.clearTimeout(id), 'timers'); return id; },
-          setInterval: (fn, delay) => { const id = win.setInterval(guard(() => { if (!doc.hidden) fn(); }), Math.max(1, delay)); own(() => win.clearInterval(id), 'timers'); return id; },
+          setInterval: (fn, delay) => { const id = win.setInterval(guard(() => { if (!doc.hidden && !presenterPaused) fn(); }), Math.max(1, delay)); own(() => win.clearInterval(id), 'timers'); return id; },
           onFrame: fn => { const item = { fn, nodeId: entry.node.id }; frameCallbacks.add(item); if (!frameId) frameId = win.requestAnimationFrame(tick); return own(() => frameCallbacks.delete(item), 'frames'); },
           assets: { resolve: asset },
           navigate: (pageId, context) => navigate(pageId, context),
@@ -1612,7 +1672,7 @@
 
     const onVisibility = () => {
       const running = renderedEntries.concat(overlayEntries).flatMap(entry => entry.visual.getAnimations ? entry.visual.getAnimations() : []);
-      running.forEach(animation => { if (doc.hidden) animation.pause(); else animation.play(); });
+      running.forEach(animation => { if (doc.hidden || presenterPaused) animation.pause(); else animation.play(); });
     };
     const htmlMessage = event => {
       const nodeId = htmlFrames.get(event.source);
@@ -1677,9 +1737,11 @@
       update, preflight, fitText, readyForStatic,
       preparePreview: () => { finishTextEdit(false); cancelGesture(); },
       select: ids => select(ids, false), action, fit, fitSelection, setZoom, setTool,
+      setPresentation: enabled => { const next = !!enabled; if (next === presenting) return; presenting = next; viewport.classList.toggle('studio-presenting', presenting); if (mode === 'preview') fit(); },
       get camera() { return Object.assign({}, camera(), { tool }); },
       setMode: (next, nodeId) => { mode = ['preview', 'static'].includes(next) ? next : 'edit'; if (mode === 'edit') navigationContext = {}; previewNodeId = nodeId || null; redraw(); },
       navigate, openOverlay,
+      presenterCommand,
       get document() { return clone(canonical); },
       get debugStats() {
         const work = [...gestureWork].sort((a, b) => a - b);
@@ -1687,8 +1749,9 @@
       },
       dispose: () => {
         if (disposed) return;
-        finishTextEdit(true); cancelGesture(); disposed = true; releasePreview(); resize.disconnect();
+        finishTextEdit(true); cancelGesture(); disposed = true; if (presenterTimer !== null) win.clearInterval(presenterTimer); releasePreview(); resize.disconnect();
         doc.removeEventListener('visibilitychange', onVisibility);
+        stage.removeEventListener('play', quietMedia, true);
         win.removeEventListener('message', htmlMessage);
         win.removeEventListener('keyup', keyUp); win.removeEventListener('blur', blur); htmlFrames.clear();
         root.replaceChildren();
@@ -1711,7 +1774,7 @@
       try {
         if (data.type === 'studio-init') {
           if (instance) instance.update(data.document, { pageId: data.pageId, mode: data.mode || 'edit', selectedIds: data.selectedIds, previewNodeId: data.previewNodeId, variantId: data.variantId, readOnly: data.readOnly });
-          else instance = mount(root, data.document, { pageId: data.pageId, mode: data.mode || 'edit', assetBase: data.assetBase || global.location.origin + '/', selectedIds: data.selectedIds, previewNodeId: data.previewNodeId, variantId: data.variantId, readOnly: data.readOnly, onMessage: send });
+          else instance = mount(root, data.document, { pageId: data.pageId, mode: data.mode || 'edit', assetBase: data.assetBase || global.location.origin + '/', selectedIds: data.selectedIds, previewNodeId: data.previewNodeId, variantId: data.variantId, readOnly: data.readOnly, presenterPageIds: data.presenterPageIds, onMessage: send });
           send({ type: 'studio-rendered', pageId: data.pageId });
         } else if (instance && data.type === 'studio-prepare-preview') { instance.preparePreview(); send({ type: 'studio-preview-prepared', requestId: data.requestId }); }
         else if (instance && data.type === 'studio-preflight') {
@@ -1721,6 +1784,8 @@
         }
         else if (instance && data.type === 'studio-select') instance.select(data.ids);
         else if (instance && data.type === 'studio-mode') instance.setMode(data.mode, data.previewNodeId);
+        else if (instance && data.type === 'studio-presentation') instance.setPresentation(data.enabled);
+        else if (instance && data.type === 'studio-presenter-command') instance.presenterCommand(data.command);
         else if (instance && data.type === 'studio-fit') data.selection ? instance.fitSelection() : instance.fit();
         else if (instance && data.type === 'studio-zoom') instance.setZoom(data.zoom);
         else if (instance && data.type === 'studio-action') instance.action(data.action);

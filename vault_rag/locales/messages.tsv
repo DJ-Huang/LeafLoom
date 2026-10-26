@@ -2402,3 +2402,68 @@ aw.localCatalogMissing|本机附件目录缓存尚未就绪，当前列表可能
 aw.localCatalogBuilding|正在更新本机附件目录缓存；已收录的附件仍可浏览，文件和引用不会因缓存更新而移动或改写。|Updating the local catalog. Existing cataloged attachments remain browsable; catalog updates do not move files or rewrite references.|端末の目録を更新中です。登録済みの添付は閲覧でき、ファイル移動や参照更新は行いません。
 al.saveSettings|保存商品目录与下载设置|Save catalog and download settings|カタログとダウンロード設定を保存
 al.settingsSaved|商品目录与下载设置已保存，附件原件保存位置不变。|Catalog and download settings saved. Attachment original destinations are unchanged.|カタログとダウンロード設定を保存しました。添付原本の保存先は変更しません。
+
+全屏演示|Present full screen|全画面でプレゼンテーション
+演示工具|Presentation controls|プレゼンテーション操作
+演示页面|Presentation page|プレゼンテーションページ
+将鼠标移到底部显示演示工具；Esc 退出全屏|Move the pointer to the bottom for presentation controls; Esc exits full screen.|下部にポインターを移動すると操作を表示します。Esc で全画面を終了します。
+
+上一页|Previous page|前のページ
+下一页|Next page|次のページ
+
+# Design dual-display presenter
+正在保存…|Saving…|保存中…
+演示者模式|Presenter mode|発表者モード
+观众画面操作预览|Interactive audience preview|観客画面の操作プレビュー
+观众实时画面|Live audience view|観客画面のライブ表示
+正在连接观众画面…|Connecting to the audience view…|観客画面に接続中…
+下一页缩略图|Next page thumbnail|次のページのサムネイル
+已到最后一页|Last page reached|最後のページです
+观众输出已暂停，请重新选择屏幕后恢复。|Audience output is paused. Select a display to reconnect.|観客への出力を停止しました。画面を選び直して再接続してください。
+控制连接已断开，讲稿已保留。|Control connection lost. Speaker notes have been retained.|操作の接続が切れました。発表者ノートは保持されています。
+演示已结束|Presentation ended|プレゼンテーションを終了しました
+编辑演示讲稿|Edit speaker notes|発表者ノートを編集
+讲稿草稿无法保存|Unable to save the speaker-note draft|発表者ノートの下書きを保存できません
+整页讲稿|Page notes|ページ全体のノート
+当前讲解点|Current talking point|現在の説明ポイント
+案例讲稿|Case notes|事例のノート
+讲解步骤|Talking points|説明のステップ
+请选择观众屏幕|Choose an audience display|観客用の画面を選択してください
+结束演示|End presentation|プレゼンテーションを終了
+选择观众屏幕|Choose audience display|観客用画面を選択
+当前屏幕显示操作预览和讲稿，观众屏幕只显示课件。|This screen shows the controls and notes. The audience display shows only the presentation.|この画面には操作プレビューとノートを、観客用画面には教材のみを表示します。
+当前屏幕 · 独立窗口预演|Current display · window rehearsal|現在の画面 · 別ウィンドウでリハーサル
+观众屏幕 · 原生全屏|Audience display · native full screen|観客用画面 · ネイティブ全画面
+识别屏幕|Identify displays|画面を識別
+交换屏幕|Swap displays|画面を入れ替え
+播放全部页面|Present all pages|すべてのページを再生
+开始演示|Start presentation|プレゼンテーションを開始
+已恢复未保存的讲稿草稿|Unsaved speaker-note draft restored|未保存の発表者ノートの下書きを復元しました
+保存讲稿|Save notes|ノートを保存
+观众屏幕|Audience display|観客用画面
+重新连接观众屏幕|Reconnect audience display|観客用画面に再接続
+已暂停|Paused|一時停止中
+点击、拖动和滚动直接控制观众画面|Click, drag and scroll to control the audience view|クリック、ドラッグ、スクロールで観客画面を操作
+调整预览与讲稿宽度|Resize preview and notes|プレビューとノートの幅を変更
+讲稿|Speaker notes|発表者ノート
+保存失败，草稿已保留|Save failed; draft retained|保存に失敗しました。下書きを保持しています
+缩小讲稿字号|Decrease note text size|ノートの文字を小さく
+放大讲稿字号|Increase note text size|ノートの文字を大きく
+跟随当前步骤|Follow current step|現在のステップに追従
+继续跟随|Resume following|追従を再開
+讲稿段落|Note section|ノートの段落
+暂无讲稿，可切换到编辑添加。|No notes yet. Switch to Edit to add them.|ノートはありません。編集に切り替えて追加できます。
+保留草稿|Keep draft|下書きを保持
+页面目录|Page directory|ページ一覧
+上一步|Previous step|前のステップ
+下一步|Next step|次のステップ
+整页播放|Whole-page navigation|ページ単位で再生
+演示计时|Presentation timer|プレゼンテーションの経過時間
+继续播放|Resume playback|再生を再開
+恢复画面|Restore picture|画面を戻す
+黑屏|Blackout|ブラックアウト
+请等待修改保存完成|Wait for changes to finish saving|変更の保存が完了するまでお待ちください
+视频播放中|Video playing|動画を再生中
+重试保存|Retry saving|保存を再試行
+演示页面已不存在，请返回编辑重新选择|This page no longer exists. Return to editing and select another page.|このページは存在しません。編集に戻ってページを選び直してください。
+演示者控制台|Presenter console|発表者コンソール

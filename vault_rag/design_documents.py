@@ -13,7 +13,9 @@ import io
 import json
 import math
 import mimetypes
+import os
 from pathlib import Path
+import stat
 import sqlite3
 import time
 import uuid
@@ -21,6 +23,7 @@ from collections import OrderedDict
 from typing import Any
 
 from vault_rag.local_state import ConflictError, atomic_write, relative
+from vault_rag.platform_support import is_link
 from vault_rag.design_references import AssetReferences, rewrite_script
 from vault_rag.design_bindings import (binding_command, validate_bindings, prune_deleted_layouts,
                                        duplicate_layouts, image_binding_references, replace_binding_asset)
@@ -694,7 +697,7 @@ class DesignDocuments:
             finally:
                 db.close()
 
-    def apply(self, directory: str, commands: list, expected_revision, operation_id: str, label='', workspace_revision=None, *, request_identity=None):
+    def apply(self, directory: str, commands: list, expected_revision, operation_id: str, label='', workspace_revision=None, *, request_identity=None, include_document=True):
         with self.config.lock, self.files.lock:
             if workspace_revision is not None and workspace_revision != self.workspace_revision:
                 raise ConflictError('Workspace changed; read the current workspace before applying design edits')
@@ -705,7 +708,7 @@ class DesignDocuments:
             try:
                 receipt = self._receipt(db, operation_id, fingerprint)
                 if receipt:
-                    return self._result(directory, path, db, replayed=True, operation_revision=receipt['revision'])
+                    return self._result(directory, path, db, replayed=True, operation_revision=receipt['revision'], include_document=include_document)
                 self._revision(meta, expected_revision)
                 after = copy.deepcopy(document)
                 try:
@@ -717,7 +720,7 @@ class DesignDocuments:
                 self.validate(after, project)
                 self._commit(db, path, document, after, meta, operation_id, fingerprint, str(label or commands[0].get('type', 'Edit')))
                 self._changed(directory, path)
-                return self._result(directory, path, db)
+                return self._result(directory, path, db, include_document=include_document)
             finally:
                 db.close()
 
@@ -754,7 +757,39 @@ class DesignDocuments:
             finally:
                 db.close()
 
-    def import_asset(self, directory: str, name: str, data, expected_revision, operation_id: str, mime=''):
+    def import_workspace_asset(self, directory: str, name: str, source_path: str, expected_revision,
+                               operation_id: str, mime='', *, expected_sha256=None, include_document=True):
+        """Copy a connected file without returning its bytes through the MCP client."""
+        with self.config.lock, self.files.lock:
+            source = self.config.path_for(relative(source_path))
+            return self.import_asset_file(directory, name, source, expected_revision, operation_id, mime,
+                                          expected_sha256=expected_sha256, include_document=include_document,
+                                          source_check=lambda: self.config.path_for(relative(source_path)))
+
+    def import_asset_file(self, directory: str, name: str, source: Path, expected_revision,
+                          operation_id: str, mime='', *, expected_sha256=None, include_document=True,
+                          source_check=None):
+        """Internal entry for connected paths or an adapter's authenticated temporary file."""
+        if is_link(source):
+            raise ValueError('Asset source must not be a link')
+        before = source.stat()
+        if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= MAX_ASSET_BYTES:
+            raise ValueError('Asset source must be a regular file containing 1 byte to 128 MiB')
+        signature = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns)
+        with source.open('rb') as stream:
+            if signature(os.fstat(stream.fileno())) != signature(before):
+                raise ConflictError('Asset source changed before copying; no asset was saved')
+            data = stream.read(MAX_ASSET_BYTES + 1)
+            if (len(data) != before.st_size or signature(os.fstat(stream.fileno())) != signature(before)
+                    or is_link(source) or signature(source.stat()) != signature(before)):
+                raise ConflictError('Asset source changed while copying; no asset was saved')
+        if source_check is not None:
+            source_check()
+        return self.import_asset(directory, name, data, expected_revision, operation_id, mime,
+                                 expected_sha256=expected_sha256, include_document=include_document)
+
+    def import_asset(self, directory: str, name: str, data, expected_revision, operation_id: str, mime='',
+                     *, expected_sha256=None, include_document=True):
         if isinstance(data, str):
             try:
                 data = base64.b64decode(data.split(',', 1)[1] if data.startswith('data:') else data, validate=True)
@@ -768,6 +803,12 @@ class DesignDocuments:
         if extension not in allowed:
             raise ValueError('Unsupported asset extension')
         digest = _hash(bytes(data))
+        if expected_sha256 is not None:
+            if (not isinstance(expected_sha256, str) or len(expected_sha256) != 64
+                    or any(char not in '0123456789abcdefABCDEF' for char in expected_sha256)):
+                raise ValueError('expected_sha256 must contain 64 hexadecimal characters')
+            if digest != expected_sha256.lower():
+                raise ConflictError('Asset SHA-256 changed; no asset was saved')
         asset_id = 'asset-' + _hash((str(operation_id) + '\n' + digest + '\n' + name).encode())[:32]
         rel_path = f'Design/Assets/Imported/{digest}{extension}'
         asset = {'id': asset_id, 'name': name, 'path': rel_path, 'mime': str(mime or mimetypes.guess_type(name)[0] or 'application/octet-stream'),
@@ -796,8 +837,10 @@ class DesignDocuments:
                     atomic_write(target, bytes(data))
             finally:
                 db.close()
-            result = self.apply(directory, [command], expected_revision, operation_id, 'Import ' + name)
-            result['asset'] = result['document']['assets'].get(asset_id, asset)
+            result = self.apply(directory, [command], expected_revision, operation_id, 'Import ' + name,
+                                include_document=include_document)
+            current = self._cached_document(self._paths(directory)[2])['document']
+            result['asset'] = copy.deepcopy(current['assets'].get(asset_id, asset))
             return result
 
     def _changed(self, directory, path):
@@ -1324,6 +1367,9 @@ class DesignDocuments:
                 raise ValueError('Page must be an object')
             identity(page.get('id'))
             page_ids.add(page['id'])
+            if 'presenterNotes' in page:
+                from vault_rag.design_presenter import validate_notes
+                validate_notes(page['presenterNotes'])
             for dimension in ('width', 'height'):
                 value = page.get(dimension)
                 if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 1 <= value <= 32768:

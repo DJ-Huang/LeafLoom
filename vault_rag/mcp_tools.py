@@ -548,14 +548,55 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         return await call(ctx, run, write=True)
 
     @tool(write=True, additive=True)
-    async def design_import_asset(directory: str, name: str, data_base64: str, expected_revision: str,
-                                  operation_id: str, workspace_revision: str, ctx: Context, mime: str = '') -> CallToolResult:
-        """Import original asset bytes as base64 into a managed project, recording metadata and one undoable library insertion.
-        Undo removes the asset registration; original bytes remain available for redo.
+    async def design_import_asset(directory: str, name: str, expected_revision: str,
+                                  operation_id: str, workspace_revision: str, ctx: Context, mime: str = '',
+                                  data_base64: str | None = None, source_path: str | None = None,
+                                  source_file_id: str | None = None, expected_sha256: str | None = None,
+                                  include_document: bool = True) -> CallToolResult:
+        """Import one asset with exactly one source: source_path (connected vault-relative file),
+        source_file_id (credential-scoped feishu_files/CLI output), or legacy data_base64.
+        Prefer server-side file sources and include_document=false for videos/large media: one small request,
+        no Base64 round trip. A source_file_id also requires Feishu read access; IDs never widen file access.
+        Optional expected_sha256 pins source bytes. Retains originals and records one undoable insertion;
+        retries reuse operation_id. Default full-document responses preserve existing clients.
         """
-        def run():
+        def import_source():
             design._check_workspace(workspace_revision)
-            return design.documents.import_asset(directory, name, data_base64, expected_revision, operation_id, mime)
+            if sum(value is not None for value in (data_base64, source_path, source_file_id)) != 1:
+                raise ValueError('Provide exactly one of data_base64, source_path or source_file_id')
+            options = {'expected_sha256': expected_sha256, 'include_document': include_document}
+            if source_path is not None:
+                return design.documents.import_workspace_asset(directory, name, source_path,
+                    expected_revision, operation_id, mime, **options)
+            if source_file_id is not None:
+                if feishu is None:
+                    raise ValueError('Feishu temporary-file import is unavailable')
+                who = principal(ctx)
+                access.require(who, resource='feishu')
+                def source_check(source):
+                    access.require(who, resource='workspace')
+                    if str(config.root) != source['root']:
+                        raise PermissionError('Connected directory changed; import the file again')
+                    if not config.path_for(source['path']).is_file():
+                        raise FileNotFoundError('Connected source file is no longer available')
+                with feishu.lock:
+                    row = feishu.files.get(access.file_owner(who), source_file_id, source_check)
+                    if not row['complete']:
+                        raise ValueError('Temporary asset file is not complete')
+                    if expected_sha256 is not None and expected_sha256.lower() != row['sha256']:
+                        raise ConflictError('Temporary asset SHA-256 changed; no asset was saved')
+                    options['expected_sha256'] = row['sha256']
+                    return design.documents.import_asset_file(directory, name, feishu.files.root / source_file_id,
+                        expected_revision, operation_id, mime,
+                        source_check=lambda: feishu.files.get(access.file_owner(who), source_file_id, source_check),
+                        **options)
+            return design.documents.import_asset(directory, name, data_base64,
+                expected_revision, operation_id, mime, **options)
+        def run():
+            # A connected directory cannot switch between source validation,
+            # the bounded file read and the existing design transaction.
+            with config.lock, design.files.lock:
+                return import_source()
         return await call(ctx, run, write=True)
 
     @tool()

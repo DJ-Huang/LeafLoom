@@ -4,6 +4,14 @@
 
 ## Unreleased
 
+- Add desktop dual-display presenter mode with one isolated audience renderer, bounded live preview and focus-preserving input, private editable notes, step/case navigation, blackout/reconnection and immutable presentation snapshots. Notes use normal revision/undo history and stay out of audience and export outputs.
+
+- Add full-screen Design Studio presentations with proportional artboard fitting, unobtrusive page controls, Esc exit and a window-filling fallback. Keep interactions running and restore the existing editing position when preview ends.
+
+- Fix a save-receipt deadlock between note writes and background catalog/attachment updates. Acknowledge committed files and history immediately, queue metadata updates, and keep later MCP calls and editor saves available without weakening revision or permission checks.
+
+- Add server-side design asset imports from connected-vault paths or credential-scoped Feishu temporary files, avoiding large Base64 MCP requests and repeated byte transfers. Optional compact receipts omit the full document; preserve existing defaults, source/hash checks, access boundaries and undo history.
+
 - Keep both local and server attachments visible when switching the new-upload destination. Separate local catalog readiness from server browsing, preserve exact paths across same-name files, retain peer originals until synced deletion, and clarify offline behavior and folder-sync limits in all three languages.
 
 - Use server attachment catalogs directly when a server is selected, separating local catalog setup from optional organization. Isolate attachment SQLite, settings, caches and transfer queues in device-private application data with a non-destructive legacy snapshot upgrade. Publish verified immutable server references before upload completion or original release; other devices restore old paths and IDs without syncing SQLite. Report conflicting references explicitly and add a one-time legacy-reference sync action.

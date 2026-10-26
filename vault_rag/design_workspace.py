@@ -901,7 +901,8 @@ class DesignWorkspace:
 
     def export(self, directory):
         value = self.documents.read(directory)
-        document = copy.deepcopy(value['document'])
+        from vault_rag.design_presenter import audience_document
+        document = audience_document(value['document'])
         with self.config.lock, self.files.lock:
             document['name'] = self._load()['meta'].get(relative(directory), {}).get('name') or document['name']
         self.install_runtime(directory)

@@ -3,6 +3,7 @@ import {api} from './api';
 import {t,useLocale} from './i18n';
 import {SettingGroup,SettingRow,StatusNotice} from './settings-ui';
 import {AppUpdate,UpdateInfo} from './app-update';
+import type {PresenterDesktop} from './design-presenter-types';
 
 export type DesktopInfo={version:string,platform:string,openAtLogin:boolean,error?:string};
 export type TunnelInfo={tunnelId:string,enabled:boolean,keySaved:boolean,state:string,error:string};
@@ -11,6 +12,7 @@ declare global {
  interface Window {
   leafloomPrepareQuit?:()=>Promise<void>;
   leafloomDesktop?:{
+   presenter:PresenterDesktop;
    appInfo:()=>Promise<DesktopInfo>;
    publishDesign:(jobId:string)=>Promise<unknown>;
    updateStatus:()=>Promise<UpdateInfo>;

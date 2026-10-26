@@ -5,6 +5,17 @@ if (process.isMainFrame) {
   contextBridge.exposeInMainWorld('leafloomDesktop', Object.freeze({
     appInfo: () => invoke('info'),
     publishDesign: jobId => invoke('design-publish', jobId),
+    presenter: Object.freeze({
+      displays: () => invoke('presenter-displays'),
+      identify: () => invoke('presenter-identify'),
+      start: input => invoke('presenter-start', input),
+      command: (id, command) => invoke('presenter-command', id, command),
+      input: (id, input) => invoke('presenter-input', id, input),
+      ack: (id, seq) => invoke('presenter-ack', id, seq),
+      heartbeat: id => invoke('presenter-heartbeat', id),
+      stop: id => invoke('presenter-stop', id),
+      subscribe: callback => {const listener = (_event, value) => callback(value); ipcRenderer.on('leafloom:presentation-event', listener); return () => ipcRenderer.removeListener('leafloom:presentation-event', listener);}
+    }),
     updateStatus: () => invoke('update-status'),
     checkUpdate: () => invoke('update-check'),
     downloadUpdate: () => invoke('update-download'),
