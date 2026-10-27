@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Reduce Design MCP output with paginated summaries, exact page/node/resource source reads, revision-pinned pagination and compact edit/undo/import receipts in public MCP and the built-in assistant. Keep explicit full-document options and HTTP editor behavior. Reuse revision-local inspection indexes and encode public MCP JSON off the event loop with compact formatting and duration/size logs.
+
 - Add desktop dual-display presenter mode with one isolated audience renderer, bounded live preview and focus-preserving input, private editable notes, step/case navigation, blackout/reconnection and immutable presentation snapshots. Notes use normal revision/undo history and stay out of audience and export outputs.
 
 - Add full-screen Design Studio presentations with proportional artboard fitting, unobtrusive page controls, Esc exit and a window-filling fallback. Keep interactions running and restore the existing editing position when preview ends.

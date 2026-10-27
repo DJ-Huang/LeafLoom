@@ -173,6 +173,8 @@ Dev 与安装版共用 Tunnel 配置和生命周期：启用后随应用启动�
 
 ## 让 AI 访问完整笔记与设计项目
 
+设计 MCP 现在默认返回精简分页摘要，每页默认 20 项。用 `page_id` 查看元素摘要，用 `section` 列出素材／组件／样式／脚本；需要源码时，以 `full=true` 加页面／元素或资源 ID 精确读取。沿 `next_offset` 翻页，并将返回的 `revision` 作为 `expected_revision`，避免混入不同版本。设计修改、撤销／重做与导入默认返回短回执，`include_document=true` 可恢复原完整返回；`design_get_project` 默认也不展开受管文档。无选择条件的 `design_document(full=true)` 仍可获取完整文档。更新后重启后端并刷新客户端工具；内置 AI 使用相同默认行为。详见 [MCP 读取选项](../MCP.md)。
+
 同一套知识库读写权限现已覆盖附件。更新后重启后端，并刷新所用 AI 客户端的工具列表；使用 LeafLoom ChatGPT 插件时，再刷新该插件。`vault_files` 查询元数据、返回文件版本和 Markdown 引用、读取原始字节、准备 ZIP 下载并查看任务；`vault_files_update` 接收聊天文件或本机分块上传，准备移动／重命名、回收及统一整理方案。先读取方案，再携带当前任务版本明确执行、继续或撤销，后续编辑不会被强制覆盖。上传保存到配置的附件目录，同名自动保留两份，默认不修改笔记。聊天上传在后台执行，失败后先核对逐文件结果，再重试剩余文件。详见[文件工具契约](../MCP.md#general-file-tools)。
 
 在 **设置 → AI 连接** 中，为本机 AI 或 ChatGPT 开启完整 MCP 读取，再分别开启写入开关，即可直接保存并保留历史、使用可恢复删除。可编辑关联目录内的 Markdown/TXT/HTML 与设计项目。受管项目使用 `design_document`、`design_operations`、`design_history` 及素材导入、共享库、导出工具；六个旧设计工具继续可用。RAG 仍只使用勾选范围，旧连接保持原有五项只读能力。详见 [AI 接入](AI.md)、[工具契约](../MCP.md)与[Design Studio 说明](../DESIGN_STUDIO.md)。

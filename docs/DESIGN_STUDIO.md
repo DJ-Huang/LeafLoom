@@ -167,8 +167,11 @@ The same service backs public MCP `design_document`, `design_operations`,
 access governs project reads, and the connection's separate write grant governs
 mutations. Asset import can reference a connected-vault file (`source_path`) or
 an authenticated Feishu temporary file (`source_file_id`) instead of putting
-Base64 media into the HTTP request. `include_document:false` keeps the receipt
-small; existing callers retain full responses by default. The copy checks source
+Base64 media into the HTTP request. MCP design reads now default to paginated
+summaries; select a page/node or resource and set `full:true` to read its exact
+source. `full:true` without selectors returns the complete canonical document.
+MCP mutations default to small receipts; `include_document:true` restores their
+full-document response. HTTP editor defaults stay unchanged. The copy checks source
 identity, size and optional SHA-256 before the same versioned registration, so
 undo/redo and retained-original behavior are unchanged. The legacy six
 `design_*` tools remain available. See [MCP](MCP.md).

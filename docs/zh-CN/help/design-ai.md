@@ -14,6 +14,8 @@
 
 ## 完成后的表现
 
+MCP 默认先返回分页摘要；按页面／元素或资源 ID 定位后，再以 `full=true` 读取所需源码。沿 `next_offset` 翻页时传 `expected_revision`；修改与导入默认短回执。无选择条件的 `full=true` 和修改工具的 `include_document=true` 保留完整文档访问。更新后重启后端并刷新客户端工具，详见 [MCP 契约](../../MCP.md)。
+
 设计修改直接应用，一批对应一个持久撤销步骤。
 
 ## 没有成功时

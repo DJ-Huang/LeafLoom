@@ -414,7 +414,7 @@ class DesignStudio:
                 cache['summaries'].pop(key)
         return list(cache['projects']), cache['summaries']
 
-    def get_project(self, directory: str, board_id: str | None = None) -> dict[str, Any]:
+    def get_project(self, directory: str, board_id: str | None = None, *, include_document=True) -> dict[str, Any]:
         root = self.config.root
         directory = relative(directory)
         proj_dir = self.config.path_for(directory) if directory else root
@@ -434,7 +434,7 @@ class DesignStudio:
             'workspace_revision': self.workspace_revision,
         }
         if summary.get('managed'):
-            result.update(self.documents.read(directory, board_id))
+            result.update(self.documents.read(directory, board_id) if include_document else self.documents.inspect(directory, board_id))
         if board_id is not None:
             result['board_id'] = board_id
             result['board_transforms'] = transforms_boards.get(board_id, {})

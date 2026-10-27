@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import tempfile
@@ -127,6 +128,11 @@ class WorkspaceMcpTests(unittest.TestCase):
         self.assertTrue(tools['vault_find_notes']['annotations']['readOnlyHint'])
         self.assertTrue(tools['vault_delete']['annotations']['destructiveHint'])
         self.assertNotIn('ctx', tools['vault_read_note']['inputSchema']['properties'])
+        design_schema = tools['design_document']['inputSchema']['properties']
+        self.assertFalse(design_schema['full']['default'])
+        self.assertEqual(design_schema['limit']['default'], 20)
+        for name in ('design_get_project', 'design_operations', 'design_history', 'design_import_asset', 'design_import_library'):
+            self.assertFalse(tools[name]['inputSchema']['properties']['include_document']['default'])
         for token in ('', 'legacy'):
             status = self.call('vault_index_status', token=token)
             self.assertFalse(status['capabilities']['read_workspace'])
@@ -142,6 +148,22 @@ class WorkspaceMcpTests(unittest.TestCase):
         self.assertTrue(rag['degraded'])
         self.call('vault_get_note', {'note_id': 'Archive/b.md'}, token='', error='retrieval_failed')
         self.call('vault_read_note', {'note_id': 'no-such-id'}, error='not_found')
+
+    def test_response_encoding_is_off_event_loop_and_keeps_json_contract(self):
+        import asyncio
+        from vault_rag.mcp_tools import _tool_result
+        encoded = []
+        def encode(value, *args, **kwargs):
+            with self.assertRaises(RuntimeError):
+                asyncio.get_running_loop()
+            encoded.append(True)
+            return _tool_result(value, *args, **kwargs)
+        with patch('vault_rag.mcp_tools._tool_result', side_effect=encode):
+            value = self.read('Archive/b.md')
+        self.assertTrue(encoded)
+        self.assertIn('private evidence', value['text'])
+        self.assertEqual(_tool_result({'date': date(2026, 10, 27)}).structuredContent,
+                         {'date': '2026-10-27'})
 
     def test_long_notes_unique_ids_and_snapshot_pagination(self):
         self.put('Archive/long.txt', '字' * 25001)
@@ -384,10 +406,10 @@ class WorkspaceMcpTests(unittest.TestCase):
         self.configure('local', enabled=True, write=False)
         self.call('design_import_asset', args, error='permission_denied')
         self.configure('local', enabled=True, write=True)
-        # Existing Base64 callers still receive the complete document by default.
+        # Base64 callers can explicitly retain the complete legacy response.
         current = self.call('design_import_asset', {'directory': directory, 'name': 'old.mp4',
             'data_base64': base64.b64encode(b'legacy').decode(), 'expected_revision': current['revision'],
-            'operation_id': 'legacy-import', 'workspace_revision': self.ws})
+            'operation_id': 'legacy-import', 'workspace_revision': self.ws, 'include_document': True})
         self.assertIn('document', current)
         self.configure('local', enabled=True, write=False, resource='feishu')
         access = self.app.state.mcp_access

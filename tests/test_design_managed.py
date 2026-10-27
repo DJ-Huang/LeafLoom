@@ -76,11 +76,34 @@ class ManagedDesignTests(unittest.TestCase):
             'expected_revision': value['revision'], 'operation_id': 'ai-edit', 'label': 'AI instruction',
             'commands': [{'type': 'page.update', 'page_id': page, 'patch': {'name': 'AI Page', 'script': {'source': 'export function mount(ctx){}'}}}]})
         self.assertTrue(edited['history']['can_undo'])
+        self.assertNotIn('document', edited)
         read = self.mcp_call('design_document', {'directory': 'Projects/Studio'})
-        self.assertEqual(read['document']['pages'][0]['name'], 'AI Page')
+        self.assertNotIn('document', read)
+        self.assertEqual(read['manifest']['pages'][0]['name'], 'AI Page')
+        exact = self.mcp_call('design_document', {'directory': 'Projects/Studio', 'page_id': page, 'full': True})
+        self.assertIn('script', exact['pages'][0])
         undone = self.mcp_call('design_history', {'directory': 'Projects/Studio', 'action': 'undo',
             'workspace_revision': self.config.data['revision'], 'expected_revision': read['revision'], 'operation_id': 'undo-ai'})
-        self.assertNotIn('script', undone['document']['pages'][0])
+        self.assertNotIn('document', undone)
+        full = self.mcp_call('design_document', {'directory': 'Projects/Studio', 'full': True})
+        self.assertNotIn('script', full['document']['pages'][0])
+        legacy = self.mcp_call('design_get_project', {'directory': 'Projects/Studio'})
+        self.assertNotIn('document', legacy)
+        self.assertEqual(legacy['revision'], full['revision'])
+        expanded = self.mcp_call('design_get_project', {'directory': 'Projects/Studio', 'include_document': True})
+        self.assertEqual(expanded['document'], full['document'])
+
+    def test_mcp_asset_import_defaults_to_short_receipt_and_allows_full_opt_in(self):
+        value = self.create()
+        (self.root / 'Projects/source.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+        arguments = {'directory': 'Projects/Studio', 'name': 'example.svg', 'source_path': 'Projects/source.svg',
+            'expected_revision': value['revision'], 'workspace_revision': self.config.data['revision'], 'operation_id': 'small-asset'}
+        imported = self.mcp_call('design_import_asset', arguments)
+        self.assertIn('asset', imported)
+        self.assertNotIn('document', imported)
+        replay = self.mcp_call('design_import_asset', {**arguments, 'include_document': True})
+        self.assertTrue(replay['replayed'])
+        self.assertIn(imported['asset']['id'], replay['document']['assets'])
 
     def test_root_guard_precedes_creation(self):
         response = self.client.post('/api/design/projects', headers=self.auth, json={
@@ -127,6 +150,13 @@ class ManagedDesignTests(unittest.TestCase):
                         'page_id': value['document']['pages'][0]['id'], 'patch': {'name': 'AI applied'}}]}
         result = call(arguments)
         self.assertFalse(result.get('isError'), result)
+        self.assertNotIn('document', json.loads(result['content'][0]['text']))
+        response = self.client.post('/ai-mcp', headers={'Authorization': 'Bearer ' + private['capability'],
+            'Accept': 'application/json, text/event-stream'}, json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
+            'params': {'name': 'design_document', 'arguments': {'directory': 'Projects/Studio'}}})
+        summary = json.loads(response.json()['result']['content'][0]['text'])
+        self.assertNotIn('document', summary)
+        self.assertEqual(summary['manifest']['pages'][0]['name'], 'AI applied')
         denied = call({**arguments, 'directory': 'Projects/Other'})
         self.assertTrue(denied.get('isError'), denied)
 

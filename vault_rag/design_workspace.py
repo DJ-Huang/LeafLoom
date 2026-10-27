@@ -774,10 +774,10 @@ class DesignWorkspace:
             self._commit(before, after)
             return self.library()
 
-    def import_library(self, directory, item_id, expected_revision, operation_id, version=None):
+    def import_library(self, directory, item_id, expected_revision, operation_id, version=None, *, include_document=True):
         with self.config.lock, self.files.lock:
             request_identity = {'type': 'library.import', 'item_id': item_id, 'version': version}
-            replay = self.documents.replay(directory, operation_id, request_identity)
+            replay = self.documents.replay(directory, operation_id, request_identity, include_document=include_document)
             if replay:
                 return replay
             item = self._load()['library'].get(item_id)
@@ -897,7 +897,8 @@ class DesignWorkspace:
             for sid, style in item.get('styles', {}).items():
                 doc.setdefault('styles', {})[maps['style'][sid]] = remap(style)
             return self.documents.apply(directory, [{'type': 'document.replace', 'document': doc}], expected_revision, operation_id,
-                                        label='Update shared library' if imported_before else 'Import shared library', request_identity=request_identity)
+                                        label='Update shared library' if imported_before else 'Import shared library', request_identity=request_identity,
+                                        include_document=include_document)
 
     def export(self, directory):
         value = self.documents.read(directory)
