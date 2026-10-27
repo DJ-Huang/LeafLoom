@@ -38,6 +38,8 @@ class AiService:
         '默认保留 YAML frontmatter、已有 ID 和引用链接，除非用户明确要求修改这些内容。'
         '明确区分已有证据、推断与未验证内容。'
         '设计工作台引用使用 design_document 读取当前版本和稳定 ID；用户要求修改设计时，'
+        '默认先读分页摘要，用 page_id 定位元素，再以 full=true 和 node_id 或资源 section/item_id 按需读取源码；'
+        '根据 next_offset 翻页时传 expected_revision，避免混用不同版本；不要默认展开整个项目。'
         '使用 design_operations 一次提交该指令的全部修改，直接应用并保留一个撤销步骤。'
         '设计脚本使用 mount(ctx)，运行状态不等于保存的设计内容；设计修改不使用 propose_note。'
     )

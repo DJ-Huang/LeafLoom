@@ -83,14 +83,43 @@ merges or replaces `Design/layer-transforms.json` and `Design/layer-transforms.j
 using `workspace_revision`; and `design_check_project` runs structural and
 layer-review validation.
 
-New managed projects use `Design/studio/project.json`. `design_document` returns
-stable page/element IDs, components, assets, styles, scripts, the project revision
-and `workspace_revision`; `manifest=true` reads page summaries and `page_id`
-reads one page. `design_operations` requires the current `expected_revision`,
+New managed projects use `Design/studio/project.json`. `design_document` defaults
+to a compact page manifest with stable IDs, resource counts, the project revision
+and `workspace_revision`. It returns 20 entries per page (maximum 100), with
+`total`, `offset` and `next_offset`. Summary rows share a 12,000-character budget;
+follow `next_offset` even if fewer than `limit` entries arrive. No HTML, CSS,
+script source, component trees or full resource tables are included by default.
+`manifest=true` is an alias for this default and cannot be combined with selectors.
+
+- Pass `page_id` to list flat node summaries, including `parent_id`, `child_count`
+  and a short text preview. IDs remain exact; names and previews can be shortened.
+- Set `section` to `assets`, `components`, `styles` or `scripts` to list resources.
+- Set `full=true` with `page_id` to read only that complete page (`pages` array),
+  or add `node_id` to read only that node/subtree (`nodes` array). Full `nodes`
+  reads require `node_id` to avoid repeating nested subtrees.
+- Set `full=true` with `section` and `item_id` to read exact resource source in
+  that section's array. Full resource reads can also paginate the section.
+- `full=true` without selectors explicitly returns the canonical `document`.
+  Only this complete source is suitable for `document.replace`. Summary and
+  selected-page responses are partial views, not replacement documents.
+
+Carry the first response's `revision` as `expected_revision` when paging; a
+changed design returns `write_conflict` instead of mixing different versions.
+Exact source reads are intentionally unrestricted by the summary character
+budget, so request only the page, node or resource needed for an edit.
+
+`design_operations` requires the current `expected_revision`,
 `workspace_revision` and a unique `operation_id`. Its `type`-discriminated batch
 is one atomic undo step. It edits page/node structure, layout, text, asset
 references, components, scripts and animation settings. Identical request retries
 reuse their receipt; stale versions and conflicting operation IDs save nothing.
+Design operations, undo/redo, asset imports and library imports now default to
+short revision/history receipts. Asset imports also return the imported `asset`.
+Use `include_document=true` to recover their previous full-document responses.
+`design_get_project` also omits the managed document by default and accepts the
+same opt-in. HTTP editor responses keep their existing contract. These defaults
+apply to both public `/mcp` and the design tools available through `/ai-mcp`;
+restart the updated backend and refresh the client's tool schema before use.
 
 `design_history` pages persistent history or executes versioned undo/redo;
 `design_import_asset` accepts exactly one source: `source_path` for a file relative
@@ -105,9 +134,9 @@ credential owner, a complete file and valid original-source access. Optional
 mismatches save no asset. The 128 MiB asset limit remains; HTTP clients/proxies can
 reject much smaller Base64 request bodies before this limit is checked.
 
-Use `include_document:false` to return only the asset, revision, workspace revision
+The default `include_document:false` returns only the asset, revision, workspace revision
 and undo state, without returning the complete project after every media import.
-The default remains `true` for existing clients. For example, call
+Set it to `true` only when the whole document is needed. For example, call
 `design_import_asset` with:
 
 ```json
@@ -356,6 +385,12 @@ set `isError: true` and an `error_code`, including `permission_denied`,
 `write_conflict`, `ambiguous_note`, `not_found`, `metadata_pending` and
 `stale_cursor`. Read-only and modifying tools carry MCP annotations; enforcement
 is always server-side.
+
+The shared public MCP response encoder uses compact JSON in its worker thread,
+keeping large explicit reads off the request event loop. Both existing JSON
+representations and native image blocks are retained for client compatibility;
+source data is never silently cut off by the response encoder. Completion logs
+record elapsed milliseconds and response character counts without file contents.
 
 ## Local validation
 

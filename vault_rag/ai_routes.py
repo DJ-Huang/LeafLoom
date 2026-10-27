@@ -10,6 +10,7 @@ from mcp.types import ToolAnnotations
 from starlette.responses import StreamingResponse
 
 from vault_rag.local_state import ConflictError
+from vault_rag.design_inspection import DesignSection
 
 
 def ai_mcp_server(ai, design=None):
@@ -49,10 +50,10 @@ def ai_mcp_server(ai, design=None):
             return json.dumps(design.list_projects(folder), ensure_ascii=False, default=str)
 
         @server.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False))
-        def design_get_project(directory: str, ctx: Context, board_id: str | None = None) -> str:
+        def design_get_project(directory: str, ctx: Context, board_id: str | None = None, include_document: bool = False) -> str:
             """Read a Design Studio project's spec, artboards, and saved layer transforms."""
             conversation(ctx)
-            return json.dumps(design.get_project(directory, board_id), ensure_ascii=False, default=str)
+            return json.dumps(design.get_project(directory, board_id, include_document=include_document), ensure_ascii=False, default=str, separators=(',', ':'))
 
         @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False))
         def design_update_layers(directory: str, board_id: str, layers: dict, ctx: Context, merge: bool = True) -> str:
@@ -61,18 +62,27 @@ def ai_mcp_server(ai, design=None):
             return json.dumps(design.save_transforms(directory, board_id, layers, merge=merge), ensure_ascii=False, default=str)
 
         @server.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False))
-        def design_document(directory: str, ctx: Context, page_id: str | None = None, manifest: bool = False) -> str:
-            """Read managed design pages/elements/assets/components/scripts and revision. Use stable IDs in design_operations."""
+        def design_document(directory: str, ctx: Context, page_id: str | None = None, manifest: bool = False,
+                            section: DesignSection = 'pages', node_id: str | None = None,
+                            item_id: str | None = None, offset: int = 0, limit: int = 20,
+                            full: bool = False, expected_revision: str | None = None) -> str:
+            """Inspect paginated design summaries (20/page). page_id lists nodes; section selects assets/components/styles/scripts.
+            full=true with page_id/node_id or section/item_id reads exact source. Without selectors it reads the whole document.
+            Follow next_offset with expected_revision. Retain stable IDs and revision for design_operations.
+            """
             conversation(ctx)
-            return json.dumps(design.documents.manifest(directory) if manifest else design.documents.read(directory, page_id), ensure_ascii=False)
+            return json.dumps(design.documents.inspect(directory, page_id, manifest, section=section, node_id=node_id,
+                item_id=item_id, offset=offset, limit=limit, full=full, expected_revision=expected_revision),
+                ensure_ascii=False, separators=(',', ':'))
 
         @server.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False))
         def design_operations(directory: str, commands: list[dict], expected_revision: str, operation_id: str,
-                              workspace_revision: str, ctx: Context, label: str = '') -> str:
+                              workspace_revision: str, ctx: Context, label: str = '', include_document: bool = False) -> str:
             """Apply one directly undoable AI instruction. Commands type page.create/update/delete, node.create/update/replace/delete/move,
             component.create/update/detach, asset.update/replace, project.update. node.update uses {page_id,node_id,patch}.
             Nodes support script:{source:'export function mount(ctx){...}',props,parameters} and animation:{preset,trigger,duration,delay,iterations,easing}.
             ctx provides el,props,state,find,on,onEvent,emit,animate,timers,assets,navigate and overlays. Retain expected_revision; stale writes save nothing.
+            Returns a short revision/history receipt; include_document=true opts into the full document.
             """
             current = conversation(ctx)
             turn = ai.rows('SELECT references_json FROM turns WHERE id=?', (ai.active_turns.get(current['id'], ''),))
@@ -81,7 +91,8 @@ def ai_mcp_server(ai, design=None):
             if not any(ref.get('kind') == 'design' and ref.get('directory') == relative(directory) for ref in references):
                 raise ValueError('Attach this Design Studio project before applying AI edits')
             return json.dumps(design.documents.apply(directory, commands, expected_revision, operation_id,
-                                                      label=label, workspace_revision=workspace_revision), ensure_ascii=False)
+                label=label, workspace_revision=workspace_revision, include_document=include_document),
+                ensure_ascii=False, separators=(',', ':'))
 
     return server
 

@@ -25,6 +25,7 @@ from typing import Any
 from vault_rag.local_state import ConflictError, atomic_write, relative
 from vault_rag.platform_support import is_link
 from vault_rag.design_references import AssetReferences, rewrite_script
+from vault_rag.design_inspection import DesignInspection
 from vault_rag.design_bindings import (binding_command, validate_bindings, prune_deleted_layouts,
                                        duplicate_layouts, image_binding_references, replace_binding_asset)
 
@@ -508,6 +509,31 @@ class DesignDocuments:
             finally:
                 db.close()
 
+    def inspect(self, directory: str, page_id=None, manifest=False, *, section='pages', node_id=None,
+                item_id=None, offset=0, limit=20, full=False, expected_revision=None):
+        """MCP-only projection; HTTP editor reads retain their canonical document contract."""
+        with self.config.lock, self.files.lock:
+            directory, _, path, document, db, meta = self._load(directory)
+            try:
+                if expected_revision is not None:
+                    self._revision(meta, expected_revision)
+                if manifest and (full or page_id is not None or node_id is not None or item_id is not None or section != 'pages'):
+                    raise ValueError('manifest cannot be combined with full or section/item selectors')
+                # Complete source remains an explicit escape hatch for existing clients.
+                if full and not manifest and section == 'pages' and page_id is None and node_id is None and item_id is None:
+                    return self._result(directory, path, db)
+                cached = self._cached_document(path)
+                if cached['hash'] != meta['content_hash']:
+                    raise ConflictError('Design document changed externally; refresh before reading another page')
+                inspection = cached.get('inspection')
+                if inspection is None:
+                    inspection = cached['inspection'] = DesignInspection(document)
+                view = inspection.read(section=section, page_id=page_id, node_id=node_id, item_id=item_id,
+                                       offset=offset, limit=limit, full=full)
+                return self._result(directory, path, db, include_document=False) | view
+            finally:
+                db.close()
+
     def manifest(self, directory: str):
         with self.config.lock, self.files.lock:
             directory, _, path, document, db, _ = self._load(directory)
@@ -686,14 +712,14 @@ class DesignDocuments:
                 db.close()
             return {'ok': True, 'directory': directory} if private else self.read(directory)
 
-    def replay(self, directory, operation_id, request_identity):
+    def replay(self, directory, operation_id, request_identity, *, include_document=True):
         """Internal adapters may recover a receipt before rebuilding derived commands."""
         with self.config.lock, self.files.lock:
             directory, _, path, _, db, _ = self._load(directory)
             try:
                 fingerprint = _hash(_json({'request_identity': request_identity}))
                 receipt = self._receipt(db, operation_id, fingerprint)
-                return self._result(directory, path, db, replayed=True, operation_revision=receipt['revision']) if receipt else None
+                return self._result(directory, path, db, replayed=True, operation_revision=receipt['revision'], include_document=include_document) if receipt else None
             finally:
                 db.close()
 
@@ -724,7 +750,7 @@ class DesignDocuments:
             finally:
                 db.close()
 
-    def history(self, directory: str, action='list', expected_revision=None, operation_id=None, offset=0, limit=50):
+    def history(self, directory: str, action='list', expected_revision=None, operation_id=None, offset=0, limit=50, *, include_document=True):
         with self.config.lock, self.files.lock:
             directory, project, path, document, db, meta = self._load(directory)
             try:
@@ -740,7 +766,7 @@ class DesignDocuments:
                 fingerprint = _hash(_json({'action': action}))
                 receipt = self._receipt(db, operation_id, fingerprint)
                 if receipt:
-                    return self._result(directory, path, db, replayed=True, operation_revision=receipt['revision'])
+                    return self._result(directory, path, db, replayed=True, operation_revision=receipt['revision'], include_document=include_document)
                 self._revision(meta, expected_revision)
                 if action == 'undo':
                     row = db.execute('SELECT * FROM operations WHERE seq=? AND active=1', (meta['cursor'],)).fetchone()
@@ -753,7 +779,7 @@ class DesignDocuments:
                 self._commit(db, path, document, after, meta, operation_id, fingerprint, row['label'], action=action,
                              cursor=row['parent'] if action == 'undo' else row['seq'])
                 self._changed(directory, path)
-                return self._result(directory, path, db)
+                return self._result(directory, path, db, include_document=include_document)
             finally:
                 db.close()
 

@@ -14,6 +14,8 @@ In Design Studio, select elements and use **Send to AI** to attach their project
 
 ## What to expect
 
+MCP starts with paginated summaries instead of the entire project. Select a page or resource, then request `full=true` with its ID when exact source is needed. Follow `next_offset` with `expected_revision`; edits and imports return short receipts. Explicit `full=true` without selectors and `include_document=true` on mutations retain full-document access. After updating, restart the backend and refresh the client's tools. See the [MCP contract](../../MCP.md).
+
 Design edits apply directly, with one durable undo step per batch.
 
 ## If it does not work
