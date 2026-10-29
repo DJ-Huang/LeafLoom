@@ -99,6 +99,23 @@
 
 - Add SHA-256-verified, single-request Base64 attachment uploads up to 2 MiB, image embeds in upload results, and discoverable upload capabilities with client tool-directory refresh guidance. Preserve the existing two-tool API, chunk transfers and ChatGPT file inputs.
 
+## 0.1.5 — 2026-10-29
+
+- Connect multiple generic WebDAV/SMB2/3 attachment servers from simplified address/account/password cards; preserve existing roots, identities and metadata bindings when changing the new-upload destination.
+- Discover directories automatically after connection recovery; persist per-directory checkpoints across disconnection/restart, reuse ten-minute caches, revalidate expired descendants and bound readers to two per server. Missing files require a complete scan and not-found confirmation.
+- Put files first with scoped manual/rule groups, compact controls, collapsible information, on-demand overview and existing-cover previews. Fix stalled initial reads, stale group contents and lingering recovered-connection errors while preserving background browsing and drafts.
+- Add a dedicated Downloads page, verified original-file preparation and configurable staging. Move file creation/import to directory actions; hide migration/organization entry points while retaining records, recovery materials and ordinary file operations.
+- Add opt-in group-scoped AI asset metadata search, real previews, optional local semantic ranking and verified delivery to a stable local directory; keep note retrieval scope separate.
+- Enrich existing Unity packages with verified official product identities, multiple versions, personal curation and real covers. Support resumable batch collection, partial Chinese metadata and bounded metadata transfers without automatic Unity import or purchase verification.
+- Synchronize groups, references and metadata through verified immutable server records with explicit conflicts; keep live SQLite catalogs, pending queues and caches device-private and preserve legacy recovery snapshots.
+- Restore desktop credentials asynchronously; back off transient NAS failures, pause rejected credentials and support numeric private VPN HTTP addresses without weakening public HTTPS requirements.
+- Extend HTTP/MCP attachment tools with shared source filtering, revision-checked group/metadata operations and SHA-256-verified single-request Base64 uploads up to 2 MiB. Preserve existing tool names, chunk transfers, old IDs and references.
+- Add full-screen Design Studio preview and desktop presenter mode with independent audience output, live controller, private notes, step navigation and connection-loss handling.
+- Add targeted/paginated Design MCP reads, compact mutation receipts and server-side asset imports; fix note-save response deadlocks by queueing background metadata after committed saves.
+- Repair localized help structure and update the release/upgrade documentation in English, Chinese and Japanese.
+
+## 0.1.4 — 2026-10-19
+
 - Fix Design Studio rejecting projects synced between computers with different vault root paths, including Windows-to-Mac transfers. Preserve document IDs and history ownership on reads, retain duplicate-directory/content-conflict guards, and support synced project moves, restore and trash cleanup.
 
 

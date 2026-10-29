@@ -15,6 +15,8 @@ The public help center has 39 task guides and four full guide/release references
 | AI Chat, MCP and Skills | [AI connections](en/AI.md) | [AI 接入](zh-CN/AI.md) | [AI 連携](ja/AI.md) |
 | Attachment workspace, remote storage, previews, organization and recovery | [Attachments](en/GUIDE.md#attachment-manager) | [附件管理](zh-CN/GUIDE.md#附件管理) | [添付ファイル](ja/GUIDE.md#添付ファイルの管理) |
 | Change history | [Changelog](../CHANGELOG.md) | [更新记录](zh-CN/CHANGELOG.md) | [変更履歴](ja/CHANGELOG.md) |
+| LeafLoom 0.1.5 release notes | [Release notes](en/RELEASE_NOTES_0.1.5.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.5.md) | [リリースノート](ja/RELEASE_NOTES_0.1.5.md) |
+| LeafLoom 0.1.4 release notes | [Release notes](en/RELEASE_NOTES_0.1.4.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.4.md) | [リリースノート](ja/RELEASE_NOTES_0.1.4.md) |
 | LeafLoom 0.1.3 release notes | [Release notes](en/RELEASE_NOTES_0.1.3.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.3.md) | [リリースノート](ja/RELEASE_NOTES_0.1.3.md) |
 | Contributing | [Contributing](../CONTRIBUTING.md) | [参与贡献](zh-CN/COMMUNITY.md) | [貢献ガイド](ja/COMMUNITY.md) |
 

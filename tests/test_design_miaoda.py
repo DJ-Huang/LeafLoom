@@ -298,6 +298,10 @@ class MiaodaRouteTests(unittest.TestCase):
     tearDown = __import__('tests.test_design_studio', fromlist=['DesignStudioTests']).DesignStudioTests.tearDown
 
     def test_miaoda_routes_validate_scope_and_selection(self):
+        routes = [(method, route.path) for route in self.app.routes
+                  if getattr(route, 'path', '').startswith('/api/design/')
+                  for method in getattr(route, 'methods', [])]
+        self.assertEqual(len(routes), len(set(routes)), 'Design endpoints must be registered only once')
         created = self.client.post('/api/design/projects', headers=self.auth, json={
             'root': str(self.root), 'directory': 'Projects/Miaoda', 'name': 'Course', 'managed': True})
         self.assertEqual(created.status_code, 200, created.text)

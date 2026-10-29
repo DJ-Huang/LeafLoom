@@ -1,5 +1,7 @@
 # Your first steps with LeafLoom
 
+[What changed in 0.1.5 and how to upgrade](RELEASE_NOTES_0.1.5.md)
+
 Use **Settings → Skill** to install or update the bundled `wiki-search` skill.
 
 [English](GUIDE.md) · [中文](../zh-CN/GUIDE.md) · [日本語](../ja/GUIDE.md)
