@@ -75,6 +75,8 @@ class RemoteAttachments:
         self.scan_locks={}
         self.scan_statuses={}
         self.scan_publish_at={}
+        self.auto_scans={}
+        self.on_scan_completed=None;self.on_connection_ready=None
         self.asset_locks={}
         self.redirect_backfilled=set()
         # Assigned by the router. A nonlocal owner must still be authorized now,
@@ -133,6 +135,7 @@ class RemoteAttachments:
             version=connection.execute('PRAGMA user_version').fetchone()[0]
             if version>1:raise ValueError('Attachment manifest belongs to a newer version')
             connection.executescript('''
+                CREATE TABLE IF NOT EXISTS sync_checkpoints(source_id TEXT PRIMARY KEY, source_revision TEXT NOT NULL, last_success REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS assets(
                     id TEXT PRIMARY KEY,source_id TEXT NOT NULL,path TEXT NOT NULL,name TEXT NOT NULL,
                     size INTEGER NOT NULL,mtime TEXT NOT NULL DEFAULT '',etag TEXT NOT NULL DEFAULT '',
@@ -286,7 +289,9 @@ class RemoteAttachments:
         if not password or '\x00' in password or len(password.encode())>4096:raise ValueError('Enter the attachment source password')
         if not isinstance(owner,str) or not owner:raise ValueError('Invalid attachment owner')
         if revision and not re.fullmatch('[A-Za-z0-9_-]{1,128}',revision):raise ValueError('Invalid credential revision')
-        with self.lock:self.credentials[source_id]=(username,password,revision or uuid.uuid4().hex,owner)
+        with self.lock:
+            self.credentials[source_id]=(username,password,revision or uuid.uuid4().hex,owner)
+            self.connections.pop(source_id,None)
         self.wake.set();return self.credentials[source_id][2]
 
     def replace_credentials(self,entries):
@@ -301,7 +306,10 @@ class RemoteAttachments:
                 raise ValueError('Invalid attachment credentials')
             if not revision or not re.fullmatch('[A-Za-z0-9_-]{1,128}',revision):raise ValueError('Credential revision is required')
             validated[source_id]=(username,password,revision,entry.get('owner','local'))
-        with self.lock:self.credentials=validated
+        with self.lock:
+            for key in set(self.credentials)|set(validated):
+                if self.credentials.get(key)!=validated.get(key):self.connections.pop(key,None)
+            self.credentials=validated
         self.wake.set()
 
     def _connection_context(self,root,source_id):
@@ -359,17 +367,23 @@ class RemoteAttachments:
         paused=error.code=='authentication_required'
         value={'state':error.state,'code':error.code,'retry_attempts':attempts,'checked_at':time.time(),
                'next_retry_at':None if error.state=='auth_required' else time.time()+min(60,2**min(attempts,6)),
-               'retry_paused':paused}
+               'retry_paused':paused,'reason':error.reason,'operation':error.operation}
         self._record_connection(context,value)
 
     def _connection_ready(self,root,source_id,*,context=None,**extra):
         try:
             context=context or self._connection_context(root,source_id)
             if self._connection_context(root,source_id)!=context:return
-            if self._connection_state(root,source_id).get('retry_paused'):return
+            previous=self._connection_state(root,source_id)
+            if previous.get('retry_paused'):return
         except (ConflictError,ValueError,OSError,sqlite3.Error):return
         self._record_connection(context,{'state':'ready','retry_attempts':0,'checked_at':time.time(),
                                         'next_retry_at':time.time()+60,'retry_paused':False,**extra})
+        if previous.get('state')!='ready' and callable(self.on_connection_ready):
+            try:
+                if self._connection_context(root,source_id)==context and self._connection_state(root,source_id)['state']=='ready':
+                    self.on_connection_ready(root,source_id)
+            except Exception:pass  # A notification cannot fail a verified connection.
 
     def _reset_connection(self,root,source_id):
         context=self._connection_context(root,source_id)
@@ -380,7 +394,7 @@ class RemoteAttachments:
         value=self._connection_state(root,source_id)
         if value.get('retry_paused'):raise RemoteStorageError('authentication_required','auth_required')
         if value['state']=='unreachable' and value.get('next_retry_at',0)>time.time():
-            raise RemoteStorageError(value.get('code','connection_unavailable'),'unreachable')
+            raise RemoteStorageError(value.get('code','connection_unavailable'),'unreachable',reason=value.get('reason',''),operation=value.get('operation',''))
 
     def _provider(self,source_id,root=None,guard=None):
         root=self._root(root)
@@ -394,7 +408,9 @@ class RemoteAttachments:
             if self.stopped.is_set():raise InterruptedError('Attachment storage stopped')
             if self._connection_context(root,source_id)!=context:raise PermissionError('Attachment source authorization changed')
             if guard is not None:guard()
-        provider=WebDAVSource(source,(source['username'],credentials[1]),transport=self.transports.get(source_id),guard=check,
+        from vault_rag.remote_smb import SMBSource
+        factory=SMBSource if source.get('type')=='smb' else WebDAVSource
+        provider=factory(source,(source['username'],credentials[1]),transport=self.transports.get(source_id),guard=check,
                               on_error=lambda error:self._connection_failed(root,source_id,error,context=context))
         provider.connection_context=context
         return provider
@@ -427,6 +443,37 @@ class RemoteAttachments:
             else:self._connection_ready(root,source_id,context=provider.connection_context,**{key:value for key,value in result.items() if key!='state'})
             break  # One bounded probe per worker pass; other sources rotate fairly.
 
+    def poll_scans(self):
+        """One automatic directory walk at a time; never hold up byte transfers."""
+        root=self._root()
+        with self.lock:
+            if any(thread.is_alive() for thread in self.scan_threads.values()):return
+        now=time.time()
+        for source in self._settings(root)['sources']:
+            source_id=source['id'];credentials=self.credentials.get(source_id)
+            if not source.get('enabled',True) or not credentials or credentials[3]!='local':continue
+            context=self._connection_context(root,source_id)
+            key=(root,source_id);previous=self.auto_scans.get(key,{})
+            if previous.get('context')!=context:
+                with self._db(root) as db:checkpoint=db.execute('SELECT last_success FROM sync_checkpoints WHERE source_id=? AND source_revision=?',(source_id,context[2])).fetchone()
+                previous={'context':context,'next_scan_at':0,'last_success_at':checkpoint[0] if checkpoint else None};self.auto_scans[key]=previous
+            connection=self._connection_state(root,source_id)
+            was=previous.get('connection_state');previous['connection_state']=connection['state']
+            if connection.get('retry_paused') or connection['state']!='ready':continue
+            if was and was!='ready':previous['next_scan_at']=0
+            lifecycle=self.scan_statuses.get(key,{})
+            finished=lifecycle.get('scan_finished_at')
+            if finished and lifecycle.get('source_revision')==context[2] and finished!=previous.get('observed'):
+                previous.update(observed=finished,next_scan_at=finished+(300 if lifecycle['scan_state']=='completed' else 60))
+                if lifecycle['scan_state']=='completed':
+                    previous['last_success_at']=finished
+                    with self._db(root) as db:db.execute('INSERT OR REPLACE INTO sync_checkpoints VALUES(?,?,?)',(source_id,context[2],finished))
+                    callback=self.on_scan_completed
+                    if callable(callback):callback(root,source_id)
+            if previous.get('next_scan_at',0)>now:continue
+            self.start_scan(root,source_id)
+            return
+
     def status(self,root=None):
         root=self._root(root);result=self._settings(root)
         for source in result['sources']:
@@ -437,6 +484,11 @@ class RemoteAttachments:
             source['connection']=(self.connections.get(source['id'],{'state':'unchecked'}) if source['password_saved'] else
                                   {'state':'unconfigured','retry_attempts':0,'next_retry_at':None,'retry_paused':False})
             source['connection']=dict(source['connection'])
+            schedule=self.auto_scans.get((root,source['id']),{})
+            if not schedule:
+                with self._db(root) as db:checkpoint=db.execute('SELECT last_success FROM sync_checkpoints WHERE source_id=? AND source_revision=?',(source['id'],source_revision)).fetchone()
+                schedule={'last_success_at':checkpoint[0] if checkpoint else None}
+            source['connection'].update(auto_sync=True,last_success_at=schedule.get('last_success_at'),next_scan_at=schedule.get('next_scan_at'))
             lifecycle=self.scan_statuses.get((str(root),source['id']),{})
             if lifecycle.get('source_revision')==source_revision:
                 source['connection'].update({key:value for key,value in lifecycle.items() if key!='source_revision'})
@@ -476,17 +528,20 @@ class RemoteAttachments:
         # observed change. An explicit HEAD without ETag is authoritative.
         if not etag and same_size_time and old['state']!='missing' and item.get('metadata_origin')!='head':etag=old['etag']
         checked_sha=sha256 or (old['sha256'] if same_size_time and old['state']!='missing' and old['etag']==etag else '')
+        mime=item.get('mime') or mimetypes.guess_type(path)[0] or 'application/octet-stream'
+        if old and (old['name'],old['size'],old['mtime'],old['etag'],old['mime'],old['sha256'],old['state'],old['mtime_ns'])==(
+                PurePosixPath(path).name,int(item['size']),modified,etag,mime,checked_sha,state,mtime_ns):return key
         db.execute('''INSERT INTO assets(id,source_id,path,name,size,mtime,etag,mime,sha256,state,metadata_revision,updated)
             VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_id,path) DO UPDATE SET
             name=excluded.name,size=excluded.size,mtime=excluded.mtime,etag=excluded.etag,mime=excluded.mime,
             sha256=excluded.sha256,
             state=excluded.state,updated=excluded.updated''',
             (key,source_id,path,PurePosixPath(path).name,int(item['size']),modified,etag,
-             item.get('mime') or mimetypes.guess_type(path)[0] or 'application/octet-stream',checked_sha,state,uuid.uuid4().hex,time.time()))
+             mime,checked_sha,state,uuid.uuid4().hex,time.time()))
         db.execute('UPDATE assets SET mtime_ns=? WHERE id=?',(mtime_ns,key))
         return key
 
-    def scan(self,root,source_id,*,guard=None,_scan_id=''):
+    def scan(self,root,source_id,*,guard=None,_scan_id='',_incremental=False,force_full=False):
         self._root(root)
         source_revision=self._source_revision(self._source(source_id,root))
         key=(str(root),source_id)
@@ -501,7 +556,7 @@ class RemoteAttachments:
                        'scan_finished_at':None,'scan_scanned':0,'scan_missing':0,'scan_excluded':0,'source_revision':source_revision}
             self.scan_statuses[key]=lifecycle
         try:
-            result=self._scan(root,source_id,guard=guard)
+            result=self._scan(root,source_id,guard=guard,incremental=_incremental or force_full,force_full=force_full)
             lifecycle.update(scan_state='completed' if result.get('ok') else 'cancelled' if result.get('state')=='cancelled' else 'failed',
                              scan_finished_at=time.time(),scan_scanned=result.get('scanned',0),scan_missing=result.get('missing',0),scan_excluded=result.get('excluded',0))
             return {**result,'scan_id':lifecycle['scan_id']}
@@ -533,12 +588,15 @@ class RemoteAttachments:
         if current.get('content_generation',0)!=expected.get('content_generation',0):
             raise ConflictError('Attachment availability changed while reading')
 
-    def _scan(self,root,source_id,*,guard=None):
+    def _scan(self,root,source_id,*,guard=None,incremental=False,force_full=False):
         self._root(root)
         source_revision=self._source_revision(self._source(source_id,root))
         metadata_directory=self._source(source_id,root).get('metadata_directory','')
         credentials=self.credentials.get(source_id)
         credential_revision=credentials[2] if credentials else ''
+        def connection_is_current():
+            try:return self._root(root)==root and self._source_revision(self._source(source_id,root))==source_revision and (self.credentials.get(source_id) or ('','',''))[2]==credential_revision
+            except (ValueError,ConflictError):return False
         seen=set();snapshot={};missing=0;excluded=0;deferred={}
         ignore=RemoteIgnore((self._source(source_id,root).get('metadata_directory',''),) if source_id!='local' else ())
         if source_id!='local':
@@ -558,10 +616,17 @@ class RemoteAttachments:
                     raise PermissionError('Attachment scan credentials changed')
                 if guard is not None:guard()
             except Exception:
-                self.connections[source_id]={'state':'cancelled','code':'scan_interrupted',**progress,'checked_at':time.time()}
+                if connection_is_current():self.connections[source_id]={'state':'cancelled','code':'scan_interrupted',**progress,'checked_at':time.time()}
                 raise
         def save_item(db,item,state='ready'):
-            key=self._upsert(db,source_id,item,state=state)
+            # Cached listings establish membership, never roll HEAD/PUT metadata
+            # back to an older directory observation. Exclusion can still change.
+            current=db.execute('SELECT * FROM assets WHERE source_id=? AND path=?',(source_id,item['path'])).fetchone() if item.get('_directory_cached') else None
+            if current:
+                key=current['id']
+                if current['state'] in {'ready','excluded'} and current['state']!=state:
+                    db.execute('UPDATE assets SET state=?,updated=? WHERE id=?',(state,time.time(),key))
+            else:key=self._upsert(db,source_id,item,state=state)
             if not db.execute('SELECT 1 FROM aliases WHERE asset_id=?',(key,)).fetchone():
                 logical=item['path'] if source_id=='local' else '/'.join((self.config.data.get('attachment_folder','_attachments'),'_remote',source_id,item['path']))
                 existing=db.execute('SELECT asset_id FROM aliases WHERE path=?',(logical,)).fetchone()
@@ -583,6 +648,7 @@ class RemoteAttachments:
                         if existing or not item.get('ignore_control'):deferred[item['path']]=item
                         continue
                     save_item(db,item)
+                check()
             if counts is not None:progress.update(counts)
             self.scan_statuses[(str(root),source_id)]['scan_scanned']=progress['scanned']
             self.scan_statuses[(str(root),source_id)]['scan_excluded']=progress.get('excluded',0)
@@ -598,8 +664,14 @@ class RemoteAttachments:
             commit_batch(items,{'scanned':len(items),'directories':0,'pending_directories':0})
         else:
             self.connections[source_id]={'state':'scanning',**progress,'checked_at':time.time()}
+            checkpoint=None
             try:
-                provider=self._provider(source_id,root,guard=check);items=provider.scan(on_batch=commit_batch,ignore=ignore)
+                provider=self._provider(source_id,root,guard=check)
+                if incremental:
+                    from vault_rag.remote_discovery import DirectoryCheckpoints,discovery_context
+                    checkpoint=DirectoryCheckpoints(self.manifest_path(root),source_id,
+                        discovery_context(root,source_revision,credential_revision,metadata_directory),check,force_full=force_full)
+                items=provider.scan(on_batch=commit_batch,ignore=ignore,**({'checkpoint':checkpoint} if checkpoint else {}))
                 ignored_paths={item['path'] for item in items if item.get('excluded')}
                 ignored_paths.update(path for path,revision,state in snapshot.values() if ignore.excluded(path))
                 excluded=len(ignored_paths)
@@ -650,18 +722,21 @@ class RemoteAttachments:
                         stale_files.extend(self._state('cache',row[0]) for row in db.execute('SELECT file FROM cache WHERE asset_id=? UNION ALL SELECT file FROM ranges WHERE asset_id=?',(asset_id,asset_id)))
                         db.execute('DELETE FROM cache WHERE asset_id=?',(asset_id,));db.execute('DELETE FROM ranges WHERE asset_id=?',(asset_id,))
                     check()
+                if checkpoint is not None:checkpoint.complete()
                 for cache_path in stale_files:
                     try:cache_path.unlink(missing_ok=True)
                     except OSError:pass  # Detached cache is disposable; never touch source/outbox.
             except RemoteStorageError as error:
-                self.connections[source_id]={**self.connections.get(source_id,{}),'state':error.state,'code':error.code,**progress,'checked_at':time.time()}
+                if connection_is_current():self.connections[source_id]={**self.connections.get(source_id,{}),'state':error.state,'code':error.code,**progress,'checked_at':time.time()}
                 self._publish_scan(root,source_id,force=True)
                 return {'ok':False,'state':error.state,'code':error.code,'scanned':progress['scanned'],'metadata_preserved':True}
             except Exception as error:
                 state='cancelled' if isinstance(error,(InterruptedError,ConflictError,PermissionError)) else 'invalid_service'
-                self.connections[source_id]={'state':state,'code':'scan_interrupted' if state=='cancelled' else 'scan_failed',**progress,'checked_at':time.time()}
+                if connection_is_current():self.connections[source_id]={'state':state,'code':'scan_interrupted' if state=='cancelled' else 'scan_failed',**progress,'checked_at':time.time()}
                 self._publish_scan(root,source_id,force=True)
                 raise
+            finally:
+                if checkpoint is not None:checkpoint.close()
         # Discovery rules never change note/RAG scopes or revoke old references.
         if source_id=='local':self.connections[source_id]={'state':'ready',**progress,'checked_at':time.time()}
         else:self._connection_ready(root,source_id,context=provider.connection_context,**progress)
@@ -676,8 +751,9 @@ class RemoteAttachments:
         try:self.runtime.publish('files',[])
         except Exception:pass  # UI notification failure never rolls back metadata.
 
-    def start_scan(self,root,source_id,*,guard=None):
+    def start_scan(self,root,source_id,*,guard=None,force_full=False):
         """Run a bounded metadata scan in the background; one per source/root."""
+        if type(force_full)is not bool:raise ValueError('Invalid attachment scan mode')
         self._root(root);self._source(source_id,root)
         if self.stopped.is_set():raise InterruptedError('Attachment storage stopped')
         key=(str(root),source_id)
@@ -686,12 +762,16 @@ class RemoteAttachments:
             if (previous is not None and previous.is_alive()) or (key in self.scan_locks and self.scan_locks[key].locked()):
                 return {'ok':True,'state':'scanning','storage_id':source_id,'scan_id':self.scan_statuses.get(key,{}).get('scan_id','')}
             scan_id=uuid.uuid4().hex
+            context=self._connection_context(root,source_id)
             self.scan_statuses[key]={'scan_id':scan_id,'scan_state':'scanning','scan_started_at':time.time(),'scan_finished_at':None,
                                      'scan_scanned':0,'scan_missing':0,'scan_excluded':0,'source_revision':self._source_revision(self._source(source_id,root))}
             self.connections[source_id]={'state':'scanning','scanned':0,'directories':0,'pending_directories':1,'checked_at':time.time()}
             def run():
-                try:self.scan(root,source_id,guard=guard,_scan_id=scan_id)
+                try:self.scan(root,source_id,guard=guard,_scan_id=scan_id,_incremental=True,force_full=force_full)
                 except Exception as error:
+                    try:
+                        if self._connection_context(root,source_id)!=context:return
+                    except (ValueError,ConflictError):return
                     previous=self.connections.get(source_id,{})
                     progress={name:previous.get(name,0) for name in ('scanned','directories','pending_directories')}
                     if isinstance(error,RemoteStorageError):state,code=error.state,error.code
@@ -1336,6 +1416,7 @@ class RemoteAttachments:
             if self.stopped.is_set():break
             try:
                 self.poll_connections()
+                self.poll_scans()
                 self.process_pending()
             except Exception:pass  # Persisted job states contain sanitized errors.
 

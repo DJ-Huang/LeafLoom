@@ -251,3 +251,21 @@ versioned save queue. The console receives bounded captures of that window only
 and forwards allowlisted, normalized Chromium Input events through a debugger
 attached exclusively to its WebContents. Project code never receives desktop
 permissions. Display loss or missed heartbeats mute, pause and hide output.
+
+## 附件连接与后台发现
+
+附件来源支持 `webdav` 与 `smb`，从管理 API 的地址推断协议；SMB 使用 `smbprotocol` 的独立连接池，显式凭据、签名、共享根边界与版本校验，不使用系统挂载或默认登录。两种传输统一提供目录扫描、范围读取、独占上传与不可变资料读写，浏览器仍只访问 LeafLoom 媒体接口。旧 WebDAV 配置及官方客户端提示保持兼容。
+
+`RemoteAttachments` 在连接就绪后启动目录发现，每个 root/source 去重，自动发现全局串行，完成五分钟后再次检查；连接恢复唤醒发现，认证失败暂停。成功时间写入 manifest 的 `sync_checkpoints`，状态接口提供 `auto_sync`、`last_success_at` 与 `next_scan_at`。成功扫描唤醒已绑定资料库；资料提交通知前端并唤醒分组同步。任务继续执行来源、凭据和知识库版本检查，不自动搬迁原件。资料库绑定与新上传默认位置独立。
+
+设置分类内部保留 `files` 标识以兼容导航，显示为“附件服务器”。目录操作通过独立的新建与导入弹窗复用文件 API。附件概览、同步状态与详情开关位于紧凑工具栏，后台目录事件使用保留浏览状态的刷新路径，过期分页保留当前快照等待用户查看最新内容。
+
+同步诊断保留原有 `code`，额外提供仅含固定枚举的 `reason` 和 HTTP `operation`，分别标识连接建立超时、响应超时、连接中断与连接繁忙；连接恢复和资料同步状态均保留这些字段与检查时间，不存储异常原文或请求凭据。工具栏在扫描时以两秒周期独立更新目录计数，资料同步失败不遮蔽目录扫描进度。
+
+目录发现由 `remote_discovery.DirectoryCheckpoints` 管理本机断点，复用现有 manifest SQLite 的 `discovery_runs` 与 `discovery_directories` 表。上下文摘要绑定知识库、来源配置版本、凭据版本和资料目录；不保存密码。每个目录的直接子项与有界 ignore 规则，在该批 manifest 提交后才发布完成回执；扫描未完成时重放已提交目录并重建剩余遍历队列，失败后再次连接或进程重启均可续扫。只有 ignore 校验、引用恢复和缺失确认全部成功后才标记整轮完成。显式 `force_full: true` 启动完整核对，普通管理 API 与自动调度使用增量检查。
+
+后续轮次缓存 TTL 为 600 秒，缓存命中仍遍历子目录各自的到期状态；未完成轮次的已提交目录不受 TTL 影响，避免长扫描中断后重新读一遍。无 [RFC 6578 WebDAV Sync](https://www.rfc-editor.org/rfc/rfc6578.html) 变更日志时不宣称强一致变更流，也不使用父目录 mtime/ETag 推断后代未变化。每个来源最多两个目录读取线程，各自持有独立 provider/session，自动来源仍全局串行。扫描状态增加 `scan_mode`（`full | incremental | resume`）与 `cached_directories`。目录缓存命中只恢复成员关系，不回写覆盖后来 HEAD/PUT 取得的文件元数据；未变化的 `_upsert` 不增加目录版本，避免无效刷新。忽略规则发生变化时废弃对应子树断点，未完整成功时不判定缺失。
+
+资料同步运行态由 `AssetLibrary.active_sync` 在进程内维护，状态读取复用同一只读事务校验来源与凭据上下文，避免把旧任务的运行状态投射到新绑定。`phase=connecting|syncing`、`retrying` 与 `sync_started_at` 描述当前重试，优先于上一轮失败；连接成功后持久状态退为可恢复的 `queued`，只有整轮完成才写入 `ready`。不持久化运行标志，防止崩溃后假装仍在同步；所有排队和失败更新保留 `last_synced_at`。`RemoteAttachments.on_connection_ready` 仅在当前上下文从非就绪转为就绪时唤醒资料工作线程。前端运行中两秒刷新；临时网络失败显示自动重试并折叠旧原因，健康、排队和运行态均不渲染残留错误字段，认证和资料错误仍需明确显示。
+
+附件列表对主动筛选与后台刷新使用不同的显示策略：主动切换分组、来源、类型、搜索和排序时清除旧分页快照与选择，显示当前分组名称和加载状态；后台更新仍保留列表、选择与草稿。状态轮询只以就绪状态和保存位置等稳定字段判断刷新需求，进度及文件计数不再直接取消正在读取的列表。新读取失败时不把旧分组内容显示在新标签下；超时使用统一语言键直接提示重试。分组条件仍由现有 `group_id` 查询及后端规则匹配完成，不更改既有分组定义、分类资料和 AI 检索范围。

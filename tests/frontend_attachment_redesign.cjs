@@ -1,0 +1,155 @@
+// Isolated production-build interaction checks. Never opens the user's service.
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),net=require('node:net'),{spawn}=require('node:child_process');
+const root=path.resolve(__dirname,'..'),output=path.join(root,'.cache/attachment-redesign');fs.mkdirSync(output,{recursive:true});
+const {chromium}=require(path.join(root,'desktop/node_modules/playwright-core'));
+const executable=process.env.CHROMIUM_PATH||['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge','/usr/bin/chromium'].find(p=>fs.existsSync(p));
+let server,browser,page,logs='';const pause=ms=>new Promise(r=>setTimeout(r,ms));
+(async()=>{
+ const port=await new Promise(resolve=>{const socket=net.createServer();socket.listen(0,'127.0.0.1',()=>{const port=socket.address().port;socket.close(()=>resolve(port));});});
+ server=spawn(path.join(root,'.venv/bin/python'),['-u',path.join(root,'tests/attachment_workspace_server.py'),path.join(root,'.cache/attachment-redesign-build')],{cwd:root,env:{...process.env,LEAFLOOM_ATTACHMENT_TEST_PORT:String(port)},stdio:['ignore','pipe','pipe']});
+ server.stdout.on('data',d=>logs+=d);server.stderr.on('data',d=>logs+=d);
+ let info;for(let i=0;i<150;i++){const line=logs.split('\n').find(l=>l.startsWith('{"fixture": true'));if(line){info=JSON.parse(line);try{await fetch(info.ui);break;}catch{}}if(server.exitCode!==null)throw Error(logs.slice(-2000));await pause(100);}
+ assert.ok(info);browser=await chromium.launch({executablePath:executable,headless:true,args:['--no-proxy-server']});
+ page=await browser.newPage({baseURL:info.ui,viewport:{width:1440,height:960}});page.setDefaultTimeout(10000);const errors=[];page.on('pageerror',error=>errors.push(error.message));
+ let coldRequests=0,delayCold=true;await page.route('**/api/attachments?*',async route=>{coldRequests++;const response=await route.fetch();if(delayCold)await pause(400);await route.fulfill({response});});
+ await page.goto('/');await page.getByRole('button',{name:'Attachments',exact:true}).click();
+ await page.evaluate(()=>{window.__scanTimer=setInterval(()=>window.dispatchEvent(new CustomEvent('vault-data-changed',{detail:{type:'files'}})),40);});
+ await page.getByRole('button',{name:'Prepare local catalog',exact:true}).click();
+ await page.locator('.aw-card').nth(99).waitFor();await page.evaluate(()=>clearInterval(window.__scanTimer));delayCold=false;assert.ok(coldRequests<15,'Scan events must not restart the initial listing');
+ // Group changes replace the visible scope immediately, including failed reads.
+ const groupSession=await (await page.request.get('/api/session')).json();
+ const createdGroup=await page.request.post('/api/attachment-groups',{headers:{'X-Vault-CSRF':groupSession.csrf},data:{root:groupSession.config.root,operation:'create',payload:{name:'PDF collection',rules:{formats:['pdf']}}}});
+ assert.equal(createdGroup.status(),200);const pdfGroup=(await createdGroup.json()).groups.find(group=>group.name==='PDF collection');assert.ok(pdfGroup);
+ await page.reload();await page.getByRole('button',{name:'Attachments',exact:true}).click();await page.locator('.aw-card').nth(99).waitFor();
+ let releaseGroup;const groupGate=new Promise(resolve=>releaseGroup=resolve);let groupRequests=0,groupFailed=false,statusPolls=0;
+ const slowStatus=async route=>{const response=await route.fetch();const data=await response.json();if(data.local_index)data.local_index={...data.local_index,progress:{done:++statusPolls},files:1000+statusPolls};await route.fulfill({response,json:data});};
+ const groupedRead=async route=>{
+  if(new URL(route.request().url()).searchParams.get('group_id')!==pdfGroup.id)return route.fallback();
+  groupRequests++;
+  if(groupFailed)return route.fulfill({status:503,json:{error:'Fixture group temporarily unavailable'}});
+  const response=await route.fetch();await groupGate;try{await route.fulfill({response});}catch{/* An explicitly superseded request may be aborted. */}
+ };
+ await page.route('**/api/attachments/status?*',slowStatus);await page.route('**/api/attachments?*',groupedRead);
+ await page.getByRole('button',{name:'PDF collection',exact:true}).click();
+ await page.getByRole('heading',{name:'PDF collection',exact:true}).waitFor();
+ await page.locator('.aw-loading').getByText('Loading group “PDF collection”…',{exact:true}).waitFor();assert.equal(await page.locator('.aw-card').count(),0);
+ assert.ok(!(await page.locator('.aw-selection').innerText()).includes('results'));
+ await page.evaluate(()=>{window.__groupScan=setInterval(()=>window.dispatchEvent(new CustomEvent('vault-data-changed',{detail:{type:'files'}})),70);});
+ await pause(750);assert.equal(groupRequests,1,'Local progress updates must not abort an active group request');releaseGroup();
+ await page.locator('.aw-file-open[data-path="Documents/Field guide.pdf"]').waitFor();assert.equal(await page.locator('.aw-card').count(),1);
+ await page.evaluate(()=>clearInterval(window.__groupScan));
+ await page.getByRole('button',{name:'All attachments',exact:true}).click();await page.locator('.aw-card').nth(99).waitFor();
+ await page.getByRole('heading',{name:'Attachments',exact:true}).waitFor();
+ groupFailed=true;await page.getByRole('button',{name:'PDF collection',exact:true}).click();
+ await page.locator('.aw-alert').filter({hasText:'Fixture group temporarily unavailable'}).waitFor();assert.equal(await page.locator('.aw-card').count(),0);await page.locator('.aw-empty').waitFor();
+ groupFailed=false;await page.locator('.aw-alert').getByRole('button',{name:'Retry',exact:true}).click();
+ await page.locator('.aw-file-open[data-path="Documents/Field guide.pdf"]').waitFor();assert.equal(await page.locator('.aw-card').count(),1);
+ await page.getByRole('button',{name:'All attachments',exact:true}).click();await page.locator('.aw-card').nth(99).waitFor();
+ await page.unroute('**/api/attachments?*',groupedRead);await page.unroute('**/api/attachments/status?*',slowStatus);
+ assert.equal(await page.locator('.aw-preview').isVisible(),false);assert.ok(Math.abs((await page.locator('.aw-browser').boundingBox()).width-(await page.locator('.aw-body').boundingBox()).width)<2);
+ assert.equal(await page.locator('.aw-header .aw-stats').count(),0);
+ assert.equal(await page.getByRole('button',{name:'Organize local attachments',exact:true}).count(),0);
+ await page.locator('.aw-file-open').first().click();assert.equal(await page.locator('.aw-preview').isVisible(),false);
+ await page.getByRole('button',{name:'Attachment information',exact:true}).click();await page.locator('.aw-preview').waitFor();
+ const focused=await page.locator('.aw-card.focused .aw-file-copy>strong').textContent();
+ await page.locator('.aw-preview>header').getByRole('button',{name:'Close',exact:true}).click();
+ assert.equal(await page.locator('.aw-card.focused .aw-file-copy>strong').textContent(),focused);
+ await page.getByRole('button',{name:'Attachment information',exact:true}).click();
+ await page.getByRole('button',{name:'Sync status',exact:true}).click();await page.locator('.aw-sync-dialog').waitFor();await page.locator('.aw-sync-dialog').getByRole('button',{name:'Close',exact:true}).click();
+ await page.getByRole('button',{name:'Attachment overview',exact:true}).click();await page.locator('.aw-overview .aw-stats').waitFor();await page.locator('.aw-overview').getByRole('button',{name:'Close',exact:true}).click();
+ // A cover is enough to preview a non-media file; original bytes are never read.
+ let originalReads=0;
+ page.on('request',req=>{if(req.url().includes('/api/media?')&&req.url().includes('Archive.zip'))originalReads++;});
+ await page.route('**/api/attachments?*',async route=>{const response=await route.fetch();const data=await response.json();data.items=data.items.map(item=>item.name==='Archive.zip'?{...item,cover_id:'fixture-cover'}:item);await route.fulfill({response,json:data});});
+ await page.route('**/api/attachments/details?*',async route=>{const response=await route.fetch();const data=await response.json();if(data.name==='Archive.zip')data.cover_id='fixture-cover';await route.fulfill({response,json:data});});
+ await page.route('**/api/asset-library/covers/fixture-cover?*',route=>route.fulfill({status:200,contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZcS4AAAAASUVORK5CYII=','base64')}));
+ const search=page.locator('.aw-search input');await search.fill('Archive.zip');await page.waitForFunction(()=>document.querySelectorAll('.aw-card').length===1);await page.locator('.aw-file-open[data-path="Documents/Archive.zip"]').click();await page.locator('.aw-cover-stage img').waitFor();
+ await page.locator('.aw-preview').getByRole('button',{name:'Expand preview',exact:true}).click();await page.locator('.aw-expanded .aw-cover-stage').waitFor();await page.locator('.aw-expanded').getByRole('button',{name:'Close',exact:true}).click();assert.equal(originalReads,0);
+ // Background events preserve selected files, current metadata drafts and scroll.
+ await page.locator('.aw-check input').check();await page.locator('.aw-metadata textarea').fill('unsaved fixture metadata');
+ await page.evaluate(()=>window.dispatchEvent(new CustomEvent('vault-data-changed',{detail:{type:'files'}})));
+ await pause(500);assert.equal(await page.locator('.aw-check input').isChecked(),true);assert.equal(await page.locator('.aw-metadata textarea').inputValue(),'unsaved fixture metadata');
+ // Expired pagination keeps the snapshot instead of jumping to the first page.
+ await search.fill('');await page.locator('.aw-card').nth(99).waitFor();await page.getByRole('button',{name:'Next page',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.aw-card').length>0&&document.querySelectorAll('.aw-card').length<100);
+ await page.evaluate(()=>window.dispatchEvent(new CustomEvent('vault-data-changed',{detail:{type:'files'}})));
+ await page.getByRole('button',{name:'List updated — show latest',exact:true}).waitFor();assert.ok(await page.locator('.aw-card').count()<100);
+ await page.getByRole('button',{name:'List updated — show latest',exact:true}).click();await page.locator('.aw-card').nth(99).waitFor();
+ await page.getByRole('button',{name:'Attachment information',exact:true}).click();assert.ok(Math.abs((await page.locator('.aw-browser').boundingBox()).width-(await page.locator('.aw-body').boundingBox()).width)<2);await page.screenshot({path:path.join(output,'attachments-desktop.png')});await page.getByRole('button',{name:'Attachment information',exact:true}).click();await page.locator('.aw-file-open[data-path="Campaign/Autumn collection.png"]').click();await page.locator('.aw-preview .aw-image-stage img').waitFor();
+ // The narrow layout overlays the detail panel, leaving the list state intact.
+ await page.setViewportSize({width:900,height:850});await pause(200);await page.screenshot({path:path.join(output,'attachments-narrow.png')});
+ assert.ok((await page.locator('.aw-preview').boundingBox()).width<=370);
+ await page.setViewportSize({width:1440,height:960});
+ // Preferences survive a reload.
+ await page.reload();await page.getByRole('button',{name:'Attachments',exact:true}).click();await page.locator('.aw-preview').waitFor();
+ // Server settings expose only connection fields; mock the external server.
+ const session=await (await page.request.get('/api/session')).json();
+ const storage=await (await page.request.get('/api/attachments/storage?'+new URLSearchParams({root:session.config.root}))).json();
+ storage.storages=[{storage_id:'a'.repeat(32),name:'Existing server',base_url:'https://fixture.invalid/',remote_root:'Material',upload_directory:'Uploads',metadata_directory:'Uploads/LeafLoomCatalog/v1',username:'old-account',connection_hint:'official-client',enabled:true,password_saved:true,connection:{state:'scanning',scan_state:'scanning',scanned:735,directories:411,pending_directories:1676,cached_directories:400,scan_mode:'resume'}}];storage.default_storage_id='a'.repeat(32);
+ await page.route(/\/api\/attachments\/storage(?:\?.*)?$/,async route=>{if(route.request().method()==='PUT'){const data=route.request().postDataJSON();storage.storages=data.storages.map(item=>({...item,password_saved:true,connection:{state:'ready'}}));storage.default_storage_id=data.default_storage_id;storage.revision=String(Number(storage.revision)||0)+1;}await route.fulfill({status:200,contentType:'application/json',json:storage});});
+ await page.route('**/api/attachments/storage/credentials',route=>route.fulfill({status:200,json:{ok:true}}));
+ await page.route('**/api/attachments/storage/test',route=>route.fulfill({status:200,json:{ok:true,state:'ready'}}));
+ const metadata={storage_id:'a'.repeat(32),state:'unreachable',code:'connection_unavailable',reason:'server_connect_timeout',operation:'GET',pending:0,checked_at:1700000000};
+ await page.route('**/api/asset-library/status?*',route=>route.fulfill({status:200,json:metadata}));
+ await page.getByRole('button',{name:'Sync status',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('.aw-sync-button').textContent.includes('411 dirs'));
+ await page.locator('.aw-sync-dialog').getByText('Connection interrupted; retrying automatically',{exact:true}).waitFor();
+ assert.equal(await page.locator('.aw-sync-dialog .error').count(),0);
+ await page.locator('.aw-sync-dialog summary').filter({hasText:'View last connection issue'}).click();
+ await page.locator('.aw-sync-dialog').getByText('Connecting to the attachment server timed out before a connection was established. Check that the server and its file-service port are available over your network or VPN.',{exact:true}).waitFor();
+ assert.ok((await page.locator('.aw-sync-dialog').innerText()).includes('735 attachments found'));
+ assert.ok(!(await page.locator('.aw-sync-dialog').innerText()).includes('connection_unavailable'));
+ await page.locator('.aw-sync-dialog').getByText('Resuming the previous scan · 400 directories reused',{exact:true}).waitFor();
+ assert.equal(await page.locator('.aw-sync-dialog').getByRole('button',{name:'Check all directories',exact:true}).isDisabled(),true);
+ // Current retry state supersedes old diagnostic fields, even with no outbox.
+ Object.assign(metadata,{state:'syncing',phase:'connecting',retrying:true});
+ await page.locator('.aw-sync-dialog').getByText('Reconnecting…',{exact:true}).waitFor();
+ assert.equal(await page.locator('.aw-sync-dialog .error').count(),0);assert.equal(await page.locator('.aw-sync-last-error').count(),0);
+ Object.assign(metadata,{phase:'syncing'});
+ await page.locator('.aw-sync-dialog').getByText('Connection restored; syncing metadata',{exact:true}).waitFor();
+ Object.assign(metadata,{state:'ready',retrying:false});
+ await page.locator('.aw-sync-dialog section').last().getByText('Synced to server',{exact:true}).waitFor();
+ assert.equal(await page.locator('.aw-sync-dialog .error').count(),0);assert.ok(!(await page.locator('.aw-sync-dialog').innerText()).includes('timed out'));
+ Object.assign(metadata,{state:'auth_required',code:'authentication_required',reason:''});
+ await page.locator('.aw-sync-dialog .error').waitFor();
+ assert.ok(!(await page.locator('.aw-sync-dialog').innerText()).includes('retrying automatically'));
+ Object.assign(metadata,{state:'queued'});
+ await page.locator('.aw-sync-dialog').getByText('Metadata sync queued',{exact:true}).waitFor();
+ assert.equal(await page.locator('.aw-sync-dialog .error').count(),0);
+ Object.assign(metadata,{state:'ready'});
+ await page.locator('.aw-sync-dialog').getByRole('button',{name:'Close',exact:true}).click();
+ storage.storages[0].connection.directories=412;storage.storages[0].connection.pending_directories=1675;
+ await page.waitForFunction(()=>document.querySelector('.aw-sync-button').textContent.includes('412 dirs'));
+ storage.storages[0].connection={state:'ready',scan_state:'completed'};let scanRequest;
+ await page.route('**/api/attachments/storage/scan',async route=>{scanRequest=route.request().postDataJSON();await route.fulfill({status:200,json:{ok:true}});});
+ await page.getByRole('button',{name:'Sync status',exact:true}).click();
+ const fullCheck=page.locator('.aw-sync-dialog').getByRole('button',{name:'Check all directories',exact:true});await fullCheck.waitFor();
+ await page.waitForFunction(()=>![...document.querySelectorAll('.aw-sync-dialog button')].find(button=>button.textContent==='Check all directories').disabled);
+ await Promise.all([page.waitForResponse(response=>response.url().includes('/api/attachments/storage/scan')),fullCheck.click()]);
+ assert.equal(scanRequest.force_full,true);assert.equal(scanRequest.storage_id,'a'.repeat(32));
+ await page.locator('.aw-sync-dialog').getByRole('button',{name:'Close',exact:true}).click();
+ await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByRole('button',{name:'Attachment servers',exact:true}).click();
+ assert.equal(await page.locator('.attachment-storage-tasks').count(),0);assert.equal(await page.locator('.al-settings').count(),0);
+ await page.getByRole('button',{name:'Add server',exact:true}).click();await page.locator('.as-edit-dialog').waitFor();
+ assert.equal(await page.locator('.as-edit-dialog input').count(),4);
+ await page.screenshot({path:path.join(output,'server-connection.png')});
+ const editor=page.locator('.as-edit-dialog');await editor.getByRole('button',{name:'Cancel changes',exact:true}).click();
+ await page.getByRole('button',{name:'Add server',exact:true}).click();
+ const connection=page.locator('.as-edit-dialog');await connection.getByRole('textbox',{name:'Service URL',exact:true}).fill('smb://nas/share');await connection.getByRole('textbox',{name:'Username',exact:true}).fill('new-account');await connection.locator('input[type=password]').fill('fictional-ui-password');
+ await connection.getByRole('button',{name:'Save and connect',exact:true}).click();await connection.waitFor({state:'hidden'});
+ assert.equal(storage.storages.length,2);assert.ok(!JSON.stringify(storage).includes('fictional-ui-password'));assert.equal(storage.default_storage_id,'a'.repeat(32));assert.equal(storage.storages[0].remote_root,'Material');assert.equal(storage.storages[0].upload_directory,'Uploads');assert.equal(storage.storages[0].connection_hint,'official-client');
+ await page.locator('.as-card-menu summary').nth(1).click();await page.getByRole('button',{name:'Use for new attachments',exact:true}).last().click();await page.waitForFunction(()=>document.querySelectorAll('.attachment-storage-profile')[1].textContent.includes('Default for new attachments'));
+ assert.equal(storage.default_storage_id,storage.storages[1].storage_id);
+ await page.getByRole('button',{name:'Save new attachments locally',exact:true}).last().click();await page.waitForFunction(()=>!document.querySelector('.attachment-storage-heading .subtle'));assert.equal(storage.default_storage_id,'local');
+ await page.locator('.settings-page-heading').getByRole('button',{name:'Close settings',exact:true}).click();
+ await page.locator('.file-tools-entry').click();await page.locator('.file-tools-dialog').waitFor();await page.locator('.file-tools-dialog').getByRole('button',{name:'Create',exact:true}).waitFor();
+ await page.locator('.file-tools-dialog').getByRole('button',{name:'Close',exact:true}).click();
+ // An unresponsive list must become an actionable error, not an endless spinner.
+ let release;const held=new Promise(resolve=>release=resolve);
+ const block=async route=>{await held;try{await route.abort();}catch{}};
+ await page.route('**/api/attachments?*',block);await page.reload();await page.getByRole('button',{name:'Attachments',exact:true}).click();
+ await page.locator('.aw-alert').filter({hasText:'Loading the attachment list timed out.'}).waitFor({timeout:25000});
+ assert.equal(await page.locator('.aw-loading').count(),0);await page.unroute('**/api/attachments?*',block);release();
+ await page.locator('.aw-alert').getByRole('button',{name:'Retry',exact:true}).click();await page.locator('.aw-card').nth(99).waitFor();
+ assert.deepEqual(errors,[]);console.log(JSON.stringify({ok:true,screenshots:output,checks:['group switching and scoped loading','failed group reads never show the previous group','group retry with background index progress','live toolbar progress with dialog closed','retry and recovery replace stale errors','authentication failures stay actionable','resumed scan and reused-directory counts','explicit full-check request','localized connection failure reason','slow initial read during scan notifications','list timeout and retry','collapsed detail','overview','cover without original','draft and selection preservation','pagination','narrow drawer','preference','server settings','file tools']}));
+})().catch(async error=>{console.error(error);if(page){await page.screenshot({path:path.join(output,'loading-failure.png')}).catch(()=>{});console.error(await page.locator('.attachment-workspace').innerText().catch(()=>''));}process.exitCode=1;}).finally(async()=>{await browser?.close();server?.kill();});

@@ -105,11 +105,23 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     from vault_rag.unity_asset_store import AssetEnrichment
     from vault_rag.asset_library_routes import asset_library_router
     asset_library=AssetLibrary(remote_attachments)
+    def refresh_attachment_metadata(root,source_id):
+        # Existing metadata bindings remain authoritative when the default upload
+        # destination changes. Initialize only the selected library source.
+        if asset_library.settings(root)['storage_id']==source_id:
+            asset_library.initialize(root)
+    remote_attachments.on_scan_completed=refresh_attachment_metadata
+    remote_attachments.on_connection_ready=lambda _root,_source_id:asset_library.wake.set()
     asset_downloads=AssetDownloads(remote_attachments)
     asset_enrichment=AssetEnrichment(asset_library)
     from vault_rag.attachment_groups import AttachmentGroups
     from vault_rag.attachment_presentation import AttachmentPresentation
     attachment_groups=AttachmentGroups(remote_attachments,asset_library)
+    def attachment_metadata_changed(root):
+        if str(config.root)==str(root):
+            attachment_groups.wake.set()
+            runtime.publish('files',[])
+    asset_library.on_changed=attachment_metadata_changed
     attachment_presentation=AttachmentPresentation(attachment_groups,asset_library)
     attachments_workspace.remote=remote_attachments
     runtime.files.attachments=AttachmentCatalog(runtime.files.attachments,remote_attachments)

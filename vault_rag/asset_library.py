@@ -98,7 +98,7 @@ class AssetLibrary:
     def __init__(self,remote):
         self.remote=remote;self.lock=threading.RLock();self.sync_lock=threading.Lock()
         self.wake=threading.Event();self.stopped=threading.Event();self.guards={}
-        self.discovered={};self.last_pull={}
+        self.discovered={};self.last_pull={};self.on_changed=None;self.active_sync=None
         self.thread=threading.Thread(target=self._loop,daemon=True,name='asset-library-sync');self.thread.start()
 
     def _root(self,root):return self.remote._root(root)
@@ -157,11 +157,21 @@ class AssetLibrary:
     @staticmethod
     def _set(db,key,value):db.execute('INSERT OR REPLACE INTO state VALUES(?,?)',(key,_bytes(value).decode()))
 
-    def settings(self,root):
+    def _set_sync(self,db,value):
+        # A transient failure or queued retry must not erase the last success.
+        previous=self._get(db,'sync',{})
+        self._set(db,'sync',{**({key:previous[key] for key in ('last_synced_at',) if key in previous}),**value})
+
+    def settings(self,root,*,db=None):
         self._root(root);path=self._path('settings.json')
         value=json.loads(path.read_text()) if path.exists() else {}
         sources=self.remote._settings(root)['sources'];default=self.remote._settings(root)['default_source']
-        storage_id=value.get('storage_id') or (default if default!='local' else next((s['id'] for s in sources if s.get('enabled',True)),''))
+        bound={}
+        if not value.get('storage_id') and self._path('library.sqlite').exists():
+            if db is not None:bound=self._get(db,'binding',{})
+            else:
+                with self._read_db(root) as connection:bound=self._get(connection,'binding',{})
+        storage_id=value.get('storage_id') or bound.get('storage_id') or (default if default!='local' else next((s['id'] for s in sources if s.get('enabled',True)),''))
         directory=self.remote._source(storage_id,root)['metadata_directory'] if storage_id else 'Incoming/LeafLoomCatalog/v1'
         return {'storage_id':storage_id,'metadata_directory':directory,'revision':value.get('revision','')}
 
@@ -189,7 +199,7 @@ class AssetLibrary:
         return self.settings(root)
 
     def _binding(self,root,*,db=None):
-        settings=self.settings(root)
+        settings=self.settings(root,db=db)
         if not settings['storage_id']:raise ValueError('Select a remote asset library storage')
         source=self.remote._source(settings['storage_id'],root)
         if db is None:
@@ -226,12 +236,13 @@ class AssetLibrary:
 
     def initialize(self,root,storage_id='',*,owner='local',guard=None):
         if storage_id:self.save_settings(root,{'storage_id':storage_id})
+        if not self._path('settings.json').exists():self.save_settings(root,{'storage_id':self.settings(root)['storage_id']})
         context=self._context(root,owner)
         if guard is not None:
             self.guards[(str(root),owner,context['workspace_revision'])]=guard
             if guard() is False:raise PermissionError('Asset library owner authorization expired')
         with self.lock,self._db(root) as db:
-            self._set(db,'requested',context);self._set(db,'sync',{'state':'queued'})
+            self._set(db,'requested',context);self._set_sync(db,{'state':'queued'})
         self._discover(root);self.wake.set()
         return {**self.status(root),'state':'queued'}
 
@@ -241,7 +252,7 @@ class AssetLibrary:
         except RemoteStorageError as error:
             if error.code!='remote_not_found':raise
             provider.ensure_directory(directory)
-            marker={'schema':LIBRARY_SCHEMA,'library_id':uuid.uuid4().hex,'locator_schema':'webdav-root-relative-v1','remote_root':provider.source['remote_root']}
+            marker={'schema':LIBRARY_SCHEMA,'library_id':uuid.uuid4().hex,'locator_schema':'smb-root-relative-v1' if provider.source['type']=='smb' else 'webdav-root-relative-v1','remote_root':provider.source['remote_root']}
             data=_bytes(marker)
             try:provider.put_immutable(path,data,max_bytes=16384)
             except RemoteStorageError as conflict:
@@ -250,13 +261,15 @@ class AssetLibrary:
         try:marker=json.loads(data.decode('utf-8'))
         except (ValueError,UnicodeError):raise RemoteStorageError('invalid_asset_library_identity') from None
         if not isinstance(marker,dict) or marker.get('schema')!=LIBRARY_SCHEMA or not re.fullmatch('[0-9a-f]{32}',str(marker.get('library_id',''))):raise RemoteStorageError('invalid_asset_library_identity')
-        if marker.get('remote_root')!=provider.source['remote_root']:raise ConflictError('Use the same logical WebDAV root for this asset library')
+        if marker.get('remote_root')!=provider.source['remote_root']:raise ConflictError('Use the same logical server root for this asset library')
         self._check(context)
         with self.lock,self._db(root) as db:
             old=self._get(db,'library_id')
             if old and old!=marker['library_id']:raise ConflictError('The remote asset library identity changed')
             if not old:db.execute('DELETE FROM files')  # Provisional candidates had no curation or remote identity.
             self._set(db,'library_id',marker['library_id']);self._set(db,'binding',{'storage_id':context['source_id'],'metadata_directory':directory})
+            if not self._path('settings.json').exists():
+                atomic_write(self._path('settings.json'),_bytes({'storage_id':context['source_id'],'revision':uuid.uuid4().hex}));private_file_mode(self._path('settings.json'))
         return marker['library_id']
 
     def _discover(self,root,*,blocking=True):
@@ -542,16 +555,24 @@ class AssetLibrary:
         self._root(root)
         if storage_id and storage_id!=self.settings(root)['storage_id']:raise ConflictError('Select the configured asset library storage')
         if not self.sync_lock.acquire(blocking=False):return {**self.status(root),'state':'syncing'}
-        sessions=ExitStack()
+        sessions=ExitStack();pulled=0
         try:
             context=copy.deepcopy(_saved_context) if _saved_context is not None else self._context(root,owner)
             self._check(context)
             if guard is not None:
                 self.guards[(str(root),owner,context['workspace_revision'])]=guard
                 if guard() is False:raise PermissionError('Asset library owner authorization expired')
+            with self._read_db(root) as db:previous=self._get(db,'sync',{})
+            self.active_sync={'context':context,'phase':'connecting','retrying':previous.get('state')=='unreachable','started_at':time.time()}
             provider=self._provider(context)
             sessions.enter_context(provider.session())
             library_id=self._bootstrap(root,provider,context)
+            # A verified metadata response supersedes an old transport failure.
+            # Persist queued (rather than a fake success or durable running flag)
+            # so a crash leaves a truthful, retryable state for the next launch.
+            with self.lock,self._db(root) as db:
+                self._check(context,db=db);self._set_sync(db,{'state':'queued'})
+            self.active_sync={**self.active_sync,'phase':'syncing'}
             fingerprint=_sha(_bytes([context,library_id]));previous=self.last_pull.get(str(root))
             same_checkpoint=previous is not None and previous[0]==fingerprint
             pull_due=not _background or not same_checkpoint or time.monotonic()-previous[1]>=BACKGROUND_PULL_INTERVAL
@@ -560,7 +581,7 @@ class AssetLibrary:
             # checkpoint; first/new-context and explicit syncs still pull first.
             deferred_pull=pull_due and _background and same_checkpoint and self._has_sendable(root)
             if pull_due and not deferred_pull:
-                self._pull(root,provider,context)
+                pulled+=self._pull(root,provider,context)
                 self.last_pull[str(root)]=(fingerprint,time.monotonic())
             self._discover(root);self._seed(root,context)
             if resume:
@@ -575,18 +596,25 @@ class AssetLibrary:
             with self.lock,self._db(root) as db:queued=[dict(row) for row in db.execute("SELECT * FROM outbox WHERE state!='authorization_required' ORDER BY CASE kind WHEN 'cover' THEN 0 ELSE 1 END,rowid")]
             completed=self._flush(root,queued)
             if deferred_pull:
-                self._pull(root,provider,context)
+                pulled+=self._pull(root,provider,context)
                 self.last_pull[str(root)]=(fingerprint,time.monotonic())
                 self._discover(root)
-            with self.lock,self._db(root) as db:self._set(db,'sync',{'state':'ready','last_synced_at':time.time()});self._project(db)
+            with self.lock,self._db(root) as db:self._set_sync(db,{'state':'ready','last_synced_at':time.time()});self._project(db)
+            if (pulled or completed) and callable(self.on_changed):
+                try:self.on_changed(root)
+                except Exception:logger.warning('Asset metadata notification unavailable')
+            self.active_sync=None
             return {**self.status(root),'completed':len(completed)}
         except RemoteStorageError as error:
-            with self.lock,self._db(root) as db:self._set(db,'sync',{'state':error.state,'code':error.code,'checked_at':time.time()})
+            with self.lock,self._db(root) as db:self._set_sync(db,{'state':error.state,'code':error.code,'reason':error.reason,'operation':error.operation,'checked_at':time.time()})
+            self.active_sync=None
             return self.status(root)
         except PermissionError:
-            with self.lock,self._db(root) as db:self._set(db,'sync',{'state':'authorization_required','code':'owner_or_credentials_changed'})
+            with self.lock,self._db(root) as db:self._set_sync(db,{'state':'authorization_required','code':'owner_or_credentials_changed'})
+            self.active_sync=None
             return self.status(root)
         finally:
+            self.active_sync=None
             try:sessions.close()
             finally:self.sync_lock.release()
 
@@ -790,6 +818,13 @@ class AssetLibrary:
             files=db.execute('SELECT COUNT(*) FROM files').fetchone()[0]
             conflicts=sum(bool(json.loads(row[0])) for row in db.execute('SELECT conflicts FROM entities'))
             pending_bytes=db.execute('SELECT COALESCE(SUM(length(data)),0) FROM outbox').fetchone()[0]
+            active=self.active_sync
+            if active and active['context']['root']==str(root):
+                try:self._check(active['context'],db=db)
+                except (ConflictError,PermissionError,RemoteStorageError,InterruptedError,ValueError):pass
+                else:
+                    state={**{key:state[key] for key in ('last_synced_at',) if key in state},
+                           'state':'syncing','phase':active['phase'],'retrying':active['retrying'],'sync_started_at':active['started_at']}
         return {**settings,**state,'library_id':library_id,'initialized':bool(library_id),'pending':sum(counts.values()),'outbox':counts,
                 'pending_bytes':pending_bytes,'files':files,'conflicts':conflicts}
 
@@ -816,7 +851,7 @@ class AssetLibrary:
                     elif isinstance(error,PermissionError):state,code='authorization_required','owner_or_credentials_changed'
                     elif isinstance(error,ConflictError):state,code='conflict','library_binding_changed'
                     else:state,code='invalid_service','asset_library_operation_failed'
-                    with self.lock,self._db(root) as db:self._set(db,'sync',{'state':state,'code':code})
+                    with self.lock,self._db(root) as db:self._set_sync(db,{'state':state,'code':code,'reason':getattr(error,'reason',''),'operation':getattr(error,'operation',''),'checked_at':time.time()})
                 except Exception:pass
 
     def stop(self):

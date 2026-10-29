@@ -2467,3 +2467,64 @@ al.settingsSaved|商品目录与下载设置已保存，附件原件保存位置
 重试保存|Retry saving|保存を再試行
 演示页面已不存在，请返回编辑重新选择|This page no longer exists. Return to editing and select another page.|このページは存在しません。編集に戻ってページを選び直してください。
 演示者控制台|Presenter console|発表者コンソール
+
+aw.overview|附件概览|Attachment overview|添付ファイルの概要
+aw.information|附件信息|Attachment information|添付ファイル情報
+aw.activity|文件操作|File activity|ファイル操作
+aw.fileTools|新建与导入|Create and import|新規作成と取り込み
+aw.autoSync|自动同步|Automatic sync|自動同期
+aw.syncing|正在同步|Syncing|同期中
+aw.syncAttention|同步需关注|Sync needs attention|同期を確認してください
+aw.syncDetails|同步状态|Sync status|同期状況
+aw.syncNow|立即同步|Sync now|今すぐ同期
+aw.noServers|尚未连接附件服务器。请在设置中添加。|No attachment servers connected. Add one in Settings.|添付サーバーがありません。設定から追加してください。
+aw.lastSynced|最近成功同步|Last successful sync|最終同期成功
+aw.notSynced|尚未同步|Not synced yet|未同期
+aw.nextSync|下次检查|Next check|次の確認
+aw.authPaused|请更新账号或密码以恢复同步|Update your account or password to resume sync|同期を再開するにはアカウントまたはパスワードを更新してください
+aw.autoSyncHelp|自动复用已扫描目录，断线后继续；目录缓存 10 分钟后重新核对。需要立即检查全部变化时使用“完整核对”。原文件按需下载。|Completed directories are reused and interrupted scans resume. Cached directories are rechecked after 10 minutes. Use Check all directories to verify all changes now. Originals download on demand.|走査済みのディレクトリを再利用し、中断した走査を再開します。キャッシュは 10 分後に再確認します。すぐに全変更を確認する場合は「全ディレクトリを確認」を使います。元ファイルは必要な時に取得します。
+aw.listUpdated|列表已更新，查看最新内容|List updated — show latest|一覧が更新されました。最新を表示
+as.simpleTitle|附件服务器|Attachment servers|添付サーバー
+as.simpleHelp|填写服务器地址、账号和密码，即可自动同步附件目录与资料。|Enter a server address, account and password to sync attachment directories and metadata automatically.|サーバーのアドレス、アカウント、パスワードを入力すると一覧と資料が自動同期されます。
+as.simpleAddressHelp|支持 WebDAV 地址或 smb://主机/共享目录，也可粘贴 Windows 共享路径。|Use a WebDAV address, smb://host/share, or a Windows shared-folder path.|WebDAV アドレス、smb://host/share、Windows 共有パスに対応します。
+as.connected|已连接，目录将在后台自动同步。|Connected. Directories will sync in the background.|接続しました。一覧はバックグラウンドで同期されます。
+as.connecting|正在连接…|Connecting…|接続中…
+as.saveConnect|保存并连接|Save and connect|保存して接続
+as.defaultBadge|新附件默认位置|Default for new attachments|新しい添付の既定先
+as.serverActions|服务器操作|Server actions|サーバー操作
+as.edit|编辑连接|Edit connection|接続を編集
+as.makeDefault|设为新附件默认位置|Use for new attachments|新しい添付の既定先にする
+as.disable|停用|Disable|無効にする
+as.enable|启用|Enable|有効にする
+as.disabled|已停用|Disabled|無効
+as.noServers|添加服务器后，附件目录和资料会自动同步。|Add a server to sync attachment directories and metadata automatically.|サーバーを追加すると一覧と資料が自動同期されます。
+as.optionalName|显示名称（可选）|Display name (optional)|表示名（任意）
+as.connectionState.cancelled|等待重新同步|Waiting to sync again|再同期待ち
+as.connectionState.conflict|资料存在冲突，请查看同步状态|Metadata conflict; check sync status|資料の競合があります。同期状況を確認してください
+as.connections|服务器连接|Server connections|サーバー接続
+as.useLocal|新附件保存在本地|Save new attachments locally|新しい添付をローカルに保存
+aw.metadataSync|资料同步|Metadata sync|資料同期
+aw.listTimeout|读取附件列表超时。后台同步仍在运行，可稍后重试。|Loading the attachment list timed out. Background sync is still running; try again shortly.|添付一覧の読み込みがタイムアウトしました。バックグラウンド同期は継続しています。しばらくして再試行してください。
+aw.listFailed|附件列表暂时无法读取，已有附件不会被删除。|The attachment list is temporarily unavailable. Existing attachments are retained.|添付一覧を読み込めません。既存の添付は保持されます。
+aw.syncProgressCompact|正在同步 · 已扫描 {done} 目录 · 待扫描 {pending}|Syncing · {done} dirs · {pending} pending|同期中 · {done} ディレクトリ確認済み · 残り {pending}
+aw.nextRetry|下次自动重试|Next automatic retry|次の自動再試行
+aw.lastFailure|上次失败时间|Last failed attempt|前回の失敗
+aw.syncWaiting|等待首次目录同步|Waiting for the first directory sync|初回の一覧同期待ち
+connection_unavailable|暂时无法连接附件服务器。请确认服务器文件服务及网络或 VPN 连接可用；应用会自动重试。|The attachment server is temporarily unreachable. Check its file service and your network or VPN; the app will retry automatically.|添付サーバーに接続できません。ファイルサービスとネットワークまたは VPN を確認してください。自動的に再試行します。
+server_connect_timeout|连接附件服务器超时，尚未建立连接。请确认服务器在线、文件服务端口可用，以及网络或 VPN 已连通。|Connecting to the attachment server timed out before a connection was established. Check that the server and its file-service port are available over your network or VPN.|添付サーバーへの接続がタイムアウトしました。サーバー、ファイルサービスのポート、ネットワークまたは VPN の接続を確認してください。
+server_read_timeout|服务器已连接，但读取响应超时。请检查网络稳定性或服务器负载，应用会自动重试。|The server connected but did not respond in time. Check network stability or server load; the app will retry automatically.|接続後の応答がタイムアウトしました。ネットワークの安定性やサーバー負荷を確認してください。自動的に再試行します。
+server_connection_interrupted|读取过程中连接中断。请检查服务器服务及网络或 VPN 稳定性，应用会自动重试。|The connection was interrupted while reading. Check the file service and network or VPN stability; the app will retry automatically.|読み取り中に接続が切断されました。サービスとネットワークまたは VPN の安定性を確認してください。自動的に再試行します。
+server_connect_failed|无法建立服务器连接。请检查服务器地址、端口和网络或 VPN 是否可达。|A connection could not be established. Check the server address, port and network or VPN connectivity.|接続を確立できません。アドレス、ポート、ネットワークまたは VPN の到達性を確認してください。
+server_connection_busy|连接暂时繁忙，应用会自动重试。|Connections are temporarily busy. The app will retry automatically.|接続が一時的に混雑しています。自動的に再試行します。
+aw.scanMode.full|首次建立目录索引|Building the directory index|ディレクトリ索引を作成中
+aw.scanMode.incremental|增量检查|Incremental check|差分確認
+aw.scanMode.resume|继续上次扫描|Resuming the previous scan|前回のスキャンを再開
+aw.scanReused|复用 {count} 个目录|{count} directories reused|{count} ディレクトリを再利用
+aw.fullCheck|完整核对|Check all directories|全ディレクトリを確認
+aw.fullCheckHelp|重新查询所有目录，立即核对新增、修改与删除；不下载原附件。|Read every directory again to check additions, changes and removals now. Original files are not downloaded.|全ディレクトリを再確認し、追加・変更・削除を確認します。元の添付はダウンロードしません。
+aw.autoRetry|连接暂时中断，将自动重试|Connection interrupted; retrying automatically|接続が一時中断しました。自動的に再試行します
+aw.reconnecting|正在重新连接…|Reconnecting…|再接続中…
+aw.recoveredSyncing|连接已恢复，正在同步资料|Connection restored; syncing metadata|接続が復旧し、資料を同期しています
+aw.syncQueued|等待同步资料|Metadata sync queued|資料の同期待ち
+aw.lastConnectionIssue|查看上次连接问题|View last connection issue|前回の接続問題を表示
+ag.loading|正在读取“{name}”分组…|Loading group “{name}”…|グループ「{name}」を読み込み中…

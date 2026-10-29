@@ -94,9 +94,19 @@ class AttachmentCatalog:
         db.create_function('catalog_path_key', 1, path_key, deterministic=True)
         db.create_function('catalog_basename', 1, lambda p: PurePosixPath(p).name, deterministic=True)
         existing = {}
+        # Logical remote aliases normally have no local directory. Validate this
+        # shared prefix once per read snapshot instead of walking its thousands
+        # of nonexistent descendants through path_for. Positive/local paths keep
+        # the complete rooted, hidden-file and symlink checks below.
+        virtual_prefix = files.config.data.get('attachment_folder','_attachments') + '/_remote/'
+        try:virtual_absent = not files.config.path_for(virtual_prefix.rstrip('/')).is_dir()
+        except (ValueError,OSError):virtual_absent = True
         def exists(path):
             if path in existing:
                 return existing[path]
+            if virtual_absent and path.startswith(virtual_prefix):
+                existing[path] = False
+                return False
             try:
                 existing[path] = files.config.path_for(path).is_file()
             except (ValueError, OSError):

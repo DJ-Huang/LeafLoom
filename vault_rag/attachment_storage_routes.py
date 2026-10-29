@@ -34,7 +34,7 @@ def public_settings(remote, root=None):
     profiles = []
     for source in result['sources']:
         profiles.append({
-            'storage_id':source['id'], 'name':source.get('name',''),
+            'storage_id':source['id'], 'type':source.get('type','webdav'), 'name':source.get('name',''),
             'base_url':source['base_url'], 'remote_root':source.get('remote_root',''),
             'upload_directory':source.get('upload_directory','Incoming'),
             'metadata_directory':source.get('metadata_directory','Incoming/LeafLoomCatalog/v1'),
@@ -59,7 +59,7 @@ def save_settings(remote, body):
     profiles = body.get('storages')
     if not isinstance(profiles,list) or len(profiles)>32:raise ValueError('Invalid attachment sources')
     sources = []
-    allowed = {'storage_id','name','base_url','remote_root','upload_directory','metadata_directory','username','connection_hint','enabled'}
+    allowed = {'type','storage_id','name','base_url','remote_root','upload_directory','metadata_directory','username','connection_hint','enabled'}
     existing={source['id']:source for source in remote._settings(root)['sources']}
     for source in profiles:
         if not isinstance(source,dict) or set(source)-allowed:raise ValueError('Unsupported attachment source setting')
@@ -67,7 +67,12 @@ def save_settings(remote, body):
         value = {key:value for key,value in source.items() if key!='storage_id'}
         if 'metadata_directory' not in value and key in existing:
             value['metadata_directory']=validate_source(existing[key])['metadata_directory']
-        value.update(id=key,type='webdav',secret_ref='attachment:'+key)
+        old=existing.get(key,{})
+        for field in ('remote_root','upload_directory','connection_hint'):
+            if field not in value and field in old:value[field]=old[field]
+        address=value.get('base_url','')
+        protocol='smb' if address.startswith(('smb://','\\\\')) else 'webdav'
+        value.update(id=key,type=protocol,secret_ref='attachment:'+key)
         try:
             address = urlsplit(value.get('base_url',''))
             value['allow_private_http'] = address.scheme=='http' and is_private_http_host(address.hostname)
@@ -230,7 +235,9 @@ def attachment_storage_router(remote, runtime, workspace):
     @router.post('/api/attachments/storage/scan')
     async def scan(request:Request):
         body=await request.json()
-        return await asyncio.to_thread(remote.start_scan,body['root'],storage_id(body['storage_id']))
+        force_full=body.get('force_full',False)
+        if type(force_full)is not bool:raise ValueError('Invalid attachment scan mode')
+        return await asyncio.to_thread(remote.start_scan,body['root'],storage_id(body['storage_id']),force_full=force_full)
 
     @router.post('/api/attachments/storage/references')
     async def sync_references(request:Request):

@@ -504,6 +504,73 @@ class RemoteAttachmentTests(unittest.TestCase):
         self.assertEqual(connection['scan_state'],'completed');self.assertEqual(connection['scan_id'],self.manager.scan_statuses[(str(self.root),SOURCE)]['scan_id'])
         self.assertFalse(any(method=='DELETE' for method,_ in self.dav.calls))
 
+    def test_connection_failure_preserves_sanitized_reason_without_changing_legacy_code(self):
+        for failure,reason in [(httpx.ConnectTimeout,'server_connect_timeout'),(httpx.ReadTimeout,'server_read_timeout'),
+                               (httpx.ReadError,'server_connection_interrupted'),(httpx.ConnectError,'server_connect_failed'),
+                               (httpx.PoolTimeout,'server_connection_busy')]:
+            with self.subTest(reason=reason):
+                def fail(request):raise failure('sensitive-fixture-diagnostic',request=request)
+                self.manager.transports[SOURCE]=httpx.MockTransport(fail)
+                result=self.manager.test(str(self.root),SOURCE)
+                self.assertEqual(result['code'],'connection_unavailable')
+                connection=self.manager.status(str(self.root))['sources'][0]['connection']
+                self.assertEqual(connection['reason'],reason);self.assertEqual(connection['operation'],'PROPFIND')
+                self.assertNotIn('sensitive-fixture-diagnostic',json.dumps(connection))
+                with self.assertRaises(RemoteStorageError) as stopped:self.manager._check_connection(str(self.root),SOURCE)
+                self.assertEqual(stopped.exception.reason,reason)
+
+    def test_scan_retries_directory_timeouts_without_losing_existing_records(self):
+        self.dav.files['Incoming/kept.bin']=b'kept'
+        self.assertTrue(self.manager.scan(str(self.root),SOURCE)['ok'])
+        path='_attachments/_remote/'+SOURCE+'/Incoming/kept.bin'
+        attempts=[]
+        def transient(request):
+            if request.method=='PROPFIND' and request.url.path=='/Incoming/':
+                attempts.append(1)
+                if len(attempts)<3:raise httpx.ReadTimeout('fixture timeout',request=request)
+            return self.dav(request)
+        self.manager.transports[SOURCE]=httpx.MockTransport(transient)
+        with patch('vault_rag.remote_webdav.time.sleep'):
+            self.assertTrue(self.manager.scan(str(self.root),SOURCE)['ok'])
+        self.assertEqual(len(attempts),3)
+        self.assertEqual(self.manager.stat(str(self.root),path)['state'],'ready')
+
+        del self.dav.files['Incoming/kept.bin']
+        attempts.clear()
+        def persistent(request):
+            if request.method=='PROPFIND':
+                attempts.append(1)
+                raise httpx.ConnectTimeout('fixture timeout',request=request)
+            return self.dav(request)
+        self.manager.transports[SOURCE]=httpx.MockTransport(persistent)
+        with patch('vault_rag.remote_webdav.time.sleep'):
+            result=self.manager.scan(str(self.root),SOURCE)
+        self.assertEqual(len(attempts),3)
+        self.assertEqual((result['ok'],result['code']),(False,'connection_unavailable'))
+        self.assertEqual(self.manager.stat(str(self.root),path)['state'],'ready')
+
+    def test_scan_does_not_retry_auth_failure_or_skip_guard_on_retry(self):
+        source=self.manager._source(SOURCE)
+        attempts=[]
+        def unauthorized(request):
+            attempts.append(1)
+            return httpx.Response(401)
+        provider=WebDAVSource(source,('leafloom',SECRET),transport=httpx.MockTransport(unauthorized))
+        with self.assertRaises(RemoteStorageError) as caught:provider.scan()
+        self.assertEqual(caught.exception.code,'authentication_required')
+        self.assertEqual(len(attempts),1)
+
+        attempts.clear();cancelled=[]
+        def timed_out(request):
+            attempts.append(1)
+            raise httpx.ReadTimeout('fixture timeout',request=request)
+        def guard():
+            if cancelled:raise InterruptedError('cancelled')
+        provider=WebDAVSource(source,('leafloom',SECRET),transport=httpx.MockTransport(timed_out),guard=guard)
+        with patch('vault_rag.remote_webdav.time.sleep',side_effect=lambda _:cancelled.append(True)):
+            with self.assertRaises(InterruptedError):provider.scan()
+        self.assertEqual(len(attempts),1)
+
     def test_partial_207_and_failed_head_never_reconcile_missing(self):
         self.dav.files.update({'Incoming/a.bin':b'aaa','Incoming/b.bin':b'bbb'})
         self.manager.scan(str(self.root),SOURCE)

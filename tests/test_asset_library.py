@@ -118,6 +118,84 @@ class AssetLibraryTests(unittest.TestCase):
             self.assertEqual(self.library.listing(self.root,limit=10)['total'],1187)
         self.assertFalse(any(method=='DELETE' for method,_ in self.dav.calls))
 
+    def test_sync_preserves_safe_transport_reason_for_status_ui(self):
+        error=RemoteStorageError('connection_unavailable','unreachable',reason='server_connect_timeout',operation='GET')
+        with patch.object(self.library,'_provider',side_effect=error):result=self.library.sync(self.root)
+        self.assertEqual(result['code'],'connection_unavailable')
+        self.assertEqual(result['reason'],'server_connect_timeout');self.assertEqual(result['operation'],'GET')
+        self.assertIn('checked_at',result)
+
+    def test_retry_status_replaces_old_failure_before_full_sync_finishes(self):
+        self.initialize()
+        with self.library._read_db(self.root) as db:last_success=self.library._get(db,'sync')['last_synced_at']
+        failure=RemoteStorageError('connection_unavailable','unreachable',reason='server_connect_timeout',operation='GET')
+        with patch.object(self.library,'_provider',side_effect=failure):failed=self.library.sync(self.root)
+        self.assertEqual(failed['last_synced_at'],last_success)
+        connecting=threading.Event();continue_connect=threading.Event();syncing=threading.Event();continue_sync=threading.Event()
+        original_bootstrap=self.library._bootstrap;original_pull=self.library._pull;results=[];errors=[]
+        def bootstrap(*args):
+            connecting.set()
+            if not continue_connect.wait(5):raise AssertionError('test connection was not released')
+            return original_bootstrap(*args)
+        def pull(*args):
+            syncing.set()
+            if not continue_sync.wait(5):raise AssertionError('test sync was not released')
+            return original_pull(*args)
+        def retry():
+            try:results.append(self.library.sync(self.root))
+            except BaseException as error:errors.append(error)
+        with patch.object(self.library,'_bootstrap',side_effect=bootstrap),patch.object(self.library,'_pull',side_effect=pull):
+            thread=threading.Thread(target=retry);thread.start()
+            try:
+                self.assertTrue(connecting.wait(3));state=self.library.status(self.root)
+                self.assertEqual((state['state'],state['phase'],state['retrying']),('syncing','connecting',True))
+                self.assertNotIn('code',state);self.assertNotIn('reason',state);self.assertEqual(state['last_synced_at'],last_success)
+                # A duplicate request observes the same in-flight attempt.
+                self.assertEqual(self.library.sync(self.root)['sync_started_at'],state['sync_started_at'])
+                continue_connect.set();self.assertTrue(syncing.wait(3));state=self.library.status(self.root)
+                self.assertEqual((state['state'],state['phase']),('syncing','syncing'))
+                self.assertNotIn('code',state)
+                with self.library._read_db(self.root) as db:durable=self.library._get(db,'sync')
+                self.assertEqual(durable['state'],'queued');self.assertNotIn('code',durable)
+                self.assertEqual(durable['last_synced_at'],last_success)
+                # Runtime activity must not survive as a fictitious running flag.
+                with patch.object(AssetLibrary,'_loop',return_value=None):restarted=AssetLibrary(self.remote)
+                self.libraries.append(restarted);self.assertEqual(restarted.status(self.root)['state'],'queued')
+            finally:
+                continue_connect.set();continue_sync.set();thread.join(5)
+        self.assertFalse(thread.is_alive());self.assertEqual(errors,[])
+        self.assertEqual(results[0]['state'],'ready');self.assertNotIn('code',results[0]);self.assertIsNone(self.library.active_sync)
+        self.assertGreaterEqual(results[0]['last_synced_at'],last_success)
+
+    def test_retry_failure_reports_current_reason_and_retains_last_success(self):
+        self.initialize()
+        with self.library._read_db(self.root) as db:last_success=self.library._get(db,'sync')['last_synced_at']
+        for failure in (RemoteStorageError('connection_unavailable','unreachable',reason='server_read_timeout',operation='PROPFIND'),
+                        RemoteStorageError('authentication_required','auth_required')):
+            with self.subTest(state=failure.state),patch.object(self.library,'_pull',side_effect=failure):
+                state=self.library.sync(self.root)
+                self.assertEqual((state['state'],state['code']),(failure.state,failure.code))
+                self.assertEqual(state['last_synced_at'],last_success);self.assertIsNone(self.library.active_sync)
+                self.assertNotIn('phase',state)
+
+    def test_active_retry_is_not_reported_for_replaced_credentials(self):
+        self.initialize();context=self.library._context(self.root)
+        self.library.active_sync={'context':context,'phase':'connecting','retrying':True,'started_at':1}
+        self.remote.set_credentials('a'*32,'leafloom',fixtures.SECRET,revision='replaced')
+        self.assertEqual(self.library.status(self.root)['state'],'ready')
+        self.assertNotIn('sync_started_at',self.library.status(self.root));self.library.active_sync=None
+
+    def test_noop_sync_does_not_notify_or_interrupt_attachment_browsing(self):
+        self.scan();self.initialize()
+        notices=[];self.library.on_changed=notices.append
+        self.library.sync(self.root)
+        self.assertEqual(notices,[])
+        self.library.update(self.root,'official',{'product_id':'123','official':{'title':'Fixture product'}})
+        self.library.sync(self.root)
+        self.assertEqual(notices,[self.root])
+        self.library.sync(self.root)
+        self.assertEqual(notices,[self.root])
+
     def test_local_snapshot_queries_and_batched_background_pulls(self):
         self.dav.files['Packages/Tool.unitypackage']=b'original package'
         self.scan();self.initialize()

@@ -10,6 +10,7 @@ import mimetypes
 import os
 from pathlib import Path, PurePosixPath
 import re
+import time
 import uuid
 from urllib.parse import quote, unquote, urljoin, urlsplit, urlunsplit
 import xml.etree.ElementTree as ET
@@ -31,10 +32,12 @@ def is_private_http_host(host):
 
 
 class RemoteStorageError(Exception):
-    def __init__(self, code, state='invalid_service'):
+    def __init__(self, code, state='invalid_service', *, reason='', operation=''):
         super().__init__(code)
         self.code = code
         self.state = state
+        self.reason = reason
+        self.operation = operation
 
 
 def remote_path(value, *, allow_empty=True):
@@ -51,6 +54,9 @@ def remote_path(value, *, allow_empty=True):
 
 
 def validate_source(source):
+    if isinstance(source,dict) and (source.get('type')=='smb' or str(source.get('base_url','')).startswith(('smb://','\\\\'))):
+        from vault_rag.remote_smb import validate_smb_source
+        return validate_smb_source(source)
     allowed = {'id','name','type','base_url','remote_root','username','enabled','upload_directory','metadata_directory','secret_ref','allow_private_http','connection_hint','revision'}
     if not isinstance(source, dict) or set(source) - allowed:
         raise ValueError('Unsupported attachment source setting')
@@ -97,14 +103,17 @@ class WebDAVSource:
         self.on_error = on_error
         self._session_client = None
 
-    def _failed(self, code, state='invalid_service'):
-        error=RemoteStorageError(code,state)
+    def _failed(self, code, state='invalid_service', *, reason='', operation=''):
+        error=RemoteStorageError(code,state,reason=reason,operation=operation)
         if self.on_error is not None:self.on_error(error)
         raise error from None
 
     def url(self, path):
         parts=[part for part in (self.source['remote_root'],remote_path(path)) if part]
         return self.source['base_url'] + quote('/'.join(parts), safe='/')
+
+    def fork(self):
+        return type(self)(self.source,self.credentials,transport=self.transport,guard=self.guard,on_error=self.on_error)
 
     def _client(self,*,keepalive=True):
         options={} if keepalive else {'limits':httpx.Limits(max_keepalive_connections=0)}
@@ -133,28 +142,38 @@ class WebDAVSource:
         if response.status_code in {404,410} and response.status_code not in allowed:raise RemoteStorageError('remote_not_found')
         if response.status_code not in allowed:raise RemoteStorageError('unexpected_http_status')
 
-    def _request(self, method, path, *, headers=None, content=None, allowed=(200,), limit=2*1024*1024):
-        self.guard()
-        try:
-            target=self.url(path)
-            if method=='PROPFIND':target=target.rstrip('/')+'/'
-            with (nullcontext(self._session_client) if self._session_client is not None else self._client()) as client:
-                # A reused connection must never turn a Set-Cookie response into
-                # ambient authentication on a later metadata request.
-                client.cookies.clear()
-                try:
-                    with client.stream(method,target,headers=headers,content=content) as response:
-                        self._status(response, allowed)
-                        data = bytearray()
-                        for chunk in response.iter_bytes():
-                            self.guard()
-                            data.extend(chunk)
-                            if len(data)>limit:raise RemoteStorageError('response_too_large')
-                        return response.status_code, dict(response.headers), bytes(data)
-                finally:client.cookies.clear()
-        except httpx.HTTPError as error:
-            logger.warning('WebDAV transport failure method=%s type=%s',method,type(error).__name__)
-            self._failed('connection_unavailable','unreachable')
+    def _request(self, method, path, *, headers=None, content=None, allowed=(200,), limit=2*1024*1024, retry_timeouts=0):
+        for attempt in range(retry_timeouts+1):
+            self.guard()
+            try:
+                target=self.url(path)
+                if method=='PROPFIND':target=target.rstrip('/')+'/'
+                with (nullcontext(self._session_client) if self._session_client is not None else self._client()) as client:
+                    # A reused connection must never turn a Set-Cookie response into
+                    # ambient authentication on a later metadata request.
+                    client.cookies.clear()
+                    try:
+                        with client.stream(method,target,headers=headers,content=content) as response:
+                            self._status(response, allowed)
+                            data = bytearray()
+                            for chunk in response.iter_bytes():
+                                self.guard()
+                                data.extend(chunk)
+                                if len(data)>limit:raise RemoteStorageError('response_too_large')
+                            return response.status_code, dict(response.headers), bytes(data)
+                    finally:client.cookies.clear()
+            except httpx.HTTPError as error:
+                if isinstance(error, httpx.TimeoutException) and attempt < retry_timeouts:
+                    logger.warning('WebDAV timeout method=%s type=%s retry=%s',method,type(error).__name__,attempt+1)
+                    time.sleep(0.5 * (attempt+1))
+                    continue
+                logger.warning('WebDAV transport failure method=%s type=%s',method,type(error).__name__)
+                reason=('server_connect_timeout' if isinstance(error,httpx.ConnectTimeout) else
+                        'server_read_timeout' if isinstance(error,httpx.ReadTimeout) else
+                        'server_connection_busy' if isinstance(error,httpx.PoolTimeout) else
+                        'server_connection_interrupted' if isinstance(error,(httpx.ReadError,httpx.RemoteProtocolError)) else
+                        'server_connect_failed' if isinstance(error,httpx.ConnectError) else 'connection_unavailable')
+                self._failed('connection_unavailable','unreachable',reason=reason,operation=method)
 
     @staticmethod
     def _metadata(path, headers):
@@ -169,9 +188,9 @@ class WebDAVSource:
         _,headers,_=self._request('HEAD',path,limit=0)
         return self._metadata(path,headers)
 
-    def _propfind(self,path):
+    def _propfind(self,path,*,retry_timeouts=0):
         body=b'<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/><getlastmodified/><getetag/><getcontenttype/></prop></propfind>'
-        _,_,data=self._request('PROPFIND',path,headers={'Depth':'1','Content-Type':'application/xml'},content=body,allowed=(207,),limit=16*1024*1024)
+        _,_,data=self._request('PROPFIND',path,headers={'Depth':'1','Content-Type':'application/xml'},content=body,allowed=(207,),limit=16*1024*1024,retry_timeouts=retry_timeouts)
         if b'<!DOCTYPE' in data.upper() or b'<!ENTITY' in data.upper():raise RemoteStorageError('unsafe_xml')
         try:tree=ET.fromstring(data)
         except ET.ParseError:raise RemoteStorageError('invalid_webdav_xml') from None
@@ -291,9 +310,17 @@ class WebDAVSource:
 
     def verify_ignore(self):
         for path,digest in getattr(self,'ignore_checks',[]):
-            if hashlib.sha256(self._ignore_bytes(path)).hexdigest()!=digest:raise RemoteStorageError('ignore_rules_changed')
+            try:changed=hashlib.sha256(self._ignore_bytes(path)).hexdigest()!=digest
+            except RemoteStorageError as error:
+                if error.code!='remote_not_found':raise
+                changed=True
+            if changed:
+                checkpoint=getattr(self,'scan_checkpoint',None)
+                if checkpoint is not None:checkpoint.invalidate(path.rpartition('/')[0])
+                raise RemoteStorageError('ignore_rules_changed')
 
-    def scan(self,path='',*,max_files=100000,max_depth=32,on_batch=None,ignore=None,prune_reserved=True,read_ignore=True):
+    def scan(self,path='',*,max_files=100000,max_depth=32,on_batch=None,ignore=None,prune_reserved=True,read_ignore=True,checkpoint=None):
+        if checkpoint is not None:return checkpoint.scan(self,path,max_files=max_files,max_depth=max_depth,on_batch=on_batch,ignore=ignore,prune_reserved=prune_reserved,read_ignore=read_ignore)
         path=remote_path(path);pending=[(path,0)];seen=set();result=[]
         reserved=(self.source['metadata_directory'],) if prune_reserved else ()
         ignore=ignore or RemoteIgnore(reserved);self.ignore_checks=[];excluded=0
@@ -302,7 +329,7 @@ class WebDAVSource:
             if current in seen:continue
             seen.add(current)
             if depth>max_depth:raise RemoteStorageError('directory_depth_limit')
-            batch=[];entries=self._propfind(current)
+            batch=[];entries=self._propfind(current,retry_timeouts=2)
             for item in entries:
                 rel=item['path']
                 if rel==current:continue

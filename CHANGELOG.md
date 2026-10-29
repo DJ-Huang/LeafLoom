@@ -4,7 +4,21 @@
 
 ## Unreleased
 
+- Make attachment group changes visible immediately with a scoped heading and loading state. Clear the previous list on explicit filter changes, keep failed group reads from showing old results, and prevent local index progress from repeatedly cancelling group requests.
+
+- Replace stale metadata connection errors with live reconnecting/syncing states, collapse temporary network diagnostics behind an automatic-retry message, retain the last successful sync time and wake metadata synchronization on connection recovery. Keep actionable authentication and service errors visible.
+
+- Resume interrupted attachment discovery from device-local directory checkpoints, reuse fresh listings for incremental checks, and read at most two directories concurrently. Revalidate expired descendants independently, avoid rewriting unchanged attachment rows, show reused-directory counts and offer a full directory check without downloading originals.
+
+- Show live scanned/pending directory counts in the attachment toolbar; translate synchronization failures and retain safe timeout/interruption reasons and failure timestamps without exposing transport exception text.
+
+- Fix attachment lists being repeatedly cancelled by automatic scan notifications before a large catalog can finish loading. Coalesce refreshes, retain existing rows and drafts, show a retryable timeout, and avoid redundant local checks for absent virtual remote directories.
+
+- Simplify attachment browsing with a collapsible information panel, on-demand overview/sync dialogs and cover previews; add generic SMB2/3 connections alongside WebDAV and automatic background discovery. Replace Files & import settings with server cards and move creation/import to directory actions; hide migration and organization entry points.
+
 - Reduce Design MCP output with paginated summaries, exact page/node/resource source reads, revision-pinned pagination and compact edit/undo/import receipts in public MCP and the built-in assistant. Keep explicit full-document options and HTTP editor behavior. Reuse revision-local inspection indexes and encode public MCP JSON off the event loop with compact formatting and duration/size logs.
+
+- Retry transient timeouts up to twice when listing a server attachment directory, preserving existing records if scanning still fails.
 
 - Add desktop dual-display presenter mode with one isolated audience renderer, bounded live preview and focus-preserving input, private editable notes, step/case navigation, blackout/reconnection and immutable presentation snapshots. Notes use normal revision/undo history and stay out of audience and export outputs.
 
