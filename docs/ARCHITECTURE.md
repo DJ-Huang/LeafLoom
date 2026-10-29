@@ -22,7 +22,7 @@ Tunnel 内部凭据通过 `X-LeafLoom-Tunnel-Authorization` 注入发现与业�
 - HTTP MCP：`http://127.0.0.1:18080/mcp`
 - 健康检查：`/healthz`；启动入口随后使用本机令牌验证 `/api/status`，避免复用另一安装实例。
 - 文件写入采用版本校验、草稿保留、原子替换；历史、移动回滚和回收区位于知识目录的 `.vault-rag`。
-- 笔记工作流在配置／文件锁内仅完成文件、历史与回执，不同步调用 `Catalog.apply`。目录工作线程持有 `update_lock` 后会读取配置快照，反向等待会造成已落盘保存的回执死锁。变更通过 `Runtime.files_changed` 合并排队，并立即通知界面、使全局元数据失效；精确路径读取不依赖目录就绪，全局查询沿用 `metadata_pending` 与后台准备流程。
+- 笔记工作流在配置／文件锁内仅完成文件、历史与回执，不同步调用 `Catalog.apply`。目录工作线程持有 `update_lock` 后会读取配置快照，反向等待会造成已落盘保存的回执死锁。变更通过 `Runtime.files_changed` 合并排队并通知界面；活跃文件线程下的全局查询先等待排队与执行中的增量批次，不为普通保存／删除清除完整目录的就绪状态并重扫全库。增量应用失败才使元数据失效；首次加载、切库和没有文件线程的独立调用仍使用原有后台准备流程。精确路径读取不依赖目录就绪，`metadata_pending` 提示增量等待为 25ms，前端按提示等待且保留取消与超时。
 
 ## 通用附件 MCP
 
@@ -269,3 +269,53 @@ permissions. Display loss or missed heartbeats mute, pause and hide output.
 资料同步运行态由 `AssetLibrary.active_sync` 在进程内维护，状态读取复用同一只读事务校验来源与凭据上下文，避免把旧任务的运行状态投射到新绑定。`phase=connecting|syncing`、`retrying` 与 `sync_started_at` 描述当前重试，优先于上一轮失败；连接成功后持久状态退为可恢复的 `queued`，只有整轮完成才写入 `ready`。不持久化运行标志，防止崩溃后假装仍在同步；所有排队和失败更新保留 `last_synced_at`。`RemoteAttachments.on_connection_ready` 仅在当前上下文从非就绪转为就绪时唤醒资料工作线程。前端运行中两秒刷新；临时网络失败显示自动重试并折叠旧原因，健康、排队和运行态均不渲染残留错误字段，认证和资料错误仍需明确显示。
 
 附件列表对主动筛选与后台刷新使用不同的显示策略：主动切换分组、来源、类型、搜索和排序时清除旧分页快照与选择，显示当前分组名称和加载状态；后台更新仍保留列表、选择与草稿。状态轮询只以就绪状态和保存位置等稳定字段判断刷新需求，进度及文件计数不再直接取消正在读取的列表。新读取失败时不把旧分组内容显示在新标签下；超时使用统一语言键直接提示重试。分组条件仍由现有 `group_id` 查询及后端规则匹配完成，不更改既有分组定义、分类资料和 AI 检索范围。
+
+## 笔记数据库
+
+`databases.py` 为网页和公共 HTTP/Tunnel MCP 提供共用服务；Markdown frontmatter 是记录真源，`.base` 是配置真源。通用字段和各类视图的附加设置位于 `leafloom` 命名空间，包含 schemaVersion、folder、fields 和各视图稳定 ID；保留旧筛选、未知 YAML 字段与注释。旧 `Catalog.base` 委托给兼容适配器，任务看板和日历继续使用旧展示。
+
+新查询在目录快照上完成安全筛选、类型排序、分组后分页；游标绑定配置版本、目录代次和查询。模型和向量检索不参与。写入复用 Files 的根目录与内容版本校验、原子保存及历史；创建使用知识库内操作回执，可恢复发布后未完成回执的重试。记录回收复用 NoteOperations 的预览令牌。前端共用文档状态，拒绝覆盖未保存正文；Gallery 按卡片行虚拟化，Timeline 按固定可导航日期窗口和记录虚拟化。嵌入以 `#view=<id>` 固定视图，编辑器特殊区块隔离内部事件。
+
+最小检查为 `python -m unittest tests.test_databases`、前端构建以及 `node tests/frontend_databases.cjs`（构建后运行）。界面夹具使用临时目录、随机回环端口和虚构数据，不读取用户配置、不准备模型、不截图。
+
+数据库展示进一步拆分为 `database-table`（列宽与虚拟行）、`database-cell`（共享属性草稿与编辑）、`database-ui`（图标与标签），页面与嵌入共用。列宽以指针捕获或键盘调整后按原配置版本保存；属性面板定位在触发按钮附近，复用模态焦点和关闭行为。视觉验收为 `node tests/frontend_database_design.cjs`，使用独立临时夹具生成中英界面及窄屏截图到 `.cache/database-design/`，不访问用户数据。
+
+`database-record-menu` 提供五视图统一的记录动作，右键定位到指针，按钮或 Shift+F10 定位到记录，复用 ActionMenu 的窗口边缘约束、方向键、Escape 与焦点恢复。输入框保留原生文本菜单；嵌入中的菜单不传播到父编辑器。重命名复用带记录版本的属性更新，回收复用删除预览／确认并携带可选记录版本。`record.duplicate` 复用创建回执和不覆盖发布，在原目录复制完整正文、未知属性与相对附件引用，更新标题和已有笔记 ID；超时重试复用操作 ID，保留未保存正文保护及 MCP 写权限。检查为 `python -m unittest tests.test_database_record_actions`、前端构建和 `node tests/frontend_database_record_menu.cjs`；后者使用临时虚构知识库及真实异步文件队列，截图位于 `.cache/database-record-menu/`。
+
+数据库读取仍每次校验磁盘内容哈希；仅按知识库、路径与内容版本复用最多 16 份 YAML 解析树，交给配置编辑前深拷贝，成功保存后预热同版本缓存。筛选排序的内部只读行快照按工作区／配置／目录版本、目录快照身份、视图条件与搜索复用，最多保留 4 份，列查询仅取各自页面，排队中的写入不会命中旧快照。前端将配置与记录刷新分开，仅响应定义文件／记录目录相关事件，在同一画面帧合并通知；只有搜索输入保留 150ms 合并。预览响应不使缓存失效，记录修改不重读未变化的 `.base`，同请求体的进行中分列查询共用请求而不持久缓存。文件移动在一次引用修复中共享 canonical 路径索引，保留原有大小写、路径优先级和版本核对。
+
+上述一致性检查为 `python -m unittest tests.test_database_refresh` 和构建后的 `node tests/frontend_database_refresh.cjs`，覆盖缓存隔离、相同文件时间戳的外部修改、切库、排队写入、预览不刷新、无关目录不查询与外部配置同步。性能对比使用隔离虚构知识库，浏览器区分卡片位置变化与恢复可操作时延；本轮记录位于 `.cache/database-latency/`，不作为跨设备固定时限。
+
+新增／复制由界面显式请求 `return_record`，创建回执直接包含落盘行及目录版本，回执持久化与操作 ID 重试保持一致。界面仅在保存成功、仍处于原知识库／视图／搜索范围且 `visible` 为真时显示最近创建行；最多 20 条，分页外以“刚创建”暂时置顶并定位。查询的 `recent_paths`／`recent_records` 在完整筛选集内核对新行，旧目录快照不撤销刚创建行，确认删除／筛选排除后移除，已载入页面按路径去重；切换范围清除临时行。看板复用同一回执，在未确认目录身份前禁止排期拖动，确认后恢复；创建失败不插入虚假行。针对性浏览器检查为 `node tests/frontend_database_create.cjs`，阻塞查询 1.1 秒验证表格、列表、大数据分页和看板仍立即显示，并检查失败与筛选排除；结果位于 `.cache/database-create/`。
+
+## 全局界面样式
+
+`web/src/theme.css` 是管理界面的字体、颜色、间距、圆角、控件尺寸与浮层阴影真源，由 `style.css` 导入。`workspace.css` 统一导航、首页、编辑器工具、通用弹窗、搜索、设置、AI 与初次使用界面；数据库、附件、图谱、设计工作台的界面部分复用这些变量。专业画布、用户笔记内容及独立 HTML 项目不以应用主题替换其自定义样式。不得在特定业务样式中以全局 `.primary!important` 覆盖其他界面。
+
+通用 `Modal` 统一标题、可选图标、关闭和焦点恢复，`FormDialog` 共用表单与危险操作视觉；现有脏状态、版本保护与保存流程不变。任务节点兼容 Tiptap NodeView 实际输出的 `data-checked`，避免仅匹配序列化 HTML 的 `data-type` 而导致 checkbox 与正文换行。
+
+`node tests/frontend_workspace_design.cjs` 使用独立临时夹具验证导航、首页、编辑、表单取消、搜索 Escape/焦点恢复、设置草稿保护、AI 和窄屏；中英截图输出到 `.cache/workspace-design/`。先构建前端再运行，不使用实际知识库。
+
+附件、图谱和设计项目的业务样式复用主题变量；设计内容的自定义配色保持独立。设计工作台依据实际容器宽度在 700px 以下显示“画布／图层／属性”切换，通过显示层保持已挂载的画布、选择和编辑状态，不重新加载项目。项目菜单在选择操作或 Escape 时关闭。
+
+`node tests/frontend_tools_design.cjs` 复用附件临时夹具的 `LEAFLOOM_TOOLS_DESIGN` 示例笔记，使用随机回环端口，覆盖三页、图谱搜索/筛选/详情，以及附件、项目管理、插入、历史、导出、发布、源码等弹窗。检查 1480px 桌面与 390px 窄屏的页面/弹窗边界、面板切换和无意外写入；实际截图及报告位于 `.cache/tools-design/`。先构建前端，禁止与构建并发读取静态文件。
+
+图谱 ResizeObserver 保留上次实际测量的容器尺寸；缩放窗口或展开详情时平移相机，正在定位节点时按新尺寸完成定位，避免 Cytoscape 提前调整尺寸造成视野偏移。附件分组弹窗分为独立滚动表单与固定操作栏，避免原生 fieldset 内部布局使按钮落到裁切区域。
+
+## 数据库看板
+
+`leafloomBoard` 使用同一 Markdown 记录服务。`leafloom.tasks` 保存状态／优先级／日期绑定、初始与完成值；单选字段的 `optionMeta` 保存可选名称、颜色，原值不改。看板的 `leafloom.board` 保存 manualOrder（记录路径）、groupOrder／hiddenGroups／collapsedGroups（服务端返回的分组 key）及 hideEmpty。普通创建仍为四视图，`preset: tasks` 增加并默认打开看板；已有数据库通过显式视图创建接入，不自动迁移旧 `tasknotesKanban`。
+
+看板查询先返回全范围计数和各列摘要，再以 group_key 分列分页，每次默认 100、最多 200。分组 key 是类型编码的值，空值与同名字面量分开；调用方原样回传。游标包含工作区、配置和目录版本及筛选／排序／分组范围。anchor_path 可恢复刷新位置，并返回 previous_cursor 读取此前的窗口。前端只请求可见且展开的列，TanStack Virtual 保留焦点行和拖动行；Pointer Events 负责拖动、插入指示和边缘滚动，菜单提供键盘等效操作。全屏与嵌入复用组件，父文档事件隔离不变。
+
+`board.group.remove` 先预览数据库级范围内的全部受影响记录（不受视图条件、搜索或分页影响），提交时同时校验预览的配置、目录与逐文件版本。移除共享单选选项、清理同字段各看板的列配置，并将记录迁移至未分类或指定选项；任务初始／完成映射显式转移。复用看板多文件可恢复事务、操作 ID 和历史；前端对全部受影响记录检查内存及持久草稿，确认弹窗在 390px 内可操作。针对性检查为 `tests.test_database_groups` 和 `tests/frontend_database_groups.cjs`，隔离运行并将实际截图存于 `.cache/database-groups/`。
+
+`record.move` 验证配置、工作区、记录和目录快照以及目标邻居；同列排序仅改 `.base`，跨列将属性和顺序作为同一可恢复操作。事务资料存于知识库 `.vault-rag/database-board-operations`，待恢复指针位于 `database-board-pending`；每个文件保留前后内容哈希和备份，写入复用 Files.save 与历史。成功重试返回原回执，部分写入仅回滚仍等于本次后像的文件，外部修改保留并报告恢复冲突。读取配置前恢复待处理操作。`board.undo` 只在当前文件仍符合操作后像时保存逆操作。Files.plan_move 同步看板路径顺序引用，覆盖笔记与目录的应用内重命名。
+
+针对性验证：`python -m unittest tests.test_databases tests.test_database_board`、前端构建及 `node tests/frontend_database_board.cjs`。浏览器夹具在随机回环端口创建独立虚构知识库，包含小型任务板和 2400 条任务，不访问用户服务、配置或模型；截图输出至 `.cache/database-board/`。
+
+看板移动以保存回执和受影响可见列的当前配置／目录快照共同解除待保存状态；两个完成事件无论先后均执行同一收尾检查。跨列还需目录版本前进，且已加载的记录确实归入目标分组，避免 `.base` 先保存而 Markdown 尚在后台队列时过早解除锁定。列请求同时依赖摘要的配置版本，避免仅修改 `.base` 而目录版本尚未更新时漏掉刷新。连续拖动回归为构建后的 `node tests/frontend_database_board_drag.cjs`：延迟移动回执到列刷新之后，并模拟配置先于目录更新，验证连续跨列／列内拖动、单张记录与空列、撤销后拖动及编辑器嵌入；加 `LEAFLOOM_BOARD_ASYNC_CATALOG=1` 使用真实 `Runtime.loop` 和文件监听，不启动模型／RAG 线程。
+
+已完整准备的目录通过 `Catalog.apply` 解析变更条目并更新 ID／引用后继续保持就绪，不为每次卡片移动重新全库扫描；内容与文件状态未变的重复监听通知不推进目录版本。未准备完整的目录仍需原有后台准备流程，`NoteOperations.metadata` 复查准备与读取之间的就绪切换。HTTP 将中途发生的 `metadata_pending` 返回为带 `pending`／`retry_after_ms` 的 503，沿用前端等待重试；其他输入错误及版本冲突的状态码不变。对应检查为 `python -m unittest tests.test_database_board_metadata`。
+
+嵌入数据库的 pointer 生命周期暂时关闭可拖祖先 NodeView 的 DOM draggable 标志，在 pointerup／pointercancel／失焦／卸载时恢复，避免浏览器以父区块为原生 dragstart 目标；不修改父 ProseMirror 文档。属性移动检查共享文档 dirty／pending 状态，仅调整视图顺序允许保留未保存正文。详情属性可接收外部刷新，字段草稿仍绑定原读取版本。浏览器验收包含草稿阻断、视图排序不覆盖正文、父笔记不变、双窗口同步及浏览器原生触摸长按。

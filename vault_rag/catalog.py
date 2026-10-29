@@ -281,16 +281,21 @@ class Catalog:
                 else:items=[]
                 for item in items:
                     path=item.relative_to(root).as_posix()
-                    try:entry=self._entry(root,item,entries.get(path),parse=(not self.lazy or self.metadata_ready or self.files.config.selected(path,validated=True)))
+                    previous=entries.get(path)
+                    try:entry=self._entry(root,item,previous,parse=(not self.lazy or self.metadata_ready or self.files.config.selected(path,validated=True)))
                     except FileNotFoundError:continue
-                    entries[path]=entry;present.add(path);changed.add(path)
+                    entries[path]=entry;present.add(path)
+                    if entry is not previous:changed.add(path)
                     parent=path.rpartition('/')[0]
                     while parent:self.directories.add(parent);parent=parent.rpartition('/')[0]
                 for path in old_paths-present:entries.pop(path,None);changed.add(path)
                 if not p.exists():
                     removed={path for path in self.directories if path==rel or path.startswith(rel+'/')}
                     self.directories.difference_update(removed);changed.update(removed)
-            if any(Path(p).suffix.lower() in ('.md','.txt','.base') for p in changed):self.metadata_ready=False
+            # A prepared namespace parses every changed text entry above; publishing
+            # also updates its IDs and references. It remains a complete snapshot.
+            # A lazy/unprepared namespace must still finish the metadata worker.
+            if not self.complete_namespace:self.metadata_ready=False
             return self._publish(root,entries,changed)
     def tree(self,rel='',*,force=False):
         # One visible folder only. Never wait for the catalog/metadata worker.
@@ -398,48 +403,8 @@ class Catalog:
             out.append({'path':row['file'].get('path',''),'values':values})
         return {'kind':'table' if table else 'list','headers':headers,'rows':out,'total':len(out)}
     def base(self,path,view_index=None):
-        import hashlib
-        raw=self.files.read(path)['text'];data=yaml.safe_load(raw) or {};rows=[]
-        profiles=json.loads((Path(__file__).parent/'tasknotes_profiles.json').read_text(encoding='utf-8'))
-        today=dt.date.today()
-        def day(value):
-            try:return dt.date.fromisoformat(str(value)[:10])
-            except (ValueError,TypeError):return None
-        def open_task(row):
-            return row.get('status')!='done' if not row.get('recurrence') else today not in [day(v) for v in list_value(row.get('complete_instances'))]
-        def matches(filter_,row):
-            if not filter_:return True
-            profile=profiles.get(hashlib.sha256(json.dumps(filter_,ensure_ascii=False,sort_keys=True).encode()).hexdigest())
-            if profile:
-                if not open_task(row):return False
-                due=day(row.get('due'));scheduled=day(row.get('scheduled'));dates=[v for v in (due,scheduled) if v]
-                if profile=='Today':return today in dates
-                if profile=='Overdue':return any(v<today for v in dates)
-                if profile=='This Week':return any(today<=v<=today+dt.timedelta(days=7) for v in dates)
-                if profile=='Unscheduled':return not dates
-                if profile=='Not Blocked':
-                    for block in list_value(row.get('blockedBy')):
-                        key=str(block.get('uid','')) if isinstance(block,dict) else str(block).strip('[]')
-                        targets=self.resolve(key)
-                        if any(self.entries[t]['metadata'].get('status')!='done' for t in targets):return False
-                    return True
-            if isinstance(filter_,str):return bool(Expr(filter_,row).run())
-            if isinstance(filter_,dict):return all((all(matches(v,row) for v in vals) if op=='and' else any(matches(v,row) for v in vals) if op=='or' else not any(matches(v,row) for v in vals)) for op,vals in filter_.items())
-            raise ValueError('视图筛选格式无效')
-        for entry in self.entries.values():
-            if entry['path'].lower().endswith('.md'):
-                row={**entry['metadata'],'file':entry['file']}
-                if matches(data.get('filters'),row):rows.append({'path':entry['path'],'title':entry['title'],'metadata':entry['metadata'],'file':entry['file'],'etag':entry['sha256']})
-        for index,view in enumerate(data.get('views',[])):
-            if view_index is not None and index!=view_index:
-                view['rows']=[];continue
-            try:
-                view['rows']=[r for r in rows if matches(view.get('filters'),{**r['metadata'],'file':r['file']})]
-                for sort in reversed(view.get('sort',[])):
-                    key=sort.get('property') or sort.get('column');reverse=sort.get('direction','ASC')=='DESC'
-                    view['rows'].sort(key=lambda r:(r['metadata'].get(key) is not None,str(r['metadata'].get(key,''))),reverse=reverse)
-            except ValueError as e:view['rows']=[];view['error']=str(e)
-        return {'properties':data.get('properties',{}),'views':data.get('views',[]),'active_view':view_index}
+        from vault_rag.databases import legacy_base
+        return legacy_base(self,path,view_index)
 
 def render_template(text,now=None):
     now=now or dt.datetime.now();cursor=None

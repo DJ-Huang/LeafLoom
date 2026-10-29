@@ -27,6 +27,16 @@ Enable **Use for AI asset search** only on the groups that AI should search. No 
 
 A visible `leafloom.ignore` at the server root or a subdirectory may exclude files using Gitignore-style patterns. Its first line must be exactly `# leafloom-ignore v1`; a child rule or `!` can reinclude files. Rules are read without requiring NAS write permission. A completed successful scan applies exclusions while retaining original files, IDs and existing references.
 
+### Upload attachments through MCP
+
+The single-request Base64 path requires a build containing this change.
+
+Use `vault_files_update` with `request.action="upload"` for knowledge-base attachments. ChatGPT should prefer `source="files"` with the host-provided top-level `files` array. Local clients can send one file up to 2 MiB with `source="base64"`, `name`, `data_base64`, and the original bytes' `sha256`; use begin/chunk/commit for larger files. Omit `folder` for the configured attachment directory, or specify a vault-relative directory such as `Comics/Project/assets`.
+
+Read `workspace_revision` from `vault_index_status` and use a unique `operation_id`; keep the ID unchanged when retrying identical arguments. Upload results include the saved path, size, SHA-256, revision and `markdown_link`; images also return `markdown_embed`. Use `vault_files` stat with `source_note` to obtain a note-relative reference, then edit the note with its current revision. Existing files remain intact.
+
+If only Design Studio import or Feishu temporary transfers appear, check the server's `tools/list`: it must include `vault_files` and `vault_files_update`. Restart an updated backend and refresh/rescan the client's plugin tool directory. Restarting LeafLoom alone does not refresh a cached client directory. Check workspace-write permission separately; these uploads do not require Feishu authorization. See [MCP file tools](mcp.md).
+
 ## What to expect
 
 Background discovery preserves browsing filters, selection, scroll and metadata drafts. An expired pagination snapshot offers **List updated — show latest** instead of silently moving to page one. Originals remain local or on their existing server. The overview reports originals separately from preview caches; unprepared local totals are unknown rather than zero.

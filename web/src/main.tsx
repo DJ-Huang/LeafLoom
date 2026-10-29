@@ -4,7 +4,7 @@ import {Diagnostic} from './i18n';
 import {getLocale,t,useLocale} from './i18n';
 import React,{lazy,Suspense,useCallback,useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {BookOpen,Calendar,Home,PanelLeft,Plus,RefreshCw,Search,Settings,ArrowLeft,Network,MessageSquare,Globe,Paperclip,Palette,Download} from 'lucide-react';
+import {BookOpen,Calendar,Home,PanelLeft,Plus,RefreshCw,Search,Settings,ArrowLeft,Network,MessageSquare,Globe,Paperclip,Palette,Download,Table2} from 'lucide-react';
 import {api,applySession,invalidate,media,Config,OpenNote,Session} from './api';
 import {DirectoryTree,FolderView} from './tree';
 import {Action,ActionMenu,Modal,LoadingShell,LazyBoundary,FormDialog,FormField} from './ui';
@@ -21,6 +21,8 @@ import {Logo} from './brand';
 import {StorageMigrationNotice} from './storage-migration';
 import {HtmlPreview} from './html-preview';
 import {PresenterAudience} from './design-presenter-audience';
+import './workspace.css';
+const CreateDatabaseDialog=lazy(()=>import('./base').then(module=>({default:module.CreateDatabaseDialog})));
 const AttachmentDownloads=lazy(()=>import('./attachment-downloads').then(module=>({default:module.AttachmentDownloads})));
 const Attachments=lazy(()=>import('./attachments').then(module=>({default:module.Attachments})));
 const DesignStudio=lazy(()=>import('./design-studio').then(module=>({default:module.DesignStudio})));
@@ -126,6 +128,7 @@ function App(){
  const [fileToolsError,setFileToolsError]=useState('');
  const [fileToolsBusy,setFileToolsBusy]=useState(false);
  const fileToolsRun:RunAction=async(_label,work,done)=>{if(fileToolsBusy)return;setFileToolsBusy(true);setFileToolsError('');const origin=session.current?.config.root;try{const valid=()=>origin===session.current?.config.root;const result=await work(valid);if(valid())done?.(result);}catch(reason){setFileToolsError((reason as Error).message);}finally{setFileToolsBusy(false);}};
+ const [createDatabase,setCreateDatabase]=useState<string|null>(null);
  const newFile=(kind:'file')=>setOperation({kind});
  const daily=async()=>{const origin=session.current?.config.root;try{const data=await api('daily',{});if(origin!==session.current?.config.root)return;if(data.created)sessionStorage.setItem('edit:'+data.path,'1');changed();openFile(data.path);}catch(error){notify((error as Error).message);}};
  const submitOperation=async(values:Record<string,string>)=>{
@@ -144,17 +147,18 @@ function App(){
   <Sidebar width={preferences.sidebarWidth} collapsed={preferences.sidebarCollapsed} mobileOpen={mobileOpen} onToggle={toggleSidebar} onWidth={sidebarWidth=>setPreferences({sidebarWidth})} onDismiss={()=>setMobileOpen(false)}>
    <div className="brand"><div className="brand-mark small"><Logo size={30}/></div><div><strong>{t("本地知识库")}</strong><span title={config.root}>{fileName(config.root)}</span></div></div>
    <nav className="sidebar-shortcuts" aria-label={t("快捷入口")}>
-    <button onClick={()=>setQuickSearch(true)}><Search size={17}/><span>{t("搜索文件")}</span><kbd>{navigator.platform.includes('Mac')?'⌘':'Ctrl'} K</kbd></button>
-    <button className={view==='home'?'active':''} onClick={showHome}><Home size={17}/>{t("首页")}</button>
-    <button className={view==='knowledge'?'active':''} onClick={showKnowledge}><Search size={17}/>{t("知识检索")}</button>
-    <button className={view==='graph'?'active':''} onClick={showGraph}><Network size={17}/>{t("关系图谱")}</button>
-    <button className={view==='design'?'active':''} onClick={()=>showDesign()}><Palette size={17}/>{t('设计工作台')}</button>
-    <button className={view==='web'?'active':''} onClick={()=>{setView('web');setMobileOpen(false);history.replaceState(null,'','/?view=web');}}><Globe size={17}/>{t('网页')}</button>
-    <button className={view==='attachments'?'active':''} onClick={()=>{setView('attachments');setAttachmentsVisited(true);setMobileOpen(false);history.replaceState(null,'','/?view=attachments');}}><Paperclip size={17}/>{t('attachments.title')}</button>
-    <button className={view==='downloads'?'active':''} onClick={showDownloads}><Download size={17}/>{t('dl.title')}</button>
-    <button onClick={()=>void daily()}><Calendar size={17}/>{t("今日笔记")}</button>
+    <button className="sidebar-search" onClick={()=>setQuickSearch(true)}><Search size={16}/><span>{t("搜索文件")}</span><kbd>{navigator.platform.includes('Mac')?'⌘':'Ctrl'} K</kbd></button>
+    <div className="sidebar-nav-group"><button className={view==='home'?'active':''} aria-current={view==='home'?'page':undefined} onClick={showHome}><Home size={16}/><span>{t('首页')}</span></button><button className={view==='knowledge'?'active':''} aria-current={view==='knowledge'?'page':undefined} onClick={showKnowledge}><Search size={16}/><span>{t('知识检索')}</span></button><button onClick={()=>void daily()}><Calendar size={16}/><span>{t('今日笔记')}</span></button></div>
+    <p className="sidebar-nav-label">{t('ui.workspaceTools')}</p>
+    <div className="sidebar-nav-group">
+     <button className={view==='graph'?'active':''} aria-current={view==='graph'?'page':undefined} onClick={showGraph}><Network size={16}/><span>{t('关系图谱')}</span></button>
+     <button className={view==='design'?'active':''} aria-current={view==='design'?'page':undefined} onClick={()=>showDesign()}><Palette size={16}/><span>{t('设计工作台')}</span></button>
+     <button className={view==='web'?'active':''} aria-current={view==='web'?'page':undefined} onClick={()=>{setView('web');setMobileOpen(false);history.replaceState(null,'','/?view=web');}}><Globe size={16}/><span>{t('网页')}</span></button>
+     <button className={view==='attachments'?'active':''} aria-current={view==='attachments'?'page':undefined} onClick={()=>{setView('attachments');setAttachmentsVisited(true);setMobileOpen(false);history.replaceState(null,'','/?view=attachments');}}><Paperclip size={16}/><span>{t('attachments.title')}</span></button>
+     <button className={view==='downloads'?'active':''} aria-current={view==='downloads'?'page':undefined} onClick={showDownloads}><Download size={16}/><span>{t('dl.title')}</span></button>
+    </div>
    </nav>
-   <div className="section-label"><span>{t("文件目录")}</span><div><Action title={t("刷新数据")} onClick={refreshData}><RefreshCw size={14}/></Action><Action title={t("新建笔记")} onClick={()=>newFile('file')}><Plus size={15}/></Action></div></div>
+   <div className="section-label"><span>{t("文件目录")}</span><div><Action title={t("刷新数据")} onClick={refreshData}><RefreshCw size={14}/></Action><Action title={t('db.create')} onClick={()=>setCreateDatabase(currentFolder)}><Table2 size={14}/></Action><Action title={t("新建笔记")} onClick={()=>newFile('file')}><Plus size={15}/></Action></div></div>
    <button className="text-link file-tools-entry" onClick={()=>setFileToolsFolder(currentFolder)}>{t("aw.fileTools")}</button><div className="file-tree"><DirectoryTree key={config.root} onOpen={openFile} onFolder={setCurrentFolder} selected={view==='document'?active:''} refresh={refresh} manage={manage}/></div>
    <div className="sidebar-tools"><button onClick={()=>openSettings()}><Settings size={16}/>{t("设置")}</button><button className="help-button" onClick={()=>{showHome();void saveGuide({step:'done',dismissed:false}).catch(error=>notify(error.message));}}>{t("新手指南")}</button><a href={`https://dj-huang.github.io/LeafLoom/docs/${getLocale()}/`} target="_blank" rel="noopener noreferrer"><BookOpen size={16}/>{t('help.center')}</a></div><IndexStatus onOpen={()=>openSettings({section:'index',targetId:'sync'})}/>
   </Sidebar>
@@ -177,7 +181,8 @@ function App(){
   {fileToolsFolder!==undefined&&<Modal title={t('aw.fileTools')} onClose={()=>{if(!fileToolsBusy)setFileToolsFolder(undefined);}} className="file-tools-dialog"><fieldset className="pad" disabled={fileToolsBusy}>{fileToolsError&&<p className="error" role="alert">{fileToolsError}</p>}<FileTools key={config.root+'\n'+fileToolsFolder} config={config} folder={fileToolsFolder} run={fileToolsRun} onOpen={result=>{setFileToolsFolder(undefined);if(!result.directory)openFile(result.path);}} onChanged={changed}/></fieldset></Modal>}
   {quickSearch&&<LazyBoundary><Suspense fallback={<Modal title={t("搜索文件")} onClose={()=>setQuickSearch(false)}><p className="pad subtle">{t("正在打开搜索…")}</p></Modal>}><FileSearch key={config.root+'\n'+config.revision} recent={preferences.recent} onOpen={openFile} onClose={()=>setQuickSearch(false)}/></Suspense></LazyBoundary>}
   {settings&&<ConnectedSettings config={config} location={settings} folder={view==='document'?parentFolder(active):currentFolder} onSaved={saved} onClose={()=>setSettings(undefined)} notify={notify} onChanged={changed} onOpen={(result:SettingsResult)=>{if(result.directory){showFolder(result.path);return;}if(result.edit)sessionStorage.setItem('edit:'+result.path,'1');if(result.cursor!=null)sessionStorage.setItem('cursor:'+result.path,String(result.cursor));setBackToKnowledge(false);setBackToGraph(false);selectDocument(result.path);}}/>}
-  {menu!==undefined&&menuAnchor.current&&<ActionMenu title={fileName(menu)||t("目录管理")} anchor={menuAnchor.current} onClose={()=>setMenu(undefined)}><button onClick={()=>{setFileToolsFolder(/\.[a-zA-Z0-9]+$/.test(fileName(menu))?folderOf(menu):menu);setMenu(undefined);}}>{t("aw.fileTools")}</button><button onClick={()=>{const dir=/\.[a-zA-Z0-9]+$/.test(fileName(menu))?folderOf(menu):menu;setMenu(undefined);showDesign(dir);}}>{t("在此新建设计项目")}</button><button onClick={()=>manage('rename',menu)}>{t("重命名")}</button><button onClick={()=>manage('move',menu)}>{t("移动")}</button><button onClick={()=>record('history',menu)}>{t("编辑历史")}</button>{window.leafloomDesktop&&<button onClick={()=>{void window.leafloomDesktop!.revealFile(menu).catch(error=>notify(error.message));setMenu(undefined);}}>{t("在文件管理器中显示")}</button>}<a href={media(menu,true)}>{t("下载原文件")}</a><button className="danger" onClick={()=>manage('delete',menu)}>{t("移入回收区")}</button></ActionMenu>}
+  {menu!==undefined&&menuAnchor.current&&<ActionMenu title={fileName(menu)||t("目录管理")} anchor={menuAnchor.current} onClose={()=>setMenu(undefined)}><button onClick={()=>{setFileToolsFolder(/\.[a-zA-Z0-9]+$/.test(fileName(menu))?folderOf(menu):menu);setMenu(undefined);}}>{t("aw.fileTools")}</button><button onClick={()=>{const dir=/\.[a-zA-Z0-9]+$/.test(fileName(menu))?folderOf(menu):menu;setMenu(undefined);showDesign(dir);}}>{t("在此新建设计项目")}</button><button onClick={()=>{setCreateDatabase(/\.[a-zA-Z0-9]+$/.test(fileName(menu))?folderOf(menu):menu);setMenu(undefined);}}>{t('db.create')}</button><button onClick={()=>manage('rename',menu)}>{t("重命名")}</button><button onClick={()=>manage('move',menu)}>{t("移动")}</button><button onClick={()=>record('history',menu)}>{t("编辑历史")}</button>{window.leafloomDesktop&&<button onClick={()=>{void window.leafloomDesktop!.revealFile(menu).catch(error=>notify(error.message));setMenu(undefined);}}>{t("在文件管理器中显示")}</button>}<a href={media(menu,true)}>{t("下载原文件")}</a><button className="danger" onClick={()=>manage('delete',menu)}>{t("移入回收区")}</button></ActionMenu>}
+  {createDatabase!==null&&<Suspense fallback={null}><CreateDatabaseDialog folder={createDatabase} onOpen={openFile} onClose={()=>setCreateDatabase(null)}/></Suspense>}
   {operation&&<FormDialog key={operation.kind+operation.path} title={{file:t("新建笔记"),rename:t("重命名"),move:t("移动文件或目录"),delete:t("移入回收区")}[operation.kind]} description={operation.kind==='delete'?t("将「")+operation.path+t("」移入回收区？之后可以恢复。"):operation.path||t("位置：")+(currentFolder||t("知识库根目录"))} fields={fields} submitLabel={operation.kind==='delete'?t("移入回收区"):operation.kind==='move'?t("移动"):operation.kind==='rename'?t("重命名"):t("创建")} danger={operation.kind==='delete'} onSubmit={submitOperation} onClose={()=>setOperation(undefined)}/>}
   {candidates&&candidates.length>1&&<Modal title={t("请选择同名文档")} onClose={()=>setCandidates(undefined)}><div className="action-list">{candidates.map(path=><button key={path} onClick={()=>{setCandidates(undefined);selectDocument(path);}}>{path}</button>)}</div></Modal>}
   {guide&&guide.step!=='done'&&<SetupGuide config={config} guide={guide} onSaved={saved} onGuide={saveGuide}/>}

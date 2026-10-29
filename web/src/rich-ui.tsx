@@ -9,7 +9,7 @@ import {t} from './i18n';
 import {AnnotationAction,AnnotationColor,annotationColors} from './annotations';
 
 export type AnchorRect={left:number,right:number,top:number,bottom:number};
-const icons:Record<InsertId,LucideIcon>={text:FileText,h1:Heading1,h2:Heading2,h3:Heading3,bullet:List,ordered:ListOrdered,todo:CheckSquare,quote:Quote,divider:Minus,code:Code2,table:Table,image:Image,file:File,link:Link,wiki:Link2,math:Sigma,mermaid:Workflow};
+const icons:Record<InsertId,LucideIcon>={database:Table,text:FileText,h1:Heading1,h2:Heading2,h3:Heading3,bullet:List,ordered:ListOrdered,todo:CheckSquare,quote:Quote,divider:Minus,code:Code2,table:Table,image:Image,file:File,link:Link,wiki:Link2,math:Sigma,mermaid:Workflow};
 const groups={recent:'最近使用',basic:'基础内容',lists:'列表',media:'媒体',advanced:'高级内容'};
 export function RichPopup({anchor,children,className='',above=false,onEscape}:{anchor:AnchorRect,children:React.ReactNode,className?:string,above?:boolean,onEscape?:()=>void}){
  const ref=useRef<HTMLDivElement>(null),[position,setPosition]=useState({left:anchor.left,top:anchor.bottom+8});

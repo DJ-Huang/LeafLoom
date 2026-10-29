@@ -27,6 +27,16 @@
 
 サーバールートや子に可視の `leafloom.ignore` を置き、Gitignore 形式で除外できます。先頭行は厳密に `# leafloom-ignore v1` とし、子ルールや `!` で再包含します。読み取りに NAS の書き込み権限は不要。全走査成功時に反映し、原本・ID・参照を保持します。
 
+### MCP で通常の添付をアップロード
+
+Base64 一括送信には、この変更を含むビルドが必要です。
+
+ナレッジベースの添付は `vault_files_update` の `request.action="upload"` を使います。ChatGPT では `source="files"` とホストが提供するトップレベルの `files` 配列を優先します。ローカルクライアントは `source="base64"`、`name`、`data_base64`、元バイト列の `sha256` により 2 MiB 以下を一括送信できます。それ以上は begin/chunk/commit を使います。`folder` を省略すると設定済み添付フォルダーを使い、`Comics/Project/assets` などの保管庫内相対パスも指定できます。
+
+`vault_index_status` の `workspace_revision` と一意の `operation_id` が必要です。同一引数の再試行では同じ ID を使います。結果は保存先、サイズ、SHA-256、リビジョン、`markdown_link` を返し、画像には `markdown_embed` も返します。`vault_files` の stat に `source_note` を指定するとノート相対リンクを取得できます。ノートの現在のリビジョンを使って Markdown を更新してください。同名の元ファイルは保持されます。
+
+Design Studio のインポートや Feishu の一時転送しか表示されない場合、サーバーの `tools/list` に `vault_files` と `vault_files_update` があるか確認します。更新済みバックエンドの再起動に加え、クライアントのプラグインツール一覧を更新／再スキャンしてください。LeafLoom の再起動だけではクライアントのキャッシュは更新されません。保管庫の書き込み権限も確認してください。通常の添付に Feishu 権限は不要です。[MCP ファイルツール](mcp.md)を参照してください。
+
 ## 完了後の状態
 
 背景更新では絞り込み・選択・スクロールと下書きを保持します。ページの版が古ければ **一覧が更新されました。最新を表示** を案内し、勝手に先頭へ戻りません。原本は既存の場所に残し、概要は原本とキャッシュを区別します。未準備のローカル容量はゼロではなく不明です。

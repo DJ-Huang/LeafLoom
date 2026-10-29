@@ -27,6 +27,16 @@
 
 服务器根目录或子目录可放可见的 `leafloom.ignore`，使用 Gitignore 风格规则排除附件。首行必须精确为 `# leafloom-ignore v1`，子规则和 `!` 可重新纳入。读取规则不要求 NAS 写权限；完整成功后应用排除，保留原文件、ID 和既有引用。
 
+### 通过 MCP 上传普通附件
+
+Base64 一次上传需要包含此改动的源码版或后续版本。
+
+知识库普通附件使用 `vault_files_update`，设置 `request.action="upload"`。ChatGPT 优先使用 `source="files"` 和宿主提供的顶层 `files` 数组。本地客户端也可用 `source="base64"`、`name`、`data_base64`、原始字节的 `sha256` 一次上传不超过 2 MiB 的文件；更大的文件使用 begin/chunk/commit。省略 `folder` 时使用配置的附件目录，也可指定知识库内相对目录，例如 `Comics/Project/assets`。
+
+先从 `vault_index_status` 获取 `workspace_revision`，每次写入使用唯一 `operation_id`，相同请求重试时保留原 ID。上传结果返回实际路径、大小、SHA-256、版本及 `markdown_link`，图片另返回 `markdown_embed`。通过 `vault_files` 的 stat 和 `source_note` 获取相对文档的引用，再按当前文档版本写入 Markdown。同名原文件会保留。
+
+如果客户端只显示 Design Studio 导入或飞书临时传输，检查服务端 `tools/list` 是否包含 `vault_files` 和 `vault_files_update`。更新后重启后端，并刷新／重新扫描客户端插件工具目录；仅重启 LeafLoom 不会刷新客户端缓存。另行检查知识库写入权限，无需为普通附件授权飞书。详见 [MCP 文件工具](mcp.md)。
+
 ## 完成后的表现
 
 后台发现保留筛选、选择、滚动与资料草稿。分页快照过期时显示 **列表已更新，查看最新内容**，不会自动跳回首页。原件仍在原本的本机或服务器位置；概览区分原件与预览缓存，尚未建立本机索引时容量显示未知而不是零。

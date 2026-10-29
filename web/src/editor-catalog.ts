@@ -1,6 +1,7 @@
-export type InsertId='text'|'h1'|'h2'|'h3'|'bullet'|'ordered'|'todo'|'quote'|'divider'|'code'|'table'|'image'|'file'|'link'|'wiki'|'math'|'mermaid';
+export type InsertId='database'|'text'|'h1'|'h2'|'h3'|'bullet'|'ordered'|'todo'|'quote'|'divider'|'code'|'table'|'image'|'file'|'link'|'wiki'|'math'|'mermaid';
 export type InsertCommand={id:InsertId,label:string,description:string,aliases:string,icon:string,group:'basic'|'insert'|'technical',category:'basic'|'lists'|'media'|'advanced'};
 export const insertCommands:readonly InsertCommand[]=[
+ {id:'database',label:'db.insert',description:'db.insertHelp',aliases:'database base gallery timeline 数据库 画廊 时间线',icon:'▦',group:'insert',category:'advanced'},
  {id:'text',label:'正文',description:'开始写下你的想法',aliases:'text paragraph 正文 段落',icon:'T',group:'basic',category:'basic'},
  {id:'h1',label:'一级标题',description:'醒目的大标题',aliases:'h1 heading title 标题',icon:'H1',group:'basic',category:'basic'},
  {id:'h2',label:'二级标题',description:'划分章节与主题',aliases:'h2 heading title 标题',icon:'H2',group:'basic',category:'basic'},

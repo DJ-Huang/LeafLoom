@@ -5,7 +5,7 @@
 .dw-source-notice{padding:8px 14px;background:#fff4d8;color:#78581f;font-size:11px;border-bottom:1px solid #eadab3}
 
 /* A quiet, consistent shell keeps the artwork as the visual focus. */
-.design-workbench{--dw-focus:#3973db;--dw-selection:color-mix(in srgb,var(--dw-focus) 11%,var(--paper));font-size:12px}
+.design-workbench{--dw-focus:var(--primary);--dw-selection:color-mix(in srgb,var(--dw-focus) 11%,var(--paper));font-size:12px}
 .design-workbench button{min-height:28px;border-radius:5px;font-size:11px}
 .design-workbench button:focus-visible,.design-workbench input:focus-visible,.design-workbench select:focus-visible,.design-workbench textarea:focus-visible{outline:2px solid var(--dw-focus);outline-offset:2px}
 .dw-toolbar{min-height:52px;gap:12px;padding:8px 14px;background:var(--paper)}
@@ -86,7 +86,7 @@
 @media(max-width:760px){.dw-toolbar-group strong{max-width:160px}.dw-toolbar-group:first-child{flex:1}.dw-save-status{order:1}.dw-toolbar-group:not(:first-child){order:2}.dw-toolbar-group+.dw-toolbar-group{border-left:0;padding-left:0}.dw-body{overflow:auto}.dw-sidebar{width:180px;min-width:180px}.dw-inspector{width:220px;min-width:220px}.dw-canvas{min-width:300px}}
 
 /* Studio controls use their own UI scale, independent of document typography. */
-.design-workbench{--dw-ui-font:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Arial,sans-serif;--dw-control-bg:color-mix(in srgb,var(--sidebar) 76%,var(--paper));font-family:var(--dw-ui-font);font-size:12px;line-height:1.5;font-weight:400;letter-spacing:normal}
+.design-workbench{--dw-ui-font:var(--font-ui);--dw-control-bg:color-mix(in srgb,var(--sidebar) 76%,var(--paper));font-family:var(--dw-ui-font);font-size:12px;line-height:1.5;font-weight:400;letter-spacing:normal}
 .design-workbench :is(button,input,select,textarea){font-family:var(--dw-ui-font);letter-spacing:normal}
 .design-workbench button{font-size:12px;line-height:1.35;min-height:30px;transition:background .12s,border-color .12s,color .12s}
 .design-workbench button:disabled{cursor:not-allowed;opacity:.45}
@@ -216,7 +216,7 @@
 
 /* Workbench hierarchy: document identity → editing tools → delivery actions.
    Keep these tokens local so authored pages and the host theme stay independent. */
-.design-workbench{container-type:inline-size;container-name:studio-workbench;--dw-focus:#356f64;--dw-selection:color-mix(in srgb,var(--dw-focus) 10%,var(--paper));--dw-control-bg:color-mix(in srgb,var(--sidebar) 65%,var(--paper));--dw-subtle-line:color-mix(in srgb,var(--line) 65%,transparent)}
+.design-workbench{container-type:inline-size;container-name:studio-workbench;--dw-focus:var(--primary);--dw-selection:color-mix(in srgb,var(--dw-focus) 10%,var(--paper));--dw-control-bg:color-mix(in srgb,var(--sidebar) 65%,var(--paper));--dw-subtle-line:color-mix(in srgb,var(--line) 65%,transparent)}
 .dw-toolbar{gap:14px;min-height:60px;padding:10px 16px;box-sizing:border-box;flex-wrap:wrap}
 .dw-toolbar .dw-project-identity{gap:8px;margin:0;min-width:0}
 .dw-project-identity strong{font-size:13px;font-weight:650;letter-spacing:-.2px;max-width:200px;white-space:nowrap}
@@ -339,5 +339,51 @@
 @media(prefers-reduced-motion:reduce){.dw-presentation-controls{transition:none}}
 
 .dw-export-modal{width:min(620px,calc(100vw - 32px))}.dw-export-body{padding:14px 20px;max-height:min(65vh,650px);overflow:auto}.dw-export-body>.dw-hint{font-size:12px}.dw-export-select{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0 8px}.dw-export-select>div{display:flex;gap:8px}.dw-export-pages{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px}.dw-export-page{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}.dw-export-page:last-child{border-bottom:0}.dw-export-page input{accent-color:var(--accent)}.dw-export-page span{display:flex;flex-direction:column;gap:3px}.dw-export-page small{color:var(--muted)}.dw-export-warning{background:var(--selected);border-radius:6px;padding:10px 12px;line-height:1.5;margin:12px 0}.dw-export-warning p{margin:5px 0}.dw-export-warning button{margin:4px 6px 0 0}
+
+/* Keep workbench chrome in the shared palette without affecting page artwork. */
+.design-workbench{--dw-panel:var(--paper);--dw-subtle-line:var(--line-soft);--dw-canvas:var(--sidebar)}
+.design-workbench .dw-canvas{background:var(--sidebar)}
+.design-workbench .dw-breadcrumbs{background:var(--paper);border-color:var(--line);color:var(--muted)}
+.design-workbench .dw-mode-switch{background:var(--surface);border-color:var(--line)}
+.design-workbench .dw-mode-switch>button.active{background:var(--paper);color:var(--ink);box-shadow:var(--shadow-sm)}
+.design-workbench .dw-tabs button.active{color:var(--ink);border-bottom-color:var(--ink)}
+.design-workbench .dw-toolbar-group>button:not(.dw-icon):not(.active){background:var(--paper)}
+.dw-mobile-panels{display:none}
+.dw-insert-grid button{border-color:var(--line);background:var(--surface);border-radius:var(--radius);min-width:0}
+.dw-insert-grid button:hover{border-color:var(--border);background:var(--hover)}
+.dw-insert-content h4{color:var(--ink-secondary);font-size:12px;font-weight:550}
+.dw-history>div{flex-wrap:wrap}
+@container studio-workbench (max-width:700px){
+ .dw-mobile-panels{display:flex;flex-shrink:0;gap:4px;padding:7px 12px;background:var(--paper);border-bottom:1px solid var(--line)}
+ .dw-mobile-panels button{flex:1;border:0;background:transparent;padding:7px 10px;color:var(--muted);font-size:12px}
+ .dw-mobile-panels button[aria-pressed=true]{background:var(--selected);color:var(--ink);font-weight:550}
+ .dw-body{position:relative;overflow:hidden;min-width:0}
+ .design-workbench>.dw-body>.dw-sidebar,.design-workbench>.dw-body>.dw-inspector{display:none}
+ .design-workbench[data-mobile-panel=layers]>.dw-body>.dw-sidebar,.design-workbench[data-mobile-panel=inspector]>.dw-body>.dw-inspector{display:flex;position:absolute;inset:0;z-index:5;width:100%;min-width:0;max-width:100%;border:0;background:var(--paper)}
+ .dw-canvas{min-width:0;width:100%}
+ .dw-toolbar{padding:8px 12px;gap:7px 10px}
+ .dw-toolbar .dw-project-identity{flex:1 1 130px;min-width:0}
+ .dw-project-identity strong{max-width:160px}
+ .dw-toolbar .dw-mode-switch{margin-left:auto}
+ .dw-toolbar .dw-tools{border:0;padding-left:0}
+ .dw-toolbar .dw-authoring-actions{border:0;padding-left:0;gap:3px}
+ .dw-toolbar .dw-delivery-actions{margin-left:auto;gap:6px}
+ .dw-toolbar .dw-save-status{flex-basis:100%;justify-content:flex-end;margin:0;font-size:10px}
+ .dw-canvas-heading{padding:6px 10px}
+ .dw-canvas-heading>span{flex:1 1 100%;font-size:11px}
+ .dw-canvas-controls{width:100%;justify-content:flex-end;gap:3px}
+ .dw-canvas-controls button{font-size:11px}
+ .dw-sidebar>.dw-tabs,.dw-inspector>.dw-tabs{justify-content:space-around}
+ .dw-inspector-scroll{padding:0 18px 24px}
+ .is-preview .dw-mobile-panels{display:none}
+ .design-workbench.is-preview>.dw-body>.dw-sidebar,.design-workbench.is-preview>.dw-body>.dw-inspector{display:none}
+ .dw-preview-toolbar{gap:7px;padding:10px 12px;max-width:100%;box-sizing:border-box}
+ .dw-preview-toolbar select{min-width:0;max-width:100%}
+}
+.design-workbench.is-presenting>.dw-mobile-panels{display:none}
+@media(max-width:600px){.dw-insert-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.dw-insert-content{padding:16px 20px}.dw-source-editor footer{flex-wrap:wrap}.design-studio-toolbar{padding:8px 12px}.design-studio-left{min-width:0;width:100%}.design-project-select{width:100%;min-width:0;max-width:100%;flex:1}.design-studio-actions{max-width:100%}.design-studio-actions button{font-size:11px}.dw-publish-variants{min-width:0}}
+@media(max-width:600px){.design-studio-left>.design-badge{display:none}.design-studio-left>.design-project-select{order:2;flex:1 1 100%;width:100%}.design-studio-left>button.primary{margin-left:auto}}
+.dw-export-modal input[type=checkbox]{accent-color:var(--primary)}
+@container studio-workbench (max-width:700px){.dw-canvas-controls>.dw-panel-toggle{display:none}}
 .dw-miaoda-associate{display:flex;gap:8px;margin:10px 0}.dw-miaoda-associate input{flex:1;min-width:0;border:1px solid var(--line);border-radius:6px;padding:7px;background:var(--paper);color:var(--accent)}.dw-export-body details summary{cursor:pointer;font-weight:600}.dw-export-warning a{color:var(--dw-focus);text-decoration:underline}
 .dw-platform-icon{width:20px;height:20px;flex-shrink:0;object-fit:contain}

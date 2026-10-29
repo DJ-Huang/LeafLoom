@@ -1,2 +1,26 @@
 .attachment-hub{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;overflow:hidden}.attachment-hub[hidden]{display:none}.attachment-view-switch{display:flex;gap:5px;padding:10px 30px;border-bottom:1px solid var(--line);background:var(--paper);flex-shrink:0}.attachment-view-switch button{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border:0;color:var(--muted);background:transparent}.attachment-view-switch button[aria-pressed=true]{background:var(--selected);color:var(--accent);font-weight:600}
 .ag-bar{border-bottom:1px solid var(--line);background:var(--paper);display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding-right:24px}.ag-bar .attachment-view-switch{border:0;flex:1;overflow-x:auto;white-space:nowrap}.ag-controls{display:flex;align-items:center;gap:5px}.ag-controls small{color:var(--muted);font-size:12px;margin-left:8px}.ag-controls button{padding:6px}.ag-dialog{max-width:660px}.ag-dialog fieldset{border:0;padding:24px;margin:0;display:grid;gap:12px}.ag-dialog label,.ag-members label{display:grid;gap:6px;font-size:13px}.ag-dialog textarea,.ag-dialog input:not([type=checkbox]),.ag-members select{width:100%;box-sizing:border-box}.ag-dialog p,.ag-members p{font-size:13px;color:var(--muted);line-height:1.6}.ag-dialog footer{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}.ag-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow:auto;font-size:11px}.ag-members>div{display:flex;gap:8px;flex-wrap:wrap}.aw-official{padding:16px 0;border-top:1px solid var(--line);font-size:13px;line-height:1.65}.aw-official img{width:100%;max-height:220px;object-fit:contain}.aw-official p{white-space:pre-wrap}.aw-file-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px}.aw-file-tags small{background:var(--paper-alt);border-radius:4px;padding:2px 5px;font-size:11px}.attachment-hub>.aw{min-height:0}.ag-bar+.attachment-workspace{min-height:0}
+
+.ag-bar{min-width:0}
+.ag-bar .attachment-view-switch{min-width:0;padding:10px 24px}
+.ag-controls{flex-shrink:0}
+.ag-controls small{font-size:11px}
+.ag-dialog input:focus,.ag-dialog textarea:focus{border-color:var(--focus)}
+@media(max-width:760px){.ag-bar{padding-right:12px;gap:0}.ag-bar .attachment-view-switch{padding:8px 12px}.ag-controls small{display:none}}
+/* Fieldset's intrinsic minimum must not stretch a narrow native dialog. */
+.ag-dialog.modal{width:min(660px,calc(100vw - 24px));max-width:calc(100vw - 24px)}
+.ag-dialog fieldset{min-width:0}
+.ag-dialog label,.ag-dialog select{min-width:0;max-width:100%}
+.ag-dialog p{overflow-wrap:anywhere}
+.ag-dialog label:has(>input[type=checkbox]){display:flex;align-items:center;gap:8px}
+.ag-dialog input[type=checkbox]{width:14px;height:14px;margin:0;flex-shrink:0}
+.ag-dialog input[type=checkbox],.ag-members input[type=checkbox]{accent-color:var(--primary)}
+.ag-dialog.modal[open]{display:flex;flex-direction:column;overflow:hidden;max-height:86dvh}
+.ag-dialog>header{flex-shrink:0}
+.ag-dialog-fields{flex:1;display:block;padding:22px 24px;min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain}
+.ag-dialog-fields fieldset>p{margin:0;font-size:12px;line-height:1.7}
+.ag-dialog footer{background:var(--paper);border-top:1px solid var(--line);flex-shrink:0;padding:14px 24px;gap:8px}
+.ag-dialog>p{margin:0;padding:0 24px 18px;font-size:12px}
+@media(max-width:760px){.ag-dialog-fields{padding:20px}.ag-dialog footer{padding:12px 20px}.ag-dialog label{font-size:12px}}
+
+.ag-dialog-fields>fieldset{display:grid;gap:12px;border:0;padding:0;margin:0;min-width:0}

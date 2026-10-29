@@ -182,3 +182,5 @@ cd LeafLoom
 MIT © 2026 DJ。依存関係とモデルはそれぞれのライセンスを保持します。 [License](../../LICENSE)
 
 Technical compatibility: `vault-rag`, `VAULT_RAG_HOME`, `.vault-rag/`, HTTP MCP `/mcp`.
+
+Markdown ノートをローカルデータベースとして整理。テーブル、リスト、ボード、ギャラリー、ドラッグ可能なタイムラインに対応。[データベースガイド](GUIDE.md#ノートデータベース)。

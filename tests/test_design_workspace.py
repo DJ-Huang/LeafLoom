@@ -400,6 +400,84 @@ class DesignWorkspaceTests(unittest.TestCase):
             self.assertEqual(bundled['pages'][0]['authoredContext'], document['pages'][0]['authoredContext'])
         self.assertEqual(source_path.read_bytes(), source_bytes)
 
+    def test_selected_export_closes_dependencies_and_reports_unselected_pages(self):
+        self.prepare_library()
+        saved = self.docs.read(self.directory)
+        document = copy.deepcopy(saved['document'])
+        first = document['pages'][0]
+        first['nodes'].append({'id': 'card-instance', 'type': 'instance', 'name': 'Card',
+                               'style': {}, 'props': {'componentId': 'card'}, 'children': []})
+        first['nodes'].append({'id': 'link-unused', 'type': 'button', 'name': 'Next',
+                               'style': {}, 'props': {'navigateTo': 'unused-page'}, 'children': []})
+        first['nodes'].append({'id': 'old-link', 'type': 'element', 'name': 'Imported link',
+                               'style': {}, 'props': {'authored': True, 'tag': 'a', 'attributes': {
+                                   'href': 'other.html', 'data-course-page': 'unused-page'}}, 'children': []})
+        document['metadata'] = {'unrelated': '__STUDIO_ASSET__/private/old.png'}
+        # The imported helper exists only on disk and references an asset by ID.
+        document['scripts']['animate']['source'] = "import { helper } from './disk-helper.js'; export function mount(ctx) { helper(ctx); }"
+        module = self.root / self.directory / 'scripts/disk-helper.js'
+        module.parent.mkdir(parents=True, exist_ok=True)
+        module.write_text("export function helper(ctx) { ctx.assets.resolve('disk-only'); }")
+        disk_asset = self.root / self.directory / 'Design/Assets/disk.png'
+        disk_asset.write_bytes(b'disk-module-asset')
+        document['assets']['disk-only'] = {'id': 'disk-only', 'name': 'disk', 'path': 'Design/Assets/disk.png'}
+        saved = self.docs.apply(self.directory, [{'type': 'document.replace', 'document': document}], saved['revision'], 'selected-export-source')
+        source_path = self.root / self.directory / 'Design/studio/project.json'
+        before = source_path.read_bytes()
+        page_id = first['id']
+        report = self.workspace.export_preflight(self.directory, [page_id], saved['revision'])
+        self.assertEqual({p['id'] for p in report['missing_pages']}, {'embedded', 'unused-page'})
+        self.assertTrue(report['dynamic_warning'])
+        with patch.object(self.workspace, 'session', return_value={'origin': 'http://localhost:1000', 'id': 'session'}):
+            exported = self.workspace.export(self.directory, [page_id], saved['revision'])
+        with zipfile.ZipFile(self.root / exported['path']) as archive:
+            portable = json.loads(archive.read('document.js').decode().removeprefix('window.STUDIO_DOCUMENT=').rstrip(';\n'))
+            self.assertEqual([page['id'] for page in portable['pages']], [page_id])
+            self.assertEqual(set(portable['assets']), {'cat', 'disk-only'})
+            self.assertEqual(set(portable['components']), {'card', 'child'})
+            self.assertEqual(set(portable['scripts']), {'animate', 'scripts/disk-helper.js'})
+            self.assertNotIn('metadata', portable)
+            imported_link = next(n for n in _walk(portable['pages'][0]['nodes']) if n['id'] == 'old-link')
+            self.assertEqual(imported_link['props']['attributes']['href'], '#')
+            self.assertIn('Design/Assets/cat.png', archive.namelist())
+            self.assertIn('Design/Assets/disk.png', archive.namelist())
+            self.assertNotIn('Design/Assets/unused.png', archive.namelist())
+            embedded = next(n for n in _walk([portable['components']['card']['node']]) if n['id'] == 'embed-instance')
+            self.assertEqual(embedded['type'], 'container')
+        self.assertEqual(source_path.read_bytes(), before)
+        with self.assertRaisesRegex(ValueError, 'Select at least one'):
+            self.workspace.export(self.directory, [])
+        with self.assertRaisesRegex(ValueError, 'unknown page'):
+            self.workspace.export(self.directory, ['not-a-page'])
+        with self.assertRaises(ConflictError):
+            self.workspace.export(self.directory, [page_id], 'stale')
+        (self.root / self.directory / 'Design/Assets/cat.png').unlink()
+        with self.assertRaisesRegex(ValueError, 'Missing export resource'):
+            self.workspace.export(self.directory, [page_id])
+
+    def test_selected_export_preserves_binding_variants_and_used_fonts(self):
+        from vault_rag.design_export_selection import select_export
+        document = copy.deepcopy(self.project['document'])
+        page = document['pages'][0]
+        page['nodes'] = [{'id': 'bound-image', 'type': 'image', 'style': {'fontFamily': 'Display Face'},
+                          'props': {'bindingKey': 'photo', 'assetId': 'first'}, 'children': []}]
+        document['pages'].append({'id': 'other', 'name': 'Other', 'width': 20, 'height': 20, 'nodes': []})
+        document['assets'] = {name: {'id': name, 'name': name, 'path': name + '.png'} for name in ('first', 'second', 'unused')}
+        document['assets']['font'] = {'id': 'font', 'name': 'font', 'fontFamily': 'Display Face', 'path': 'font.woff2'}
+        document['bindings'] = {'photo': {'key': 'photo', 'kind': 'image', 'value': 'first', 'revision': 1},
+                                'unused': {'key': 'unused', 'kind': 'image', 'value': 'unused', 'revision': 1}}
+        document['variants'] = {'alternate': {'id': 'alternate', 'values': {
+            'photo': {'value': 'second', 'sourceRevision': 1}, 'unused': {'value': 'unused', 'sourceRevision': 1}},
+            'layout': {'bound-image': {'width': 10}, 'elsewhere': {'width': 20}}, 'pageLayout': {'other': {'width': 20}}}}
+        result, _ = select_export(document, ['other', page['id']])
+        self.assertEqual([item['id'] for item in result['pages']], [page['id'], 'other'])
+        result, _ = select_export(document, [page['id']])
+        self.assertEqual(set(result['assets']), {'first', 'second', 'font'})
+        self.assertEqual(set(result['bindings']), {'photo'})
+        self.assertEqual(set(result['variants']['alternate']['values']), {'photo'})
+        self.assertEqual(set(result['variants']['alternate']['layout']), {'bound-image'})
+        self.assertEqual(result['variants']['alternate']['pageLayout'], {})
+
     def test_library_collects_unregistered_responsive_assets_without_external_paths(self):
         document = copy.deepcopy(self.project['document'])
         for name in ('small.png', 'large.png', 'poster.png'):

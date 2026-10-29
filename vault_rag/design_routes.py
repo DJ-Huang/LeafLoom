@@ -86,7 +86,7 @@ def design_router(studio, feishu=None):
     @router.post('/export')
     async def export(request: Request):
         body = await request.json(); guard(body)
-        return await run(body, workspace.export, body['directory'])
+        return await run(body, workspace.export, body['directory'], body.get('page_ids'), body.get('expected_revision'))
 
     @router.post('/export/preflight')
     async def export_preflight(request: Request):

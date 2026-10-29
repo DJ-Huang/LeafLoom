@@ -51,11 +51,12 @@ function consume<T>(entry:Pending,signal?:AbortSignal):Promise<T>{
 export async function api<T=any>(path:string,body?:any,method?:string,options:{signal?:AbortSignal,force?:boolean}={}):Promise<T>{
  if(options.signal?.aborted)throw aborted();
  const verb=method||(body===undefined?'GET':'POST'),readable=(verb==='GET'&&!path.startsWith('ai/')&&!/^(session|status|bootstrap|records|preferences|mcp-access|feishu)(\?|$)/.test(path))||(verb==='POST'&&path==='query');
- const resource=path+(verb==='POST'&&path==='query'?'?query='+encodeURIComponent(JSON.stringify(body)):'');
+ const databaseQuery=verb==='POST'&&path==='bases/query';
+ const resource=path+(verb==='POST'&&(path==='query'||databaseQuery)?'?query='+encodeURIComponent(JSON.stringify(body)):'');
  const key=scope+'\n'+resource,previous=cache.get(key);
  if(readable&&previous?.valid&&!options.force){cache.delete(key);cache.set(key,previous);return previous.value;}
  const generation=versions.get(key)||0,requestKey=key+'\n'+generation;
- if(verb==='GET'||readable){const pending=requests.get(requestKey);if(pending&&!pending.controller.signal.aborted)return consume<T>(pending,options.signal);}
+ if(verb==='GET'||readable||databaseQuery){const pending=requests.get(requestKey);if(pending&&!pending.controller.signal.aborted)return consume<T>(pending,options.signal);}
  const controller=new AbortController();
  const work=async()=>{
   const headers:Record<string,string>={'Content-Type':'application/json','X-Vault-CSRF':csrf};
@@ -63,25 +64,29 @@ export async function api<T=any>(path:string,body?:any,method?:string,options:{s
   const fetchRead=()=>fetch('/api/'+path,{method:verb,headers,body:body===undefined?undefined:JSON.stringify(body),signal:controller.signal});
   let response:Response;
   try{response=await fetchRead();}catch(error){if(verb!=='GET'||controller.signal.aborted)throw error;response=await fetchRead();}
-  if(verb==='GET'&&response.status===503){await new Promise(resolve=>setTimeout(resolve,150));response=await fetchRead();}
   if(response.status===304&&!previous){delete headers['If-None-Match'];response=await fetch('/api/'+path,{headers,signal:controller.signal});}
   let data=response.status===304?previous!.value:await response.json();
+  if(verb==='GET'&&response.status===503&&!data.pending){await new Promise(resolve=>setTimeout(resolve,150));response=await fetchRead();data=await response.json();}
   const pendingUntil=Date.now()+60000;
   while(response.status===503&&data.pending&&Date.now()<pendingUntil){
    await new Promise<void>((resolve,reject)=>{
     const cancel=()=>{clearTimeout(timer);reject(aborted());};
-    const timer=setTimeout(()=>{controller.signal.removeEventListener('abort',cancel);resolve();},600);
+    const delay=Math.max(25,Math.min(1000,Number(data.retry_after_ms)||600));
+    const timer=setTimeout(()=>{controller.signal.removeEventListener('abort',cancel);resolve();},delay);
     if(controller.signal.aborted){cancel();return;}controller.signal.addEventListener('abort',cancel,{once:true});
    });
    response=await fetchRead();data=await response.json();
   }
   if(!response.ok&&response.status!==304)throw Object.assign(new Error(data.error||(response.status===404&&path==='trash/clear'?"当前后台服务尚未加载清空功能，请重启服务后重试":typeof data.detail==='string'?data.detail:"操作未完成")),{conflict:response.status===409,status:response.status});
   if(readable&&scope+'\n'+resource===key&&(versions.get(key)||0)===generation)remember(key,{value:data,etag:response.headers.get('ETag')||previous?.etag,bytes:typeof data.text==='string'?data.text.length*2+512:JSON.stringify(data).length*2,valid:true});
-  if(verb!=='GET'&&verb!=='HEAD'&&!path.startsWith('ai/')&&!path.startsWith('html-')&&!path.startsWith('feishu')&&!['activity','preferences','demo','query','knowledge-search','html-preview','choose-directory','model-directory/open','model-prepare','reindex','skills/wiki-search/install'].includes(path))invalidate({type:'write',paths:[body?.path,body?.source,body?.destination,data.path].filter(Boolean)});
+  if(verb!=='GET'&&verb!=='HEAD'&&!data.dry_run&&data.changed!==false&&!path.startsWith('ai/')&&!path.startsWith('html-')&&!path.startsWith('feishu')&&!['activity','preferences','demo','query','knowledge-search','bases/query','html-preview','choose-directory','model-directory/open','model-prepare','reindex','skills/wiki-search/install'].includes(path)){
+   const recordOnly=path==='bases/commands'&&body?.command?.type?.startsWith('record.')&&body.command.type!=='record.move';
+   invalidate({type:'write',paths:(recordOnly?[body.command.type==='record.update'||body.command.type==='record.trash'?body.command.path:undefined,data.path]:[body?.path,body?.source,body?.destination,data.path,...(path==='bases/commands'&&body?.command?.type==='board.group.remove'?(body.command.records||[]).map((record:{path:string})=>record.path):[])]).filter(Boolean)});
+  }
   return data;
  };
  const entry:Pending={controller,users:0,settled:false,promise:Promise.resolve()};
  entry.promise=work().finally(()=>{entry.settled=true;if(requests.get(requestKey)===entry)requests.delete(requestKey);});
- if(verb==='GET'||readable)requests.set(requestKey,entry);return consume<T>(entry,options.signal);
+ if(verb==='GET'||readable||databaseQuery)requests.set(requestKey,entry);return consume<T>(entry,options.signal);
 }
 export const media=(path:string,download=false,root?:string)=>{if(!resources.has(path))resources.set(path,resourceVersion);return '/api/media?path='+encodeURIComponent(path)+'&v='+resources.get(path)+(download?'&download=true':'')+(root?'&root='+encodeURIComponent(root):'');};

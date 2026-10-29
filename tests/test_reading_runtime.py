@@ -89,8 +89,9 @@ class ReadingRuntimeTests(unittest.TestCase):
         with patch.object(Path,'read_bytes',side_effect=AssertionError('unchanged note read')):
             self.assertTrue(runtime.ensure_metadata());runtime.catalog.prepare_metadata()
         self.put('outside.md','---\naliases: [NewAlias]\n---\n# Changed');runtime.catalog.apply(['outside.md'])
-        self.assertFalse(runtime.catalog.metadata_ready)
-        runtime.ensure_metadata();self.wait(lambda:runtime.catalog.metadata_ready)
+        self.assertTrue(runtime.catalog.metadata_ready)
+        with patch.object(runtime.catalog,'prepare_metadata',side_effect=AssertionError('incremental edit must not rescan the vault')):
+            self.assertTrue(runtime.ensure_metadata())
         self.assertEqual(runtime.catalog.resolve('NewAlias'),['outside.md'])
         self.assertFalse(runtime.catalog.resolve('Alias'))
 
