@@ -187,7 +187,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         return json_response({'error':'Attachment server is unavailable','error_code':error.code,'state':error.state},
                              503 if error.state=='unreachable' else 409)
     from vault_rag.design_routes import design_router
-    app.include_router(design_router(design))
+    app.include_router(design_router(design, feishu))
     @app.middleware('http')
     async def local_security(request,call_next):
         host=request.headers.get('host','')

@@ -7,9 +7,14 @@ from fastapi.responses import FileResponse
 from vault_rag.local_state import ConflictError
 
 
-def design_router(studio):
+def design_router(studio, feishu=None):
     router = APIRouter(prefix='/api/design')
     documents, workspace = studio.documents, studio.workspace
+    if feishu is not None:
+        from vault_rag.design_miaoda import MiaodaPublisher
+        miaoda = MiaodaPublisher(studio, feishu)
+    else:
+        miaoda = None
 
     def guard(body):
         if not isinstance(body, dict) or body.get('root') != str(studio.config.root):
@@ -82,6 +87,51 @@ def design_router(studio):
     async def export(request: Request):
         body = await request.json(); guard(body)
         return await run(body, workspace.export, body['directory'])
+
+    @router.post('/export/preflight')
+    async def export_preflight(request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, workspace.export_preflight, body['directory'], body.get('page_ids'), body.get('expected_revision'))
+
+    @router.get('/miaoda/apps')
+    async def miaoda_apps(root: str, directory: str):
+        guard({'root': root})
+        return await run({'root': root}, miaoda.applications, directory)
+
+    @router.post('/miaoda/associate')
+    async def miaoda_associate(request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, miaoda.associate, body['directory'], body['app_id'])
+
+    @router.post('/miaoda/publish')
+    async def miaoda_publish(request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, miaoda.start, body)
+
+    @router.get('/miaoda/jobs')
+    async def miaoda_jobs(root: str, directory: str):
+        guard({'root': root})
+        return await run({'root': root}, miaoda.jobs, directory)
+
+    @router.get('/miaoda/jobs/{job_id}')
+    async def miaoda_job(job_id: str, root: str):
+        guard({'root': root})
+        return await run({'root': root}, miaoda.get, job_id)
+
+    @router.post('/miaoda/jobs/{job_id}/refresh')
+    async def miaoda_refresh(job_id: str, request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, miaoda.refresh, job_id)
+
+    @router.post('/miaoda/jobs/{job_id}/retry')
+    async def miaoda_retry(job_id: str, request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, miaoda.retry, job_id)
+
+    @router.post('/miaoda/jobs/{job_id}/acknowledge')
+    async def miaoda_acknowledge(job_id: str, request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, miaoda.acknowledge, job_id, body.get('confirmed'))
 
     @router.post('/publish/preflight')
     async def publishing_preflight(request: Request):
