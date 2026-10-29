@@ -68,15 +68,16 @@ class RagProcess:
             process.stdout.close()
             if owned and self.on_status:self.on_status({'type':'exit','error':error})
 
-    def request(self,operation,**args):
+    def request(self,operation,timeout=None,**args):
         self.start();identifier=uuid.uuid4().hex;pending=queue.Queue()
         with self.lock:self.pending[identifier]=(self.process,operation,pending)
         try:
-            if operation in ('dense','prepare') and any(op=='build' for _,op,_ in self.pending.values()):self.cancel()
+            if operation in ('dense','prepare','asset_dense') and any(op=='build' for _,op,_ in self.pending.values()):self.cancel()
             if not self.send({'type':'request','id':identifier,'operation':operation,'config':dict(self.config.data),**args}):raise RuntimeError('RAG worker unavailable')
             # Large first-time downloads can exceed ten minutes. The worker's
             # status stream and exit handling remain live while preparation waits.
-            value=pending.get(timeout=None if operation=='prepare' else 600)
+            try:value=pending.get(timeout=timeout if timeout is not None else (None if operation=='prepare' else 600))
+            except queue.Empty:raise TimeoutError('RAG request timed out') from None
             if value.get('cancelled'):raise RagCancelled('RAG task cancelled')
             if value.get('error'):raise RuntimeError(value['error'])
             return value.get('result')

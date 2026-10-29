@@ -84,6 +84,8 @@ def renderer_available(format='png'):
 
 
 def plan(document, page_ids, variant_ids=None, scale=1, format='png'):
+    from vault_rag.design_presenter import audience_document
+    document = audience_document(document)
     validate_inline_media(document)
     if format not in ('png', 'pdf'):
         raise ValueError('Choose PNG or PDF')

@@ -3,19 +3,26 @@ import {api} from './api';
 import {t,useLocale} from './i18n';
 import {SettingGroup,SettingRow,StatusNotice} from './settings-ui';
 import {AppUpdate,UpdateInfo} from './app-update';
+import type {PresenterDesktop} from './design-presenter-types';
 
 export type DesktopInfo={version:string,platform:string,openAtLogin:boolean,error?:string};
 export type TunnelInfo={tunnelId:string,enabled:boolean,keySaved:boolean,state:string,error:string};
+export type AttachmentCredentialStatus={state:string,saved:boolean,attempts:number,retry_scheduled:boolean,next_retry_at:number|null};
 declare global {
  interface Window {
   leafloomPrepareQuit?:()=>Promise<void>;
   leafloomDesktop?:{
+   presenter:PresenterDesktop;
    appInfo:()=>Promise<DesktopInfo>;
    publishDesign:(jobId:string)=>Promise<unknown>;
    updateStatus:()=>Promise<UpdateInfo>;
    checkUpdate:()=>Promise<UpdateInfo>;
    downloadUpdate:()=>Promise<UpdateInfo>;
    installUpdate:()=>Promise<UpdateInfo>;
+   saveAttachmentCredential:(value:{storage_id:string,password:string})=>Promise<{password_saved:boolean,state:string}>;
+   clearAttachmentCredential:(value:{storage_id:string})=>Promise<{password_saved:boolean,state:string}>;
+   attachmentCredentialStatus:()=>Promise<AttachmentCredentialStatus>;
+   retryAttachmentCredentials:()=>Promise<AttachmentCredentialStatus>;
    tunnelStatus:()=>Promise<TunnelInfo>;
    saveTunnel:(value:{tunnelId:string,appKey?:string,enabled:boolean})=>Promise<TunnelInfo>;
    reconnectTunnel:()=>Promise<TunnelInfo>;

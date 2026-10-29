@@ -18,11 +18,13 @@ import zipfile
 from vault_rag.local_state import ConflictError, atomic_write, relative
 from vault_rag.attachment_migrations import ASSETS, SOURCE_MARKERS, SOURCE_RESOURCE_TYPES
 from vault_rag.attachment_references import OPAQUE_RESOURCE_TYPES, discover_project_dependencies
+from vault_rag.remote_webdav import RemoteStorageError
 
 
 class AttachmentWorkspace:
     def __init__(self, runtime, migrations):
         self.runtime=runtime;self.config=runtime.config;self.migrations=migrations
+        self.remote=None
         self.images=threading.BoundedSemaphore(2);self.lock=threading.RLock();self.guards={}
         self.protection_lock=threading.Lock();self.protection=None;self.downloads={};self.stops={};self.threads={}
 
@@ -47,22 +49,46 @@ class AttachmentWorkspace:
             with self.lock:self.protection=(stamp,time.monotonic(),protected)
             return protected
     def details(self,root,path):
-        files=self.files(root);path=relative(path);p=files.config.path_for(path);info=p.stat()
+        files=self.files(root);path=relative(path);metadata=None
+        if self.remote:
+            try:metadata=self.remote.stat(root,path=path)
+            except FileNotFoundError:pass
+            if metadata and metadata.get('storage_id',metadata.get('source_id','local'))!='local':
+                return {**metadata,'protected':False}
+        p=files.config.path_for(path);info=p.stat()
         if not p.is_file():raise ValueError('Select an attachment file')
         result={'path':path,'name':p.name,'size':info.st_size,'mtime':info.st_mtime,
                 'mime':mimetypes.guess_type(p.name)[0] or 'application/octet-stream',
                 'protected':path in self._protected(files)}
+        if metadata:
+            result={**metadata,**result}
         self.migrations._guard(root);self.config.path_for(path);return result
 
     def thumbnail(self,root,path):
         from PIL import Image, ImageOps, UnidentifiedImageError
         files=self.files(root);path=relative(path);source=files.config.path_for(path)
-        if source.suffix.lower() not in {'.png','.jpg','.jpeg','.gif','.webp','.bmp','.tif','.tiff','.avif'}:
+        if Path(path).suffix.lower() not in {'.png','.jpg','.jpeg','.gif','.webp','.bmp','.tif','.tiff','.avif'}:
             raise ValueError('Thumbnail format is unsupported')
+        remote=False
+        target=None
+        if self.remote:
+            try:item=self.remote.stat(root,path=path)
+            except FileNotFoundError:item=None
+            if item and item.get('storage_id',item.get('source_id','local'))!='local':
+                if item.get('state')=='missing':raise RemoteStorageError('remote_asset_missing','missing')
+                if item['size']>64*1024*1024:raise ValueError('Image is too large for a thumbnail')
+                identity=[root,item['asset_id'],item.get('etag'),item['size'],item.get('mtime')]
+                if item.get('content_generation',0):identity.append(item['content_generation'])
+                key=hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+                target=files.state_path('remote-attachment-thumbnails',key+'.webp')
+                if target.is_file():
+                    self.migrations._guard(root);self.config.path_for(path)
+                    return target
+                source=self.remote.materialize(root,asset_id=item['asset_id']);remote=True
         before=source.stat()
         if before.st_size>64*1024*1024:raise ValueError('Image is too large for a thumbnail')
         key=hashlib.sha256(json.dumps([root,path,before.st_size,before.st_mtime_ns,self.config.data.get('revision')]).encode()).hexdigest()
-        target=files.state_path('attachment-thumbnails',key+'.webp')
+        if target is None:target=files.state_path('attachment-thumbnails',key+'.webp')
         with self.images:
             target.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
             if not target.exists():
@@ -80,16 +106,21 @@ class AttachmentWorkspace:
                             data=io.BytesIO();picture.save(data,'WEBP',quality=78)
                 except (UnidentifiedImageError,OSError,Image.DecompressionBombWarning,Image.DecompressionBombError) as error:
                     raise ValueError('Image thumbnail is unavailable') from error
-                after=files.config.path_for(path).stat()
+                after=source.stat() if remote else files.config.path_for(path).stat()
                 self.migrations._guard(root)
                 if (before.st_size,before.st_mtime_ns,before.st_ino)!=(after.st_size,after.st_mtime_ns,after.st_ino):
                     raise ConflictError('Image changed while preparing its thumbnail')
                 atomic_write(target,data.getvalue())
                 entries=list(target.parent.glob('*.webp'))
-                if len(entries)>1024:
+                if not remote and len(entries)>1024:
                     for old in sorted(entries,key=lambda p:p.stat().st_mtime)[:len(entries)-1024]:
                         if old!=target:old.unlink(missing_ok=True)
         self.migrations._guard(root);self.config.path_for(path)
+        if remote:
+            current=self.remote.stat(root,asset_id=item['asset_id'])
+            if current.get('state')=='missing':raise RemoteStorageError('remote_asset_missing','missing')
+            if current.get('content_generation',0)!=item.get('content_generation',0):
+                raise ConflictError('Attachment availability changed while preparing its thumbnail')
         return target
 
     def operation(self,root,kind,paths,destination='',name=''):
@@ -130,7 +161,7 @@ class AttachmentWorkspace:
             if sum(t.is_alive() for t in self.threads.values())>=2:raise ConflictError('Wait for the current downloads to finish')
             key=uuid.uuid4().hex;stop=threading.Event();self.stops[key]=stop
             if guard is not None:self.guards[key]=guard
-            job={'id':key,'root':root,'revision':self.config.data.get('revision'),'state':'running','done':0,'total':len(paths),'created_at':time.time()}
+            job={'id':key,'root':root,'revision':self.config.data.get('revision'),'state':'running','done':0,'total':len(paths),'created_at':time.time(),'owner':'mcp' if guard is not None else 'local'}
             self._download_path(files,key,'job.json').parent.mkdir(parents=True,exist_ok=True,mode=0o700)
             self.downloads[key]=job;self._save_download(files,job)
             thread=threading.Thread(target=self._zip,args=(files,job,paths,stop),daemon=True)
@@ -170,6 +201,44 @@ class AttachmentWorkspace:
             job['error']=str(error) or 'Download cancelled'
         finally:
             partial.unlink(missing_ok=True);self._save_download(files,job)
+
+    def list_downloads(self,root):
+        files=self.files(root);directory=files.state_path('attachment-downloads');jobs=[]
+        if directory.exists():
+            for entry in directory.iterdir():
+                if not re.fullmatch('[0-9a-f]{32}',entry.name) or entry.is_symlink():continue
+                try:
+                    job=self._browser_download_record(root,entry.name)
+                    previous=job['state']
+                    alive=self.threads.get(entry.name,threading.Thread()).is_alive()
+                    if job['state']=='running' and not alive:job['state']='interrupted'
+                    if time.time()-job['created_at']>3600 and not alive and job['state']!='released':
+                        self._download_path(files,entry.name,'attachments.zip').unlink(missing_ok=True)
+                        job['state']='expired'
+                    if job['state']!=previous:self._save_download(files,job)
+                    # Browser jobs belong to the local session; MCP exports have
+                    # a separate authorization guard and must not leak here.
+                    if job.get('owner','local')!='local':continue
+                    jobs.append({k:v for k,v in job.items() if k not in {'root','revision'}})
+                except (OSError,ValueError,ConflictError,PermissionError):continue
+        return {'jobs':sorted(jobs,key=lambda j:j['created_at'],reverse=True)}
+
+    def _browser_download_record(self,root,key):
+        files=self.files(root)
+        job=json.loads(self._download_path(files,key,'job.json').read_text())
+        if job['root']!=root:raise ConflictError('Download belongs to another folder')
+        self._download_guard(job)
+        if job.get('owner','local')!='local':raise PermissionError('Download owner mismatch')
+        return job
+
+    def release_download(self,root,key):
+        job=self._browser_download_record(root,key)
+        if job.get('owner','local')!='local':raise PermissionError('Download owner mismatch')
+        if job['state']=='running':raise ConflictError('Stop the download before clearing it')
+        files=self.files(root)
+        self._download_path(files,key,'attachments.zip').unlink(missing_ok=True)
+        job['state']='released';self._save_download(files,job)
+        return {'id':key,'state':'released'}
 
     def download_status(self,root,key,cancel=False):
         files=self.files(root);record=self._download_path(files,key,'job.json')

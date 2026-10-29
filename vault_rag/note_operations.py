@@ -163,11 +163,17 @@ class NoteOperations:
             page = self.page(value['rows'], limit, cursor, key=['query', query])
             return {**value, **page, 'rows': page['results']}
 
+    def changed(self, paths):
+        # Called under config/files locks: never wait for catalog.update_lock.
+        # Catalog workers take that lock before snapshotting config, so doing
+        # synchronous catalog work here can deadlock after the file is committed.
+        # Keep queries honest until the existing worker refreshes their metadata.
+        self.runtime.catalog.metadata_ready = False
+        self.runtime.files_changed(*paths)
+        self.runtime.publish('files', paths)
+
     def saved(self, path, **extra):
-        # Apply the small local change before acknowledging it; metadata hydration
-        # and vector work remain asynchronous and use the existing runtime queues.
-        self.runtime.catalog.apply([path])
-        self.runtime.publish('files', [path])
+        self.changed([path])
         value = self.files.read(path)
         return {'ok': True, 'path': path, 'revision': value['etag'], 'saved': True,
                 'workspace_revision': self.workspace_revision,
@@ -235,8 +241,7 @@ class NoteOperations:
         with self.config.lock, self.files.lock:
             self.check_workspace(workspace_revision)
             result = self.files.create(relative(path), directory=True)
-            self.runtime.catalog.apply([result['path']])
-            self.runtime.publish('files', [result['path']])
+            self.changed([result['path']])
             return {'ok': True, **result, 'workspace_revision': self.workspace_revision}
 
     def _operation_state(self, kind, source, destination=''):
@@ -275,8 +280,7 @@ class NoteOperations:
                 raise ConflictError('Operation expired or its affected files changed; request a new preview')
             result = self.files.move(path, destination, expected_state=state) if kind == 'move' else self.files.delete(path, expected_snapshot=state['tree'])
             paths = [path, destination] if destination else [path]
-            self.runtime.catalog.apply(paths + list(state['edits']))
-            self.runtime.publish('files', paths + list(state['edits']))
+            self.changed(paths + list(state['edits']))
             return {'ok': True, **result, 'workspace_revision': workspace_revision,
                     'saved': True, 'index_pending': True}
 
@@ -373,8 +377,7 @@ class NoteOperations:
             paths = [record['path']]
             if kind == 'operations':
                 paths += [record['destination']] + [row['path'] for row in record['edits']]
-            self.runtime.catalog.apply(paths)
-            self.runtime.publish('files', paths)
+            self.changed(paths)
             return {'ok': True, **result, 'workspace_revision': workspace_revision, 'saved': True, 'index_pending': True}
 
     def links(self, path, limit=50, cursor=''):

@@ -6,15 +6,29 @@ from contextlib import contextmanager
 import ipaddress
 import json
 import logging
+import time
 from typing import Any, Literal
 
 from mcp.server.fastmcp import Context, FastMCP
-from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from mcp.types import CallToolResult, TextContent, ImageContent, ToolAnnotations
 
 from vault_rag.local_state import ConflictError, digest
 from vault_rag.note_operations import NoteError
 from vault_rag.mcp_access import TUNNEL_AUTH_HEADER, McpAccessError
 from vault_rag.file_commands import ChatFile, ReadCommand, WriteCommand
+from vault_rag.design_inspection import DesignSection
+
+
+def _tool_result(value, failed=False):
+    """Normalize metadata off the event loop, retaining both existing MCP representations."""
+    failed = failed or (isinstance(value, dict) and bool(value.get('error')) and value.get('ok') is False)
+    if failed and isinstance(value, dict):
+        value.setdefault('error_code', 'retrieval_failed')
+    preview = value.pop('_image', None) if isinstance(value, dict) and not failed else None
+    text = json.dumps(value, ensure_ascii=False, default=str, allow_nan=False, separators=(',', ':'))
+    return CallToolResult(content=[TextContent(type='text', text=text)] +
+                          ([ImageContent(type='image', data=preview, mimeType='image/webp')] if preview else []),
+                          structuredContent=json.loads(text), isError=failed)
 
 
 def build_workspace_mcp(config, runtime, operations, access, legacy_token, design=None, feishu=None, annotations=None, files=None):
@@ -41,6 +55,7 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         # credential again under the access lock immediately before mutation.
         request = ctx.request_context.request
         header = request.headers.get('authorization', '') if request else ''
+        started = time.perf_counter()
         def execute():
             runtime.foreground_begin()
             try:
@@ -52,18 +67,21 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
                     if not legacy:
                         access.require(who, write=write, resource=resource)
                     if write:
-                        return fn(*args, **kwargs)
-                return fn(*args, **kwargs)
+                        value = fn(*args, **kwargs)
+                if not write:
+                    value = fn(*args, **kwargs)
+                # Large opt-in reads must not block unrelated requests while encoding.
+                return _tool_result(value)
             finally:
                 runtime.foreground_end()
         try:
-            value = await asyncio.to_thread(execute)
-            failed = isinstance(value, dict) and bool(value.get('error')) and value.get('ok') is False
-            if failed:
-                value.setdefault('error_code', 'retrieval_failed')
+            result = await asyncio.to_thread(execute)
         except Exception as error:
+            from vault_rag.remote_webdav import RemoteStorageError
             if isinstance(error, NoteError):
                 code, details = error.code, error.details
+            elif isinstance(error, RemoteStorageError):
+                code,details=error.code,{'state':error.state,'retryable':error.state in {'unreachable','auth_required'}}
             else:
                 code = ('permission_denied' if isinstance(error, PermissionError) else
                         'write_conflict' if isinstance(error, ConflictError) else
@@ -73,13 +91,16 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
                 details = error.details if isinstance(error, McpAccessError) else {}
             # Do not reflect arbitrary request headers or internal exception paths.
             message = str(error) if isinstance(error, (NoteError, ConflictError, PermissionError, ValueError)) else code.replace('_', ' ')
+            if isinstance(error,RemoteStorageError) and error.state=='missing':
+                message='Attachment is missing or unavailable on the server'
             if header:
                 message = message.replace(header, '[credential]').replace(header.removeprefix('Bearer '), '[credential]')
             value = {'ok': False, 'error_code': code, 'error': message, **details}
-            failed = True
-        # JSON-roundtrip also normalizes YAML dates/other metadata for MCP JSON.
-        text = json.dumps(value, ensure_ascii=False, default=str, allow_nan=False)
-        return CallToolResult(content=[TextContent(type='text', text=text)], structuredContent=json.loads(text), isError=failed)
+            result = _tool_result(value, failed=True)
+        logging.getLogger(__name__).info('MCP completed operation=%s elapsed_ms=%.1f response_chars=%d failed=%s',
+            getattr(fn, '__name__', 'status'), (time.perf_counter() - started) * 1000,
+            sum(len(block.text) for block in result.content if isinstance(block, TextContent)), result.isError)
+        return result
 
     @tool()
     async def vault_search(query: str, ctx: Context, top_k: int = 3, note_type: str | None = None,
@@ -120,8 +141,14 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
                     'workspace_access': 'all connected notes; retrieval uses selected directories only'}
             if files is not None and result['capabilities']['read_workspace'] and config.data.get('root'):
                 result['attachments'] = {'index':files.index_jobs.status(),
+                    'asset_search':files.asset_search.status(),
                     'folder':config.data.get('attachment_folder','_attachments'),
-                    'tools':['vault_files','vault_files_update']}
+                    'tools':['vault_files','vault_files_update'],
+                    'upload': {'tool': 'vault_files_update', 'action': 'upload',
+                        'sources': ['files', 'base64', 'begin', 'chunk', 'commit', 'abort'],
+                        'inline_max_bytes': files.INLINE_MAX, 'chunk_max_bytes': files.CHUNK,
+                        'folder': 'Optional vault-relative directory, e.g. Comics/Project/assets',
+                        'client_hint': 'If either file tool is missing in the client, refresh/rescan its plugin tool directory after restarting the updated backend; Design Studio and Feishu transfers are separate.'}}
             return result
         return await call(ctx, status, legacy=True)
 
@@ -162,10 +189,26 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
 
         @tool()
         async def vault_files(request: ReadCommand, workspace_revision: str, ctx: Context) -> CallToolResult:
-            """Read connected files: request.action=list|stat|read|export|status.
-            list searches attachment metadata; stat returns revision and Markdown links.
-            read takes exactly one path or download job_id, expected_revision and byte offsets.
+            """Read connected files: request.action=list|stat|read|export|status|groups|products|product|prepare_download|download_status.
+            Prefer search_assets for existing materials, textures, models and Unity packages before sourcing new assets.
+            Only groups explicitly enabled for AI asset search participate; group_id narrows this scope and never expands it.
+            No enabled groups returns scope_not_configured; ask the user to select groups, never fall back to all files automatically.
+            search_assets returns compact keyword/hybrid candidates and recorded metadata; optional source/storage_id/group_id/formats/pipeline filters.
+            asset_details takes result_id and returns all actual versions/copies and selectable file paths/revisions.
+            asset_preview takes result_id and expected_revision, returning a real product cover or file thumbnail as a native image.
+            delivery_status takes job_id; only completed deliveries expose a stable local_path on the identified SERVICE HOST.
+            A path is not proof this client runs on that machine. Download success is not engine import.
+            list searches names, tags, categories and descriptions; storage_id filters a configured source.
+            stat takes path or asset_id and returns file/metadata revisions and Markdown links.
+            read takes exactly one path, asset_id or download job_id, expected_revision and byte offsets.
             export prepares a ZIP; status reads a job or lists jobs/index/transfer limits.
+            products queries the local Unity product catalog, including metadata and review states.
+            product takes product_id (or a candidate ID) and lists all linked versions/copies.
+            prepare_download takes asset_id and streams a remote attachment in the backend, outside preview cache.
+            download_status takes job_id (or lists jobs). Only ready jobs have verified 24-hour handles;
+            queued/paused does not mean saved to the user device.
+            Prepared attachments are delivered through the controlled Downloads page, never Base64 chunks.
+            read(job_id) is for legacy ZIP exports only, not staged attachment downloads.
             Status sections paginate full operation previews. No note text/OCR search.
             Use current workspace_revision from vault_index_status. Never expose localhost URLs.
             """
@@ -174,9 +217,29 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         @tool(write=True, external=True, meta={'openai/fileParams': ['files']})
         async def vault_files_update(request: WriteCommand, workspace_revision: str, operation_id: str,
                                      ctx: Context, files: list[ChatFile] = []) -> CallToolResult:
-            """Manage connected files with request.action=upload|move|trash|organize|reindex|job.
-            upload source=files consumes top-level ChatGPT files; begin/chunk/commit/abort
-            transfers local bytes (256 KiB/chunk), with declared size and SHA-256 at begin.
+            """Manage connected files with request.action=upload|metadata|move|trash|organize|reindex|job|group_update|product_update.
+            deliver_asset copies one path from asset_details with expected_revision into the configured delivery directory;
+            use a unique operation_id and poll vault_files delivery_status for the actual completed local_path.
+            No destination paths or engine operations are accepted. delivery_control retries/cancels with job_id, command and expected_revision.
+            Delivered originals persist independently of temporary download caches. Select actual package versions after reading details.
+            Upload ordinary knowledge-base attachments/images to the configured _attachments
+            folder or a vault-relative folder such as Comics/Project/assets.
+            source=files consumes top-level ChatGPT files (preferred); source=base64 takes
+            name, data_base64, sha256 in request for a single file up to 2 MiB.
+            begin/chunk/commit/abort transfers larger local bytes (256 KiB/chunk),
+            with declared size and SHA-256 at begin. Never invent missing file bytes/URLs.
+            Upload storage_id selects a configured server; omitted uses the configured default.
+            Remote uploads return a durable job. Queued is not saved: wait for remote_saved=true.
+            metadata edits tags/category/description using path or asset_id and the current
+            metadata_revision as expected_revision. It never edits the attachment bytes.
+            groups lists user-defined attachment groups; list accepts group_id.
+            group_update creates/edits/deletes groups and manages manual membership using revision checks.
+            Explicit create/update search_enabled controls asset search membership (default false); updates require search_scope_revision.
+            Resolve scope conflicts with resolve_search_scope=true only after reviewing the branches. Old requests omitting the flag preserve it.
+            product_update initializes/syncs the NAS product catalog, edits official or personal data,
+            confirms product/file associations, records review decisions, or releases/retries prepared downloads.
+            Use operation, product_id/asset_id, expected_revision and payload. Official refresh never replaces personal fields.
+            A matched product ID is not proof of ownership. Preserve all package versions and duplicate originals.
             move destination_kind=path renames one file; folder moves up to 100 files.
             move/trash/organize ONLY prepare a recoverable plan. Read its job and blockers,
             then job command=execute with expected_revision and confirm=true after user authorization.
@@ -356,11 +419,13 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         return await call(ctx, design.list_projects, folder, current_path)
 
     @tool()
-    async def design_get_project(directory: str, ctx: Context, board_id: str | None = None) -> CallToolResult:
+    async def design_get_project(directory: str, ctx: Context, board_id: str | None = None,
+                                 include_document: bool = False) -> CallToolResult:
         """Read a Design Studio project's specification (project-spec.json), artboards/screens list,
-        and saved Figma-like layer transforms (optionally filtered to a specific board_id).
+        and saved Figma-like layer transforms. Managed designs return a compact overview;
+        use design_document for paginated reads or include_document=true for legacy full source.
         """
-        return await call(ctx, design.get_project, directory, board_id)
+        return await call(ctx, design.get_project, directory, board_id, include_document=include_document)
 
     @tool(write=True, additive=True)
     async def design_create_project(
@@ -465,16 +530,24 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         return await call(ctx, design.check_project, directory)
 
     @tool()
-    async def design_document(directory: str, ctx: Context, page_id: str | None = None, manifest: bool = False) -> CallToolResult:
-        """Read a managed design's stable pages, elements, components, assets, scripts and current revision.
-        Use manifest=true for page summaries, then page_id for a selected page. Retain revision and workspace_revision.
+    async def design_document(directory: str, ctx: Context, page_id: str | None = None, manifest: bool = False,
+                              section: DesignSection = 'pages', node_id: str | None = None,
+                              item_id: str | None = None, offset: int = 0, limit: int = 20,
+                              full: bool = False, expected_revision: str | None = None) -> CallToolResult:
+        """Inspect a saved design: default paginated page summaries, never the whole source.
+        page_id lists flat node summaries; section selects assets/components/styles/scripts.
+        Read exact source with full=true plus page_id/node_id or section/item_id.
+        full=true without selectors returns the complete document for document.replace.
+        Follow next_offset; expected_revision pins pagination. Retain revision and workspace_revision.
         """
-        return await call(ctx, design.documents.manifest if manifest else design.documents.read, directory,
-                          **({} if manifest else {'page_id': page_id}))
+        return await call(ctx, design.documents.inspect, directory, page_id, manifest, section=section,
+                          node_id=node_id, item_id=item_id, offset=offset, limit=limit, full=full,
+                          expected_revision=expected_revision)
 
     @tool(write=True)
     async def design_operations(directory: str, commands: list[dict[str, Any]], expected_revision: str,
-                                operation_id: str, workspace_revision: str, ctx: Context, label: str = '') -> CallToolResult:
+                                operation_id: str, workspace_revision: str, ctx: Context, label: str = '',
+                                include_document: bool = False) -> CallToolResult:
         """Apply one atomic, undoable design instruction. Commands use type and stable IDs: page.create/update/delete/duplicate/move,
         node.create/update/replace/delete/duplicate/move/group/ungroup, component.create/update/delete/detach,
         asset.update/delete/replace, style.create/update/delete, script.create/update/delete, project.update.
@@ -483,31 +556,75 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         script:{source:'export function mount(ctx){return ()=>{}}',props,parameters},animation:{preset,trigger,duration,delay,iterations,easing}}.
         Script ctx includes el, props, state, find, on, onEvent, emit, animate, timers, assets, navigation and overlays.
         All commands in one call are one undo step. A stale revision saves nothing; re-read and merge. Reuse operation_id only to retry identical requests.
+        Returns a short revision/history receipt. include_document=true opts into the full document.
         """
         return await call(ctx, design.documents.apply, directory, commands, expected_revision, operation_id,
-                          label=label, workspace_revision=workspace_revision, write=True)
+                          label=label, workspace_revision=workspace_revision, include_document=include_document, write=True)
 
     @tool(write=True)
     async def design_history(directory: str, action: Literal['list', 'undo', 'redo'], workspace_revision: str,
                              ctx: Context, expected_revision: str | None = None, operation_id: str | None = None,
-                             offset: int = 0, limit: int = 50) -> CallToolResult:
+                             offset: int = 0, limit: int = 50, include_document: bool = False) -> CallToolResult:
         """Read persistent operation history or undo/redo a project transaction. Undo/redo require current expected_revision and unique operation_id.
         History survives page switches, application restart and project relocation.
+        Undo/redo return short receipts; include_document=true opts into the full document.
         """
         def run():
             design._check_workspace(workspace_revision)
-            return design.documents.history(directory, action, expected_revision, operation_id, offset, limit)
+            return design.documents.history(directory, action, expected_revision, operation_id, offset, limit,
+                                            include_document=include_document)
         return await call(ctx, run, write=True)
 
     @tool(write=True, additive=True)
-    async def design_import_asset(directory: str, name: str, data_base64: str, expected_revision: str,
-                                  operation_id: str, workspace_revision: str, ctx: Context, mime: str = '') -> CallToolResult:
-        """Import original asset bytes as base64 into a managed project, recording metadata and one undoable library insertion.
-        Undo removes the asset registration; original bytes remain available for redo.
+    async def design_import_asset(directory: str, name: str, expected_revision: str,
+                                  operation_id: str, workspace_revision: str, ctx: Context, mime: str = '',
+                                  data_base64: str | None = None, source_path: str | None = None,
+                                  source_file_id: str | None = None, expected_sha256: str | None = None,
+                                  include_document: bool = False) -> CallToolResult:
+        """Import one asset with exactly one source: source_path (connected vault-relative file),
+        source_file_id (credential-scoped feishu_files/CLI output), or legacy data_base64.
+        Prefer server-side file sources and include_document=false for videos/large media: one small request,
+        no Base64 round trip. A source_file_id also requires Feishu read access; IDs never widen file access.
+        Optional expected_sha256 pins source bytes. Retains originals and records one undoable insertion;
+        retries reuse operation_id. Default short receipts include the asset; include_document=true returns full source.
         """
-        def run():
+        def import_source():
             design._check_workspace(workspace_revision)
-            return design.documents.import_asset(directory, name, data_base64, expected_revision, operation_id, mime)
+            if sum(value is not None for value in (data_base64, source_path, source_file_id)) != 1:
+                raise ValueError('Provide exactly one of data_base64, source_path or source_file_id')
+            options = {'expected_sha256': expected_sha256, 'include_document': include_document}
+            if source_path is not None:
+                return design.documents.import_workspace_asset(directory, name, source_path,
+                    expected_revision, operation_id, mime, **options)
+            if source_file_id is not None:
+                if feishu is None:
+                    raise ValueError('Feishu temporary-file import is unavailable')
+                who = principal(ctx)
+                access.require(who, resource='feishu')
+                def source_check(source):
+                    access.require(who, resource='workspace')
+                    if str(config.root) != source['root']:
+                        raise PermissionError('Connected directory changed; import the file again')
+                    if not config.path_for(source['path']).is_file():
+                        raise FileNotFoundError('Connected source file is no longer available')
+                with feishu.lock:
+                    row = feishu.files.get(access.file_owner(who), source_file_id, source_check)
+                    if not row['complete']:
+                        raise ValueError('Temporary asset file is not complete')
+                    if expected_sha256 is not None and expected_sha256.lower() != row['sha256']:
+                        raise ConflictError('Temporary asset SHA-256 changed; no asset was saved')
+                    options['expected_sha256'] = row['sha256']
+                    return design.documents.import_asset_file(directory, name, feishu.files.root / source_file_id,
+                        expected_revision, operation_id, mime,
+                        source_check=lambda: feishu.files.get(access.file_owner(who), source_file_id, source_check),
+                        **options)
+            return design.documents.import_asset(directory, name, data_base64,
+                expected_revision, operation_id, mime, **options)
+        def run():
+            # A connected directory cannot switch between source validation,
+            # the bounded file read and the existing design transaction.
+            with config.lock, design.files.lock:
+                return import_source()
         return await call(ctx, run, write=True)
 
     @tool()
@@ -527,11 +644,13 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
 
     @tool(write=True, additive=True)
     async def design_import_library(directory: str, item_id: str, expected_revision: str, operation_id: str,
-                                    workspace_revision: str, ctx: Context, version: int | None = None) -> CallToolResult:
-        """Import or explicitly update a shared item and its dependencies. Resources are copied into the project for offline export."""
+                                    workspace_revision: str, ctx: Context, version: int | None = None,
+                                    include_document: bool = False) -> CallToolResult:
+        """Import or update a shared item and dependencies for offline export. Short receipt by default; include_document=true returns full source."""
         def run():
             design._check_workspace(workspace_revision)
-            return design.workspace.import_library(directory, item_id, expected_revision, operation_id, version)
+            return design.workspace.import_library(directory, item_id, expected_revision, operation_id, version,
+                                                   include_document=include_document)
         return await call(ctx, run, write=True)
 
     @tool(write=True, additive=True)

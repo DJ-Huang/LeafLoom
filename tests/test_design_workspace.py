@@ -463,6 +463,15 @@ class DesignWorkspaceTests(unittest.TestCase):
         self.assertEqual(imported['revision'], replay['revision'])
         source_import = self.workspace.import_library(self.directory, item_id, self.project['revision'], 'import-into-source')
         self.assertEqual(len(source_import['document']['components']), 4)
+        compact_target = self.create('Projects/Compact')
+        args = ('Projects/Compact', item_id, compact_target['revision'], 'import-compact')
+        compact = self.workspace.import_library(*args, include_document=False)
+        self.assertNotIn('document', compact)
+        replay = self.workspace.import_library(*args, include_document=False)
+        self.assertNotIn('document', replay)
+        self.assertTrue(replay['replayed'])
+        self.assertEqual(compact['revision'], replay['revision'])
+        self.assertEqual(len(self.docs.read('Projects/Compact')['document']['components']), 2)
 
     def test_library_update_keeps_stable_ids_original_media_and_can_undo(self):
         state = self.prepare_library()

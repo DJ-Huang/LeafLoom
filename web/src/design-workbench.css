@@ -321,3 +321,19 @@
 .design-workbench.is-canvas-focused>.dw-body>.dw-inspector{display:none}
 .design-workbench .dw-panel-toggle{margin-right:4px;border:1px solid var(--dw-subtle-line);border-radius:6px}
 .design-workbench .dw-panel-toggle[aria-pressed=true]{background:var(--dw-selection);color:var(--dw-focus);border-color:color-mix(in srgb,var(--dw-focus) 25%,var(--line))}
+
+/* Full-screen presenting keeps the existing runtime and its interaction state. */
+.design-workbench.is-presenting{position:fixed;inset:0;z-index:1500;width:100vw;height:100dvh;min-width:0;min-height:0;background:#111816;isolation:isolate}
+.design-workbench.is-presenting:fullscreen{width:100%;height:100%}
+.is-presenting>.dw-toolbar,.is-presenting>.dw-preview-toolbar,.is-presenting>.dw-source-notice,.is-presenting>.dw-fidelity,.is-presenting .dw-canvas-heading,.is-presenting .dw-breadcrumbs,.is-presenting .dw-console{display:none}
+.is-presenting>.dw-body,.is-presenting .dw-canvas{min-width:0;min-height:0;width:100%;height:100%;border:0;background:#111816}
+.is-presenting .dw-canvas-status{inset:0}
+.dw-presentation-controls{position:absolute;z-index:5;left:50%;bottom:12px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;max-width:calc(100% - 24px);padding:7px;border:1px solid #ffffff30;border-radius:12px;background:#172b25ed;color:#fff;box-shadow:0 4px 20px #0003;opacity:0;transition:opacity .2s}
+.dw-presentation-controls.is-revealed,.dw-presentation-controls:hover,.dw-presentation-controls:focus-within{opacity:1}
+.design-workbench .dw-presentation-controls button,.dw-presentation-controls select{min-height:34px;border:0;border-radius:6px;background:#ffffff12;color:#fff;padding:6px 10px}
+.dw-presentation-controls select{width:320px;max-width:40vw;font:inherit;text-overflow:ellipsis}
+.dw-presentation-controls option{color:#172b25;background:#fff}
+.dw-presentation-controls kbd{margin-left:5px;font:10px ui-monospace,monospace;color:#c5d9d1}
+.dw-presentation-controls :focus-visible{outline:2px solid #b6e5cc;outline-offset:2px}
+@media(max-width:600px){.dw-presentation-controls{gap:2px;padding:5px}.dw-presentation-controls select{width:150px}.dw-presentation-controls kbd{display:none}}
+@media(prefers-reduced-motion:reduce){.dw-presentation-controls{transition:none}}

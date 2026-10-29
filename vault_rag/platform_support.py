@@ -206,3 +206,16 @@ def show_error(message: str) -> None:
                        check=False)
     else:
         print(message, file=sys.stderr)
+
+
+def downloads_directory() -> Path:
+    """Resolve the user's system download folder without launching a shell."""
+    if is_windows():
+        import winreg
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders') as key:
+                value = winreg.QueryValueEx(key, '{374DE290-123F-4565-9164-39C4925E467B}')[0]
+                return Path(os.path.expandvars(value))
+        except OSError:
+            pass
+    return Path.home() / 'Downloads'

@@ -1,11 +1,13 @@
 'use strict';
-const {app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, nativeImage, screen, session, safeStorage} = require('electron');
+const {app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, nativeImage, screen, session, safeStorage, powerMonitor} = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
 const {Backend} = require('./backend.cjs');
 const {publishJob} = require('./design-publisher.cjs');
+const {DesignPresenter} = require('./design-presenter.cjs');
 const {TunnelSettings, tunnelBinary} = require('./tunnel.cjs');
+const {AttachmentSecrets, registerAttachmentCredentialIpc} = require('./attachment-secrets.cjs');
 const {Updater} = require('./updater.cjs');
 const policy = require('./policy.cjs');
 const {strings, resolve} = require('./strings.cjs');
@@ -23,7 +25,10 @@ const control = path.join(home, 'desktop-control');
 let window, tray, backend, origin = '', lastOrigin = '', workspaceLoaded = false, quitting = false, quitPending = false, failure = '', retrying = false;
 const websiteContents = new Set();
 let startupTimer, closeTimer;
+let presenter;
+let backendGeneration = 0;
 const tunnel = new TunnelSettings(home, safeStorage);
+const attachmentSecrets = new AttachmentSecrets(home, safeStorage, {onState: state => log('Attachment credential restore: ' + JSON.stringify(state))});
 const updater = new Updater({current: app.getVersion(), platform: process.platform, arch: process.arch, directory: path.join(home, 'desktop-updates'), packaged: app.isPackaged});
 let pendingInstaller = '';
 let restartPending = false;
@@ -128,7 +133,7 @@ function createWindow() {
     child.on('closed', () => websiteContents.delete(site));
   });
   contents.on('will-attach-webview', event => event.preventDefault());
-  contents.on('render-process-gone', (_, details) => {workspaceLoaded = false; if (!quitting) fail(new Error('Window stopped: ' + details.reason));});
+  contents.on('render-process-gone', (_, details) => {presenter?.stop(); workspaceLoaded = false; if (!quitting) fail(new Error('Window stopped: ' + details.reason));});
   contents.on('will-prevent-unload', event => {
     if (allowDiscard) {allowDiscard = false; event.preventDefault(); return;}
     // A blocked quit preserves manual AI drafts and failed/conflicting edits.
@@ -151,6 +156,7 @@ function createWindow() {
     });
   });
   window.on('close', event => {
+    presenter?.stop();
     if (!window.isMaximized() && !window.isMinimized()) atomicJson(path.join(home, 'desktop-window.json'), window.getBounds());
     if (!quitPending && !quitting) {event.preventDefault(); window.hide();}
   });
@@ -173,7 +179,9 @@ async function requestRestart() {
 }
 async function finishQuit() {
   if (quitting) return; quitting = true;
+  backendGeneration++;
   clearTimeout(startupTimer); clearInterval(closeTimer);
+  attachmentSecrets.disconnectBackend();
   await backend?.stop();
   if (pendingInstaller) {
     const file = pendingInstaller; pendingInstaller = '';
@@ -198,8 +206,11 @@ function fail(error) {
 }
 async function startBackend() {
   if (retrying || quitting) return; retrying = true;
+  const generation = ++backendGeneration;
+  clearTimeout(startupTimer);
   try {
     tunnelBackendReady = false;
+    attachmentSecrets.disconnectBackend();
     await backend?.stop();
     failure = ''; origin = '';
     const python = app.isPackaged
@@ -207,14 +218,19 @@ async function startBackend() {
       : process.env.LEAFLOOM_PYTHON;
     if (!python || !fs.existsSync(python)) throw new Error('Private Python is missing. Build the backend, or set LEAFLOOM_PYTHON to its interpreter.');
     backend = new Backend({python, home, devServer: app.isPackaged ? undefined : process.env.LEAFLOOM_DEV_SERVER});
-    backend.on('failure', fail);
-    backend.on('exit', result => {
+    const instance = backend;
+    const current = () => backend === instance && backendGeneration === generation && !quitting;
+    instance.on('failure', error => {if (current()) fail(error);});
+    instance.on('exit', result => {
+      if (!current()) return;
       tunnelBackendReady = false;
+      attachmentSecrets.disconnectBackend();
       tunnel.state = {state: tunnel.value.enabled ? 'waiting' : 'disabled', error: ''};
       if (!result.expected && !quitting) fail(new Error('Local service exited (' + result.code + ').'));
     });
-    backend.on('tunnel-state', value => {tunnel.state = {state: value.state, error: value.error};});
-    backend.on('ready', async ready => {
+    instance.on('tunnel-state', value => {if (current()) tunnel.state = {state: value.state, error: value.error};});
+    instance.on('ready', async ready => {
+      if (!current()) return;
       const preferencesPath = path.join(home, 'desktop-preferences.json');
       const previousPreferences = readJson(preferencesPath);
       const previousLogin = loginSettings().openAtLogin;
@@ -226,24 +242,34 @@ async function startBackend() {
         if (ready.version !== app.getVersion()) throw new Error('App/backend version mismatch');
         const token = fs.readFileSync(path.join(home, 'auth-token'), 'utf8').trim();
         const response = await fetch(ready.url + '/api/status', {headers: {Authorization: 'Bearer ' + token}, signal: AbortSignal.timeout(10000)});
+        if (!current()) return;
         if (!response.ok) throw new Error('Local service authentication failed');
         const sessionResponse = await fetch(ready.url + '/api/session', {headers: {Authorization: 'Bearer ' + token}, signal: AbortSignal.timeout(10000)});
+        if (!current()) return;
         if (!sessionResponse.ok) throw new Error('Workspace address unavailable');
         const sessionInfo = await sessionResponse.json();
+        if (!current()) return;
+        // Restore only through the private backend Bearer channel. A locked OS
+        // key store must not prevent the rest of the workspace from opening.
+        void attachmentSecrets.restoreBackend(ready.url, token).catch(() => log('Attachment credential restore failed'));
+        if (!current()) return;
         origin = policy.workspaceOrigin(sessionInfo.ui_url, ready.url); lastOrigin = origin;
         if (!policy.trustedPage(window.webContents.getURL(), origin)) await window.loadURL(ready.url + '/');
+        if (!current()) return;
         // The legacy entrance and collector intentionally navigate across origins.
         // Poll from the main process; a promise in the old renderer is destroyed
         // by those navigations and cannot reliably supervise readiness.
         const interfaceDeadline = Date.now() + 45000;
         let interfaceReady = false;
         while (Date.now() < interfaceDeadline && !interfaceReady) {
+          if (!current()) return;
           if (!window || window.isDestroyed()) throw new Error('Workspace window closed during startup');
           if (policy.trustedPage(window.webContents.getURL(), origin)) {
             try {interfaceReady = await window.webContents.executeJavaScript('Boolean(document.querySelector("#root main") && window.leafloomDesktop)');} catch {}
           }
           if (!interfaceReady) await new Promise(resolve => setTimeout(resolve, 200));
         }
+        if (!current()) return;
         if (!interfaceReady) throw new Error('Workspace interface did not become ready');
         workspaceLoaded = true;
         if (!previousPreferences && app.isPackaged) {loginChanged = true; setLogin(Boolean(ready.autostart));}
@@ -257,16 +283,19 @@ async function startBackend() {
         }
         await new Promise((resolve, reject) => {
           const timer = setTimeout(() => reject(new Error('Migration commit timed out')), 10000);
-          backend.once('committed', () => {clearTimeout(timer); resolve();});
-          backend.send('commit');
+          instance.once('committed', () => {clearTimeout(timer); resolve();});
+          instance.send('commit');
         });
+        if (!current()) return;
         clearTimeout(startupTimer); updateMenu();
         tunnelBackendReady = true;
         // Tunnel failure must not roll back an otherwise healthy workspace.
         try { configureTunnel(); } catch { tunnel.state = {state: 'failed', error: 'tunnel.error.process'}; }
         if (!background) showWindow();
       } catch (error) {
-        fail(error); await backend.stop();
+        if (!current()) return;
+        fail(error); await instance.stop();
+        if (!current()) return;
         if (metadataChanged) {
           for (const [file, previous] of [[installPath, previousInstall], [registrationPath, previousRegistration]]) {
             try {if (previous) atomicJson(file, previous); else if (fs.existsSync(file)) fs.unlinkSync(file);} catch (rollbackError) {log(rollbackError);}
@@ -282,8 +311,8 @@ async function startBackend() {
         }
       }
     });
-    backend.start();
-    startupTimer = setTimeout(() => {fail(new Error('Local service startup timed out. See logs and retry.')); void backend.stop();}, 110000);
+    instance.start();
+    startupTimer = setTimeout(() => {if (current()) {fail(new Error('Local service startup timed out. See logs and retry.')); void instance.stop();}}, 110000);
   } catch (error) {fail(error);} finally {retrying = false; if (tray) updateMenu();}
 }
 
@@ -292,6 +321,7 @@ else {
   app.on('second-instance', (_, argv) => {if (argv.includes('--quit')) void requestQuit(); else showWindow();});
   app.on('before-quit', event => {if (!quitting) {event.preventDefault(); void requestQuit();}});
   app.on('will-quit', () => {
+    presenter?.dispose();
     if (restartPending) {
       try {restartApplication(app, home, {argv: process.argv, env: process.env});}
       catch (error) {log(error); dialog.showErrorBox('LeafLoom', text().restartFailed);}
@@ -301,6 +331,9 @@ else {
   app.on('window-all-closed', () => {});
   app.on('activate', showWindow);
   app.whenReady().then(async () => {
+    for (const event of ['unlock-screen', 'resume']) powerMonitor.on(event, () => {
+      if (!quitting) void attachmentSecrets.retryRestore();
+    });
     if (process.platform === 'darwin' && !app.isPackaged) app.dock.setIcon(image('logo.png'));
     if (process.platform === 'darwin') background = background || loginSettings().wasOpenedAtLogin;
     if (process.argv.includes('--quit')) {quitting = true; app.quit(); return;}
@@ -309,8 +342,11 @@ else {
     session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
       const url = details.requestingUrl || details.securityOrigin || '';
       let site; try {site = new URL(url).origin;} catch {callback(false); return;}
-      if (!window || (contents !== window.webContents && !websiteContents.has(contents)) || site === origin) {callback(false); return;}
+      if (!window || (contents !== window.webContents && !websiteContents.has(contents))) {callback(false); return;}
+      // Presenting the trusted management canvas also needs native fullscreen.
+      // All other management-origin permission requests remain denied.
       if (permission === 'fullscreen') {callback(true); return;}
+      if (site === origin) {callback(false); return;}
       if (!['media', 'geolocation', 'notifications', 'clipboard-read', 'clipboard-sanitized-write', 'pointerLock'].includes(permission)) {callback(false); return;}
       void dialog.showMessageBox(window, {type: 'question', title: 'LeafLoom', message: `${site}\n${permission}`, detail: 'Allow this website to use this capability? / 是否允许此网页使用该能力？', buttons: ['Deny / 拒绝', 'Allow / 允许'], defaultId: 0, cancelId: 0}).then(result => {
         if (result.response === 1) grants.add(site + '\n' + permission);
@@ -325,6 +361,8 @@ else {
       if (!window || (contents !== window.webContents && !websiteContents.has(contents)) || !allowed) event.preventDefault();
     });
     createWindow();
+    presenter = new DesignPresenter({BrowserWindow, screen, owner: () => window, origin: () => origin,
+      emit: value => {if (window && !window.isDestroyed()) window.webContents.send('leafloom:presentation-event', value);}, log});
     const trayImage = nativeImage.createFromPath(image(process.platform === 'darwin' ? 'icon-32.png' : 'icon-64.png')).resize({width: process.platform === 'darwin' ? 18 : 32});
     tray = new Tray(trayImage); tray.setToolTip('LeafLoom'); tray.on('click', showWindow); tray.on('right-click', updateMenu); updateMenu();
     const t = text();
@@ -333,6 +371,14 @@ else {
       {role: 'editMenu'}, {role: 'viewMenu'}, {role: 'windowMenu'},
     ]));
     const methods = {
+      'presenter-displays': () => presenter.displays(),
+      'presenter-identify': () => presenter.identify(),
+      'presenter-start': input => presenter.start(input),
+      'presenter-command': (id, command) => presenter.command(id, command),
+      'presenter-input': (id, input) => presenter.input(id, input),
+      'presenter-ack': (id, seq) => presenter.ack(id, seq),
+      'presenter-heartbeat': id => presenter.heartbeat(id),
+      'presenter-stop': id => presenter.stop(id),
       'design-publish': id => {
         if (!backend?.ready || !workspaceLoaded) throw new Error('Workspace is not ready for publishing');
         return publishJob({BrowserWindow, session}, backend.ready.url, fs.readFileSync(path.join(home, 'auth-token'), 'utf8').trim(), id);
@@ -366,6 +412,9 @@ else {
       retry: () => startBackend(), quit: () => requestQuit(),
     };
     for (const [name, handler] of Object.entries(methods)) ipcMain.handle('leafloom:' + name, (event, ...args) => {isMain(event, !['info', 'logs', 'retry', 'quit'].includes(name)); return handler(...args);});
+    ipcMain.handle('leafloom:presentation-output-ready', event => presenter.outputReady(event));
+    ipcMain.on('leafloom:presentation-output-report', (event, value) => {try {presenter.outputReport(event, value);} catch (error) {log(error);}});
+    registerAttachmentCredentialIpc(ipcMain, event => isMain(event), attachmentSecrets);
     // Also support legacy Stop scripts without depending on a Python install.
     fs.mkdirSync(control, {recursive: true});
     try {fs.unlinkSync(path.join(control, 'quit'));} catch {}

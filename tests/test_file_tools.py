@@ -140,6 +140,80 @@ class FileToolsTests(unittest.TestCase):
         (self.root / saved['path']).write_bytes(b'new version')
         self.call('read', path=saved['path'], expected_revision=info['revision'], error='write_conflict')
 
+    def test_inline_upload_discovery_project_links_and_retries(self):
+        from urllib.parse import unquote
+        status = self.call('status')
+        self.assertIn('base64', status['upload_sources'])
+        self.assertEqual(status['limits']['inline_bytes'], 2 * 1024 * 1024)
+        discovery = self.rpc('tools/call', {'name':'vault_index_status','arguments':{}}).json()['result']['structuredContent']
+        self.assertEqual(discovery['attachments']['upload']['tool'], 'vault_files_update')
+        self.assertIn('refresh', discovery['attachments']['upload']['client_hint'])
+        tools = {t['name']:t for t in self.rpc('tools/list').json()['result']['tools']}
+        self.assertIn('InlineUpload', tools['vault_files_update']['inputSchema']['$defs'])
+        data = b'\x89PNG\r\n\x1a\n' + bytes(range(256)) * 6144
+        operation_id = uuid.uuid4().hex
+        args = dict(source='base64', name='概念板 #1.png',
+            data_base64=base64.b64encode(data).decode(),
+            sha256=hashlib.sha256(data).hexdigest().upper(), folder='Comics/Project/assets')
+        saved = self.call('upload', write=True, operation_id=operation_id, **args)
+        self.assertEqual(saved['state'], 'completed')
+        self.assertEqual(saved['size'], len(data))
+        self.assertEqual(saved['sha256'], hashlib.sha256(data).hexdigest())
+        self.assertEqual((self.root / saved['path']).read_bytes(), data)
+        self.assertEqual(saved['markdown_embed'], '!' + saved['markdown_link'])
+        replay = self.call('upload', write=True, operation_id=operation_id, **args)
+        self.assertEqual(replay['path'], saved['path'])
+        self.assertTrue(replay['replayed'])
+        self.put('Comics/Project/visual.md', '# Visual')
+        info = self.call('stat', path=saved['path'], source_note='Comics/Project/visual.md')
+        self.assertIn('assets/', info['markdown_embed'])
+        target = info['markdown_embed'].split('(<', 1)[1].split('>)', 1)[0]
+        self.assertEqual((self.root / 'Comics/Project' / unquote(target)).resolve(), self.root / saved['path'])
+        direct = self.call('read', path=saved['path'], expected_revision=saved['revision'], limit=100)
+        self.assertEqual(base64.b64decode(direct['data_base64']), data[:100])
+        self.assertNotEqual(self.call('upload', write=True, **args)['path'], saved['path'])
+        self.call('upload', write=True, operation_id=operation_id, **{**args, 'name':'other.png'}, error='write_conflict')
+        self.assertFalse(list(self.app.state.file_operations.directory.iterdir()))
+
+    def test_inline_upload_validation_permissions_and_boundaries(self):
+        args = dict(source='base64', name='image.png', data_base64='YQ==',
+            sha256=hashlib.sha256(b'a').hexdigest())
+        self.call('upload', write=True, **{**args, 'data_base64':'@@@'}, error='invalid_request')
+        self.call('upload', write=True, **{**args, 'sha256':'0'*64}, error='invalid_request')
+        for overrides in ({'name':'../escape.png'}, {'folder':'../outside'}, {'name':'note.md'}):
+            self.call('upload', write=True, **{**args, **overrides}, error='invalid_request')
+        with patch.object(self.app.state.file_operations, 'INLINE_MAX', 0):
+            self.call('upload', write=True, **args, error='invalid_request')
+        with patch.object(self.app.state.file_operations, 'MAX_TOTAL', 0):
+            self.call('upload', write=True, **args, error='invalid_request')
+        with patch.object(Path, 'write_bytes', side_effect=OSError('fictional staging failure')):
+            self.call('upload', write=True, **args, error='operation_failed')
+        self.assertFalse(list(self.app.state.file_operations.directory.iterdir()))
+        self.access.configure('local', enabled=True, write=False)
+        self.call('upload', write=True, **args, error='permission_denied')
+        self.access.configure('local', enabled=True, write=True)
+        self.call('upload', write=True, **args, revision='stale', error='write_conflict')
+        self.assertFalse(list(self.root.rglob('*.png')))
+        self.assertFalse(list(self.app.state.file_operations.directory.iterdir()))
+
+    def test_large_concept_board_chunk_upload_and_readback(self):
+        data = b'\x89PNG\r\n\x1a\n' + bytes(range(256)) * 12288
+        job = self.begin(name='concept-board.png', data=data, folder='Comics/Project/assets')
+        step = 256 * 1024
+        for offset in range(0, len(data), step):
+            self.call('upload', write=True, source='chunk', job_id=job['job_id'], offset=offset,
+                data_base64=base64.b64encode(data[offset:offset+step]).decode())
+        saved = self.call('upload', write=True, source='commit', job_id=job['job_id'])
+        self.assertEqual((self.root / saved['path']).read_bytes(), data)
+        self.assertEqual(saved['sha256'], hashlib.sha256(data).hexdigest())
+        self.assertTrue(saved['markdown_embed'].startswith('!['))
+        restored = bytearray()
+        for offset in range(0, len(data), step):
+            part = self.call('read', path=saved['path'], expected_revision=saved['revision'],
+                offset=offset, limit=step)
+            restored.extend(base64.b64decode(part['data_base64']))
+        self.assertEqual(bytes(restored), data)
+
     def test_hash_offset_quota_and_paths(self):
         job = self.begin(data=b'ab')
         self.call('upload', write=True, source='chunk', job_id=job['job_id'], offset=1, data_base64='YQ==', error='invalid_request')

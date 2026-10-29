@@ -371,6 +371,11 @@ class AttachmentMigrations:
             source=files.config.path_for(move['source']);backup=self._backup(files,job,move)
             existing=source if source.exists() else backup
             if not existing.is_file() or file_hash(existing)!=move['sha256']:raise ConflictError('Source changed: '+move['source'])
+        metadata=getattr(self.runtime,'attachment_metadata',None)
+        if metadata is not None and metadata.prepare_migration(job):
+            # Persist source identities before publication. A crash between a
+            # manifest commit and journal save can then be replayed safely.
+            self._save(files,job)
         job['phase']='copying';job['progress']={'done':0,'total':len(job['moves'])};self._save(files,job)
         for index,move in enumerate(job['moves']):
             job['current_path']=move['source']
@@ -454,7 +459,7 @@ class AttachmentMigrations:
             if job.get('kind','organize')=='organize' and self.config.data.get('attachment_folder')==job['destination']:
                 self.config.save({'attachment_folder':job['previous_attachment_folder']})
         for result in job.get('results',[]):result['state']='rolled_back'
-        self._reindex(job);job['state']='rolled_back';job['phase']='rolled_back';self._save(files,job)
+        self._reindex(job,reverse=True);job['state']='rolled_back';job['phase']='rolled_back';self._save(files,job)
 
     def _execute_trash(self,files,job,cancel):
         self._check(job,cancel);self._validate_documents(files,job,allow_after=False)
@@ -497,8 +502,10 @@ class AttachmentMigrations:
                 job['results'][index]['state']='rolled_back';self._save(files,job)
         self._reindex(job);job['state']='rolled_back';job['phase']='rolled_back';self._save(files,job)
 
-    def _reindex(self,job,strict=False):
+    def _reindex(self,job,strict=False,reverse=False):
         self._guard(job['root'])
+        metadata=getattr(self.runtime,'attachment_metadata',None)
+        if metadata is not None:metadata.sync_migration(job,reverse=reverse)
         try:self.runtime.files.attachments.refresh()
         except (OSError,ValueError,sqlite3.Error) as error:
             if strict:raise

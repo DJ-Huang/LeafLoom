@@ -53,3 +53,6 @@ body { background: #e8eaef; }
 .studio-static .studio-stage { left: 0; top: 0; box-shadow: none; }
 .studio-static .studio-canvas-chrome { display: none; }
 .studio-static *, .studio-static *::before, .studio-static *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }
+
+.studio-viewport.studio-presenting{background:#111816;background-image:none}
+.studio-presenting .studio-stage{box-shadow:none}

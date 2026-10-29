@@ -34,6 +34,8 @@ links/junctions and paths outside the folder remain inaccessible. HTML is source
 text, not executed by the tools. RAG continues to use only selected, eligible
 Markdown/TXT; neither full access nor saving a note expands that selection.
 
+Note writes acknowledge durable file/history changes with `saved:true` and the committed revision before catalog/attachment maintenance. Catalog updates use the existing runtime queue; they never run synchronously while note workflows hold configuration/file locks. Exact-path reads and revision-checked writes do not wait for catalog preparation. Global metadata queries can return `metadata_pending` until their background refresh finishes; retry the query, not an already successful mutation. `index_pending` remains the existing search-index eligibility/pending hint, not a persistence status.
+
 ## Tools
 
 | Workflow | Tools |
@@ -81,18 +83,78 @@ merges or replaces `Design/layer-transforms.json` and `Design/layer-transforms.j
 using `workspace_revision`; and `design_check_project` runs structural and
 layer-review validation.
 
-New managed projects use `Design/studio/project.json`. `design_document` returns
-stable page/element IDs, components, assets, styles, scripts, the project revision
-and `workspace_revision`; `manifest=true` reads page summaries and `page_id`
-reads one page. `design_operations` requires the current `expected_revision`,
+New managed projects use `Design/studio/project.json`. `design_document` defaults
+to a compact page manifest with stable IDs, resource counts, the project revision
+and `workspace_revision`. It returns 20 entries per page (maximum 100), with
+`total`, `offset` and `next_offset`. Summary rows share a 12,000-character budget;
+follow `next_offset` even if fewer than `limit` entries arrive. No HTML, CSS,
+script source, component trees or full resource tables are included by default.
+`manifest=true` is an alias for this default and cannot be combined with selectors.
+
+- Pass `page_id` to list flat node summaries, including `parent_id`, `child_count`
+  and a short text preview. IDs remain exact; names and previews can be shortened.
+- Set `section` to `assets`, `components`, `styles` or `scripts` to list resources.
+- Set `full=true` with `page_id` to read only that complete page (`pages` array),
+  or add `node_id` to read only that node/subtree (`nodes` array). Full `nodes`
+  reads require `node_id` to avoid repeating nested subtrees.
+- Set `full=true` with `section` and `item_id` to read exact resource source in
+  that section's array. Full resource reads can also paginate the section.
+- `full=true` without selectors explicitly returns the canonical `document`.
+  Only this complete source is suitable for `document.replace`. Summary and
+  selected-page responses are partial views, not replacement documents.
+
+Carry the first response's `revision` as `expected_revision` when paging; a
+changed design returns `write_conflict` instead of mixing different versions.
+Exact source reads are intentionally unrestricted by the summary character
+budget, so request only the page, node or resource needed for an edit.
+
+`design_operations` requires the current `expected_revision`,
 `workspace_revision` and a unique `operation_id`. Its `type`-discriminated batch
 is one atomic undo step. It edits page/node structure, layout, text, asset
 references, components, scripts and animation settings. Identical request retries
 reuse their receipt; stale versions and conflicting operation IDs save nothing.
+Design operations, undo/redo, asset imports and library imports now default to
+short revision/history receipts. Asset imports also return the imported `asset`.
+Use `include_document=true` to recover their previous full-document responses.
+`design_get_project` also omits the managed document by default and accepts the
+same opt-in. HTTP editor responses keep their existing contract. These defaults
+apply to both public `/mcp` and the design tools available through `/ai-mcp`;
+restart the updated backend and refresh the client's tool schema before use.
 
 `design_history` pages persistent history or executes versioned undo/redo;
-`design_import_asset` accepts original bytes as base64 and retains those bytes
-when registration is undone. `design_library` lists published personal items;
+`design_import_asset` accepts exactly one source: `source_path` for a file relative
+to the connected vault, `source_file_id` for an owned `feishu_files` / CLI download,
+or the existing `data_base64`. Prefer file references for videos and other large
+assets: the service copies and hashes the original locally instead of sending it
+out through MCP and uploading it again. Paths are on the **service host**, must
+remain inside the connected vault, and cannot traverse links or hidden/protected
+directories. Temporary IDs require current Feishu read permission, the same
+credential owner, a complete file and valid original-source access. Optional
+`expected_sha256` pins the input bytes; changed files, stale revisions and source
+mismatches save no asset. The 128 MiB asset limit remains; HTTP clients/proxies can
+reject much smaller Base64 request bodies before this limit is checked.
+
+The default `include_document:false` returns only the asset, revision, workspace revision
+and undo state, without returning the complete project after every media import.
+Set it to `true` only when the whole document is needed. For example, call
+`design_import_asset` with:
+
+```json
+{
+  "directory": "Projects/Training",
+  "name": "sky.mp4",
+  "source_path": "Projects/Training/SourceMedia/sky.mp4",
+  "expected_revision": "<design_document revision>",
+  "workspace_revision": "<current workspace_revision>",
+  "operation_id": "import-sky-unique-id",
+  "include_document": false
+}
+```
+
+For a Feishu download, replace `source_path` with `source_file_id` returned by
+`feishu_cli_read`; there is no need to call `feishu_files.get` to transfer the
+bytes back to the caller. Import still registers one undoable operation, and
+original bytes are retained when registration is undone. `design_library` lists published personal items;
 `design_publish_library` publishes a versioned component/asset/style/script and
 `design_import_library` explicitly imports or updates it with local dependency
 copies. `design_export` creates an independent HTML ZIP. Reading requires full
@@ -138,16 +200,17 @@ reuse a receipt; reusing an ID with different arguments is a conflict.
 
 | Tool | `request.action` | Parameters and result |
 | --- | --- | --- |
-| `vault_files` | `list` | Optional `query`, `kind`, `sort`, `order`, `limit`, `cursor`; searches filenames/paths, not OCR or file bodies. Defaults: modified descending, 50 items, maximum 200. |
-| `vault_files` | `stat` | `path`, optional `source_note`; returns file `revision`, metadata, protection status, Markdown link and image embed when applicable. |
-| `vault_files` | `read` | Exactly one `path` or ZIP `job_id`, `expected_revision`, optional byte `offset`/`limit`; returns Base64 bytes, `next_offset`, `eof`. Default 64 KiB, maximum 256 KiB. |
+| `vault_files` | `list` | Optional `query`, `kind`, `sort`, `order`, `limit`, `cursor`, `source` (`all`, `local`, `remote`), `storage_id` (one server UUID or `local`), `tags`, `category`; searches paths and attachment metadata, not OCR or file bodies. Defaults: modified descending, 50 items, maximum 200. |
+| `vault_files` | `stat` | Exactly one `path` or `asset_id`, optional `source_note`; returns file `revision`, storage identity, metadata, protection status, Markdown link and image embed when applicable. |
+| `vault_files` | `read` | Exactly one `path`, `asset_id` or ZIP `job_id`, `expected_revision`, optional byte `offset`/`limit`; returns Base64 bytes, `next_offset`, `eof`. Default 64 KiB, maximum 256 KiB. |
 | `vault_files` | `export` | `paths` (1–100); prepares a private ZIP task. |
 | `vault_files` | `status` | Without `job_id`, pages tasks and returns index/limits. With an ID, reads that task. Operation `section=moves/references/blockers/exclusions/results` returns a complete paginated `page`. |
-| `vault_files_update` | `upload` | `source=files/begin/chunk/commit/abort`; see below. |
+| `vault_files_update` | `upload` | `source=files/base64/begin/chunk/commit/abort`; see below. |
 | `vault_files_update` | `move` | `paths`, `destination`; `destination_kind=folder` by default. Use `path` with one source to rename or move to an exact filename. Prepares a plan. |
 | `vault_files_update` | `trash` | `paths` (1–100); prepares a recoverable recycle plan without removing note links. |
 | `vault_files_update` | `organize` | Optional `destination` (default `_attachments`); prepares a consolidation plan. |
-| `vault_files_update` | `reindex` | Starts background attachment index initialization/refresh. |
+| `vault_files_update` | `metadata` | Exactly one `path` or `asset_id`, current metadata `expected_revision`, and `tags`, `category`, `description`; changes durable metadata without editing the original. |
+| `vault_files_update` | `reindex` | Starts background attachment index initialization/refresh; optional remote `storage_id` scans that configured server's metadata. |
 | `vault_files_update` | `job` | `job_id`, `command=execute/cancel/resume/undo`. Operations except cancel require current `expected_revision` and explicit `confirm=true`. Other job types support cancel. |
 
 For example, after obtaining a current workspace revision:
@@ -155,6 +218,47 @@ For example, after obtaining a current workspace revision:
 ```json
 {"request":{"action":"list","query":"report","kind":"pdf"},"workspace_revision":"<current-workspace-revision>"}
 ```
+
+Server attachment builds combine the local index with configured WebDAV sources.
+`asset_id` and `storage_id` identify assets without exposing a server password or
+session. Old LeafLoom paths and recorded local asset IDs continue to resolve after
+an approved migration. Metadata lives independently of downloadable caches.
+`list.summary.by_source.local` and `.remote` report original file counts and
+bytes within the selected source scope; cache usage is separate in `status`.
+After a successful complete server scan, absent snapshot entries are hidden only
+when additional HEAD requests confirm 404/410. Interrupted, unauthorized or
+incomplete scans preserve existing entries. Missing assets retain their identity,
+tags and old paths; `stat` reports `state=missing`, while content reads return
+`remote_asset_missing` rather than old cached bytes. A reappearing path keeps its
+identity but invalidates the previous content generation. Server refresh returns
+`scan_id`; `status.attachment_storage.sources[].connection.scan_state` is the
+independent scan lifecycle, with `scan_scanned`, `scan_missing` and `scan_excluded` counts. A healthy
+connection alone does not prove scan completion.
+Remote discovery excludes Markdown, HTML and explicit source/script extensions by
+default, while retaining text/data and design resources. A server directory may
+contain a UTF-8 `leafloom.ignore` whose first line is `# leafloom-ignore v1`;
+subsequent gitignore-style patterns and `!` rules override defaults and ancestors.
+Directories are still visited so child rule files can override parent exclusions.
+Only a complete, validated scan commits exclusion changes. Excluded entries do
+not appear in `list` or its size/count summaries; `stat` reports `state=excluded`,
+and old IDs/paths can still read their content and cache. Exclusion does not imply
+missing, remove metadata, clear caches or change note/retrieval scopes. Invalid,
+oversized, inaccessible or changing rule files fail the scan and preserve the old
+exclusion state. Control files are never attachments.
+`version_state=strong_etag` denotes a strong server validator; `weak_metadata`
+means one is unavailable. SHA-256 can be unknown for the current version; a
+historical migration receipt is not proof of its current contents. Uncached reads
+check HEAD metadata, and a changed revision requires another `stat` before reading.
+Omitted directory-listing ETags do not erase known validators for an unchanged
+size and modification time. `status.attachment_storage` reports redacted source,
+scan, cache and outbox state. Remote move, rename, trash and ZIP export are not
+supported by this first adapter.
+
+The disk cache defaults to 2 GiB per workspace and can be adjusted in Attachment
+Storage settings. For the optional Zspace official desktop forwarding adapter,
+keep both the official client and its attachment remote-access window open.
+After restarting that client, reopen the window and update the configured address
+if its local forwarding port changes; unattended bridge recovery is not guaranteed.
 
 ### Uploads
 
@@ -169,6 +273,19 @@ size and timeout limits. Signed URLs are never saved in receipts or results.
 Read `status` using the returned `upload:` job ID. A failed batch can contain
 completed files: inspect `results` before uploading only the remaining files.
 
+For a single file up to 2 MiB, a build containing this change also accepts
+`request={"action":"upload","source":"base64","name":"concept.png","data_base64":"<original-file-base64>","sha256":"<sha256-of-original-bytes>","folder":"Comics/Project/assets"}`.
+Supply the current `workspace_revision` and a unique `operation_id` at the top level.
+The server validates the hash before publication; use host file inputs or chunks
+for larger files or client request limits. Uploads return `markdown_link` and, for
+images, `markdown_embed`. Use `stat.source_note` for a note-relative reference.
+
+`vault_index_status.attachments.upload` advertises the upload tool, sources,
+limits and client refresh guidance. File `status` also exposes `upload_sources`
+and `limits.inline_bytes`. If the server lists both file tools but the client
+only has Design Studio/Feishu tools, refresh/rescan the client plugin tool directory;
+this is a stale client catalog, not a missing attachment API.
+
 Local clients read files using their own host permissions, then send bytes:
 
 1. `source=begin`, `name`, total `size`, `sha256`, optional `folder` returns `job_id`.
@@ -178,7 +295,7 @@ Local clients read files using their own host permissions, then send bytes:
    discards an unfinished upload. Use a distinct operation ID for each step and
    retain that ID when retrying the same step.
 
-Both sources use the configured attachment folder unless `folder` specifies a
+All upload sources use the configured attachment folder unless `folder` specifies a
 safe relative directory. Same-name uploads get numbered copies and preserve
 original bytes. Markdown/TXT/Base use their note workflows. Uploads never edit a
 note automatically; insert a returned link with the existing note revision checks
@@ -186,6 +303,16 @@ only when requested. `stat.source_note` returns a note-relative reference.
 `saved=true,index_pending=true` means the file exists but its index has not been
 updated. Upload/stat/read work without initialized metadata; `list` reports
 `initialization_required`, and `reindex` prepares the index without moving files.
+
+An optional `storage_id` selects an enabled upload target; otherwise the configured
+default applies. A server upload can return a `remote:` job with
+`remote_saved=false`. Poll that job until remote storage and readback verification
+complete; only then use its completed result and Markdown link as a saved upload.
+After commit, its outbox bytes and receipt persist across restarts. Before commit,
+the local byte-staging limits and interruption behavior below still apply. The
+default durable outbox limit is 10 GiB per vault and is configurable. Standard
+WebDAV retries incomplete uploads using a fresh unique object and a full retry;
+PATCH-based continuation is not assumed.
 
 Uploads are limited to 256 MiB/file, 1 GiB of active staged bytes/credential,
 1024 retained transfers/credential and 24-hour expiry. Temporary bytes are
@@ -259,6 +386,12 @@ set `isError: true` and an `error_code`, including `permission_denied`,
 `stale_cursor`. Read-only and modifying tools carry MCP annotations; enforcement
 is always server-side.
 
+The shared public MCP response encoder uses compact JSON in its worker thread,
+keeping large explicit reads off the request event loop. Both existing JSON
+representations and native image blocks are retained for client compatibility;
+source data is never silently cut off by the response encoder. Completion logs
+record elapsed milliseconds and response character counts without file contents.
+
 ## Local validation
 
 The isolated HTTP workflow cases are in `tests/test_workspace_mcp.py`; Tunnel
@@ -329,3 +462,74 @@ the tool list after upgrading; the old document/Base tools were removed. High-ri
 commands and raw API calls need a separate per-connection permission and explicit
 confirmation. File IDs are credential-scoped; connected-file imports also need note
 read permission. See [Feishu](FEISHU.md) for the complete interface.
+
+## Unity asset products and prepared downloads
+
+The same two file tools expose the product catalog; refresh cached tool discovery after updating. These operations need the current `workspace_revision` from `vault_index_status` and the connection's workspace-read grant:
+
+- `vault_files` with `request.action="products"` searches catalog metadata using `query`, review/sync `status`, `limit` and `cursor`.
+- `request.action="product"` with `product_id` reads a product and all linked package versions/copies. A candidate ID is accepted for an unmatched package.
+- `request.action="prepare_download"` with `asset_id` starts or reuses a backend streamed download of an existing NAS package. It does not fetch a missing purchase from a store account or modify Unity.
+- `request.action="download_status"` with `job_id` reads a prepared-download task; omit the ID to list the caller's visible tasks. Queued, downloading and paused are not completed. Only a verified `ready` task returns an opaque, 24-hour download handle; never expose localhost URLs or internal disk paths to a remote client.
+
+`vault_files_update` with `request.action="product_update"` requires workspace-write permission plus the existing unique `operation_id`. Its `operation` is `initialize`, `sync`, `rebuild`, `official`, `bind`, `personal`, `review`, `official_url`, `enrich`, `release_download` or `retry_download`. Supply relevant `product_id`, `asset_id`, `storage_id`, `job_id`, `url`, `expected_revision` and `payload` fields. Read detail before editing; an identical retry reuses its operation ID, while changed data uses a new one. Keep official fields and personal fields in their separate payload sections. A URL proposal that needs review is confirmed by binding the original candidate with its candidate revision, then reviewing the product with the newly returned product revision; do not substitute a product revision for a file-association revision.
+
+The catalog is stored in the chosen NAS metadata directory (default `Incoming/LeafLoomCatalog/v1`), with a local query projection and versioned pending changes. Official updates preserve personal tags/notes; existing file metadata is separate. Filename hints are not confirmed product matches, and a product association is not proof of purchase entitlement. Explicit `enrich` reports actual obtained, review-needed and failed entries. A recorded URL does not prove a page was fetched; unavailable descriptions/covers remain empty and a pending Chinese summary stays marked as pending.
+
+Complete package bytes are downloaded through the controlled local UI; MCP manages preparation and status, not Base64 transfer of the complete package. The existing `vault_files` action `read` with a download job ID remains limited to legacy ZIP export output.
+
+Prepared downloads use a separate 20 GiB staging budget, independently of preview cache and upload outbox. Release removes the local prepared copy without deleting the NAS original. The catalog and download operations do not import into or modify a Unity project; import must be authorized separately in a known target project. They do not grant access to an Asset Store account or prove ownership.
+
+### Batch script
+
+[`scripts/collect_unity_catalog.py`](../scripts/collect_unity_catalog.py) starts or observes the same local collection task without browser automation. Start LeafLoom first and use its connected vault as `--root`. `--start --wait --interval 10 --report collection-report.json` starts/resumes and observes collection; `--status --report status-report.json` reads current progress. Omitting a mode also reads status. The backend persists collection progress, so stopping the script does not cancel a task. Official `succeeded` results do not imply Chinese summaries or translations are complete; inspect those fields separately.
+
+Use `--apply-chinese chinese.json --report chinese-report.json` separately from `--wait`. Input is an array of partial official-field updates:
+
+```json
+[
+  {
+    "product_id": "123",
+    "expected_revision": "current 64-character revision from product detail",
+    "official": {
+      "summary_zh": "A faithful Chinese summary of the recorded official facts.",
+      "summary_status": "provided",
+      "categories_zh": ["工具"],
+      "keywords_zh": ["渲染"],
+      "url": "https://assetstore.unity.com/packages/tools/example-123"
+    }
+  }
+]
+```
+
+Only these five official fields are accepted, and at least one must be supplied. `url` is optional; if present, it must be an official HTTPS product URL for the same product ID without query or fragment. `expected_revision` is optional; use the actual revision from the facts being translated to reject changed input. The script validates the whole file, reads current detail and applies partial updates with a revision check. Identical fields are skipped; personal fields are never changed. Applying Chinese does not fetch a website.
+
+The default API is `http://127.0.0.1:18080`; use `--api-url` only for a different configured local port. It accepts a bare HTTP(S) origin with a literal loopback IP, no path or trailing slash, credentials, query or fragment. Local requests disable proxies and redirects. The script reads the platform's private `VaultRag/auth-token` file into memory (or `--token-file`) and never includes it in reports or uses store-account cookies. Reports are atomically written with owner-only permissions. `--interval` is 1–60 seconds. Completion exits 0, paused/interrupted collection exits 2, errors exit 1, and Ctrl-C exits 130 without cancelling the backend task.
+
+
+### User-defined attachment groups
+
+`vault_files({action:"groups"})` returns saved groups and synchronization/conflict state. `list` accepts `group_id`, combined with existing source, type, category, tag and search filters. Source descriptions/keywords and personal metadata participate in attachment search; existing product commands remain compatible.
+
+`vault_files_update` accepts `{action:"group_update", operation:"create"|"update"|"delete"|"members", payload:{...}}`, with the usual workspace revision, operation ID and write grant. Create uses `name`, optional `rules` and `position`. Update/delete/members require the group `id` and current `revision`; resolving existing conflicts additionally requires `resolve:true`. Members use up to 100 logical `paths` and `mode:"include"|"exclude"|"reset"`. Rules use arrays `sources`, `directories`, `formats`, `categories`, `tags`; populated conditions use AND, values use OR. Manual exclusions win over inclusions and rule matches. Deleting a group never deletes files.
+
+`prepare_download` accepts any available remote attachment, not a store-specific package. `download_status` retains existing owner-scoped behavior. Ready staging is delivered through the local Downloads page, not MCP Base64 chunks; it does not assert that a user saved a copy to their chosen directory. Read-only clients can query groups and prepare authorized downloads but cannot change groups or membership.
+
+
+## AI asset retrieval and persistent delivery
+
+The existing file tools support `search_assets`, `asset_details`, native-image `asset_preview`, `deliver_asset`, `delivery_status` and `delivery_control`. Read existing assets first, inspect actual file versions and deliver selected originals to the configured directory. Completed jobs return an absolute path on the identified service host; the calling AI handles engine integration. Old temporary download handles still hide staging paths. See [configuration, action schemas and recovery](ASSET_WORKFLOWS.md).
+
+AI asset search is now opt-in per attachment group. `groups` includes `search_enabled`, `search_scope_revision` and `search_scope_conflicts`; explicit `group_update` flag updates require the scope revision. Scope conflict resolution uses `resolve_search_scope=true` after review. Unselected groups are excluded from keyword and semantic search; no enabled groups returns `scope_not_configured`. Do not automatically bypass it with a full attachment listing. `group_id` only narrows the enabled union. See [group configuration and NAS synchronization](ASSET_WORKFLOWS.md#select-groups-before-searching).
+
+### Presenter notes in managed designs
+
+Local `design_document` reads optional page `presenterNotes` objects. Save them
+with normal revision-checked `design_operations` commands:
+`{type: "page.update", page_id, patch: {presenterNotes: {overview, cues}}}`.
+`cues` maps stable step/case IDs to Markdown text. Use the read-time revision,
+workspace revision and a unique operation ID; initialize only blank sections.
+Notes participate in normal undo/redo and copies. Audience runtime documents,
+project-origin `Design/studio/project.json`, HTML ZIPs and static-publish snapshots
+omit notes. Presenter window control is a desktop-only main-frame interface,
+not a general MCP or project-script debugging endpoint.
