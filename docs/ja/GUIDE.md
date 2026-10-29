@@ -1,5 +1,7 @@
 # LeafLoom を使い始める
 
+[0.1.5 の変更点と更新手順](RELEASE_NOTES_0.1.5.md)
+
 **設定 → Skill** で同梱の `wiki-search` スキルをインストール・更新できます。
 
 [English](../en/GUIDE.md) · [中文](../zh-CN/GUIDE.md) · [日本語](GUIDE.md)
