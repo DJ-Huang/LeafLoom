@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Publish selected Design Studio pages from the **Publish to** menu to a new or associated Miaoda course app, identified by the Feishu icon, with dependency warnings, asset progress and remote revision protection.
+
 ## 0.1.5 — 2026-10-29
 
 - Connect multiple generic WebDAV/SMB2/3 attachment servers from simplified address/account/password cards; preserve existing roots, identities and metadata bindings when changing the new-upload destination.

@@ -56,6 +56,10 @@ libraries are retained. Cleanup is journaled and resumes after an interruption.
 and Delete removes selected elements. Focused source/text fields retain their
 normal editing shortcuts. A new edit after undo starts a new history branch.
 
+## Publish interactive courses to Miaoda
+
+Choose **Publish to**, then **Miaoda**, select pages, and create a frontend app or associate a compatible Design Studio course app by its app ID. The selected saved revision replaces the app's course; previously unselected pages are excluded. For a new app, an empty scaffold is released first because Miaoda only permits access configuration after publication. Course content is uploaded only after organization access is confirmed; two approvals may be needed. Associated apps retain their existing scope. Media is uploaded to the app's storage; dynamically computed references may require manual review. Publication jobs show progress, require inspection after uncertain writes, and stop while an approver is pending. A changed remote branch blocks replacement. The resulting link is available only after release completes. Feishu CLI authentication and the apps read/write scopes are required.
+
 ## Canvas navigation and inspection
 
 Use Select (`V`) for editing and Hand (`H`) for panning, or temporarily hold Space

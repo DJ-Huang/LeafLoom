@@ -2528,3 +2528,65 @@ aw.recoveredSyncing|连接已恢复，正在同步资料|Connection restored; sy
 aw.syncQueued|等待同步资料|Metadata sync queued|資料の同期待ち
 aw.lastConnectionIssue|查看上次连接问题|View last connection issue|前回の接続問題を表示
 ag.loading|正在读取“{name}”分组…|Loading group “{name}”…|グループ「{name}」を読み込み中…
+
+取消全选|Clear all|選択をすべて解除
+正在检查页面依赖…|Checking page dependencies…|ページの依存関係を確認中…
+以下关联页面未选择|These linked pages are not selected|関連する次のページが選択されていません
+跳转到未选择的页面将不可用，嵌入的页面将留空。可以补选后再导出。|Links to unselected pages will be unavailable and embedded pages will be blank. Add them to the selection before exporting if needed.|未選択ページへの移動は使用できず、埋め込みページは空白になります。必要なページを追加してから書き出してください。
+发布到|Publish to|公開先
+妙搭|Miaoda|妙搭
+发布到妙搭|Publish to Miaoda|妙搭へ公開
+选择已保存的页面，生成带目录的交互课件并发布到妙搭。|Choose saved pages to publish an interactive course with a table of contents.|保存済みページを選択し、目次付きの対話型教材を妙搭に公開します。
+脚本中的动态素材和跳转可能无法自动识别，发布后请检查交互。|Dynamic script resources and navigation may not be detected; check interactions after publishing.|スクリプトの動的な素材やページ移動は検出できない場合があります。公開後に操作を確認してください。
+目标应用|Target application|対象アプリ
+新建妙搭应用|Create a Miaoda app|妙搭アプリを新規作成
+应用名称|Application name|アプリ名
+输入课件应用名称|Enter the course application name|教材アプリの名前を入力
+新应用先发布空白外壳，确认公司内访问后再上传课件；可能需要两次发布审批。|A new app first publishes an empty shell. Course content is uploaded only after organization access is confirmed; two approvals may be required.|新規アプリは空の画面を先に公開し、組織内アクセスを確認してから教材をアップロードします。公開承認が 2 回必要な場合があります。
+准备应用访问权限|Preparing app access|アプリのアクセス権限を準備中
+发布确认|Review publication|公開内容の確認
+将发布的页面|Pages to publish|公開するページ
+Enable Feishu in LeafLoom settings|请先在 LeafLoom 设置中启用飞书连接。|Enable Feishu in LeafLoom settings.|LeafLoom の設定で飛書接続を有効にしてください。
+Feishu operation failed; check CLI login and resource permissions externally|飞书操作未完成，请检查飞书登录状态和资源权限。|The Feishu operation failed. Check CLI sign-in and resource permissions.|飛書の操作に失敗しました。CLI のログインとリソース権限を確認してください。
+The remote app changed after association or the last publication; review before continuing|远端应用在关联或上次发布后已发生变化，请检查后再继续。|The remote app changed after association or the last publication. Review it before continuing.|関連付けまたは前回の公開後にリモートアプリが変更されました。確認してから続行してください。
+The remote app changed during publication; no content was pushed|发布期间远端应用发生变化，未推送课件。|The remote app changed during publication. No course content was pushed.|公開中にリモートアプリが変更されました。教材はプッシュされていません。
+Only frontend course apps can be associated|只能关联前端课件应用。|Only frontend course apps can be associated.|フロントエンド教材アプリのみ関連付けできます。
+This app is not a supported Design Studio course app|该应用不是受支持的 Design Studio 课件应用。|This app is not a supported Design Studio course app.|このアプリは対応する Design Studio 教材アプリではありません。
+This course app belongs to a different design project|该课件应用属于另一个设计项目。|This course app belongs to a different design project.|この教材アプリは別のデザインプロジェクトに属しています。
+This course app has unrecognized remote changes; inspect it before association|课件应用存在未识别的远端改动，请检查后再关联。|This course app has unrecognized remote changes. Inspect it before association.|教材アプリに未確認のリモート変更があります。確認してから関連付けてください。
+The last upload could not be uniquely confirmed; inspect app storage before retrying|无法确认上一次素材上传的结果，请检查应用存储后再重试。|The last upload could not be uniquely confirmed. Inspect app storage before retrying.|前回のアップロードを一意に確認できません。アプリのストレージを確認してから再試行してください。
+The app access scope changed; inspect it before uploading the course|应用访问范围已变化，请检查后再上传课件。|The app access scope changed. Inspect it before uploading the course.|アプリのアクセス範囲が変更されました。確認してから教材をアップロードしてください。
+The app access scope changed; inspect it before sharing the course|应用访问范围已变化，请检查后再分享课件。|The app access scope changed. Inspect it before sharing the course.|アプリのアクセス範囲が変更されました。確認してから教材を共有してください。
+所选页面将替换此应用当前课件；其他页面不会出现在新版本中。|Selected pages replace the current course; other pages will not appear in the new version.|選択したページが現在の教材を置き換え、他のページは新しい版に表示されません。
+关联已有课件应用|Associate an existing course app|既存の教材アプリを関連付け
+仅支持已有的 Design Studio 课件应用；关联会检查应用结构和远端版本。|Only existing Design Studio course apps are supported; association checks the app structure and remote revision.|既存の Design Studio 教材アプリのみ対応します。関連付け時に構造とリモート版を確認します。
+妙搭应用 ID 或链接|Miaoda app ID or link|妙搭アプリ ID またはリンク
+妙搭应用 ID|Miaoda app ID|妙搭アプリ ID
+请输入有效的妙搭应用 ID|Enter a valid Miaoda app ID|有効な妙搭アプリ ID を入力してください
+关联应用|Associate app|アプリを関連付け
+发布中|Publishing|公開中
+等待发布结果|Waiting for publication|公開結果を待機中
+等待审批|Awaiting approval|承認待ち
+发布完成|Published|公開完了
+发布已暂停|Publication paused|公開を一時停止
+发布失败|Publication failed|公開失敗
+准备已保存版本|Preparing saved version|保存済みの版を準備中
+创建妙搭应用|Creating Miaoda app|妙搭アプリを作成中
+初始化应用|Initializing app|アプリを初期化中
+设置公司内访问|Setting organization access|組織内アクセスを設定中
+检查应用版本|Checking application revision|アプリの版を確認中
+上传素材|Uploading assets|素材をアップロード中
+提交并推送课件|Committing and pushing the course|教材をコミットして送信中
+发起发布|Starting publication|公開を開始中
+素材进度|Asset progress|素材の進捗
+发布理由|Publication reason|公開理由
+发布正在等待审批负责人处理。|Publication is waiting for an approver.|公開は承認担当者の対応を待っています。
+打开审批链接|Open approval link|承認リンクを開く
+打开在线课件|Open online course|オンライン教材を開く
+刷新发布状态|Refresh publication status|公開状況を更新
+请先检查妙搭中的应用和素材状态，再开始新任务；不会自动重复不确定的操作。|Check the app and assets in Miaoda before starting another job; uncertain operations are not repeated automatically.|新しい処理を始める前に妙搭のアプリと素材を確認してください。不確かな操作は自動で繰り返しません。
+核对素材并继续|Verify assets and continue|素材を確認して続行
+发布状态待核对|Publication status needs review|公開状況の確認が必要
+已核对|Reviewed|確認済み
+已核对远端，允许开始新任务|I checked the remote app; allow a new job|リモートアプリを確認し、新しい処理を許可
+请在飞书连接中检查妙搭授权，然后核对任务后继续。|Check Miaoda authorization in Feishu settings, then review the job before continuing.|飛書接続で妙搭の権限を確認し、処理を確認してから続行してください。
