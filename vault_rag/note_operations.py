@@ -47,11 +47,14 @@ class NoteOperations:
 
     def metadata(self):
         catalog = self.runtime.catalog
+        if self.runtime.catalog_pending():
+            raise NoteError('metadata_pending', 'Workspace metadata is preparing; retry shortly', retry_after_ms=25)
         if catalog.metadata_ready and catalog.complete_namespace and catalog.root == self.config.data.get('root'):
             return catalog
         if not catalog.complete_namespace or catalog.root != self.config.data.get('root'):
             catalog.metadata_ready = False
-        self.runtime.ensure_metadata()
+        if self.runtime.ensure_metadata() and catalog is self.runtime.catalog and catalog.metadata_ready and catalog.complete_namespace and catalog.root == self.config.data.get('root'):
+            return catalog
         raise NoteError('metadata_pending', 'Workspace metadata is preparing; retry shortly', retry_after_ms=600)
 
     def page(self, rows, limit=50, cursor='', *, key=''):
@@ -167,8 +170,10 @@ class NoteOperations:
         # Called under config/files locks: never wait for catalog.update_lock.
         # Catalog workers take that lock before snapshotting config, so doing
         # synchronous catalog work here can deadlock after the file is committed.
-        # Keep queries honest until the existing worker refreshes their metadata.
-        self.runtime.catalog.metadata_ready = False
+        # Readers wait for the queued incremental batch, without rescanning the vault.
+        # Standalone callers without a file worker keep explicit metadata preparation.
+        if not self.runtime.thread or not self.runtime.thread.is_alive():
+            self.runtime.catalog.metadata_ready = False
         self.runtime.files_changed(*paths)
         self.runtime.publish('files', paths)
 

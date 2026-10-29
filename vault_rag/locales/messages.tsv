@@ -2528,3 +2528,319 @@ aw.recoveredSyncing|连接已恢复，正在同步资料|Connection restored; sy
 aw.syncQueued|等待同步资料|Metadata sync queued|資料の同期待ち
 aw.lastConnectionIssue|查看上次连接问题|View last connection issue|前回の接続問題を表示
 ag.loading|正在读取“{name}”分组…|Loading group “{name}”…|グループ「{name}」を読み込み中…
+
+db.create|新建数据库|New database|データベースを作成
+db.databaseName|数据库名称|Database name|データベース名
+db.recordFolder|记录目录（留空则新建专属目录）|Record folder (blank creates a dedicated folder)|記録フォルダー（空欄で専用フォルダーを作成）
+db.title|标题|Title|タイトル
+db.category|分类|Category|分類
+db.attachments|附件|Attachments|添付ファイル
+db.cover|封面|Cover|カバー
+db.start|开始日期|Start date|開始日
+db.end|结束日期|End date|終了日
+db.created|创建时间|Created time|作成日時
+db.modified|修改时间|Modified time|更新日時
+db.table|表格|Table|テーブル
+db.list|列表|List|リスト
+db.gallery|画廊|Gallery|ギャラリー
+db.timeline|时间线|Timeline|タイムライン
+db.view|视图|View|ビュー
+db.views|数据库视图|Database views|データベースのビュー
+db.addView|添加视图|Add view|ビューを追加
+db.addRecord|添加记录|Add record|記録を追加
+db.fields|字段|Fields|フィールド
+db.layout|布局|Layout|レイアウト
+db.filter|筛选|Filter|フィルター
+db.sort|排序|Sort|並べ替え
+db.group|分组|Group|グループ
+db.search|搜索记录|Search records|記録を検索
+db.noteRecords|记录保存到原笔记|Records are saved to the original notes|記録は元のノートに保存されます
+db.createdRecord|记录已创建|Record created|記録を作成しました
+db.createdOutsideView|已创建，但不在当前视图中|Created, but not in the current view|作成済みですが、現在のビューの条件に含まれていません
+db.reload|重新加载|Reload|再読み込み
+db.missingView|指定的视图已不存在|The specified view no longer exists|指定したビューは存在しません
+db.defaultView|默认视图|Default view|既定のビュー
+db.unsupportedView|此视图暂不支持，配置已保留|This view is unsupported; its configuration is preserved|未対応のビューです。設定は保持されています
+db.fullPage|完整页面|Full page|ページ全体
+db.columnWidth|列宽|Column width|列の幅
+db.ungrouped|未分组|Ungrouped|未分類
+db.noRecords|没有符合条件的记录|No matching records|一致する記録がありません
+db.loadMore|加载更多|Load more|さらに読み込む
+db.viewName|视图名称|View name|ビュー名
+db.trashRecord|回收记录|Recycle record|記録をゴミ箱に移動
+db.trashHelp|将原笔记移入回收区，可以从历史与回收区恢复。|Move the original note to recoverable trash.|元のノートをゴミ箱に移動します。復元できます。
+db.fieldKey|选择字段|Select field|フィールドを選択
+db.addField|添加字段|Add field|フィールドを追加
+db.newKey|属性键（创建后固定）|Property key (fixed after creation)|プロパティキー（作成後は固定）
+db.fieldName|显示名称|Display name|表示名
+db.fieldType|字段类型|Field type|フィールドの種類
+db.options|选项（逗号分隔）|Options (comma separated)|選択肢（カンマ区切り）
+db.removeField|移除字段配置|Remove field configuration|フィールド設定を削除
+db.keepValues|原笔记中的属性值会保留。|Property values in original notes are preserved.|元のノートのプロパティ値は保持されます。
+db.visibleFields|显示字段与顺序|Visible fields and order|表示するフィールドと順序
+db.moveUp|上移|Move up|上へ移動
+db.cardSize|卡片大小|Card size|カードサイズ
+db.small|小|Small|小
+db.medium|中|Medium|中
+db.large|大|Large|大
+db.imageFit|图片适配|Image fit|画像の表示
+db.crop|裁切填充|Crop to fill|トリミングして表示
+db.contain|完整显示|Fit entire image|画像全体を表示
+db.direction|排序方向|Sort direction|並び順
+db.operator|条件|Condition|条件
+db.value|值|Value|値
+db.addCondition|添加条件（全部满足）|Add condition (match all)|条件を追加（すべて一致）
+db.removeView|删除此视图|Delete this view|このビューを削除
+db.searchAttachments|搜索附件名称或路径|Search attachment name or path|添付ファイル名またはパスを検索
+db.upload|上传附件|Upload attachments|添付ファイルをアップロード
+db.video|播放视频|Play video|動画を再生
+db.noCover|暂无封面|No cover|カバーなし
+db.chooseDates|请在布局中设置开始和结束日期字段|Choose start and end date fields in Layout|レイアウトで開始日と終了日を設定してください
+db.today|回到今天|Today|今日
+db.scale|时间尺度|Time scale|時間スケール
+db.day|日|Day|日
+db.week|周|Week|週
+db.month|月|Month|月
+db.invalidDates|结束日期早于开始日期|End date is before start date|終了日が開始日より前です
+db.jumpToRecord|定位记录|Jump to record|記録に移動
+db.unscheduled|未排期|Unscheduled|未予定
+db.insert|插入数据库|Insert database|データベースを挿入
+db.insertHelp|嵌入已有数据库的指定视图|Embed a view from an existing database|既存データベースのビューを埋め込む
+db.busy|正在保存，请稍候|Saving; please wait|保存中です。お待ちください
+db.draftConflict|正文有未保存修改，请先在记录详情中保存或合并，再修改属性。|The note has unsaved edits. Save or merge them in record details before changing properties.|未保存の編集があります。記録の詳細で保存または統合してからプロパティを変更してください。
+db.invalidName|名称不能包含路径分隔符|The name cannot contain path separators|名前にパス区切り文字は使用できません
+db.type.text|文本|Text|テキスト
+db.type.number|数字|Number|数値
+db.type.select|单选|Select|選択
+db.type.multiselect|多选|Multi-select|複数選択
+db.type.date|日期|Date|日付
+db.type.checkbox|勾选|Checkbox|チェックボックス
+db.type.url|链接|URL|リンク
+db.type.attachment|附件|Attachment|添付ファイル
+db.op.eq|等于|Equals|等しい
+db.op.neq|不等于|Does not equal|等しくない
+db.op.contains|包含|Contains|含む
+db.op.empty|为空|Is empty|空である
+db.op.not_empty|不为空|Is not empty|空でない
+db.op.gt|大于|Greater than|より大きい
+db.op.lt|小于|Less than|より小さい
+db.op.gte|大于等于|At least|以上
+db.op.lte|小于等于|At most|以下
+
+Database view not found|数据库视图不存在|Database view not found|データベースのビューが見つかりません
+Database path must end in .base|数据库路径必须以 .base 结尾|Database path must end in .base|データベースのパスは .base で終わる必要があります
+Invalid database configuration|数据库配置无效|Invalid database configuration|データベース設定が無効です
+Unsupported database schema version; source kept unchanged|不支持此数据库版本，原文件未修改|Unsupported database schema version; source kept unchanged|未対応のデータベース版です。元のファイルは変更していません
+Keep at least one view|请至少保留一个视图|Keep at least one view|ビューを一つ以上残してください
+Choose a configured editable field|请选择已配置的可编辑字段|Choose a configured editable field|設定済みの編集可能なフィールドを選んでください
+Number must be finite|请输入有限数值|Number must be finite|有限の数値を入力してください
+Use an HTTP(S) URL|请输入 HTTP(S) 链接|Use an HTTP(S) URL|HTTP(S) のリンクを入力してください
+End date must not be before start date|结束日期不能早于开始日期|End date must not be before start date|終了日を開始日より前にすることはできません
+Record folder must exist|记录目录必须存在|Record folder must exist|記録フォルダーが存在する必要があります
+Invalid or reserved field key|属性键无效或为保留名称|Invalid or reserved field key|プロパティキーが無効または予約名です
+Unsupported field type|不支持此字段类型|Unsupported field type|未対応のフィールドの種類です
+Duplicate field keys|属性键重复|Duplicate field keys|プロパティキーが重複しています
+Database changed; reload configuration before saving|数据库配置已变化，请重新加载并核对后保存|Database changed; reload configuration before saving|設定が変更されました。再読み込みして確認してから保存してください
+Use YYYY-MM-DD dates|请使用 YYYY-MM-DD 日期格式|Use YYYY-MM-DD dates|日付は YYYY-MM-DD 形式を使用してください
+Select a configured option|请选择已配置的选项|Select a configured option|設定済みの選択肢を選んでください
+Timeline requires date fields|时间线需要日期字段|Timeline requires date fields|タイムラインには日付フィールドが必要です
+Choose two distinct date fields|请选择两个不同的日期字段|Choose two distinct date fields|異なる二つの日付フィールドを選んでください
+Database already exists|数据库已存在|Database already exists|データベースは既に存在します
+Configure a record folder before creating records|请先配置记录保存目录|Configure a record folder before creating records|先に記録フォルダーを設定してください
+Record is outside the database folder|记录不在数据库目录范围内|Record is outside the database folder|記録がデータベースのフォルダー外にあります
+operation_id was used for another command|操作标识已用于其他命令，请重新打开创建窗口|operation_id was used for another command|操作 ID は別のコマンドで使用済みです。作成画面を開き直してください
+Creation outcome changed; inspect the target before retrying|创建结果已变化，重试前请检查目标文件|Creation outcome changed; inspect the target before retrying|作成結果が変更されました。再試行前に対象ファイルを確認してください
+Unsupported view type|不支持此视图类型|Unsupported view type|未対応のビューの種類です
+
+db.database|笔记数据库|Note database|ノートデータベース
+db.records|条记录|records|件
+db.localNotes|保存在本地笔记中|Saved in local notes|ローカルノートに保存
+db.emptyValue|空|Empty|未設定
+db.newPage|新记录|New record|新しい記録
+db.emptyHint|添加第一条记录，开始整理你的内容。|Add your first record to get started.|最初の記録を追加して始めましょう。
+db.thisView|仅此视图|This view only|このビューのみ
+db.builtIn|内置|Built-in|組み込み
+db.hideField|隐藏|Hide|非表示
+db.showField|显示|Show|表示
+db.noSort|默认顺序|Default order|既定の順序
+db.noGroup|不分组|No grouping|グループなし
+db.ascending|升序|Ascending|昇順
+db.descending|降序|Descending|降順
+db.noFilters|显示所有记录|All records are shown|すべての記録を表示
+db.filterHint|添加条件，只展示你关心的内容。|Add a condition to focus on what matters.|条件を追加して必要な記録に絞り込みます。
+db.removeCondition|移除条件|Remove condition|条件を削除
+db.createHelp|选择记录目录，同一批笔记可切换不同视图；任务管理模板默认打开看板。|Choose a record folder and view the same notes in different layouts. The task template opens a board.|記録フォルダーを選び、同じノートを複数のビューで表示します。タスクテンプレートはボードを開きます。
+db.previousPeriod|上一时段|Previous period|前の期間
+db.nextPeriod|下一时段|Next period|次の期間
+
+ui.workspaceTools|工作台|Workspace tools|ワークスペースツール
+ui.yourWorkspace|你的工作空间|YOUR WORKSPACE|ワークスペース
+ui.quickStart|快速开始|Quick start|すぐに始める
+ui.newNoteHint|记下想法与工作笔记|Capture an idea or a working note|アイデアや作業メモを書く
+ui.dailyHint|整理今天的记录与待办|Make room for today's notes|今日の記録とタスクを整理
+ui.searchHint|找到内容和原文依据|Find answers and their sources|内容と出典を見つける
+ui.designHint|把想法变成可视化内容|Turn ideas into visual work|アイデアを視覚化する
+ui.homeSearch|从你的笔记中查找内容与线索…|Find something in your notes…|ノートから内容を探す…
+导出 HTML|Export HTML|HTML を書き出し
+取消全选|Clear all|選択をすべて解除
+选择页面并导出已保存的交互式 HTML ZIP。按原顺序播放，首页为第一个所选页面。|Choose pages for an interactive HTML ZIP from the saved version. Pages retain their order, starting with the first selected page.|保存済みの対話型 HTML ZIP に書き出すページを選択します。元の順序を維持し、最初の選択ページから開始します。
+正在检查页面依赖…|Checking page dependencies…|ページの依存関係を確認中…
+以下关联页面未选择|These linked pages are not selected|関連する次のページが選択されていません
+跳转到未选择的页面将不可用，嵌入的页面将留空。可以补选后再导出。|Links to unselected pages will be unavailable and embedded pages will be blank. Add them to the selection before exporting if needed.|未選択ページへの移動は使用できず、埋め込みページは空白になります。必要なページを追加してから書き出してください。
+脚本中的动态素材和页面跳转可能无法自动识别，请解压后检查交互；如有遗漏，请补选页面或检查脚本引用。|Dynamically referenced assets and page links in scripts may not be detected. Check interactions after unzipping; select missing pages or review script references if needed.|スクリプトが動的に参照する素材やページは自動検出できない場合があります。展開後に操作を確認し、必要なページの追加や参照の確認を行ってください。
+导出 HTML ZIP|Export HTML ZIP|HTML ZIP を書き出し
+外部网址不会打包；离线使用前请检查引用和交互。|External URLs are not bundled. Check references and interactions before using the export offline.|外部 URL は同梱されません。オフラインで使用する前に参照と操作を確認してください。
+
+design.panelSwitch|工作台面板|Workbench panels|ワークベンチのパネル
+design.canvas|画布|Canvas|キャンバス
+发布到|Publish to|公開先
+妙搭|Miaoda|妙搭
+发布到妙搭|Publish to Miaoda|妙搭へ公開
+选择已保存的页面，生成带目录的交互课件并发布到妙搭。|Choose saved pages to publish an interactive course with a table of contents.|保存済みページを選択し、目次付きの対話型教材を妙搭に公開します。
+脚本中的动态素材和跳转可能无法自动识别，发布后请检查交互。|Dynamic script resources and navigation may not be detected; check interactions after publishing.|スクリプトの動的な素材やページ移動は検出できない場合があります。公開後に操作を確認してください。
+目标应用|Target application|対象アプリ
+新建妙搭应用|Create a Miaoda app|妙搭アプリを新規作成
+应用名称|Application name|アプリ名
+输入课件应用名称|Enter the course application name|教材アプリの名前を入力
+新应用先发布空白外壳，确认公司内访问后再上传课件；可能需要两次发布审批。|A new app first publishes an empty shell. Course content is uploaded only after organization access is confirmed; two approvals may be required.|新規アプリは空の画面を先に公開し、組織内アクセスを確認してから教材をアップロードします。公開承認が 2 回必要な場合があります。
+准备应用访问权限|Preparing app access|アプリのアクセス権限を準備中
+发布确认|Review publication|公開内容の確認
+将发布的页面|Pages to publish|公開するページ
+Enable Feishu in LeafLoom settings|请先在 LeafLoom 设置中启用飞书连接。|Enable Feishu in LeafLoom settings.|LeafLoom の設定で飛書接続を有効にしてください。
+Feishu operation failed; check CLI login and resource permissions externally|飞书操作未完成，请检查飞书登录状态和资源权限。|The Feishu operation failed. Check CLI sign-in and resource permissions.|飛書の操作に失敗しました。CLI のログインとリソース権限を確認してください。
+The remote app changed after association or the last publication; review before continuing|远端应用在关联或上次发布后已发生变化，请检查后再继续。|The remote app changed after association or the last publication. Review it before continuing.|関連付けまたは前回の公開後にリモートアプリが変更されました。確認してから続行してください。
+The remote app changed during publication; no content was pushed|发布期间远端应用发生变化，未推送课件。|The remote app changed during publication. No course content was pushed.|公開中にリモートアプリが変更されました。教材はプッシュされていません。
+Only frontend course apps can be associated|只能关联前端课件应用。|Only frontend course apps can be associated.|フロントエンド教材アプリのみ関連付けできます。
+This app is not a supported Design Studio course app|该应用不是受支持的 Design Studio 课件应用。|This app is not a supported Design Studio course app.|このアプリは対応する Design Studio 教材アプリではありません。
+This course app belongs to a different design project|该课件应用属于另一个设计项目。|This course app belongs to a different design project.|この教材アプリは別のデザインプロジェクトに属しています。
+This course app has unrecognized remote changes; inspect it before association|课件应用存在未识别的远端改动，请检查后再关联。|This course app has unrecognized remote changes. Inspect it before association.|教材アプリに未確認のリモート変更があります。確認してから関連付けてください。
+The last upload could not be uniquely confirmed; inspect app storage before retrying|无法确认上一次素材上传的结果，请检查应用存储后再重试。|The last upload could not be uniquely confirmed. Inspect app storage before retrying.|前回のアップロードを一意に確認できません。アプリのストレージを確認してから再試行してください。
+The app access scope changed; inspect it before uploading the course|应用访问范围已变化，请检查后再上传课件。|The app access scope changed. Inspect it before uploading the course.|アプリのアクセス範囲が変更されました。確認してから教材をアップロードしてください。
+The app access scope changed; inspect it before sharing the course|应用访问范围已变化，请检查后再分享课件。|The app access scope changed. Inspect it before sharing the course.|アプリのアクセス範囲が変更されました。確認してから教材を共有してください。
+所选页面将替换此应用当前课件；其他页面不会出现在新版本中。|Selected pages replace the current course; other pages will not appear in the new version.|選択したページが現在の教材を置き換え、他のページは新しい版に表示されません。
+关联已有课件应用|Associate an existing course app|既存の教材アプリを関連付け
+仅支持已有的 Design Studio 课件应用；关联会检查应用结构和远端版本。|Only existing Design Studio course apps are supported; association checks the app structure and remote revision.|既存の Design Studio 教材アプリのみ対応します。関連付け時に構造とリモート版を確認します。
+妙搭应用 ID 或链接|Miaoda app ID or link|妙搭アプリ ID またはリンク
+妙搭应用 ID|Miaoda app ID|妙搭アプリ ID
+请输入有效的妙搭应用 ID|Enter a valid Miaoda app ID|有効な妙搭アプリ ID を入力してください
+关联应用|Associate app|アプリを関連付け
+发布中|Publishing|公開中
+等待发布结果|Waiting for publication|公開結果を待機中
+等待审批|Awaiting approval|承認待ち
+发布完成|Published|公開完了
+发布已暂停|Publication paused|公開を一時停止
+发布失败|Publication failed|公開失敗
+准备已保存版本|Preparing saved version|保存済みの版を準備中
+创建妙搭应用|Creating Miaoda app|妙搭アプリを作成中
+初始化应用|Initializing app|アプリを初期化中
+设置公司内访问|Setting organization access|組織内アクセスを設定中
+检查应用版本|Checking application revision|アプリの版を確認中
+上传素材|Uploading assets|素材をアップロード中
+提交并推送课件|Committing and pushing the course|教材をコミットして送信中
+发起发布|Starting publication|公開を開始中
+素材进度|Asset progress|素材の進捗
+发布理由|Publication reason|公開理由
+发布正在等待审批负责人处理。|Publication is waiting for an approver.|公開は承認担当者の対応を待っています。
+打开审批链接|Open approval link|承認リンクを開く
+打开在线课件|Open online course|オンライン教材を開く
+刷新发布状态|Refresh publication status|公開状況を更新
+请先检查妙搭中的应用和素材状态，再开始新任务；不会自动重复不确定的操作。|Check the app and assets in Miaoda before starting another job; uncertain operations are not repeated automatically.|新しい処理を始める前に妙搭のアプリと素材を確認してください。不確かな操作は自動で繰り返しません。
+核对素材并继续|Verify assets and continue|素材を確認して続行
+发布状态待核对|Publication status needs review|公開状況の確認が必要
+已核对|Reviewed|確認済み
+已核对远端，允许开始新任务|I checked the remote app; allow a new job|リモートアプリを確認し、新しい処理を許可
+请在飞书连接中检查妙搭授权，然后核对任务后继续。|Check Miaoda authorization in Feishu settings, then review the job before continuing.|飛書接続で妙搭の権限を確認し、処理を確認してから続行してください。
+db.board|看板|Board|ボード
+db.todo|待开始|To do|未着手
+db.doing|进行中|In progress|進行中
+db.done|已完成|Done|完了
+db.high|高优先级|High|高
+db.mediumPriority|中优先级|Medium|中
+db.low|低优先级|Low|低
+db.status|状态|Status|ステータス
+db.priority|优先级|Priority|優先度
+db.due|截止日期|Due date|期限
+db.taskPreset|任务管理|Task management|タスク管理
+db.template|模板|Template|テンプレート
+db.basicTemplate|普通数据库|General database|通常のデータベース
+db.taskSetupHelp|选择用于任务的字段，并明确初始和完成状态。保留已有字段和笔记值。|Choose task fields and explicit initial/completed states. Existing fields and note values are preserved.|タスクの項目と初期・完了状態を選びます。既存の項目とノート値は保持されます。
+db.willAddField|新增字段：{name}|New field: {name}|新しい項目：{name}
+db.newFieldsPreview|将新增：{fields}|Will add: {fields}|追加する項目：{fields}
+db.initialStatus|初始状态|Initial status|初期状態
+db.completedStatuses|完成状态|Completed states|完了とする状態
+db.chooseOption|选择一个选项|Choose an option|選択してください
+db.createView|创建视图|Create view|ビューを作成
+db.boardTaskFields|请选择不同且类型兼容的状态、优先级和日期字段；已有字段不会自动转换类型。|Choose distinct compatible status, priority and date fields. Existing field types are never converted automatically.|ステータス、優先度、日付に互換性のある別々の項目を選んでください。既存の型は自動変換されません。
+db.boardChooseStates|请选择有效的初始状态和至少一个完成状态。|Choose a valid initial state and at least one completed state.|有効な初期状態と少なくとも一つの完了状態を選択してください。
+db.invalidOption|选项显示名称或颜色无效。|Invalid option label or color.|選択肢の表示名または色が無効です。
+db.boardSelectField|选择一个单选字段作为看板分组|Choose a select field for board columns|ボードの列に使う選択項目を選んでください
+db.boardInvalid|看板配置无效，原配置已保留。|Invalid board configuration. The original is preserved.|ボード設定が無効です。元の設定は保持されています。
+db.boardMissingGroup|分组已变化，请刷新看板。|The group changed. Refresh the board.|グループが変更されました。ボードを更新してください。
+db.boardUnknownGroup|先将此历史值恢复为选项，再向该列移动任务。|Restore this historical value as an option before moving tasks into it.|この列へ移動する前に、以前の値を選択肢として復元してください。
+db.boardOperationId|此操作需要有效的操作标识，请刷新后重试。|This operation needs a valid operation ID. Refresh and retry.|有効な操作 ID が必要です。更新して再試行してください。
+db.boardRecoveryConflict|操作恢复时发现外部修改，已保留恢复资料和文件；请检查文件历史后再继续。|Recovery found external edits. Files and recovery material are preserved; inspect file history before continuing.|復元中に外部変更が見つかりました。ファイルと復元データは保持されています。履歴を確認してください。
+db.boardConflict|任务或看板已变化，未覆盖其他修改。请刷新后重试。|The task or board changed. Other edits were not overwritten. Refresh and retry.|タスクまたはボードが変更されました。他の変更は上書きしていません。更新して再試行してください。
+db.boardAutoOrder|当前按规则排序；切换为手动排序后可调整同列顺序。|This view uses automatic sorting. Switch to manual order to reorder within a column.|現在は自動並べ替えです。列内の順序を変えるには手動順序に切り替えてください。
+db.boardMoved|任务位置已保存|Task position saved|タスクの位置を保存しました
+db.boardLoading|正在读取任务…|Loading tasks…|タスクを読み込み中…
+db.boardManual|手动排序 · 拖动安排任务|Manual order · Drag to arrange|手動順序 · ドラッグして配置
+db.boardSorted|按规则排序 · 跨列拖动更改属性|Sorted · Drag across columns to update|自動順序 · 列をまたいでドラッグすると項目を更新
+db.hiddenGroups|隐藏的分组 · {count}|Hidden groups · {count}|非表示のグループ · {count}
+db.addGroup|新增分组|Add group|グループを追加
+db.boardActions|看板操作|Board actions|ボード操作
+db.moveTo|移动到|Move to|移動先
+db.moveDown|下移|Move down|下へ移動
+db.editGroup|编辑分组|Edit group|グループを編集
+db.restoreOption|恢复为选项|Restore option|選択肢として復元
+db.hideGroup|隐藏此分组|Hide group|グループを非表示
+db.groupLeft|向左移动列|Move column left|列を左へ移動
+db.groupRight|向右移动列|Move column right|列を右へ移動
+db.groupName|分组显示名称|Group display name|グループの表示名
+db.groupColor|颜色|Color|色
+db.groupShared|显示名称和颜色在各视图中共享；隐藏和列顺序仅影响当前看板，笔记值保持不变。|Labels and colors are shared across views. Visibility and column order apply to this board; note values are preserved.|表示名と色は各ビューで共有します。表示・列順序はこのボードだけに適用し、ノート値は保持されます。
+db.expandGroup|展开分组|Expand group|グループを展開
+db.collapseGroup|折叠分组|Collapse group|グループを折りたたむ
+db.addToGroup|在「{name}」新建任务|Add task to {name}|「{name}」にタスクを追加
+db.groupActions|分组操作|Group actions|グループ操作
+db.unconfiguredGroup|历史值尚未配置为选项，记录已保留。|This historical value is not a configured option. Records are preserved.|以前の値が選択肢に未登録です。レコードは保持されています。
+db.loadEarlier|加载前面的任务|Load earlier tasks|前のタスクを読み込む
+db.emptyGroup|还没有任务|No tasks yet|タスクはまだありません
+db.taskTitle|任务标题|Task title|タスク名
+db.addTask|新建任务|New task|タスクを追加
+db.dragTask|拖动任务（触屏请长按手柄）|Drag task (hold handle on touch)|タスクをドラッグ（タッチはハンドルを長押し）
+db.taskActions|任务操作|Task actions|タスク操作
+db.overdue|逾期|Overdue|期限超過
+db.attachmentCount|{count} 个附件|{count} attachments|添付 {count} 件
+db.optionValuesHelp|值用于笔记存储；编辑显示名称和颜色可保留原值。|Values are stored in notes. Edit labels and colors to preserve those values.|値はノートに保存されます。表示名と色の編集では元の値を保持します。
+db.optionName|显示名称|Display name|表示名
+db.hideEmptyGroups|隐藏空分组|Hide empty groups|空のグループを非表示
+db.configureTasks|配置任务字段与完成状态|Configure task fields and completed states|タスク項目と完了状態を設定
+db.color.gray|灰色|Gray|グレー
+db.color.blue|蓝色|Blue|青
+db.color.green|绿色|Green|緑
+db.color.red|红色|Red|赤
+db.color.orange|橙色|Orange|オレンジ
+db.color.yellow|黄色|Yellow|黄
+db.color.purple|紫色|Purple|紫
+db.color.pink|粉色|Pink|ピンク
+db.recordActions|记录操作|Record actions|記録の操作
+db.openPeek|在侧边预览中打开|Open in side peek|サイドプレビューで開く
+db.openPage|打开为完整页面|Open as full page|ページ全体で開く
+db.duplicateRecord|创建副本|Duplicate|複製
+db.copyNoteLink|复制笔记链接|Copy note link|ノートリンクをコピー
+db.noteLinkCopied|笔记链接已复制|Note link copied|ノートリンクをコピーしました
+db.noteLinkFailed|未能复制链接，请检查剪贴板权限后重试。|Could not copy the link. Check clipboard permissions and retry.|リンクをコピーできませんでした。クリップボードの権限を確認してください。
+db.copyTitle|{title}（副本）|{title} (copy)|{title}（コピー）
+db.recordDuplicated|记录副本已创建|Record duplicated|記録を複製しました
+db.recordRenamed|记录标题已更新|Record title updated|記録のタイトルを更新しました
+db.recordTrashed|记录已移到回收站|Record moved to trash|記録をゴミ箱に移動しました
+db.titleRequired|请输入记录标题。|Enter a record title.|記録のタイトルを入力してください。
+db.trashRecordPrompt|将「{title}」移到回收站，可从历史与回收区恢复。|Move “{title}” to trash? You can restore it from History & Trash.|「{title}」をゴミ箱に移動します。履歴とゴミ箱から復元できます。
+db.recordConflict|记录已在其他位置修改，请重新加载后再试。|This record changed elsewhere. Reload it and retry.|記録が別の場所で変更されました。再読み込みしてやり直してください。
+db.justCreated|刚创建|Just created|作成直後
+db.deleteGroup|删除分组|Delete group|グループを削除
+db.deleteGroupDescription|删除“{name}”及其共享的字段选项。记录将移到所选分组，笔记及正文会保留；此更改也会同步到其他视图。|Delete “{name}” and its shared field option. Move its records to the selected group, preserving notes and their bodies. Other views will reflect this change.|「{name}」と共有フィールドの選択肢を削除します。記録は選択したグループへ移動し、ノートと本文は保持されます。他のビューにも反映されます。
+db.deleteGroupCount|共影响 {count} 条记录，包含当前筛选隐藏和尚未加载的记录。|Affects {count} records, including records hidden by view filters or not yet loaded.|ビューのフィルターで非表示、または未読み込みの記録を含む {count} 件が対象です。
+db.moveRecordsTo|将记录移到|Move records to|記録の移動先
+db.deleteGroupTaskTarget|此分组用作初始状态或唯一完成状态，请选择另一个状态接替；至少保留一个任务状态。|This group is the initial or sole completed state. Choose another status to take over; keep at least one task status.|このグループは初期状態または唯一の完了状態です。引き継ぐ状態を選び、少なくとも1つのタスク状態を残してください。
+db.groupDeleted|分组已删除，记录已保留|Group deleted; records preserved|グループを削除しました。記録は保持されています

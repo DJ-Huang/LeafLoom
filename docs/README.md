@@ -61,3 +61,9 @@ These records describe particular builds and environments. Use the current user 
 - [Earlier UI, settings and graph changes](NOTION_UI.md)
 
 Editor regression commands and the disposable browser harness are documented in [Contributing](../CONTRIBUTING.md). The current formatted Markdown editor is described in the three user guides above.
+
+### Note databases · 笔记数据库 · ノートデータベース
+
+[English guide](en/GUIDE.md#note-databases) · [中文指南](zh-CN/GUIDE.md#笔记数据库) · [日本語ガイド](ja/GUIDE.md#ノートデータベース) · [MCP contracts](MCP.md#note-databases)
+
+[Board and basic tasks](en/GUIDE.md#database-boards-and-basic-tasks) · [数据库看板与基础任务](zh-CN/GUIDE.md#数据库看板与基础任务) · [ボードと基本タスク](ja/GUIDE.md#データベースのボードと基本タスク)

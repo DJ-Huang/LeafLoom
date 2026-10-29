@@ -180,3 +180,5 @@ cd LeafLoom
 MIT © 2026 DJ。依赖和模型保留各自许可。 [License](../../LICENSE)
 
 Technical compatibility: `vault-rag`, `VAULT_RAG_HOME`, `.vault-rag/`, HTTP MCP `/mcp`.
+
+将 Markdown 笔记组织为本地数据库，支持表格、列表、看板、画廊和可拖动时间线。[数据库指南](GUIDE.md#笔记数据库)。

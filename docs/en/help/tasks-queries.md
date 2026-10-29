@@ -27,3 +27,7 @@ This supports a bounded grammar and view set, not the entire Dataview or TaskNot
 
 - [Use templates, daily notes and properties](templates-properties.md)
 - [Restore note history and recycled files](recovery.md)
+
+## Note databases
+
+Use **New database** in the directory heading/menu to create a `.base` configuration and choose its record folder. Table, list, board, gallery and draggable timeline views share the same Markdown notes. Configure typed fields, filters, sort, grouping and layout in the toolbar; click a record to edit its properties and body. Use **Insert database** in the editor to embed a stable view. Removing a field/view keeps note data; recycling a record moves the original note to recoverable trash. [Complete database instructions](../GUIDE.md#note-databases).

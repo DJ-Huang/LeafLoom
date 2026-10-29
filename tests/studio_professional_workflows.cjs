@@ -159,6 +159,7 @@ module.exports = async function professionalWorkflows({page, request, info, chec
   const exportedEvent = page.waitForResponse(response => new URL(response.url()).pathname === '/api/design/export' && response.request().method() === 'POST');
   const htmlDownloadEvent = page.waitForEvent('download');
   await toolbar().getByRole('button', {name: '导出', exact: true}).click();
+  await page.getByTestId('export-selected').click();
   const exportedResponse = await exportedEvent; assert.ok(exportedResponse.ok(), await exportedResponse.text());
   const exported = await exportedResponse.json();
   const htmlDownload = await htmlDownloadEvent; assert.equal(await htmlDownload.failure(), null);

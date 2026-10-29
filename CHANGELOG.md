@@ -4,6 +4,35 @@
 
 ## Unreleased
 
+- Add **Delete group** to database board column menus, with a full affected-record preview, migration to Ungrouped or an existing group, shared option cleanup, explicit task-role replacement, draft/version guards and recoverable saves. Preserve note bodies and support narrow-screen confirmation.
+
+- Show newly created database records directly from the saved receipt, without waiting for indexing or a page query. Keep a marked recent row visible outside the loaded page, reconcile it without duplicates, and retain filtering, failure and retry safeguards.
+
+- Reduce database deletion/move latency with content-versioned configuration and query snapshots, scoped refresh coalescing, immediate acknowledged row updates and no refresh for delete previews. Wait briefly for queued incremental metadata instead of rescanning the vault, honor retry hints, and reuse the path index when repairing moved-file references. Keep version checks, history and recoverable trash.
+
+- Add a shared Notion-style record context menu to all five database views and embeds, with side peek/full-page opening, title rename, full-note duplication, note-link copying and confirmed recoverable trash. Keep board move/order actions and add keyboard and narrow-screen menu access.
+
+- Fix database cards becoming undraggable after one move, including asynchronous catalog updates, empty destination columns and delayed save replies. Keep prepared metadata valid after incremental edits, ignore duplicate file notifications, and return retryable responses while metadata is preparing.
+
+- Add a page-list context menu in Design Studio to duplicate or delete the selected page, with undo and last-page protection.
+
+- Add a database Board view and task preset with independently paged columns, virtualized cards, cross-column moves, manual ordering, explicit task-state mapping, option labels/colors and overdue dates. Preserve Markdown and legacy task views; add recoverable, version-checked moves/undo, stable embeds, keyboard menus and narrow-screen layouts.
+
+- Publish selected Design Studio pages from the **Publish to** menu to a new or associated Miaoda course app, identified by the Feishu icon, with dependency warnings, asset progress and remote revision protection.
+
+- Align Attachment Manager, the graph and Design Studio with the shared workspace style, including project menus and attachment, export, publishing and source dialogs. Wrap narrow-screen attachment actions, keep previews usable, and add Canvas / Layers / Properties switching without unmounting the workbench state.
+
+- Unify the application UI around shared typography, colors, spacing, focus rings and dialog elevation. Refresh sidebar grouping, home actions/recent-note cards, document tools, search, settings, AI and first-run surfaces; align task checkboxes with their text and remove onboarding’s global green-button override.
+
+
+- Choose pages for interactive HTML exports, bundling their dependencies and warning about unselected linked pages and dynamic script references.
+
+- Refine database pages with a document-style heading, compact icon toolbar, inline value cells, soft category tags, draggable column edges and anchored property panels. Unify gallery, timeline, side-peek and narrow-screen styling.
+
+
+- Add file-backed note databases with table/list/gallery/timeline views, typed fields, safe record editing, media covers, editable stable-view embeds and permission-checked MCP tools.
+
+
 - Make attachment group changes visible immediately with a scoped heading and loading state. Clear the previous list on explicit filter changes, keep failed group reads from showing old results, and prevent local index progress from repeatedly cancelling group requests.
 
 - Replace stale metadata connection errors with live reconnecting/syncing states, collapse temporary network diagnostics behind an automatic-retry message, retain the last successful sync time and wake metadata synchronization on connection recovery. Keep actionable authentication and service errors visible.

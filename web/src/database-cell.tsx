@@ -1,0 +1,21 @@
+import React,{useEffect,useRef,useState} from 'react';
+import {t,getLocale} from './i18n';
+import {Field,Row,labelOf,valueOf} from './database-model';
+import {AttachmentPicker,refPath} from './database-media';
+import {Paperclip,ChevronDown,File} from 'lucide-react';
+import {Tag,optionLabel} from './database-ui';
+const fieldDrafts=new Map<string,{raw:string,revision:string}>();
+export function Cell({row,fieldKey,field,root,disabled,update}:{row:Row,fieldKey:string,field:Field,root:string,disabled:boolean,update:(r:Row,v:any)=>Promise<void>}){
+ const draftKey=root+'\n'+row.path+'\n'+fieldKey,value=valueOf(row,fieldKey),[draft,setDraft]=useState(()=>fieldDrafts.get(draftKey)?.raw??String(value??'')),[picking,setPicking]=useState(false),dirty=useRef(fieldDrafts.has(draftKey)),cancel=useRef(false);
+ useEffect(()=>{if(!dirty.current)setDraft(String(value??''));},[value]);
+ const save=async(next:any)=>{if(JSON.stringify(next)===JSON.stringify(value)){dirty.current=false;fieldDrafts.delete(draftKey);return;}const pending=fieldDrafts.get(draftKey);await update(pending?{...row,revision:pending.revision}:row,{[fieldKey]:next});dirty.current=false;fieldDrafts.delete(draftKey);};
+ const label=row.title+' '+t(labelOf(fieldKey,field));
+ if(field.readonly||fieldKey.startsWith('file.'))return <span>{fieldKey.startsWith('file.')&&field.type==='date'&&value?new Date(Number(value)*1000).toLocaleDateString(getLocale()):String(value??'')}</span>;
+ if(field.type==='checkbox')return <input aria-label={label} type="checkbox" disabled={disabled} checked={value===true} onChange={e=>void save(e.target.checked).catch(()=>{})}/>;
+ if(field.type==='select')return <div className="db-select-cell">{value?<Tag value={String(value)} field={field}/>:<span className="db-cell-empty">—</span>}<ChevronDown size={12} className="db-cell-chevron"/><select aria-label={label} disabled={disabled} value={value||''} onChange={e=>void save(e.target.value||null).catch(()=>{})}><option value="">—</option>{[...new Set([...(field.options||[]),...(value?[value]:[])])].map(o=><option key={o} value={o}>{optionLabel(o,field)}</option>)}</select></div>;
+ if(field.type==='multiselect')return <details className="db-multiselect"><summary>{Array.isArray(value)&&value.length?value.map(v=><Tag key={v} value={String(v)} field={field}/>):<span className="db-cell-empty">—</span>}</summary>{(field.options||[]).map(o=><label key={o}><input type="checkbox" disabled={disabled} checked={Array.isArray(value)&&value.includes(o)} onChange={e=>void save(e.target.checked?[...(Array.isArray(value)?value:[]),o]:(value||[]).filter((v:string)=>v!==o)).catch(()=>{})}/>{optionLabel(o,field)}</label>)}</details>;
+ if(field.type==='attachment')return <><button className="db-attachment-cell" disabled={disabled} aria-label={label} onClick={()=>setPicking(true)}><Paperclip size={14}/><span>{Array.isArray(value)&&value.length?refPath(value[0]).split('/').pop():t('db.emptyValue')}</span>{Array.isArray(value)&&value.length>1&&<small>+{value.length-1}</small>}</button>{picking&&<AttachmentPicker root={root} value={Array.isArray(value)?value:[]} onSave={save} onClose={()=>setPicking(false)}/>}</>;
+ const date=field.type==='date';
+ const displayDate=draft&&/^\d{4}-\d{2}-\d{2}$/.test(draft)?new Date(draft+'T00:00:00Z').toLocaleDateString(getLocale(),{year:'numeric',month:'short',day:'numeric',timeZone:'UTC'}):draft;
+ return <div className={'db-input-cell'+(date?' db-date-cell':'')} data-empty={!draft}>{date&&<span className={draft?'db-date-display':'db-date-display db-cell-empty'}>{displayDate||t('db.emptyValue')}</span>}<input aria-label={label} disabled={disabled} type={field.type==='date'?'date':field.type==='number'?'number':field.type==='url'?'url':'text'} step={field.type==='number'?'any':undefined} value={draft} onChange={e=>{dirty.current=true;fieldDrafts.set(draftKey,{raw:e.target.value,revision:fieldDrafts.get(draftKey)?.revision||row.revision});setDraft(e.target.value);}} onBlur={()=>{if(cancel.current){cancel.current=false;return;}void save(draft===''?null:field.type==='number'?Number(draft):draft).catch(()=>{});}} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();if(e.key==='Escape'){cancel.current=true;fieldDrafts.delete(draftKey);dirty.current=false;setDraft(String(value??''));e.currentTarget.blur();}}}/></div>;
+}

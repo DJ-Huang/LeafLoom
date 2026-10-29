@@ -1,6 +1,6 @@
 import {t,useLocale} from './i18n';
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {BookOpen,Paperclip,Calendar,ChevronRight,FileText,Folder,Home,Palette,PanelLeftClose,Search,Network} from 'lucide-react';
+import {BookOpen,Paperclip,Calendar,ChevronRight,FileText,Table2,Folder,Home,Palette,PanelLeftClose,Search,Network,ArrowUpRight} from 'lucide-react';
 import {Config,OpenNote} from './api';
 import {useStatus} from './hooks';
 import {Action} from './ui';
@@ -49,7 +49,7 @@ export function PathNavigation({path,view,onFolder}:{path:string,view:string,onF
  return <nav className="path-navigation" aria-label={t("当前位置")}><ol>
   {browsing?<><li><button onClick={()=>onFolder('')} title={t("打开知识库根目录")}><BookOpen size={15}/><span>{t("知识库")}</span></button></li>{parts.map((part,index)=>{
    const current=index===parts.length-1,target=parts.slice(0,index+1).join('/');
-   return <li key={target}><ChevronRight size={13} aria-hidden="true"/>{current?<span className="path-current" aria-current="page" title={path}>{view==='document'?<FileText size={15}/>:<Folder size={15}/>}<span>{part}</span></span>:<button title={t("打开 ")+target} onClick={()=>onFolder(target)}>{part}</button>}</li>;
+   return <li key={target}><ChevronRight size={13} aria-hidden="true"/>{current?<span className="path-current" aria-current="page" title={path}>{view==='document'?(part.endsWith('.base')?<Table2 size={15}/>:<FileText size={15}/>):<Folder size={15}/>}<span>{part.replace(/\.base$/,'')}</span></span>:<button title={t("打开 ")+target} onClick={()=>onFolder(target)}>{part}</button>}</li>;
   })}</>:<li><span className="path-current" aria-current="page">{view==='attachments'?<Paperclip size={15}/>:view==='knowledge'?<Search size={15}/>:view==='graph'?<Network size={15}/>:view==='design'?<Palette size={15}/>:<Home size={15}/>}<span>{view==='downloads'?t('dl.title'):view==='attachments'?t('attachments.title'):view==='knowledge'?t("知识检索"):view==='graph'?t("关系图谱"):view==='design'?t("设计工作台"):view==='web'?t("网页"):t("首页")}</span></span></li>}
  </ol></nav>;
 }
@@ -57,11 +57,13 @@ export function IndexStatus({onOpen}:{onOpen:()=>void}){
  useLocale();const status=useStatus(),failed=!!(status?.last_error||status?.watch?.error);return <button className="index-status" onClick={onOpen} aria-label={t("查看同步与索引")} title={status?.last_error||t("{p0} 篇检索资料 · {p1} 个文件",{p0:status?.num_files||0,p1:status?.catalog_files||0})}><span className={'status-dot '+(failed?'error':'')}/><span>{failed?t("同步需要关注"):t(status?.sync?.state||'正在同步目录')}</span><ChevronRight size={13}/></button>;}
 export function Dashboard({config,recent,onOpen,onCreate,onKnowledge,onDaily,onDesign,guideContent}:{config:Config,recent:string[],onOpen:OpenNote,onCreate:()=>void,onKnowledge:()=>void,onDaily:()=>void,onDesign?:()=>void,guideContent?:React.ReactNode}){
  useLocale();
- return <div className="dashboard"><div className="page-icon"><BookOpen size={42} strokeWidth={1.4}/></div><h1>{t("你的知识库")}</h1><p className="dashboard-intro">{t("从上次的思路继续，或记下新的想法。")}</p>
-  <div className="home-shortcuts"><button onClick={onCreate}><FileText size={20}/><span>{t("新建笔记")}</span></button><button onClick={onDaily}><Calendar size={20}/><span>{t("今日笔记")}</span></button><button onClick={onKnowledge}><Search size={20}/><span>{t("检索知识")}</span></button>{onDesign&&<button onClick={onDesign}><Palette size={20}/><span>{t("设计工作台")}</span></button>}</div>
-  {config.homepage&&<button className="homepage-link" onClick={()=>onOpen(config.homepage)}><Home size={18}/><div><strong>{t("知识库首页")}</strong><span>{config.homepage}</span></div><ChevronRight size={16}/></button>}
+ const shortcuts=[{Icon:FileText,title:t('新建笔记'),detail:t('ui.newNoteHint'),action:onCreate},{Icon:Calendar,title:t('今日笔记'),detail:t('ui.dailyHint'),action:onDaily},{Icon:Search,title:t('检索知识'),detail:t('ui.searchHint'),action:onKnowledge},...(onDesign?[{Icon:Palette,title:t('设计工作台'),detail:t('ui.designHint'),action:onDesign}]:[])];
+ return <div className="dashboard"><header className="dashboard-heading"><div className="page-icon"><BookOpen size={31} strokeWidth={1.4}/></div><span className="dashboard-eyebrow">{t('ui.yourWorkspace')}</span><h1>{t('你的知识库')}</h1><p className="dashboard-intro">{t('从上次的思路继续，或记下新的想法。')}</p></header>
+  <button className="home-search-entry" onClick={onKnowledge}><Search size={17}/><span>{t('ui.homeSearch')}</span><ArrowUpRight size={15}/></button>
+  <section className="home-actions-section" aria-label={t('ui.quickStart')}><h2 className="home-section-heading">{t('ui.quickStart')}</h2><div className="home-shortcuts">{shortcuts.map(({Icon,title,detail,action})=><button key={title} onClick={action}><span className="home-shortcut-icon"><Icon size={20} strokeWidth={1.5}/></span><strong>{title}</strong><span className="home-shortcut-detail">{detail}</span><ArrowUpRight className="home-shortcut-arrow" size={14}/></button>)}</div></section>
+  {config.homepage&&<button className="homepage-link" onClick={()=>onOpen(config.homepage)}><span className="home-feature-icon"><Home size={20} strokeWidth={1.5}/></span><div><strong>{t('知识库首页')}</strong><span>{fileName(config.homepage).replace(/\.(md|base)$/i,'')}</span></div><ArrowUpRight size={15}/></button>}
   {guideContent}
-  <section className="recent-section"><h2>{t("最近打开")}</h2>{recent.length?<div className="recent-list">{recent.map(path=><button key={path} onClick={()=>onOpen(path)}><FileText size={17}/><div><strong>{fileName(path).replace(/\.md$/i,'')}</strong><span>{path}</span></div><ChevronRight size={14}/></button>)}</div>:<div className="recent-empty"><FileText size={22}/><p>{t("打开一篇笔记，从这里继续阅读。")}</p></div>}</section>
-  <div className="dashboard-footer"><span>{t("本地文件")}</span><span title={config.root||''}>{fileName(config.root||'')}</span></div>
+  <section className="recent-section"><div className="home-section-heading"><h2>{t('最近打开')}</h2><span>{recent.length?String(recent.length).padStart(2,'0'):''}</span></div>{recent.length?<div className="recent-list">{recent.map(path=><button key={path} onClick={()=>onOpen(path)}><span className="recent-note-icon">{path.endsWith('.base')?<Table2 size={20} strokeWidth={1.45}/>:<FileText size={20} strokeWidth={1.45}/>}</span><div><strong>{fileName(path).replace(/\.(md|base)$/i,'')}</strong><span>{path.includes('/')?path.slice(0,path.lastIndexOf('/')):t('知识库根目录')}</span></div><ArrowUpRight size={14}/></button>)}</div>:<div className="recent-empty"><FileText size={24} strokeWidth={1.4}/><p>{t('打开一篇笔记，从这里继续阅读。')}</p></div>}</section>
+  <div className="dashboard-footer"><span className="status-dot"/><span>{t('本地文件')}</span><span>{fileName(config.root||'')}</span></div>
  </div>;
 }

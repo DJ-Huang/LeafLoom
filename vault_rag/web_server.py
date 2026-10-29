@@ -21,7 +21,7 @@ from vault_rag.demo import create_demo
 from vault_rag.i18n import error_code
 from vault_rag.mcp_access import McpAccess, TUNNEL_AUTH_HEADER
 from vault_rag.mcp_tools import build_workspace_mcp
-from vault_rag.note_operations import NoteOperations
+from vault_rag.note_operations import NoteOperations,NoteError
 from vault_rag.annotations import Annotations
 from vault_rag.feishu import Feishu
 
@@ -75,6 +75,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     ai_app=ai_mcp.streamable_http_app()
     mcp_access=McpAccess(config)
     notes=NoteOperations(config,runtime)
+    from vault_rag.databases import Databases
+    databases=Databases(config,runtime,notes)
     from vault_rag.remote_attachments import RemoteAttachments
     from vault_rag.attachment_catalog import AttachmentCatalog
     from vault_rag.attachment_storage_routes import attachment_storage_router, public_job
@@ -136,7 +138,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     from vault_rag.attachment_metadata_hooks import install_attachment_metadata_hooks
     install_attachment_metadata_hooks(runtime,remote_attachments)
     feishu=Feishu(config)
-    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token,design=design,feishu=feishu,annotations=annotations,files=file_operations)
+    mcp=build_workspace_mcp(config,runtime,notes,mcp_access,token,design=design,feishu=feishu,annotations=annotations,files=file_operations,databases=databases)
     mcp_app=mcp.streamable_http_app()
     @contextlib.asynccontextmanager
     async def lifespan(app):
@@ -187,7 +189,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         return json_response({'error':'Attachment server is unavailable','error_code':error.code,'state':error.state},
                              503 if error.state=='unreachable' else 409)
     from vault_rag.design_routes import design_router
-    app.include_router(design_router(design))
+    app.include_router(design_router(design, feishu))
     @app.middleware('http')
     async def local_security(request,call_next):
         host=request.headers.get('host','')
@@ -231,6 +233,10 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         except PermissionError:return json_response({'error':'Attachment operation is not authorized','error_code':'permission_denied'},403)
         except FileNotFoundError as e:return json_response({'error':str(e),'error_code':'not_found'},400)
         except UnicodeDecodeError as e:return json_response({'error':str(e),'error_code':'invalid_text_encoding'},400)
+        except NoteError as e:
+            if e.code=='metadata_pending':
+                return json_response({'error':'正在准备目录元数据，阅读与编辑不受影响','error_code':e.code,'pending':True,**e.details},503)
+            return json_response({'error':str(e),'error_code':'invalid_request'},400)
         except ValueError as e:return json_response({'error':str(e),'error_code':'invalid_request'},400)
         finally:
             if foreground:runtime.foreground_end()
@@ -307,6 +313,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     async def activity():runtime.activity();return {'ok':True}
 
     def metadata_pending():
+        if runtime.catalog_pending():
+            return json_response({'error':'正在准备目录元数据，阅读与编辑不受影响','pending':True,'retry_after_ms':25},503)
         if runtime.catalog.metadata_ready:return None
         if runtime.metadata.get('state')=='failed':
             error=runtime.metadata['error'];runtime.metadata['state']='idle'
@@ -692,6 +700,24 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     async def base(path:str,view:int|None=None):
         pending=metadata_pending()
         return pending if pending is not None else json_response(await asyncio.to_thread(runtime.catalog.base,path,view))
+    @app.get('/api/bases/config')
+    async def database_config(path:str):
+        return json_response(await asyncio.to_thread(databases.config_read,path))
+    @app.get('/api/bases')
+    async def database_list(folder:str='',cursor:str='',limit:int=100):
+        pending=metadata_pending()
+        if pending is not None:return pending
+        return json_response(await asyncio.to_thread(databases.discover,folder,limit,cursor))
+    @app.post('/api/bases/query')
+    async def database_query(request:Request):
+        body=await request.json()
+        pending=metadata_pending()
+        if pending is not None:return pending
+        return json_response(await asyncio.to_thread(databases.query,body['path'],body.get('view_id',''),body.get('search',''),body.get('cursor',''),body.get('limit',100),body.get('group_key'),body.get('anchor_path',''),body.get('recent_paths')))
+    @app.post('/api/bases/commands')
+    async def database_command(request:Request):
+        body=await request.json()
+        return json_response(await asyncio.to_thread(databases.command,body['path'],body['command'],body['workspace_revision'],body.get('expected_revision',''),body.get('operation_id','')))
     @app.get('/api/templates')
     async def templates():
         folder=config.data['templates']

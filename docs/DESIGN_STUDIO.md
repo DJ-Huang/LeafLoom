@@ -50,11 +50,15 @@ libraries are retained. Cleanup is journaled and resumes after an interruption.
    source line when available.
 8. Send the selection to AI and describe the change. Managed design operations
    apply directly, one tool request per undo step. Wait for pending saves before
-   exporting. Unzip the export and open `index.html`; keep its companion files.
+   exporting. Unzip the export and open `index.html`; keep its companion files. Choose pages in the export dialog; the ZIP contains selected pages and detected dependencies. Known unselected page targets are listed, omitted embeds are blank, and dynamic script references need manual review.
 
 `Ctrl/⌘+Z` undoes, `Ctrl/⌘+Shift+Z` or `Ctrl+Y` redoes, `Ctrl/⌘+D` duplicates,
 and Delete removes selected elements. Focused source/text fields retain their
 normal editing shortcuts. A new edit after undo starts a new history branch.
+
+## Publish interactive courses to Miaoda
+
+Choose **Publish to**, then **Miaoda**, select pages, and create a frontend app or associate a compatible Design Studio course app by its app ID. The selected saved revision replaces the app's course; previously unselected pages are excluded. For a new app, an empty scaffold is released first because Miaoda only permits access configuration after publication. Course content is uploaded only after organization access is confirmed; two approvals may be needed. Associated apps retain their existing scope. Media is uploaded to the app's storage; dynamically computed references may require manual review. Publication jobs show progress, require inspection after uncertain writes, and stop while an approver is pending. A changed remote branch blocks replacement. The resulting link is available only after release completes. Feishu CLI authentication and the apps read/write scopes are required.
 
 ## Canvas navigation and inspection
 
@@ -613,3 +617,5 @@ drags without activating the audience OS window, and serializes press/move/relea
 commands. The preview retains the pressed button through a captured drag.
 This setup is internal; the exposed interface still accepts input events only.
 See the [upstream focus-emulation contract](https://github.com/ChromeDevTools/devtools-protocol/blob/master/pdl/domains/Emulation.pdl).
+
+窄屏工作台按实际容器宽度提供“画布／图层／属性”面板切换。画布与属性保持挂载，切换不会重新载入项目或丢失选择、草稿；预览模式继续使用同一运行画布。项目菜单在选择操作或 Escape 时收起，管理、导出、发布和源码弹窗共用应用主题。

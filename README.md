@@ -180,3 +180,5 @@ The desktop installer supports the platforms above. This is not cloud sync, univ
 MIT © 2026 DJ. Dependencies and models keep their own licenses. [License](LICENSE)
 
 Technical compatibility: `vault-rag`, `VAULT_RAG_HOME`, `.vault-rag/`, HTTP MCP `/mcp`.
+
+Organize Markdown notes as local databases with table, list, board, gallery and draggable timeline views. [Database guide](docs/en/GUIDE.md#note-databases).

@@ -49,7 +49,7 @@ export function richExtensions(actions:SpecialActions){
   addNodeView(){return ({node,getPos})=>{
    const dom=document.createElement('div');dom.className='rich-special';dom.contentEditable='false';const root=createRoot(dom);
    const render=(value:PMNode)=>{dom.dataset.kind=value.attrs.kind;root.render(<SpecialPreview node={value} pos={getPos} actions={actions}/>);};render(node);
-   return {dom,update(next){if(next.type.name!=='specialBlock')return false;render(next);return true;},stopEvent:event=>!!(event.target as HTMLElement).closest('button,a,input,video,audio,iframe'),ignoreMutation:()=>true,destroy(){queueMicrotask(()=>root.unmount());}};
+   return {dom,update(next){if(next.type.name!=='specialBlock')return false;render(next);return true;},stopEvent:event=>!!(event.target as HTMLElement).closest('.database,dialog,button,a,input,select,textarea,video,audio,iframe'),ignoreMutation:()=>true,destroy(){queueMicrotask(()=>root.unmount());}};
   };}
  });
  const WikiLink=TiptapNode.create({

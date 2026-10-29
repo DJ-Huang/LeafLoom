@@ -157,7 +157,7 @@ bytes back to the caller. Import still registers one undoable operation, and
 original bytes are retained when registration is undone. `design_library` lists published personal items;
 `design_publish_library` publishes a versioned component/asset/style/script and
 `design_import_library` explicitly imports or updates it with local dependency
-copies. `design_export` creates an independent HTML ZIP. Reading requires full
+copies. `design_export` creates an independent HTML ZIP. Optional `page_ids` limits the export to selected pages and their detected dependencies; omitted retains the full-project behavior. An optional `expected_revision` rejects stale exports. Script-generated references require manual review. Reading requires full
 note access; modifying tools use the connection's separate note-write grant.
 The legacy tools remain compatible, with managed-project adapters preserving
 version checks and transaction history.
@@ -533,3 +533,40 @@ Notes participate in normal undo/redo and copies. Audience runtime documents,
 project-origin `Design/studio/project.json`, HTML ZIPs and static-publish snapshots
 omit notes. Presenter window control is a desktop-only main-frame interface,
 not a general MCP or project-script debugging endpoint.
+
+## Note databases
+
+`vault_database(action="list"|"config"|"query", path?, folder?, view_id?, search?, limit=100, cursor="")` discovers local `.base` files, reads typed fields and stable view IDs, or queries Markdown records. Results include workspace revision, configuration revision and per-record revisions. Limits are 1–200; stale cursors require restarting the query.
+
+`vault_database_update(path, command, workspace_revision, expected_revision, operation_id?)` uses the same service as the UI. Workspace read/write permissions apply independently to local and Tunnel connections; legacy retrieval credentials gain no database access. `create`, `record.create` and `record.duplicate` require a unique operation ID; identical retries reuse that ID. Other commands require the read-time configuration revision.
+
+Commands:
+
+- `create`: `{type:"create", folder?:"Projects"}`; path ends in `.base`. Omitted folder creates a sibling directory named after the database.
+- `field.set`: `{type:"field.set",key:"status",displayName:"Status",field:{type:"select",options:["Open","Done"]}}`. Types: text, number, select, multiselect, date (YYYY-MM-DD), checkbox, url, attachment (list of `[[vault/path]]` references). `field.remove {key}` removes configuration, preserving note values. Keys are fixed; change displayName for renaming.
+- `view.add {view:{name,type,order?,leafloom?}}`, `view.update {view_id,patch}`, `view.remove {view_id}`. Types: table, list, cards, leafloomTimeline. Standard sort/groupBy and namespaced coverField/cardSize/fit/startField/endField/conditions are supported. Conditions are ANDed and use field/operator/value; operators eq, neq, contains, empty, not_empty, gt, lt, gte, lte.
+- `record.create {title,values}` writes a distinct Markdown note; `record.update {path,record_revision,values}` updates configured properties with a note revision check. Titles use the built-in `title` field.
+- `record.duplicate {path,record_revision,title?,view_id?,search?}` copies the full Markdown note into its current folder with a distinct file name, retaining the literal body, unknown properties and relative attachment references. An existing note `id` receives a fresh value. Original notes are unchanged; the result includes `visible` for the requested view. Read-time workspace/config/source revisions are required; reuse `operation_id` for retries.
+
+Creation and duplication may opt into `return_record: true` inside the command. The persisted receipt then includes `record` (path/title/metadata/file/revision) and a catalog-version marker for immediate UI display; the default receipt remains compact. HTTP queries accept up to 20 `recent_paths` and return their `recent_records` from the complete filtered result, independent of pagination. Excluded/out-of-scope paths reveal no records. This reconciliation does not alter normal page order, cursor validation or retrieval scopes.
+- `record.trash {path,record_revision?,dry_run:true}` returns a preview and operation_token; execute the same path with `dry_run:false,operation_token`. Supplying `record_revision` rejects a stale source before preview/execution. The original note goes to recoverable trash.
+
+No operation selects notes for RAG. Read note content with existing note tools, and preserve unsaved drafts. Clients must refresh tool discovery after upgrading.
+
+Ordinary saves/deletions wait for the active incremental file queue before metadata queries. Temporary `metadata_pending` responses include `retry_after_ms` (normally 25ms for an incremental batch; initial preparation can be longer). HTTP uses status 503 and `pending: true`; respect the hint and refresh read-time revisions after genuine conflicts. Configuration/query reuse is bound to content and workspace/catalog versions; it does not bypass permissions, source revisions or undo/trash safeguards.
+
+### 数据库看板与任务预设
+
+`vault_database` 与 HTTP `POST /api/bases/query` 对 `leafloomBoard` 首先返回 `groups`（key、value、count、configured、可选名称和颜色）、总数、config_revision 和 catalog_version。将某列返回的 `key` 原样作为 `group_key` 再查询该列；limit 默认 100、最大 200。cursor 仅用于相同列和快照；可选 anchor_path 在刷新后定位记录，并使用 previous_cursor 读取此前的窗口。其他四视图返回结构不变。浏览数据库不更改 RAG 范围。
+
+`vault_database_update` 及 `/api/bases/commands` 新增以下用法，权限和工作区／配置版本保护沿用现有接口：
+
+- `create {folder?, preset: "tasks"}` 创建五视图任务数据库，省略 preset 保留普通数据库行为。
+- `view.add {view: {type: "leafloomBoard", name, groupBy?, leafloom?}, preset: "tasks"}` 复用或创建兼容任务字段；可用 task_setup 明确 statusField、priorityField、dueField、initialStatus、completedStatuses。view.update 也可显式携带 task_setup。普通看板按现有可编辑单选字段 groupBy.property 分列。
+- `field.set` 的单选配置保留字符串 options，并可增加 `optionMeta: {原值: {label?, color?}}`；color 为 gray、blue、green、red、orange、yellow、purple、pink。修改标签不重写笔记值。
+- `record.create` 可携带 view_id、group_key、search，自动填写列属性；返回 visible 指明是否符合当前视图。任务数据库的新记录默认使用配置的初始状态。
+- `record.move {view_id, path, record_revision, group_key, catalog_version, before_path? 或 after_path?, search?}` 保存分组与顺序。自动排序时允许跨列，禁止同列位置调整。相邻记录必须属于查询范围与目标列。
+- `board.undo {move_id}` 撤销对应操作。只有当前文件仍符合操作后像时才执行，避免覆盖后续修改。
+- `board.group.remove {view_id, group_key, dry_run: true}` 预览删除分组，返回 count、全部受影响记录的 `records: [{path, revision}]`、catalog_version 和 config_revision。范围遵循数据库目录和数据库级筛选，忽略当前视图筛选、搜索与分页。确认后携带原 records、catalog_version、`target_value: null`（未分类）或另一现有选项，使用预览的 config_revision 作为 expected_revision，并提供唯一 operation_id。事务共同移除共享字段选项、清理各看板列配置并迁移记录属性，保留笔记和正文；初始状态或唯一完成状态必须指定接替状态，不能删除“未分类”。
+
+移动、分组删除与撤销需要唯一 operation_id；同一请求超时重试复用原 ID，改变请求使用新 ID。成功回执包含 undo_id、config_revision、record_revision；冲突应重新读取，不绕过版本校验。跨文件中断会恢复或安全回滚；外部修改导致的恢复冲突保留资料，需要先检查文件历史。只读 MCP 连接不能执行上述写入。

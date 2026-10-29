@@ -11,7 +11,7 @@ export type {FormatId,InsertId,InsertCommand} from './editor-catalog';
 export type InsertRange={from:number,to:number};
 export const editAnnotations=[Transaction.userEvent.of('input.editor-command'),isolateHistory.of('full')];
 export function snippet(id:InsertId):{text:string,offset:number}{
- const simple:Partial<Record<InsertId,string>>={text:'',h1:'# ',h2:'## ',h3:'### ',bullet:'- ',ordered:'1. ',todo:'- [ ] ',quote:'> ',divider:'---\n',wiki:'[[',code:'```\n\n```',math:'$$\n\n$$',mermaid:'```mermaid\ngraph LR\n  A --> B\n```',table:'| A | B |\n| --- | --- |\n|  |  |\n|  |  |'};
+ const simple:Partial<Record<InsertId,string>>={text:'',database:'![[Database.base]]',h1:'# ',h2:'## ',h3:'### ',bullet:'- ',ordered:'1. ',todo:'- [ ] ',quote:'> ',divider:'---\n',wiki:'[[',code:'```\n\n```',math:'$$\n\n$$',mermaid:'```mermaid\ngraph LR\n  A --> B\n```',table:'| A | B |\n| --- | --- |\n|  |  |\n|  |  |'};
  const text=simple[id]??'';
  return {text,offset:id==='code'?4:id==='math'?3:id==='table'?2:id==='mermaid'?19:text.length};
 }
