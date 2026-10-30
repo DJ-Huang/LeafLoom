@@ -1,6 +1,6 @@
 # 开始使用 LeafLoom · 知织
 
-[0.1.5 更新内容与升级说明](RELEASE_NOTES_0.1.5.md)
+[0.1.6 更新内容与升级说明](RELEASE_NOTES_0.1.6.md)
 
 在 **设置 → Skill** 中安装或更新内置的 `wiki-search` 技能。
 

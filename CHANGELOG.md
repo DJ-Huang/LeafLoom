@@ -4,116 +4,14 @@
 
 ## Unreleased
 
-- Add **Edit field** directly to record property menus, sharing a compact editor with the toolbar. Single/multi-select options support add, display-name editing, color palettes and confirmed removal while preserving stored values and unknown metadata. Task state replacements save atomically with options; historical multi-select values remain editable without allowing new unknown assignments.
+## 0.1.6 — 2026-10-30
 
-- Add direct record-property actions: click/right-click names or use **⋯** for inline rename, guarded configuration deletion and up/down movement. Drag handles reorder visible and collapsed properties separately, with rollback on save failure, keyboard alternatives and narrow-screen menus. Rename/delete apply across the database while preserving original note values and bodies.
-
-- Keep record details focused on the configured property layout, with remaining properties collapsed. Add a Notion-style **Add field** row at the bottom, with a compact name/type form and an atomic create-and-show save shared by UI and MCP; preserve note bodies and original property values.
-
-- Reorder database view tabs by dragging, the left/right menu actions or Alt+Left/Right. Persist stable view order across full pages and embeds, preserve the current view, roll back failed saves, and expose the same version-checked operation through MCP.
-
-- Automatically prefill new database records from the selected view's unambiguous writable equality filters, including task/document/setting types. Share this behavior across all views, board columns, embeds and MCP; preserve explicit values and retry receipts.
-
-- Complete database MCP workflows with typed command discovery, a capability map, paged record-body reads, saved-record reconciliation and direct board group creation/editing. Enable guarded `.base` move/trash/history recovery while preserving record folders, note-text boundaries and existing permissions/revision checks.
-
-- Reduce repeated startup synchronization: preserve due times, check directories and metadata every 30 minutes, add server scan scopes and persistent pause/resume, reuse unchanged cached receipts and projections, and show concrete sync phases and progress.
-
-- Add configurable attachment extension allowlists shared by local files and all servers, with default source-file exclusion, immediate list/count filtering, guarded attachment uploads and preserved originals and links.
-
-- Add **Delete group** to database board column menus, with a full affected-record preview, migration to Ungrouped or an existing group, shared option cleanup, explicit task-role replacement, draft/version guards and recoverable saves. Preserve note bodies and support narrow-screen confirmation.
-
-- Show newly created database records directly from the saved receipt, without waiting for indexing or a page query. Keep a marked recent row visible outside the loaded page, reconcile it without duplicates, and retain filtering, failure and retry safeguards.
-
-- Reduce database deletion/move latency with content-versioned configuration and query snapshots, scoped refresh coalescing, immediate acknowledged row updates and no refresh for delete previews. Wait briefly for queued incremental metadata instead of rescanning the vault, honor retry hints, and reuse the path index when repairing moved-file references. Keep version checks, history and recoverable trash.
-
-- Add a shared Notion-style record context menu to all five database views and embeds, with side peek/full-page opening, title rename, full-note duplication, note-link copying and confirmed recoverable trash. Keep board move/order actions and add keyboard and narrow-screen menu access.
-
-- Fix database cards becoming undraggable after one move, including asynchronous catalog updates, empty destination columns and delayed save replies. Keep prepared metadata valid after incremental edits, ignore duplicate file notifications, and return retryable responses while metadata is preparing.
-
-- Add a page-list context menu in Design Studio to duplicate or delete the selected page, with undo and last-page protection.
-
-- Add a database Board view and task preset with independently paged columns, virtualized cards, cross-column moves, manual ordering, explicit task-state mapping, option labels/colors and overdue dates. Preserve Markdown and legacy task views; add recoverable, version-checked moves/undo, stable embeds, keyboard menus and narrow-screen layouts.
-
-- Publish selected Design Studio pages from the **Publish to** menu to a new or associated Miaoda course app, identified by the Feishu icon, with dependency warnings, asset progress and remote revision protection.
-
-- Align Attachment Manager, the graph and Design Studio with the shared workspace style, including project menus and attachment, export, publishing and source dialogs. Wrap narrow-screen attachment actions, keep previews usable, and add Canvas / Layers / Properties switching without unmounting the workbench state.
-
-- Unify the application UI around shared typography, colors, spacing, focus rings and dialog elevation. Refresh sidebar grouping, home actions/recent-note cards, document tools, search, settings, AI and first-run surfaces; align task checkboxes with their text and remove onboarding’s global green-button override.
-
-
-- Choose pages for interactive HTML exports, bundling their dependencies and warning about unselected linked pages and dynamic script references.
-
-- Refine database pages with a document-style heading, compact icon toolbar, inline value cells, soft category tags, draggable column edges and anchored property panels. Unify gallery, timeline, side-peek and narrow-screen styling.
-
-
-- Add file-backed note databases with table/list/gallery/timeline views, typed fields, safe record editing, media covers, editable stable-view embeds and permission-checked MCP tools.
-
-
-- Make attachment group changes visible immediately with a scoped heading and loading state. Clear the previous list on explicit filter changes, keep failed group reads from showing old results, and prevent local index progress from repeatedly cancelling group requests.
-
-- Replace stale metadata connection errors with live reconnecting/syncing states, collapse temporary network diagnostics behind an automatic-retry message, retain the last successful sync time and wake metadata synchronization on connection recovery. Keep actionable authentication and service errors visible.
-
-- Resume interrupted attachment discovery from device-local directory checkpoints, reuse fresh listings for incremental checks, and read at most two directories concurrently. Revalidate expired descendants independently, avoid rewriting unchanged attachment rows, show reused-directory counts and offer a full directory check without downloading originals.
-
-- Show live scanned/pending directory counts in the attachment toolbar; translate synchronization failures and retain safe timeout/interruption reasons and failure timestamps without exposing transport exception text.
-
-- Fix attachment lists being repeatedly cancelled by automatic scan notifications before a large catalog can finish loading. Coalesce refreshes, retain existing rows and drafts, show a retryable timeout, and avoid redundant local checks for absent virtual remote directories.
-
-- Simplify attachment browsing with a collapsible information panel, on-demand overview/sync dialogs and cover previews; add generic SMB2/3 connections alongside WebDAV and automatic background discovery. Replace Files & import settings with server cards and move creation/import to directory actions; hide migration and organization entry points.
-
-- Reduce Design MCP output with paginated summaries, exact page/node/resource source reads, revision-pinned pagination and compact edit/undo/import receipts in public MCP and the built-in assistant. Keep explicit full-document options and HTTP editor behavior. Reuse revision-local inspection indexes and encode public MCP JSON off the event loop with compact formatting and duration/size logs.
-
-- Retry transient timeouts up to twice when listing a server attachment directory, preserving existing records if scanning still fails.
-
-- Add desktop dual-display presenter mode with one isolated audience renderer, bounded live preview and focus-preserving input, private editable notes, step/case navigation, blackout/reconnection and immutable presentation snapshots. Notes use normal revision/undo history and stay out of audience and export outputs.
-
-- Add full-screen Design Studio presentations with proportional artboard fitting, unobtrusive page controls, Esc exit and a window-filling fallback. Keep interactions running and restore the existing editing position when preview ends.
-
-- Fix a save-receipt deadlock between note writes and background catalog/attachment updates. Acknowledge committed files and history immediately, queue metadata updates, and keep later MCP calls and editor saves available without weakening revision or permission checks.
-
-- Add server-side design asset imports from connected-vault paths or credential-scoped Feishu temporary files, avoiding large Base64 MCP requests and repeated byte transfers. Optional compact receipts omit the full document; preserve existing defaults, source/hash checks, access boundaries and undo history.
-
-- Keep both local and server attachments visible when switching the new-upload destination. Separate local catalog readiness from server browsing, preserve exact paths across same-name files, retain peer originals until synced deletion, and clarify offline behavior and folder-sync limits in all three languages.
-
-- Use server attachment catalogs directly when a server is selected, separating local catalog setup from optional organization. Isolate attachment SQLite, settings, caches and transfer queues in device-private application data with a non-destructive legacy snapshot upgrade. Publish verified immutable server references before upload completion or original release; other devices restore old paths and IDs without syncing SQLite. Report conflicting references explicitly and add a one-time legacy-reference sync action.
-
-- Support numeric shared-network VPN attachment addresses (`100.64.0.0/10`), including Tailscale, in the existing private HTTP configuration flow. Keep explicit source opt-in and reject public HTTP endpoints.
-
-- Fix saving older attachment server profiles that omit the metadata-directory field. Address changes now preserve the derived directory and existing credentials instead of failing with a server error.
-
-- Add opt-in, NAS-synchronized per-group AI asset search scope. No selection returns empty results, group conflicts stay excluded, and product details cannot expose out-of-scope package copies.
-
-- Add metadata-only AI asset search with optional local semantic ranking, real image previews and persistent original-file delivery to a configured directory. Completed owner-scoped jobs return a verified path on the identified service host; existing downloads and engine integration remain separate.
-
-- Fix attachment details crashing the entire attachment view when Unity Asset compatibility metadata is an object. Support string, array and object values, including nested data, and omit empty compatibility information.
-- Add user-defined attachment tabs with manual/rule membership, vault persistence and verified NAS event synchronization with explicit conflict resolution. Replace the fixed product view with file browsing enriched by existing source metadata and covers. Add a separate Downloads page for staged attachments and ZIP tasks, preserving existing jobs and moving staging capacity into download settings. Extend MCP with group queries and revision-checked edits.
-
-- Support official product pages without JSON-LD when their structured product and publisher identities are verified; continue rejecting ambiguous or inconsistent identities.
-- Reuse HTTP clients and verified directory checks during product synchronization to reduce repeated requests; the official-client bridge can use separate connections for compatibility. Retain per-item read-back verification and pending items after failures. Bound parallel synchronization to four small metadata objects, preserving dependency and authorization checks. Reuse a batch snapshot of locally verified events for large-catalog startup/background checks to reduce repeated disk reads, retaining identity, authorization and unverified-event SHA checks.
-
-- Add a local batch script to start/resume official product collection, monitor saved progress and apply partial Chinese metadata with revision checks while preserving personal fields; official collection success and Chinese completion remain separate. Interrupted collection preserves completed review-needed decisions and retries blocked/network failures; background sync resumes pending uploads from a verified checkpoint before its remote check, while first/explicit sync checks remote first.
-- Keep the last catalog sync result when normal shutdown interrupts a background check, instead of saving a service error for the next startup.
-- Reuse the current transaction for catalog authorization checks to avoid database lock failures with large product metadata, while retaining checks before commit.
-
-- Let official product collection reuse a supported existing macOS loopback HTTP proxy while retaining official-host restrictions, TLS verification and response limits, without changing system settings. Preserve Chinese text on refresh and mark changed source facts for translation updates; keep local product queries responsive while NAS synchronization waits on the network.
-
-- Add an Asset products view for existing Unity packages, separate official/personal metadata, reviewable official URL associations and explicit collection progress. Keep multiple package versions, NAS-backed catalog metadata and independently limited 20 GiB verified download staging; no automatic Unity import or purchase verification.
-
-- Restore saved attachment credentials in the background with asynchronous system-encryption APIs where available, so key-store recovery does not block opening the workspace. Coalesce retries and discard results for retired backend connections.
-
-- Support per-directory server `leafloom.ignore` rules with Gitignore-style patterns, child overrides and `!` reinclusion; require the `# leafloom-ignore v1` first-line header. Successful refreshes report excluded entries and remove them from attachment discovery and totals while preserving IDs, tags, references and cache; rules are read without NAS write permission.
-
-- Add an explicit per-server directory refresh in Attachments, with metadata-only progress and completion. Only complete successful scans hide missing NAS files from lists and size totals; IDs, tags and old references remain, and failed scans retain prior records.
-
-- Show local and server attachment-original sizes separately for all sources, and only the selected source's size when filtered. Local cache is excluded from these totals.
-
-- Add bounded attachment-credential recovery after 1/3/10/30 seconds, unlock/wake retries and status/manual recovery in Settings. NAS network and 502–504 failures back off from 2 to 60 seconds; 401/403 pauses automatic attempts with the same credentials. Health probes touch only configured URLs, existing tasks still check owner/credential revisions, and official attachment windows must stay open without automatic session rebuilding.
-
-- Add an attachment-source dropdown for all, local, server or individual-server browsing. HTTP and MCP lists share server-side source filtering, pagination, storage totals and type counts.
-
-- Add generic multi-server WebDAV attachment storage, system-encrypted desktop credentials, memory-only browser credentials, bounded local cache and a separate pending-upload queue. Add reviewed local-to-server migration with readback verification and stable LeafLoom references, plus editable asset tags/categories/descriptions and source/cache status. Official-client bridges remain dependent on their open attachment window and configured port.
-
-- Add SHA-256-verified, single-request Base64 attachment uploads up to 2 MiB, image embeds in upload results, and discoverable upload capabilities with client tool-directory refresh guidance. Preserve the existing two-tool API, chunk transfers and ChatGPT file inputs.
+- Add Markdown note databases with table, list, board, gallery and timeline views, per-view filters/layouts and stable editable embeds.
+- Add basic task boards, cross-column moves, manual ordering, recoverable group removal and undo; fix repeated dragging and delayed record feedback.
+- Add compact record details and direct record/property menus, view ordering and select/multi-select option editing while preserving original note content.
+- Expose complete version-checked database workflows through MCP, including body reads, fields, views, groups and board moves.
+- Unify sidebar, home, editor, attachment, graph, Design Studio and dialog styling, including narrow screens; add selected-page HTML exports and Miaoda publishing.
+- Add attachment extension allowlists, scoped scans, persistent pause/resume and approximately 30-minute background checks; preserve originals, references and pending metadata.
 
 ## 0.1.5 — 2026-10-29
 
