@@ -22,10 +22,8 @@ import uuid
 from vault_rag.local_state import Files, ConflictError, atomic_write, digest, relative, under
 from vault_rag.platform_support import move_exclusive, path_key, preserve_file_mode
 
-ASSETS = {'.png','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.ico','.tif','.tiff',
-          '.pdf','.mp3','.m4a','.wav','.ogg','.flac','.aac','.mp4','.mov','.webm','.m4v','.avi',
-          '.doc','.docx','.xls','.xlsx','.ppt','.pptx','.odt','.ods','.odp',
-          '.zip','.7z','.rar','.tar','.gz','.bz2','.epub','.woff','.woff2','.ttf','.otf'}
+from vault_rag.attachment_policy import MIGRATION_EXTENSIONS as ASSETS, allows, extensions_for
+
 DOCUMENTS = {'.md','.markdown','.txt','.base','.html','.htm','.css','.svg','.js','.mjs','.cjs','.json','.yaml','.yml','.xml'}
 SOURCE_MARKERS = {'package.json','pyproject.toml','Cargo.toml','go.mod','CMakeLists.txt'}
 SOURCE_RESOURCE_TYPES = {'.js','.mjs','.cjs','.ts','.tsx','.jsx','.py','.blend','.blend1',
@@ -191,6 +189,10 @@ class AttachmentMigrations:
         self._guard(job['root'])
         if job['id'] in self.guards:self.guards[job['id']]()
         if cancel.is_set():raise InterruptedError('Migration cancelled')
+        if job.get('state')=='running':
+            extensions=extensions_for(self._files())
+            if any(not allows(m['source'],extensions) or not allows(m['destination'],extensions) for m in job.get('moves',[])):
+                raise ConflictError('Attachment file types changed; preview again before moving attachments')
 
     def _plan(self, files, job, cancel):
         from vault_rag.attachment_references import plan_references, discover_project_dependencies, OPAQUE_RESOURCE_TYPES
@@ -207,6 +209,7 @@ class AttachmentMigrations:
             self.runtime.files.attachments.refresh(cancel=cancel,progress=index_progress)
         self._check(job,cancel)
         job['stage']='discover';job['progress']={'done':0,'total':0};self._save(files,job)
+        extensions=extensions_for(files)
         root=files.config.root;target=job['destination'];paths=set()
         for path in files.walk(strict=True):
             self._check(job,cancel);paths.add(path.relative_to(root).as_posix())
@@ -231,12 +234,14 @@ class AttachmentMigrations:
         candidates=[];reserved={path_key(p) for p in paths};selection=job.get('selection')
         if selection is not None:
             for path in selection:
-                if path not in paths or path in protected or Path(path).suffix.lower() not in ASSETS:
+                if path not in paths or path in protected or Path(path).suffix.lower() not in ASSETS or not allows(path,extensions):
                     job['blockers'].append({'path':path,'reason':'Project or source resource is retained in place'})
         for path in sorted(paths):
             if selection is not None and path not in selection:continue
             suffix=Path(path).suffix.lower()
             if selection is None and under(path,target):continue
+            if not allows(path,extensions):
+                job['exclusions'].append({'path':path,'reason':'File type is not enabled for attachments'});continue
             if suffix not in ASSETS:
                 if suffix=='.svg':job['exclusions'].append({'path':path,'reason':'Vector resource retained for dependency review'})
                 if suffix not in DOCUMENTS and suffix not in {'.py','.ts','.tsx','.jsx','.toml','.ini','.cfg','.log','.csv','.srt','.vtt'}:
@@ -253,6 +258,8 @@ class AttachmentMigrations:
             dest=job.get('destinations',{}).get(path) if selection is not None else None
             dest=relative(dest) if dest else '/'.join(p for p in (target,PurePosixPath(path).name if selection is not None else path) if p)
             if job.get('kind')=='trash':dest='_removed/'+path
+            if not allows(dest,extensions):
+                job['blockers'].append({'path':dest,'reason':'Destination file type is not enabled for attachments'});continue
             if selection is not None and job.get('kind')!='trash' and (path_key(dest) in reserved or dest==path):
                 job['blockers'].append({'path':path,'reason':'Destination already exists or matches the source'});continue
             if any(under(dest,p) for p in project_roots|source_roots) and job.get('kind')!='trash':

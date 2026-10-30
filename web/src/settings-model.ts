@@ -21,6 +21,7 @@ export const settingsEntries:{section:SettingsSection,id:string,title:string,des
  {section:'general',id:'root',get title(){return t("关联目录");},get description(){return t("选择或切换本地知识库文件夹");}},
  {section:'general',id:'homepage',get title(){return t("知识库首页");},get description(){return t("默认首页文件路径");}},
  {section:'general',id:'app-update',get title(){return t('update.title');},get description(){return t('update.search');}},
+ {section:'files',id:'attachment-types',get title(){return t('at.title');},get description(){return t('at.help');}},
  {section:'files',id:'attachment-storage',get title(){return t('as.simpleTitle');},get description(){return t('as.simpleHelp');}},
  {section:'templates',id:'templates',get title(){return t("模板与日记目录");},get description(){return t("模板目录、今日笔记、日记位置");}},
  {section:'templates',id:'write-targets',get title(){return t("默认写入位置");},get description(){return t("知识正文、规则、主题导航、工时资料");}},

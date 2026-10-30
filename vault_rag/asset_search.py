@@ -7,6 +7,7 @@ from pathlib import Path
 import threading
 import time
 
+from vault_rag.attachment_policy import extensions_for
 from vault_rag.catalog import tokens
 from vault_rag.local_state import atomic_write, digest, ConflictError
 
@@ -40,6 +41,7 @@ class AssetSearch:
         scope = groups.search_scope(root) if groups else {
             'group_ids':[],'groups':[],'scope_revision':signature([]),
             'scope_state':'scope_not_configured','conflict_group_ids':[]}
+        scope = {**scope, 'scope_revision': signature([scope['scope_revision'], extensions_for(self.files.runtime.files)])}
         if str(self.files.config.root)!=root:
             raise ConflictError('Workspace changed while reading asset scope')
         if self.scope_revisions.get(root)!=scope['scope_revision']:

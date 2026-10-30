@@ -8,6 +8,7 @@ import httpx
 from tests.test_remote_attachments import FakeDAV, SOURCE, SECRET
 from vault_rag.local_state import LocalConfig
 from vault_rag.remote_attachments import RemoteAttachments
+from vault_rag.attachment_scan_policy import SCAN_INTERVAL
 from vault_rag.attachment_storage_routes import save_settings, public_settings
 
 class AutoSyncTests(TestCase):
@@ -21,17 +22,20 @@ class AutoSyncTests(TestCase):
         self.remote.save(str(self.root),{'sources':[{'id':SOURCE,'base_url':'https://fixture.invalid/','username':'leafloom'}]})
         self.remote.set_credentials(SOURCE,'leafloom',SECRET)
         self.remote.poll_connections()
+        # Most scheduler tests start after the startup grace; dedicated tests cover launch deferral.
+        self.remote.poll_scans()
+        for state in self.remote.auto_scans.values():state['next_scan_at']=0
 
     def finish(self):
         for thread in list(self.remote.scan_threads.values()):thread.join(3)
         self.assertFalse(any(thread.is_alive() for thread in self.remote.scan_threads.values()))
 
-    def test_initial_scan_then_five_minutes_and_metadata_callback(self):
+    def test_initial_scan_then_regular_interval_and_metadata_callback(self):
         self.dav.files['Incoming/a.bin']=b'a';callback=Mock();self.remote.on_scan_completed=callback
         self.remote.poll_scans();self.finish();self.remote.poll_scans()
         callback.assert_called_once_with(str(self.root),SOURCE)
         state=public_settings(self.remote,str(self.root))['storages'][0]['connection']
-        self.assertEqual(state['next_scan_at']-state['last_success_at'],300)
+        self.assertEqual(state['next_scan_at']-state['last_success_at'],SCAN_INTERVAL)
         with patch.object(self.remote,'start_scan') as start:self.remote.poll_scans();start.assert_not_called()
         with patch('vault_rag.remote_attachments.time.time',return_value=state['next_scan_at']+1),patch.object(self.remote,'start_scan') as start:
             self.remote.poll_scans();start.assert_called_once()

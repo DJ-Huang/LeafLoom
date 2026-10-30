@@ -25,13 +25,15 @@ import uuid
 from vault_rag.local_state import ConflictError, Files, atomic_write, relative, under
 from vault_rag.platform_support import is_link, private_file_mode, move_exclusive
 from vault_rag.remote_webdav import RemoteStorageError, WebDAVSource, remote_path, validate_source
+from vault_rag.attachment_scan_policy import SCAN_INTERVAL, STARTUP_GRACE, in_scan_scope, register_scan_scope
 from vault_rag.remote_ignore import RemoteIgnore
+from vault_rag.attachment_policy import AttachmentTypeError, DEFAULT_EXTENSIONS, allows, extensions_for, normalize_extensions, register_policy, require_allowed
 
 
 CACHE_DEFAULT = 2 * 1024**3
 OUTBOX_DEFAULT = 10 * 1024**3
 _PENDING = {'queued','waiting_for_connection','waiting_for_auth','waiting_for_authorization','uploading','verifying'}
-_JSON_SETTINGS = {'revision','root','sources','default_source','cache_max_bytes','outbox_max_bytes'}
+_JSON_SETTINGS = {'revision','root','sources','default_source','cache_max_bytes','outbox_max_bytes','allowed_extensions'}
 
 
 def _json(value):
@@ -78,7 +80,7 @@ class RemoteAttachments:
         self.auto_scans={}
         self.on_scan_completed=None;self.on_connection_ready=None
         self.asset_locks={}
-        self.redirect_backfilled=set()
+        self.redirect_backfilled=set();self.schema_ready={}
         # Assigned by the router. A nonlocal owner must still be authorized now,
         # including after restart; neither a persisted owner nor a token is enough.
         self.authorize_owner=None
@@ -109,6 +111,7 @@ class RemoteAttachments:
             if value.get('root')!=root:value={}
         return {'root':root,'revision':value.get('revision',''), 'sources':copy.deepcopy(value.get('sources',[])),
                 'default_source':value.get('default_source','local'),
+                'allowed_extensions':normalize_extensions(value.get('allowed_extensions',list(DEFAULT_EXTENSIONS))),
                 'cache_max_bytes':value.get('cache_max_bytes',CACHE_DEFAULT),
                 'outbox_max_bytes':value.get('outbox_max_bytes',OUTBOX_DEFAULT)}
 
@@ -134,56 +137,60 @@ class RemoteAttachments:
             connection.execute('PRAGMA foreign_keys=ON');connection.execute('PRAGMA synchronous=FULL')
             version=connection.execute('PRAGMA user_version').fetchone()[0]
             if version>1:raise ValueError('Attachment manifest belongs to a newer version')
-            connection.executescript('''
-                CREATE TABLE IF NOT EXISTS sync_checkpoints(source_id TEXT PRIMARY KEY, source_revision TEXT NOT NULL, last_success REAL NOT NULL);
-                CREATE TABLE IF NOT EXISTS assets(
-                    id TEXT PRIMARY KEY,source_id TEXT NOT NULL,path TEXT NOT NULL,name TEXT NOT NULL,
-                    size INTEGER NOT NULL,mtime TEXT NOT NULL DEFAULT '',etag TEXT NOT NULL DEFAULT '',
-                    mime TEXT NOT NULL,sha256 TEXT NOT NULL DEFAULT '',state TEXT NOT NULL DEFAULT 'ready',
-                    description TEXT NOT NULL DEFAULT '',tags TEXT NOT NULL DEFAULT '[]',category TEXT NOT NULL DEFAULT '',
-                    metadata_revision TEXT NOT NULL,updated REAL NOT NULL,UNIQUE(source_id,path));
-                CREATE TABLE IF NOT EXISTS aliases(path TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES assets(id));
-                CREATE TABLE IF NOT EXISTS reference_ids(old_id TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES assets(id));
-                CREATE TABLE IF NOT EXISTS reference_records(digest TEXT PRIMARY KEY,data BLOB NOT NULL);
-                CREATE TABLE IF NOT EXISTS asset_redirects(old_id TEXT PRIMARY KEY REFERENCES assets(id),
-                    new_id TEXT NOT NULL REFERENCES assets(id),source_path TEXT NOT NULL,job_id TEXT NOT NULL,
-                    active INTEGER NOT NULL DEFAULT 0,created REAL NOT NULL,CHECK(old_id!=new_id));
-                CREATE TABLE IF NOT EXISTS cache(asset_id TEXT PRIMARY KEY REFERENCES assets(id),file TEXT NOT NULL,
-                    size INTEGER NOT NULL,sha256 TEXT NOT NULL,etag TEXT NOT NULL,mtime TEXT NOT NULL,accessed REAL NOT NULL);
-                CREATE TABLE IF NOT EXISTS ranges(asset_id TEXT NOT NULL REFERENCES assets(id),start INTEGER NOT NULL,end INTEGER NOT NULL,
-                    file TEXT NOT NULL,size INTEGER NOT NULL,object_size INTEGER NOT NULL,sha256 TEXT NOT NULL,etag TEXT NOT NULL,mtime TEXT NOT NULL,
-                    accessed REAL NOT NULL,verified REAL NOT NULL,identity TEXT NOT NULL,PRIMARY KEY(asset_id,start,end));
-                CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,kind TEXT NOT NULL,state TEXT NOT NULL,payload TEXT NOT NULL,
-                    created REAL NOT NULL,updated REAL NOT NULL);
-                CREATE TABLE IF NOT EXISTS upload_receipts(owner TEXT NOT NULL,operation_key TEXT NOT NULL,
-                    fingerprint TEXT NOT NULL,job_id TEXT NOT NULL REFERENCES jobs(id),PRIMARY KEY(owner,operation_key));
-                CREATE TABLE IF NOT EXISTS connection_recovery(source_id TEXT PRIMARY KEY,source_revision TEXT NOT NULL,
-                    credential_revision TEXT NOT NULL,payload TEXT NOT NULL);
-                CREATE INDEX IF NOT EXISTS remote_assets_name ON assets(name);
-                CREATE INDEX IF NOT EXISTS remote_jobs_state ON jobs(state);
-                CREATE TABLE IF NOT EXISTS catalog_state(id INTEGER PRIMARY KEY CHECK(id=1),generation INTEGER NOT NULL);
-                INSERT OR IGNORE INTO catalog_state VALUES(1,0);
-                PRAGMA user_version=1;
-            ''')
-            columns={r[1] for r in connection.execute('PRAGMA table_info(assets)')}
-            if 'mtime_ns' not in columns:connection.execute('ALTER TABLE assets ADD COLUMN mtime_ns INTEGER NOT NULL DEFAULT 0')
-            if 'reconcile_revision' not in columns:connection.execute('ALTER TABLE assets ADD COLUMN reconcile_revision INTEGER NOT NULL DEFAULT 0')
-            if 'content_generation' not in columns:connection.execute('ALTER TABLE assets ADD COLUMN content_generation INTEGER NOT NULL DEFAULT 0')
-            connection.execute('''CREATE TRIGGER IF NOT EXISTS remote_asset_reconcile_revision AFTER UPDATE ON assets
-                WHEN NEW.reconcile_revision=OLD.reconcile_revision BEGIN
-                UPDATE assets SET reconcile_revision=reconcile_revision+1 WHERE id=NEW.id; END''')
-            cache_columns={r[1] for r in connection.execute('PRAGMA table_info(cache)')}
-            if 'verified' not in cache_columns:connection.execute('ALTER TABLE cache ADD COLUMN verified REAL NOT NULL DEFAULT 0')
-            if 'identity' not in cache_columns:connection.execute("ALTER TABLE cache ADD COLUMN identity TEXT NOT NULL DEFAULT ''")
-            for table in ('assets','aliases','cache','ranges','asset_redirects','reference_ids'):
-                for action in ('INSERT','UPDATE','DELETE'):
-                    connection.execute(f'CREATE TRIGGER IF NOT EXISTS catalog_{table}_{action.lower()} AFTER {action} ON {table} BEGIN UPDATE catalog_state SET generation=generation+1 WHERE id=1; END')
+            identity=(path.stat().st_dev,path.stat().st_ino)
+            prepare=self.schema_ready.get(str(path))!=identity or version!=1
+            if prepare:
+                connection.executescript('''
+                    CREATE TABLE IF NOT EXISTS sync_checkpoints(source_id TEXT PRIMARY KEY, source_revision TEXT NOT NULL, last_success REAL NOT NULL);
+                    CREATE TABLE IF NOT EXISTS assets(
+                        id TEXT PRIMARY KEY,source_id TEXT NOT NULL,path TEXT NOT NULL,name TEXT NOT NULL,
+                        size INTEGER NOT NULL,mtime TEXT NOT NULL DEFAULT '',etag TEXT NOT NULL DEFAULT '',
+                        mime TEXT NOT NULL,sha256 TEXT NOT NULL DEFAULT '',state TEXT NOT NULL DEFAULT 'ready',
+                        description TEXT NOT NULL DEFAULT '',tags TEXT NOT NULL DEFAULT '[]',category TEXT NOT NULL DEFAULT '',
+                        metadata_revision TEXT NOT NULL,updated REAL NOT NULL,UNIQUE(source_id,path));
+                    CREATE TABLE IF NOT EXISTS aliases(path TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES assets(id));
+                    CREATE TABLE IF NOT EXISTS reference_ids(old_id TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES assets(id));
+                    CREATE TABLE IF NOT EXISTS reference_records(digest TEXT PRIMARY KEY,data BLOB NOT NULL);
+                    CREATE TABLE IF NOT EXISTS asset_redirects(old_id TEXT PRIMARY KEY REFERENCES assets(id),
+                        new_id TEXT NOT NULL REFERENCES assets(id),source_path TEXT NOT NULL,job_id TEXT NOT NULL,
+                        active INTEGER NOT NULL DEFAULT 0,created REAL NOT NULL,CHECK(old_id!=new_id));
+                    CREATE TABLE IF NOT EXISTS cache(asset_id TEXT PRIMARY KEY REFERENCES assets(id),file TEXT NOT NULL,
+                        size INTEGER NOT NULL,sha256 TEXT NOT NULL,etag TEXT NOT NULL,mtime TEXT NOT NULL,accessed REAL NOT NULL);
+                    CREATE TABLE IF NOT EXISTS ranges(asset_id TEXT NOT NULL REFERENCES assets(id),start INTEGER NOT NULL,end INTEGER NOT NULL,
+                        file TEXT NOT NULL,size INTEGER NOT NULL,object_size INTEGER NOT NULL,sha256 TEXT NOT NULL,etag TEXT NOT NULL,mtime TEXT NOT NULL,
+                        accessed REAL NOT NULL,verified REAL NOT NULL,identity TEXT NOT NULL,PRIMARY KEY(asset_id,start,end));
+                    CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,kind TEXT NOT NULL,state TEXT NOT NULL,payload TEXT NOT NULL,
+                        created REAL NOT NULL,updated REAL NOT NULL);
+                    CREATE TABLE IF NOT EXISTS upload_receipts(owner TEXT NOT NULL,operation_key TEXT NOT NULL,
+                        fingerprint TEXT NOT NULL,job_id TEXT NOT NULL REFERENCES jobs(id),PRIMARY KEY(owner,operation_key));
+                    CREATE TABLE IF NOT EXISTS connection_recovery(source_id TEXT PRIMARY KEY,source_revision TEXT NOT NULL,
+                        credential_revision TEXT NOT NULL,payload TEXT NOT NULL);
+                    CREATE INDEX IF NOT EXISTS remote_assets_name ON assets(name);
+                    CREATE INDEX IF NOT EXISTS remote_jobs_state ON jobs(state);
+                    CREATE TABLE IF NOT EXISTS catalog_state(id INTEGER PRIMARY KEY CHECK(id=1),generation INTEGER NOT NULL);
+                    INSERT OR IGNORE INTO catalog_state VALUES(1,0);
+                    PRAGMA user_version=1;
+                ''')
+                columns={r[1] for r in connection.execute('PRAGMA table_info(assets)')}
+                if 'mtime_ns' not in columns:connection.execute('ALTER TABLE assets ADD COLUMN mtime_ns INTEGER NOT NULL DEFAULT 0')
+                if 'reconcile_revision' not in columns:connection.execute('ALTER TABLE assets ADD COLUMN reconcile_revision INTEGER NOT NULL DEFAULT 0')
+                if 'content_generation' not in columns:connection.execute('ALTER TABLE assets ADD COLUMN content_generation INTEGER NOT NULL DEFAULT 0')
+                connection.execute('''CREATE TRIGGER IF NOT EXISTS remote_asset_reconcile_revision AFTER UPDATE ON assets
+                    WHEN NEW.reconcile_revision=OLD.reconcile_revision BEGIN
+                    UPDATE assets SET reconcile_revision=reconcile_revision+1 WHERE id=NEW.id; END''')
+                cache_columns={r[1] for r in connection.execute('PRAGMA table_info(cache)')}
+                if 'verified' not in cache_columns:connection.execute('ALTER TABLE cache ADD COLUMN verified REAL NOT NULL DEFAULT 0')
+                if 'identity' not in cache_columns:connection.execute("ALTER TABLE cache ADD COLUMN identity TEXT NOT NULL DEFAULT ''")
+                for table in ('assets','aliases','cache','ranges','asset_redirects','reference_ids'):
+                    for action in ('INSERT','UPDATE','DELETE'):
+                        connection.execute(f'CREATE TRIGGER IF NOT EXISTS catalog_{table}_{action.lower()} AFTER {action} ON {table} BEGIN UPDATE catalog_state SET generation=generation+1 WHERE id=1; END')
             private_file_mode(path)
             backfill=expected not in self.redirect_backfilled
             if backfill:self._backfill_redirects(connection,expected)
             yield connection
             self._root(expected)
             connection.commit()
+            if prepare:self.schema_ready[str(path)]=identity
             if backfill:self.redirect_backfilled.add(expected)
         except Exception:
             connection.rollback();raise
@@ -253,7 +260,7 @@ class RemoteAttachments:
     def _source_revision(source):
         # Metadata namespace is guarded separately by AssetLibrary. Adding its
         # default must not invalidate existing attachment transfer journals.
-        return hashlib.sha256(_json({k:v for k,v in source.items() if k!='metadata_directory'}).encode()).hexdigest()
+        return hashlib.sha256(_json({k:v for k,v in source.items() if k not in {'metadata_directory','scan_roots','scan_paused'}}).encode()).hexdigest()
 
     def save(self,root,payload,revision=None):
         self._root(root)
@@ -279,6 +286,7 @@ class RemoteAttachments:
                 raise ValueError('Select an enabled default attachment source')
             for key in ('cache_max_bytes','outbox_max_bytes'):
                 if type(values[key])is not int or values[key]<0:raise ValueError('Invalid attachment storage size limit')
+            values['allowed_extensions']=normalize_extensions(values['allowed_extensions'])
             destination=self._state('settings.json')
             atomic_write(destination,_json(values).encode());private_file_mode(destination)
         self.wake.set();return self.status(root)
@@ -451,12 +459,13 @@ class RemoteAttachments:
         now=time.time()
         for source in self._settings(root)['sources']:
             source_id=source['id'];credentials=self.credentials.get(source_id)
-            if not source.get('enabled',True) or not credentials or credentials[3]!='local':continue
+            if not source.get('enabled',True) or source.get('scan_paused',False) or not credentials or credentials[3]!='local':continue
             context=self._connection_context(root,source_id)
             key=(root,source_id);previous=self.auto_scans.get(key,{})
             if previous.get('context')!=context:
                 with self._db(root) as db:checkpoint=db.execute('SELECT last_success FROM sync_checkpoints WHERE source_id=? AND source_revision=?',(source_id,context[2])).fetchone()
-                previous={'context':context,'next_scan_at':0,'last_success_at':checkpoint[0] if checkpoint else None};self.auto_scans[key]=previous
+                last=checkpoint[0] if checkpoint else None
+                previous={'context':context,'next_scan_at':max(now+STARTUP_GRACE,(last or 0)+SCAN_INTERVAL),'last_success_at':last};self.auto_scans[key]=previous
             connection=self._connection_state(root,source_id)
             was=previous.get('connection_state');previous['connection_state']=connection['state']
             if connection.get('retry_paused') or connection['state']!='ready':continue
@@ -464,10 +473,9 @@ class RemoteAttachments:
             lifecycle=self.scan_statuses.get(key,{})
             finished=lifecycle.get('scan_finished_at')
             if finished and lifecycle.get('source_revision')==context[2] and finished!=previous.get('observed'):
-                previous.update(observed=finished,next_scan_at=finished+(300 if lifecycle['scan_state']=='completed' else 60))
+                previous.update(observed=finished,next_scan_at=finished+(SCAN_INTERVAL if lifecycle['scan_state']=='completed' else 60))
                 if lifecycle['scan_state']=='completed':
                     previous['last_success_at']=finished
-                    with self._db(root) as db:db.execute('INSERT OR REPLACE INTO sync_checkpoints VALUES(?,?,?)',(source_id,context[2],finished))
                     callback=self.on_scan_completed
                     if callable(callback):callback(root,source_id)
             if previous.get('next_scan_at',0)>now:continue
@@ -488,7 +496,7 @@ class RemoteAttachments:
             if not schedule:
                 with self._db(root) as db:checkpoint=db.execute('SELECT last_success FROM sync_checkpoints WHERE source_id=? AND source_revision=?',(source['id'],source_revision)).fetchone()
                 schedule={'last_success_at':checkpoint[0] if checkpoint else None}
-            source['connection'].update(auto_sync=True,last_success_at=schedule.get('last_success_at'),next_scan_at=schedule.get('next_scan_at'))
+            source['connection'].update(auto_sync=not source.get('scan_paused',False),scan_paused=source.get('scan_paused',False),last_success_at=schedule.get('last_success_at'),next_scan_at=schedule.get('next_scan_at'))
             lifecycle=self.scan_statuses.get((str(root),source['id']),{})
             if lifecycle.get('source_revision')==source_revision:
                 source['connection'].update({key:value for key,value in lifecycle.items() if key!='source_revision'})
@@ -559,6 +567,9 @@ class RemoteAttachments:
             result=self._scan(root,source_id,guard=guard,incremental=_incremental or force_full,force_full=force_full)
             lifecycle.update(scan_state='completed' if result.get('ok') else 'cancelled' if result.get('state')=='cancelled' else 'failed',
                              scan_finished_at=time.time(),scan_scanned=result.get('scanned',0),scan_missing=result.get('missing',0),scan_excluded=result.get('excluded',0))
+            if result.get('ok') and source_id!='local':
+                with self.lock,self._db(root) as db:
+                    db.execute('INSERT OR REPLACE INTO sync_checkpoints VALUES(?,?,?)',(source_id,source_revision,lifecycle['scan_finished_at']))
             return {**result,'scan_id':lifecycle['scan_id']}
         except Exception as error:
             lifecycle.update(scan_state='cancelled' if isinstance(error,(InterruptedError,ConflictError,PermissionError)) else 'failed',scan_finished_at=time.time())
@@ -591,21 +602,31 @@ class RemoteAttachments:
     def _scan(self,root,source_id,*,guard=None,incremental=False,force_full=False):
         self._root(root)
         source_revision=self._source_revision(self._source(source_id,root))
-        metadata_directory=self._source(source_id,root).get('metadata_directory','')
+        scan_source=self._source(source_id,root)
+        scan_roots=scan_source.get('scan_roots',[''])
+        metadata_directory=scan_source.get('metadata_directory','')
+        pause_state=scan_source.get('scan_paused',False)
         credentials=self.credentials.get(source_id)
         credential_revision=credentials[2] if credentials else ''
         def connection_is_current():
             try:return self._root(root)==root and self._source_revision(self._source(source_id,root))==source_revision and (self.credentials.get(source_id) or ('','',''))[2]==credential_revision
             except (ValueError,ConflictError):return False
         seen=set();snapshot={};missing=0;excluded=0;deferred={}
-        ignore=RemoteIgnore((self._source(source_id,root).get('metadata_directory',''),) if source_id!='local' else ())
+        extensions=extensions_for(self._files())
+        ignore=RemoteIgnore((self._source(source_id,root).get('metadata_directory',''),) if source_id!='local' else (), allowed_extensions=extensions)
+        cached_states={}
         if source_id!='local':
             with self.lock,self._db(root) as db:
-                snapshot={row['id']:(row['path'],row['reconcile_revision'],row['state']) for row in db.execute("SELECT id,path,reconcile_revision,state FROM assets WHERE source_id=? AND state IN ('ready','excluded')",(source_id,))}
+                cached_states={row['path']:(row['state'],bool(row['has_alias'])) for row in db.execute("SELECT path,state,EXISTS(SELECT 1 FROM aliases x WHERE x.asset_id=assets.id) AS has_alias FROM assets WHERE source_id=? AND state IN ('ready','excluded')",(source_id,))}
+                snapshot={row['id']:(row['path'],row['reconcile_revision'],row['state']) for row in db.execute("SELECT id,path,reconcile_revision,state FROM assets WHERE source_id=? AND state IN ('ready','excluded')",(source_id,)) if in_scan_scope(row['path'],scan_roots)}
         progress={'scanned':0,'directories':0,'pending_directories':1}
         def check():
             try:
                 self._root(root)
+                current_source=self._source(source_id,root)
+                if current_source.get('scan_paused',False)!=pause_state:raise InterruptedError('Attachment directory scan paused')
+                if current_source.get('scan_roots',[''])!=scan_roots:raise ConflictError('Attachment scan directories changed')
+                if extensions_for(self._files())!=extensions:raise ConflictError('Attachment file types changed')
                 if self.stopped.is_set():raise InterruptedError('Attachment scan stopped')
                 if self._source_revision(self._source(source_id,root))!=source_revision:
                     raise ConflictError('Attachment scan source settings changed')
@@ -634,32 +655,38 @@ class RemoteAttachments:
                 db.execute('INSERT OR IGNORE INTO aliases VALUES(?,?)',(logical,key))
         def commit_batch(items,counts=None):
             check()
-            with self.lock,self._db(root) as db:
-                # A PUT can already be visible on WebDAV before its independent
-                # readback succeeds. Jobs reserve those keys before uploading;
-                # discovery must not publish their partial bytes as new assets.
-                reserved=self._reserved_paths(db,source_id) if source_id!='local' else set()
-                for item in items:
-                    seen.add(item['path'])
-                    if item['path'] in reserved:continue
-                    existing=db.execute('SELECT state FROM assets WHERE source_id=? AND path=?',(source_id,item['path'])).fetchone()
-                    if existing and existing['state'] in {'pending','migration_pending'}:continue
-                    if source_id!='local' and (item.get('excluded') or (existing and existing['state']=='excluded')):
-                        if existing or not item.get('ignore_control'):deferred[item['path']]=item
-                        continue
-                    save_item(db,item)
-                check()
+            seen.update(item['path'] for item in items)
+            items=[item for item in items if not (item.get('_directory_cached') and cached_states.get(item['path'])==('excluded' if item.get('excluded') else 'ready',True))]
+            changed=False
+            if items:
+                with self.lock,self._db(root) as db:
+                    before=db.total_changes
+                    # A PUT can already be visible on WebDAV before its independent
+                    # readback succeeds. Jobs reserve those keys before uploading;
+                    # discovery must not publish their partial bytes as new assets.
+                    reserved=self._reserved_paths(db,source_id) if source_id!='local' else set()
+                    for item in items:
+                        seen.add(item['path'])
+                        if item['path'] in reserved:continue
+                        existing=db.execute('SELECT state FROM assets WHERE source_id=? AND path=?',(source_id,item['path'])).fetchone()
+                        if existing and existing['state'] in {'pending','migration_pending'}:continue
+                        if source_id!='local' and (item.get('excluded') or (existing and existing['state']=='excluded')):
+                            if existing or not item.get('ignore_control'):deferred[item['path']]=item
+                            continue
+                        save_item(db,item)
+                    check()
+                    changed=db.total_changes!=before
             if counts is not None:progress.update(counts)
             self.scan_statuses[(str(root),source_id)]['scan_scanned']=progress['scanned']
             self.scan_statuses[(str(root),source_id)]['scan_excluded']=progress.get('excluded',0)
             self.connections[source_id]={'state':'scanning',**progress,'checked_at':time.time()}
-            self._publish_scan(root,source_id)
+            if changed:self._publish_scan(root,source_id)
         if source_id=='local':
             files=self._files();items=[]
             for path in files.walk(strict=True):
                 check()
                 rel=path.relative_to(files.config.root).as_posix()
-                if path.suffix.lower() in {'.md','.markdown','.txt','.base'}:continue
+                if not allows(rel,extensions):continue
                 info=path.stat();items.append({'path':rel,'size':info.st_size,'mtime':str(info.st_mtime_ns)})
             commit_batch(items,{'scanned':len(items),'directories':0,'pending_directories':0})
         else:
@@ -671,7 +698,7 @@ class RemoteAttachments:
                     from vault_rag.remote_discovery import DirectoryCheckpoints,discovery_context
                     checkpoint=DirectoryCheckpoints(self.manifest_path(root),source_id,
                         discovery_context(root,source_revision,credential_revision,metadata_directory),check,force_full=force_full)
-                items=provider.scan(on_batch=commit_batch,ignore=ignore,**({'checkpoint':checkpoint} if checkpoint else {}))
+                items=provider.scan(on_batch=commit_batch,ignore=ignore,roots=scan_roots,**({'checkpoint':checkpoint} if checkpoint else {}))
                 ignored_paths={item['path'] for item in items if item.get('excluded')}
                 ignored_paths.update(path for path,revision,state in snapshot.values() if ignore.excluded(path))
                 excluded=len(ignored_paths)
@@ -687,13 +714,15 @@ class RemoteAttachments:
                 confirmed=set();head_present={}
                 for index,(asset_id,path,revision) in enumerate(candidates):
                     check()
-                    self.connections[source_id]={'state':'scanning','phase':'confirming','pending_missing':len(candidates)-index,**progress,'checked_at':time.time()}
+                    self.connections[source_id]={'state':'scanning',**progress,'phase':'confirming','pending_missing':len(candidates)-index,'checked_at':time.time()}
                     try:head_present[asset_id]=provider.stat(path)
                     except RemoteStorageError as error:
                         if error.code!='remote_not_found':raise
                         confirmed.add(asset_id)
+                self.connections[source_id]={**self.connections[source_id],'phase':'verifying_rules'}
                 provider.verify_ignore()
                 from vault_rag.attachment_server_references import pull
+                self.connections[source_id]={**self.connections[source_id],'phase':'syncing_references'}
                 pull(self,root,source_id,provider)
                 # Only a complete view can prove absence. Check the same
                 # source/credential view again while committing the decision.
@@ -708,6 +737,7 @@ class RemoteAttachments:
                     for asset_id,(path,revision,state) in snapshot.items():
                         if path in reserved:continue
                         if path in ignored_paths:
+                            if state=='excluded':continue
                             db.execute("UPDATE assets SET state='excluded',updated=? WHERE id=? AND state='ready' AND reconcile_revision=?",
                                        (time.time(),asset_id,revision))
                             continue
@@ -751,10 +781,24 @@ class RemoteAttachments:
         try:self.runtime.publish('files',[])
         except Exception:pass  # UI notification failure never rolls back metadata.
 
+    def pause_scan(self,root,source_id,paused):
+        if type(paused)is not bool:raise ValueError('Invalid automatic scan setting')
+        with self.config.lock,self.lock:
+            settings=self._settings(root)
+            source=next((s for s in settings['sources'] if s['id']==source_id),None)
+            if source is None:raise ValueError('Attachment source is unavailable')
+            source['scan_paused']=paused
+            self.save(root,settings,settings['revision'])
+            if not paused:self.auto_scans.pop((str(root),source_id),None)
+        if not paused:self.start_scan(root,source_id)
+        self.wake.set()
+        return {'ok':True,'paused':paused}
+
     def start_scan(self,root,source_id,*,guard=None,force_full=False):
         """Run a bounded metadata scan in the background; one per source/root."""
         if type(force_full)is not bool:raise ValueError('Invalid attachment scan mode')
-        self._root(root);self._source(source_id,root)
+        self._root(root)
+        if self._source(source_id,root).get('scan_paused',False):raise ValueError('Resume automatic directory checks before scanning')
         if self.stopped.is_set():raise InterruptedError('Attachment storage stopped')
         key=(str(root),source_id)
         with self.lock:
@@ -821,12 +865,14 @@ class RemoteAttachments:
     def list(self,root,query='',source_id='',limit=100,after=''):
         self._root(root)
         if len(query)>500 or len(after)>4096:raise ValueError('Attachment query is too long')
-        limit=max(1,min(int(limit),500));where=['a.path>?',"a.state NOT IN ('redirected','missing','excluded')"];params=[after]
+        limit=max(1,min(int(limit),500));where=['a.path>?','attachment_allowed(a.path)=1','attachment_scan_scope(a.source_id,a.path)=1',"a.state NOT IN ('redirected','missing','excluded')"];params=[after]
         if source_id:where.append('a.source_id=?');params.append(source_id)
         if query:
             where.append('(a.path LIKE ? ESCAPE "\\" OR a.description LIKE ? ESCAPE "\\" OR a.tags LIKE ? ESCAPE "\\" OR a.category LIKE ? ESCAPE "\\")')
             pattern='%'+query.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%';params.extend([pattern]*4)
         with self.lock,self._db(root) as db:
+            register_policy(db,extensions_for(self._files()))
+            register_scan_scope(db,self._settings(root)['sources'])
             total=db.execute('SELECT COUNT(*) FROM assets a WHERE '+' AND '.join(where),params).fetchone()[0]
             rows=db.execute('SELECT a.*,(SELECT MIN(path) FROM aliases WHERE asset_id=a.id) AS logical_path,c.asset_id AS cached FROM assets a LEFT JOIN cache c ON a.id=c.asset_id WHERE '+' AND '.join(where)+' ORDER BY a.path,a.source_id LIMIT ?',(*params,limit+1)).fetchall()
         return {'items':[self._public_asset({k:r[k] for k in r.keys() if k!='cached'},bool(r['cached'])) for r in rows[:limit]],
@@ -1165,6 +1211,10 @@ class RemoteAttachments:
 
     def _check_job(self,value,*,authorize=True):
         self._root(value['root'])
+        if value['kind']=='upload' and value.get('attachment_upload',True):require_allowed(self._files(),value['requested_path'])
+        if value['kind']=='migration':
+            for item in value.get('items',[]):
+                if item['state']!='released':require_allowed(self._files(),item['path'])
         if self.stopped.is_set():raise InterruptedError('Attachment storage stopped')
         if value['id'] in self.cancelled:raise InterruptedError('Attachment transfer cancelled')
         if value['workspace_revision']!=self.config.data.get('revision',''):
@@ -1185,7 +1235,7 @@ class RemoteAttachments:
                 raise PermissionError('Attachment source credentials changed')
             if not value['credential_revision']:value['credential_revision']=credentials[2]
 
-    def queue_upload(self,root,source_id,path,local_path,*,owner='local',guard=None,idempotency_key='',fingerprint=''):
+    def queue_upload(self,root,source_id,path,local_path,*,owner='local',guard=None,idempotency_key='',fingerprint='',attachment=True):
         self._root(root);path=remote_path(path,allow_empty=False)
         if not isinstance(owner,str) or not 1<=len(owner)<=256:raise ValueError('Invalid attachment owner')
         if (not isinstance(idempotency_key,str) or not isinstance(fingerprint,str) or
@@ -1198,7 +1248,8 @@ class RemoteAttachments:
                     if previous['fingerprint']!=fingerprint:raise ConflictError('Upload operation key was already used with different arguments')
                     result=json.loads(db.execute('SELECT payload FROM jobs WHERE id=?',(previous['job_id'],)).fetchone()[0])
                     return self._public_job(result)
-        value=self._new_job(root,source_id,owner,'upload');value['asset_id']=uuid.uuid4().hex
+        if attachment:require_allowed(self._files(),path)
+        value=self._new_job(root,source_id,owner,'upload');value['attachment_upload']=attachment;value['asset_id']=uuid.uuid4().hex
         value['requested_path']=path
         source=self._source(source_id,root);name=PurePosixPath(path).name
         # Opaque unique keys keep retries from overwriting an existing object.
@@ -1206,6 +1257,7 @@ class RemoteAttachments:
         directory=self._state('outbox');directory.mkdir(parents=True,exist_ok=True,mode=0o700)
         staged=self._state('outbox',value['id']+'.blob')
         with self.lock:
+            if attachment:require_allowed(self._files(),path)
             size,value['sha256']=self._stage_upload(root,local_path,staged,guard)
             value['size']=size
             if guard is not None:self.guards[value['id']]=guard
@@ -1372,11 +1424,13 @@ class RemoteAttachments:
         else:result=provider.upload(value['remote_path'],staged,expected_sha256=value['sha256'])
         self._check_job(value)
         with self.lock,self._db(root) as db:
+            self._check_job(value)
             self._upsert(db,value['source_id'],result,asset_id=value['asset_id'],sha256=value['sha256'])
         from vault_rag.attachment_server_references import publish
         publish(self,root,value['source_id'],value['asset_id'],provider)
         self._check_job(value)
         with self.lock,self._db(root) as db:
+            self._check_job(value)
             value['state']='completed';value['verified']=True;value.pop('error',None)
             for field in ('retry_attempts','next_retry_at','retry_paused'):value.pop(field,None)
             self._job_save(db,value)
@@ -1434,6 +1488,8 @@ class RemoteAttachments:
                     self._defer_job(value,error)
                 except PermissionError:
                     value['state']='waiting_for_authorization';value['error']='owner_or_credentials_changed'
+                except AttachmentTypeError:
+                    value['state']='conflict';value['error']='attachment_file_type_not_allowed'
                 except (ConflictError,ValueError,FileNotFoundError):
                     value['state']='conflict';value['error']='attachment_or_settings_changed'
                 except InterruptedError:
@@ -1454,7 +1510,7 @@ class RemoteAttachments:
     def migration_plan(self,root,source_id,paths=None,*,owner='local',guard=None):
         from vault_rag.attachment_migrations import ASSETS,SOURCE_MARKERS,SOURCE_RESOURCE_TYPES
         from vault_rag.attachment_references import OPAQUE_RESOURCE_TYPES,discover_project_dependencies
-        self._root(root);files=self._files();value=self._new_job(root,source_id,owner,'migration')
+        self._root(root);files=self._files();extensions=extensions_for(files);value=self._new_job(root,source_id,owner,'migration')
         all_paths={p.relative_to(files.config.root).as_posix() for p in files.walk(strict=True)}
         project_roots={p.rpartition('/')[0] for p in all_paths if Path(p).suffix.lower() in {'.html','.htm'}|SOURCE_RESOURCE_TYPES or PurePosixPath(p).name in SOURCE_MARKERS}
         websites=getattr(self.runtime,'websites',None)
@@ -1466,7 +1522,7 @@ class RemoteAttachments:
         if selected is not None and len(selected)>10000:raise ValueError('Select at most 10000 attachments')
         value.update(state='planned',items=[],exclusions=[],blockers=protected['blockers'],completed=0)
         for path in sorted(all_paths if selected is None else selected):
-            if path not in all_paths or path in protected['protected'] or Path(path).suffix.lower() not in ASSETS:
+            if path not in all_paths or path in protected['protected'] or Path(path).suffix.lower() not in ASSETS or not allows(path,extensions):
                 if selected is not None:value['exclusions'].append({'path':path,'reason':'Note, project dependency, or unsupported attachment type'})
                 continue
             original=files.config.path_for(path);digest,version=_hash_file(original)
@@ -1515,6 +1571,7 @@ class RemoteAttachments:
 
     def _migrate_one(self,value,item):
         root=value['root'];source=self.config.path_for(item['path']);files=self._files()
+        require_allowed(files,item['path'])
         # Repair journals written by the earlier scan/upload race as well as
         # using the canonical identity for new migrations. A release filename
         # is an independent recovery key and must retain its existing value.

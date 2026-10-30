@@ -31,6 +31,7 @@ export function useDatabase(path:string,initialView:string){
   const folder=c.folder||'';if(!folder||paths.some(p=>p===folder||p.startsWith(folder+'/')||folder.startsWith(p+'/'))){records=true;schedule();}
  };window.addEventListener('vault-data-changed',reload);return()=>{cancelAnimationFrame(frame);window.removeEventListener('vault-data-changed',reload);};},[path]);
  const view=config?.views.find(v=>v.id===viewId)||(!viewId?config?.views[0]:undefined);
+ useEffect(()=>{if(config?.path===path&&!viewId&&config.views.length)setViewId(config.views[0].id);},[config,viewId,path]);
  const scope=JSON.stringify([config?.root,path,view?.id,search]),activeScope=useRef(scope);activeScope.current=scope;
  useEffect(()=>{changeRecent(old=>old.some(r=>r.scope!==scope)?old.filter(r=>r.scope===scope):old);},[scope]);
  const confirmRecent=(records:Row[])=>changeRecent(old=>{const next=old.filter(r=>!records.some(row=>row.path===r.row.path&&row.revision===r.row.revision));return next.length===old.length?old:next;});

@@ -95,6 +95,16 @@ def asset_library_router(library,downloads,enrichment):
             'Cache-Control':'private, no-cache','X-Content-Type-Options':'nosniff',
             'Content-Security-Policy':"default-src 'none'; sandbox"})
 
+    @router.post('/api/asset-library/enrichment/{mode}')
+    async def batch_enrichment(mode:str,request:Request):
+        body=await request.json()
+        if mode not in {'plan','start'}:raise ValueError('Unknown batch collection mode')
+        if not isinstance(body,dict) or set(body)-{'root','item_ids','limit','refresh','delay'}:
+            raise ValueError('Unknown batch collection option')
+        options={key:value for key,value in body.items() if key!='root'}
+        method=enrichment.plan if mode=='plan' else enrichment.start
+        return await asyncio.to_thread(method,body['root'],**options)
+
     @router.post('/api/asset-library/actions')
     async def action(request:Request):
         body=await request.json()

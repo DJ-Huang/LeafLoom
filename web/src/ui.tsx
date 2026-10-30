@@ -14,12 +14,12 @@ export function Modal({title,children,onClose,wide=false,className='',hideHeader
  const ref=useRef<HTMLDialogElement>(null),label=useId(),close=useRef(onClose);close.current=onClose;
  useEffect(()=>{const previous=document.activeElement as HTMLElement|null,dialog=ref.current!;dialog.showModal();
   return()=>{dialog.close();if(previous?.isConnected)previous.focus();};},[]);
- return <dialog ref={ref} className={'modal '+(wide?'wide ':'')+className} style={style} aria-labelledby={label} onCancel={event=>{event.preventDefault();close.current();}} onClick={event=>{if(event.target===event.currentTarget){const box=event.currentTarget.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)close.current();}}}>
+ return <dialog ref={ref} className={'modal '+(wide?'wide ':'')+className} style={style} aria-labelledby={label} onCancel={event=>{if(event.target!==event.currentTarget)return;event.preventDefault();event.stopPropagation();close.current();}} onClick={event=>{if(event.target===event.currentTarget){const box=event.currentTarget.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)close.current();}}}>
   {hideHeader?<h2 id={label} className="sr-only">{title}</h2>:<header><div className="modal-heading">{icon&&<span className="modal-heading-icon" aria-hidden="true">{icon}</span>}<h2 id={label}>{title}</h2></div><Action title={t("关闭")} onClick={onClose}><X size={18}/></Action></header>}{children}
  </dialog>;
 }
 export type MenuPoint={x:number,y:number};
-export function ActionMenu({title,anchor,point,className='',children,onClose}:{title:string,anchor:HTMLElement,point?:MenuPoint,className?:string,children:React.ReactNode,onClose:()=>void}){
+export function ActionMenu({title,anchor,point,className='',children,onClose,portalTarget}:{title:string,anchor:HTMLElement,point?:MenuPoint,className?:string,children:React.ReactNode,onClose:()=>void,portalTarget?:HTMLElement}){
  useLocale();
  const ref=useRef<HTMLDivElement>(null),close=useRef(onClose);close.current=onClose;
  useLayoutEffect(()=>{
@@ -32,7 +32,7 @@ export function ActionMenu({title,anchor,point,className='',children,onClose}:{t
   document.addEventListener('pointerdown',outside);menu.addEventListener('keydown',key);window.addEventListener('resize',place);window.addEventListener('scroll',place,true);
   return()=>{document.removeEventListener('pointerdown',outside);menu.removeEventListener('keydown',key);window.removeEventListener('resize',place);window.removeEventListener('scroll',place,true);if(anchor.isConnected)anchor.focus();};
  },[anchor,point?.x,point?.y]);
- return createPortal(<div ref={ref} className={'action-menu action-list '+className} role="menu" aria-label={title} onContextMenu={event=>event.preventDefault()} onClick={event=>{if((event.target as HTMLElement).closest('button:not(:disabled),a[href]'))onClose();}}>{children}</div>,document.body);
+ return createPortal(<div ref={ref} className={'action-menu action-list '+className} role="menu" aria-label={title} onContextMenu={event=>event.preventDefault()} onClick={event=>{if((event.target as HTMLElement).closest('button:not(:disabled),a[href]'))onClose();}}>{children}</div>,portalTarget||document.body);
 }
 export type FormField={name:string,label:string,value?:string,multiline?:boolean,required?:boolean,options?:{value:string,label:string}[]};
 export function FormDialog({title,description,fields=[],submitLabel=t("保存"),danger=false,onSubmit,onClose,className=''}:{title:string,description?:string,fields?:FormField[],submitLabel?:string,danger?:boolean,className?:string,onSubmit:(values:Record<string,string>)=>Promise<void>,onClose:()=>void}){

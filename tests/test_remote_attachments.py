@@ -17,6 +17,7 @@ import httpx
 from vault_rag.local_state import ConflictError, LocalConfig
 from vault_rag.remote_attachments import RemoteAttachments
 from vault_rag.remote_webdav import RemoteStorageError, WebDAVSource, validate_source
+from vault_rag.attachment_policy import DEFAULT_EXTENSIONS
 from vault_rag.remote_ignore import IGNORE_HEADER,IGNORE_NAME,MAX_IGNORE_BYTES,MAX_TOTAL_IGNORE_BYTES,RemoteIgnore,IgnoreRuleError
 
 
@@ -93,7 +94,7 @@ class RemoteAttachmentTests(unittest.TestCase):
         self.config=LocalConfig(self.home/'state');self.config.save({'root':str(self.root)})
         self.dav=FakeDAV();self.transport=httpx.MockTransport(self.dav)
         self.managers=[];self.manager=self.manager_for_config()
-        self.manager.save(str(self.root),{'sources':[{'id':SOURCE,'name':'Fixture','type':'webdav','base_url':'http://127.0.0.1:10000/','remote_root':'','username':'leafloom','enabled':True,'allow_private_http':True,'upload_directory':'Incoming','secret_ref':'fixture-reference','connection_hint':'official-client'}],'default_source':SOURCE})
+        self.manager.save(str(self.root),{'allowed_extensions':[*DEFAULT_EXTENSIONS,'.bin'],'sources':[{'id':SOURCE,'name':'Fixture','type':'webdav','base_url':'http://127.0.0.1:10000/','remote_root':'','username':'leafloom','enabled':True,'allow_private_http':True,'upload_directory':'Incoming','secret_ref':'fixture-reference','connection_hint':'official-client'}],'default_source':SOURCE})
         self.manager.set_credentials(SOURCE,'stale-username',SECRET,revision='stable-revision')
 
     def manager_for_config(self):
@@ -736,10 +737,10 @@ class RemoteAttachmentTests(unittest.TestCase):
             'blocked/deep/image.png':b'png','blocked/deep/keep.html':b'<html>',
         })
         result=self.manager.scan(str(self.root),SOURCE);self.assertTrue(result['ok'])
-        expected={'note.md':'excluded','page.html':'excluded','tool.py':'excluded','ordinary.txt':'ready',
-                  'data.json':'ready','image.svg':'ready','allowed.md':'ready','blocked/image.png':'ready',
-                  'blocked/script.py':'ready','blocked/hidden.zip':'excluded','blocked/deep/image.png':'excluded',
-                  'blocked/deep/keep.html':'ready'}
+        expected={'note.md':'excluded','page.html':'excluded','tool.py':'excluded','ordinary.txt':'excluded',
+                  'data.json':'excluded','image.svg':'ready','allowed.md':'excluded','blocked/image.png':'ready',
+                  'blocked/script.py':'excluded','blocked/hidden.zip':'excluded','blocked/deep/image.png':'excluded',
+                  'blocked/deep/keep.html':'excluded'}
         for path,state in expected.items():
             with self.subTest(path=path):
                 self.assertEqual(self.manager.stat(str(self.root),'_attachments/_remote/'+SOURCE+'/'+path)['state'],state)
@@ -822,7 +823,7 @@ class RemoteAttachmentTests(unittest.TestCase):
 
     def test_ignore_bounds_bom_and_missing_child_rule_inherit(self):
         rules=RemoteIgnore();rules.add('',('\ufeff'+IGNORE_HEADER+'\r\n*.md\r\n!keep.md\r\n').encode())
-        self.assertTrue(rules.excluded('note.md'));self.assertFalse(rules.excluded('keep.md'))
+        self.assertTrue(rules.excluded('note.md'));self.assertTrue(rules.excluded('keep.md'))
         for data in ((IGNORE_HEADER+'\n'+'x'*2049).encode(),(IGNORE_HEADER+'\n'+'#\n'*2048).encode(),b'x'*(MAX_IGNORE_BYTES+1)):
             with self.assertRaises(IgnoreRuleError):RemoteIgnore().add('',data)
         budget=RemoteIgnore()

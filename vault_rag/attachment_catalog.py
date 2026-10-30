@@ -15,6 +15,8 @@ import uuid
 from contextlib import closing
 from pathlib import PurePosixPath
 
+from vault_rag.attachment_scan_policy import register_scan_scope
+from vault_rag.attachment_policy import extensions_for, register_policy
 from vault_rag.local_state import ConflictError, relative
 from vault_rag.platform_support import path_key
 
@@ -91,6 +93,8 @@ class AttachmentCatalog:
                 raise ValueError('Attachment manifest sidecar cannot be a link')
         db.execute('ATTACH DATABASE ? AS manifest', (path.as_uri() + '?mode=ro',))
         db.row_factory = sqlite3.Row
+        register_policy(db, extensions_for(files))
+        register_scan_scope(db, [])
         db.create_function('catalog_path_key', 1, path_key, deterministic=True)
         db.create_function('catalog_basename', 1, lambda p: PurePosixPath(p).name, deterministic=True)
         existing = {}
@@ -130,7 +134,7 @@ class AttachmentCatalog:
                 'complete' AS cache_state
             FROM main.assets l LEFT JOIN manifest.assets m
                 ON m.source_id='local' AND m.path=l.path
-            WHERE l.attachment=1 AND catalog_local_exists(l.path)
+            WHERE attachment_allowed(l.path)=1 AND catalog_local_exists(l.path)
             UNION ALL
             SELECT COALESCE(x.logical_path,? || a.source_id || '/' || a.path) AS path,
                 catalog_basename(COALESCE(x.logical_path,a.path)) AS name,
@@ -144,9 +148,9 @@ class AttachmentCatalog:
                     ) THEN 'partial' ELSE 'none' END AS cache_state
             FROM manifest.assets a LEFT JOIN alias_choice x ON x.asset_id=a.id
                 LEFT JOIN manifest.cache c ON c.asset_id=a.id
-            WHERE a.source_id!='local' AND a.state NOT IN ('missing','excluded') AND (a.state!='migration_pending' OR NOT EXISTS (
+            WHERE a.source_id!='local' AND attachment_scan_scope(a.source_id,a.path)=1 AND attachment_allowed(a.path)=1 AND attachment_allowed(COALESCE(x.logical_path,a.path))=1 AND a.state NOT IN ('missing','excluded') AND (a.state!='migration_pending' OR NOT EXISTS (
                 SELECT 1 FROM manifest.aliases pending JOIN main.assets l
-                    ON l.path=pending.path AND l.attachment=1 AND catalog_local_exists(l.path)
+                    ON l.path=pending.path AND attachment_allowed(l.path)=1 AND catalog_local_exists(l.path)
                 WHERE pending.asset_id=a.id
             ))
         ) '''
@@ -249,11 +253,12 @@ class AttachmentCatalog:
                 prefix = files.config.data.get('attachment_folder', '_attachments') + '/_remote/'
                 with closing(self._catalog_connection(local, files)) as db:
                     self._attach(db, path, files)
+                    register_scan_scope(db,settings['sources'])
                     view_stamp = presentation.prepare(db,str(root),group_id) if presentation else ''
                     db.execute('BEGIN')
                     scanned = db.execute('SELECT scanned_at FROM main.state WHERE root=?', (str(root),)).fetchone()
                     generation = db.execute('SELECT generation FROM manifest.catalog_state WHERE id=1').fetchone()[0]
-                    presence = [row[0] for row in db.execute('SELECT path FROM main.assets WHERE attachment=1 AND catalog_local_exists(path) '
+                    presence = [row[0] for row in db.execute('SELECT path FROM main.assets WHERE attachment_allowed(path)=1 AND catalog_local_exists(path) '
                         'UNION SELECT path FROM manifest.aliases WHERE catalog_local_exists(path) ORDER BY path')]
                     scope = self._scope([str(root), stamp, scanned[0] if scanned else None, local.generation,
                                          generation, presence, query, kind, sort, order, source, storage_id, sorted(set(tags)), category, group_id, view_stamp])

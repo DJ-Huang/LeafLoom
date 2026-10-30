@@ -33,7 +33,7 @@ LIBRARY_SCHEMA='leafloom.asset-library.v1'
 MAX_EVENT_BYTES=256*1024
 MAX_COVER_BYTES=2*1024*1024
 MAX_SYNC_BYTES=256*1024*1024
-BACKGROUND_PULL_INTERVAL=30
+BACKGROUND_PULL_INTERVAL=30*60
 METADATA_WORKERS=4
 REVIEW={'unmatched','needs_review','confirmed','rejected'}
 OFFICIAL_FIELDS={'product_id','url','title','publisher','summary_zh','description','categories','keywords',
@@ -242,7 +242,8 @@ class AssetLibrary:
             self.guards[(str(root),owner,context['workspace_revision'])]=guard
             if guard() is False:raise PermissionError('Asset library owner authorization expired')
         with self.lock,self._db(root) as db:
-            self._set(db,'requested',context);self._set_sync(db,{'state':'queued'})
+            self._set(db,'requested',context)
+            if not self._get(db,'library_id'):self._set_sync(db,{'state':'queued'})
         self._discover(root);self.wake.set()
         return {**self.status(root),'state':'queued'}
 
@@ -329,6 +330,8 @@ class AssetLibrary:
                                    'keywords':[],'categories_zh':[],'keywords_zh':[],'compatibility':{},'latest_version':'','fetched_at':None,'cover_source_url':''}}
 
     def _project(self,db):
+        version=_sha(_bytes([tuple(row) for row in db.execute("SELECT id,sha256 FROM events WHERE kind='state' ORDER BY id")]))
+        if self._get(db,'projection_revision')==version:return
         grouped={}
         for row in db.execute("SELECT * FROM events WHERE kind='state'"):
             grouped.setdefault(row['entity'],{})[row['id']]={'parents':json.loads(row['parents']),'state':json.loads(row['payload'])}
@@ -354,6 +357,8 @@ class AssetLibrary:
                 if incomplete or not heads:conflicts.append({'reason':'incomplete_or_cyclic_history'})
             revision=_sha(_bytes([entity,heads]))
             db.execute('INSERT INTO entities VALUES(?,?,?,?,?)',(entity,_bytes(state).decode(),_bytes(heads).decode(),revision,_bytes(conflicts).decode()))
+
+        self._set(db,'projection_revision',version)
 
     def _entity(self,db,entity):
         row=db.execute('SELECT * FROM entities WHERE id=?',(entity,)).fetchone()
@@ -435,6 +440,7 @@ class AssetLibrary:
     def _pull(self,root,provider,context):
         directory=context['metadata_directory']+'/events'
         self._check(context)
+        if self.active_sync:self.active_sync.update(phase='pulling')
         try:items=provider.scan(directory,max_files=20000,max_depth=2,prune_reserved=False,read_ignore=False)
         except RemoteStorageError as error:
             if error.code=='remote_not_found':self._check(context);return 0
@@ -443,11 +449,14 @@ class AssetLibrary:
         with self._read_db(root) as db:
             known={row['id']:row['sha256'] for row in db.execute('SELECT id,sha256 FROM events WHERE synced=1')}
         total=0;count=0
+        if self.active_sync:self.active_sync.update(phase='pulling',done=0,total=len(items))
         for index,item in enumerate(items):
             # Known immutable identities need no per-event writer/schema setup.
             # Revalidate authorization in bounded batches, and before every
             # unknown-object read/write regardless of the batch position.
-            if index%128==0:self._check(context)
+            if index%128==0:
+                self._check(context)
+                if self.active_sync:self.active_sync['done']=index
             match=re.fullmatch(re.escape(directory)+r'/([0-9a-f]{2})/([0-9a-f]{32})-([0-9a-f]{64})\.json',item['path'])
             if not match or match[1]!=match[2][:2] or item['size']>MAX_EVENT_BYTES:raise RemoteStorageError('invalid_asset_library_event_path')
             if match[2] in known:
@@ -472,6 +481,7 @@ class AssetLibrary:
             # A large projection may spill SQLite's page cache and hold an
             # exclusive lock. Read our binding on this same transaction while
             # retaining live source/credential checks before commit.
+            if self.active_sync:self.active_sync.update(phase='projecting',done=len(items),total=len(items))
             self._check(context,db=db);self._project(db);self._check(context,db=db)
         return count
 
@@ -543,6 +553,7 @@ class AssetLibrary:
                         row=active.pop(future)
                         try:
                             actual=future.result();self._ack_outbox(root,row,actual);completed.add(row['id'])
+                            if self.active_sync:self.active_sync.update(phase='publishing',done=len(completed),total=len(queued))
                         except CancelledError:pass  # Not started; leave its durable queue entry intact.
                         except BaseException as error:
                             failed.set();first_error=first_error or error;self._outbox_failure(root,row,error)
@@ -562,7 +573,24 @@ class AssetLibrary:
             if guard is not None:
                 self.guards[(str(root),owner,context['workspace_revision'])]=guard
                 if guard() is False:raise PermissionError('Asset library owner authorization expired')
-            with self._read_db(root) as db:previous=self._get(db,'sync',{})
+            self._discover(root)
+            with self._read_db(root) as db:
+                previous=self._get(db,'sync',{})
+                saved=self._get(db,'pull_checkpoint',{})
+                known_library=self._get(db,'library_id','')
+                unexported=bool(db.execute('SELECT 1 FROM files WHERE exported=0 LIMIT 1').fetchone())
+            known_fingerprint=_sha(_bytes([context,known_library]))
+            if known_library and str(root) not in self.last_pull and saved.get('fingerprint')==known_fingerprint:
+                age=time.time()-saved.get('pulled_at',0)
+                if 0<=age<BACKGROUND_PULL_INTERVAL:self.last_pull[str(root)]=(known_fingerprint,time.monotonic()-age)
+            receipt=self.last_pull.get(str(root))
+            if (_background and receipt and receipt[0]==known_fingerprint
+                    and time.monotonic()-receipt[1]<BACKGROUND_PULL_INTERVAL
+                    and previous.get('state') in {'ready','queued'}
+                    and not unexported and not self._has_sendable(root)):
+                if previous.get('state')=='queued':
+                    with self.lock,self._db(root) as db:self._check(context,db=db);self._set_sync(db,{'state':'ready'})
+                return self.status(root)
             self.active_sync={'context':context,'phase':'connecting','retrying':previous.get('state')=='unreachable','started_at':time.time()}
             provider=self._provider(context)
             sessions.enter_context(provider.session())
@@ -583,6 +611,8 @@ class AssetLibrary:
             if pull_due and not deferred_pull:
                 pulled+=self._pull(root,provider,context)
                 self.last_pull[str(root)]=(fingerprint,time.monotonic())
+                with self.lock,self._db(root) as db:
+                    self._check(context,db=db);self._set(db,'pull_checkpoint',{'fingerprint':fingerprint,'pulled_at':time.time()})
             self._discover(root);self._seed(root,context)
             if resume:
                 with self.lock,self._db(root) as db:
@@ -594,10 +624,13 @@ class AssetLibrary:
                     if requested and requested['owner']==owner and requested['source_id']==context['source_id'] and requested['metadata_directory']==context['metadata_directory']:
                         self._set(db,'requested',context)
             with self.lock,self._db(root) as db:queued=[dict(row) for row in db.execute("SELECT * FROM outbox WHERE state!='authorization_required' ORDER BY CASE kind WHEN 'cover' THEN 0 ELSE 1 END,rowid")]
+            self.active_sync.update(phase='publishing',done=0,total=len(queued))
             completed=self._flush(root,queued)
             if deferred_pull:
                 pulled+=self._pull(root,provider,context)
                 self.last_pull[str(root)]=(fingerprint,time.monotonic())
+                with self.lock,self._db(root) as db:
+                    self._check(context,db=db);self._set(db,'pull_checkpoint',{'fingerprint':fingerprint,'pulled_at':time.time()})
                 self._discover(root)
             with self.lock,self._db(root) as db:self._set_sync(db,{'state':'ready','last_synced_at':time.time()});self._project(db)
             if (pulled or completed) and callable(self.on_changed):
@@ -824,7 +857,7 @@ class AssetLibrary:
                 except (ConflictError,PermissionError,RemoteStorageError,InterruptedError,ValueError):pass
                 else:
                     state={**{key:state[key] for key in ('last_synced_at',) if key in state},
-                           'state':'syncing','phase':active['phase'],'retrying':active['retrying'],'sync_started_at':active['started_at']}
+                           'state':'syncing','phase':active['phase'],'retrying':active['retrying'],'sync_started_at':active['started_at'],'done':active.get('done',0),'total':active.get('total',0)}
         return {**settings,**state,'library_id':library_id,'initialized':bool(library_id),'pending':sum(counts.values()),'outbox':counts,
                 'pending_bytes':pending_bytes,'files':files,'conflicts':conflicts}
 

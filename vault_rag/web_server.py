@@ -619,6 +619,9 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     @app.post('/api/upload')
     async def upload(request:Request,folder:str='',name:str='',root:str|None=None,create_folder:bool=False,central:bool=False,unique:bool=False,storage_id:str=''):
         settings=remote_attachments._settings(root)
+        if central:
+            from vault_rag.attachment_policy import require_allowed
+            require_allowed(runtime.files,name)
         selected=storage_id or settings['default_source']
         if selected!='local':
             from vault_rag.local_state import relative
@@ -642,7 +645,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
                             raise ValueError('Attachment upload staging space is full')
                         stream.write(part)
                     stream.flush();os.fsync(stream.fileno())
-                value=await asyncio.to_thread(remote_attachments.queue_upload,root,selected,logical,stage,guard=guard)
+                value=await asyncio.to_thread(remote_attachments.queue_upload,root,selected,logical,stage,guard=guard,attachment=central)
                 runtime.publish('files',[logical])
                 return public_job(value)
             finally:stage.unlink(missing_ok=True)
