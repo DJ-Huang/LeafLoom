@@ -4,7 +4,7 @@ export const imageFile=(name:string)=>/\.(png|jpe?g|gif|webp|avif|svg)$/i.test(n
 export function attachmentName(file:File){
  const extensions:Record<string,string>={'image/png':'.png','image/jpeg':'.jpg','image/gif':'.gif','image/webp':'.webp','image/avif':'.avif'};
  let name=file.name.replace(/[<>:"/\\|?*\x00-\x1f]/g,'-').replace(/^[. ]+|[. ]+$/g,'')||'image';
- const extension=/\.[a-z0-9]{1,12}$/i.exec(name)?.[0]||extensions[file.type]||'';
+ const extension=/\.[a-z0-9]{1,12}(?:\.[a-z0-9]{1,12})*$/i.exec(name)?.[0]||extensions[file.type]||'';
  if(extension&&name.endsWith(extension))name=name.slice(0,-extension.length);
  return name.slice(0,100)+'-'+crypto.randomUUID().slice(0,12)+extension;
 }

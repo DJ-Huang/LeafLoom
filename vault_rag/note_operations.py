@@ -45,6 +45,15 @@ class NoteOperations:
             raise ValueError('Note operations support Markdown, TXT and HTML/HTM only')
         return path
 
+    def file_operation_path(self, path):
+        # Database definitions share guarded move/trash/history operations, but
+        # generic note text mutation remains limited to its existing formats.
+        path = relative(path)
+        if Path(path).suffix.lower() == '.base':
+            self.config.path_for(path, writable=True)
+            return path
+        return self.note_path(path)
+
     def metadata(self):
         catalog = self.runtime.catalog
         if self.runtime.catalog_pending():
@@ -252,7 +261,9 @@ class NoteOperations:
     def _operation_state(self, kind, source, destination=''):
         path = self.config.path_for(source, writable=True)
         if not path.is_dir():
-            self.note_path(source)
+            self.file_operation_path(source)
+            if kind == 'move' and Path(source).suffix.lower() == '.base' and Path(destination).suffix.lower() != '.base':
+                raise ValueError('Database destinations must end in .base')
         snapshot = self.files.snapshot(source)
         plan = self.files.plan_move(source, destination) if kind == 'move' else None
         edits = {path: [digest(old), digest(new)] for path, (old, new) in plan['edits'].items()} if plan else {}
@@ -302,11 +313,11 @@ class NoteOperations:
             destination = self.config.path_for(record['destination'], writable=True)
             source = self.config.path_for(record['path'], writable=True)
             if not (destination.is_dir() or source.is_dir()):
-                self.note_path(record['path'])
+                self.file_operation_path(record['path'])
         if kind != 'operations':
             content = self.files.state_path(kind, key, 'content')
             if not content.is_dir():
-                self.note_path(record['path'])
+                self.file_operation_path(record['path'])
         content_state = {}
         if validate_content:
             if kind == 'operations':

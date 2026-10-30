@@ -113,6 +113,14 @@ class Databases:
                     if p.endswith('.base') and under(p, folder)]
         return self.notes.page(rows, limit, cursor, key=['databases', folder])
 
+    def read_record(self, path, record_path, offset=0, limit=12000):
+        with self.config.lock:
+            config = self.config_read(path)
+            target = relative(record_path)
+            if not target.endswith('.md') or (config['folder'] is not None and not under(target, config['folder'])):
+                raise ValueError('Record is outside the database folder')
+            return {**self.notes.read(target, offset, limit), 'config_revision': config['revision'], 'markdown_link': '[['+target+']]'}
+
     def view(self, data, view_id):
         for index, view in enumerate(data.get('views', [])):
             if (not view_id and index == 0) or view_id in (view.get('leafloom', {}).get('id', f'legacy-{index}'), view.get('name')):
@@ -234,8 +242,10 @@ class Databases:
                 if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', value): raise ValueError('Use YYYY-MM-DD dates')
                 dt.date.fromisoformat(value)
             if kind == 'url' and value and not re.match(r'^https?://[^\s]+$', value): raise ValueError('Use an HTTP(S) URL')
-            if kind in {'select', 'multiselect'} and spec.get('options'):
-                if any(v not in spec['options'] for v in (value if isinstance(value, list) else [value])):
+            if kind in {'select', 'multiselect'} and (spec.get('options') or spec.get('allowCustomOptions') is False):
+                previous = (old or {}).get(key_name(key))
+                retained = previous if isinstance(previous, list) else [previous]
+                if any(v not in spec['options'] and v not in retained for v in (value if isinstance(value, list) else [value])):
                     raise ValueError('Select a configured option')
         merged = {**(old or {}), **{key_name(k): v for k, v in updates.items()}}
         for view in data.get('views', []):
@@ -245,6 +255,27 @@ class Databases:
             a, b = merged.get(key_name(start)), merged.get(key_name(end))
             if a and b and str(b) < str(a): raise ValueError('End date must not be before start date')
         return {key_name(k): v for k, v in updates.items()}
+
+    def creation_defaults(self, data, view):
+        """Infer only unambiguous, writable equality values from UI filters.
+
+        Structured conditions are ANDed. Search, expressions, ranges and negative
+        predicates cannot safely choose a value for a new record.
+        """
+        fields = self.fields(data); defaults = {}; equalities = {}; conflicts = set()
+        for condition in view.get('leafloom', {}).get('conditions', []):
+            if not isinstance(condition, dict) or condition.get('operator') != 'eq': continue
+            key, value = condition.get('field'), condition.get('value')
+            if not isinstance(key, str) or key == 'title' or key not in fields or key in conflicts: continue
+            if key in equalities and equalities[key] != value:
+                defaults.pop(key, None); conflicts.add(key); continue
+            equalities[key] = value
+            if value is None: continue
+            if key.startswith(('file.', 'formula.')) or fields[key].get('readonly'): continue
+            try: self.validate_values(data, {key: value})
+            except (ValueError, TypeError): continue
+            defaults[key] = copy.deepcopy(value)
+        return defaults
 
     def validate_config(self, data):
         leaf = data.setdefault('leafloom', {}); leaf.setdefault('schemaVersion', 1)
@@ -287,10 +318,10 @@ class Databases:
                 replay = self.board.replay(path, command, operation_id)
                 if replay is not None: return replay
             required = {'field.set': ('key', 'field'), 'field.remove': ('key',), 'view.add': ('view',),
-                        'view.update': ('view_id', 'patch'), 'view.remove': ('view_id',),
+                        'view.update': ('view_id', 'patch'), 'view.remove': ('view_id',), 'view.move': ('view_id',),
                         'record.update': ('path', 'record_revision'), 'record.duplicate': ('path', 'record_revision'), 'record.trash': ('path',),
                         'record.move': ('path', 'record_revision', 'view_id', 'group_key', 'catalog_version'), 'board.undo': ('move_id',),
-                        'board.group.remove': ('view_id', 'group_key')}
+                        'board.group.remove': ('view_id', 'group_key'), 'board.group.set': ('view_id', 'value')}
             if any(k not in command for k in required.get(action, ())): raise ValueError('Missing database command arguments')
             for name in ('field', 'view', 'patch'):
                 if name in command and not isinstance(command[name], dict): raise ValueError('Configuration changes must be objects')
@@ -364,6 +395,7 @@ class Databases:
             if action == 'record.create':
                 folder = data.get('leafloom', {}).get('folder')
                 if folder is None: raise ValueError('Configure a record folder before creating records')
+                view = self.view(data, command.get('view_id', ''))
                 title = str(command.get('title', '')).strip() or 'Untitled'
                 filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '-', title).strip('. ')[:100] or 'Untitled'
                 target = f'{folder}/{filename}.md' if folder else filename + '.md'
@@ -374,13 +406,14 @@ class Databases:
                         n += 1; target = '/'.join(x for x in [folder, f'{filename} ({n}).md'] if x)
                 initial = {}; tasks = data.get('leafloom', {}).get('tasks')
                 if tasks: initial[tasks['statusField']] = tasks['initialStatus']
+                initial.update(self.creation_defaults(data, view))
                 if command.get('group_key') is not None:
-                    v = self.view(data, command.get('view_id')); group = v.get('groupBy', {}).get('property')
-                    if v.get('type') != 'leafloomBoard' or not group: raise ValueError('db.boardSelectField')
+                    group = view.get('groupBy', {}).get('property')
+                    if view.get('type') != 'leafloomBoard' or not group: raise ValueError('db.boardSelectField')
                     initial[group] = json.loads(command['group_key'])
                 values = self.validate_values(data, {**initial, **command.get('values', {})}); values['title'] = title
                 out = io.StringIO(); yaml.dump(values, out)
-                return self.create_once(target, '---\n' + out.getvalue() + '---\n\n', receipt, signature, data=data, view=self.view(data, command.get('view_id', '')), search=command.get('search', ''), return_record=command.get('return_record', False))
+                return self.create_once(target, '---\n' + out.getvalue() + '---\n\n', receipt, signature, data=data, view=view, search=command.get('search', ''), return_record=command.get('return_record', False))
             if action in {'record.update', 'record.trash'}:
                 target = relative(command['path']); folder = data.get('leafloom', {}).get('folder')
                 if not target.endswith('.md') or (folder is not None and not under(target, folder)):
@@ -388,18 +421,30 @@ class Databases:
                 if action == 'record.trash':
                     if command.get('record_revision') and self.files.read(target)['etag'] != command['record_revision']:
                         raise ConflictError('db.recordConflict')
-                    return self.notes.operation('delete', target, workspace_revision, '', command.get('dry_run', True), command.get('operation_token'))
+                    return self.notes.operation('delete', target, workspace_revision, '', command.get('dry_run', True), command.get('operation_token'), command.get('limit', 50), command.get('cursor', ''))
                 old = self.files.read(target)
                 updates = self.validate_values(data, command.get('values', {}), old['metadata'])
                 if 'title' in updates and 'name' in old['metadata']:
                     updates['name'] = updates.pop('title')
                 result = self.files.properties(target, updates, command['record_revision'], expected_root=value['root'])
                 return {'ok': True, 'path': target, 'revision': result['etag'], 'note': result, 'history_id': result.get('history_id'), 'catalog_version': self.runtime.catalog.version}
-            if action == 'field.set':
+            if action == 'board.group.set':
+                self.board.set_group(data, command)
+            elif action == 'field.set':
                 key = command['key']; fields = data.setdefault('leafloom', {}).setdefault('fields', {})
                 fields[key] = {**fields.get(key, {}), **command['field']}
-                data.setdefault('properties', {}).setdefault(key, {})['displayName'] = command.get('displayName', key)
+                display = data.setdefault('properties', {}).setdefault(key, {})
+                if 'displayName' in command: display['displayName'] = command['displayName']
+                else: display.setdefault('displayName', key)
+                if command.get('task_setup') is not None: self.board.setup(data, command['task_setup'])
+                if 'detail_view_id' in command or 'detail_fields' in command:
+                    detail_fields, view_id = command.get('detail_fields'), command.get('detail_view_id')
+                    if not isinstance(view_id, str) or not view_id or not isinstance(detail_fields, list) or any(not isinstance(k, str) or k not in self.fields(data) for k in detail_fields):
+                        raise ValueError('Invalid record detail fields')
+                    self.view(data, view_id).setdefault('leafloom', {})['detailFields'] = list(dict.fromkeys([*detail_fields, key]))
             elif action == 'field.remove':
+                if command['key'] == 'title' or command['key'].startswith(('file.', 'formula.')) or self.fields(data).get(command['key'], {}).get('readonly'):
+                    raise ValueError('db.builtInFieldProtected')
                 key = command['key']; data.setdefault('leafloom', {}).setdefault('fields', {}).pop(key, None)
                 data.setdefault('properties', {}).pop(key, None)
                 if key in [data.get('leafloom', {}).get('tasks', {}).get(role) for role in ('statusField', 'priorityField', 'dueField')]: data['leafloom'].pop('tasks', None)
@@ -408,6 +453,8 @@ class Databases:
                     if v.get('groupBy', {}).get('property') == key: v.pop('groupBy', None)
                     v['sort'] = [s for s in v.get('sort', []) if s.get('property') != key]
                     opts = v.get('leafloom', {})
+                    if isinstance(opts.get('detailFields'), list): opts['detailFields'] = [k for k in opts['detailFields'] if k != key]
+                    if isinstance(opts.get('detailExtraOrder'), list): opts['detailExtraOrder'] = [k for k in opts['detailExtraOrder'] if k != key]
                     opts['conditions'] = [c for c in opts.get('conditions', []) if c.get('field') != key]
                     for name in ('startField', 'endField', 'coverField'):
                         if opts.get(name) == key: opts.pop(name)
@@ -416,6 +463,18 @@ class Databases:
                 added = copy.deepcopy(command['view'])
                 if added.get('type') == 'leafloomBoard': self.board.prepare_view(data, added, command)
                 data.setdefault('views', []).append(added)
+            elif action == 'view.move':
+                before, after = command.get('before_view_id'), command.get('after_view_id')
+                if bool(before) == bool(after) or not isinstance(before or after, str):
+                    raise ValueError('Choose exactly one neighboring view')
+                by_id = {v['leafloom']['id']: v for v in data.get('views', [])}
+                if not isinstance(command['view_id'], str) or command['view_id'] not in by_id or (before or after) not in by_id:
+                    raise ValueError('Database view not found')
+                moved, neighbor = by_id[command['view_id']], by_id[before or after]
+                if moved is neighbor: raise ValueError('Choose a different neighboring view')
+                views = data['views']; old = list(views)
+                views.remove(moved); views.insert(views.index(neighbor) + (0 if before else 1), moved)
+                if views == old: return {'ok': True, 'path': path, 'revision': value['etag'], 'changed': False}
             elif action in {'view.update', 'view.remove'}:
                 v = self.view(data, command['view_id'])
                 if command.get('task_setup') is not None: self.board.setup(data, command['task_setup'])

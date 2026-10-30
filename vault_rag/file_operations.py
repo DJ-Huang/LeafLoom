@@ -20,6 +20,7 @@ import time
 import uuid
 from urllib.parse import quote
 
+from vault_rag.attachment_policy import AttachmentTypeError, require_allowed
 from vault_rag.attachment_uploads import UploadTarget
 from vault_rag.file_downloads import download_file
 from vault_rag.local_state import ConflictError, atomic_write, digest, relative
@@ -60,11 +61,11 @@ class FileOperations:
             self.notes.check_workspace(revision)
 
     @staticmethod
-    def _name(name):
+    def _name(name, *, upload=False):
         if (not isinstance(name, str) or not name or name.startswith('.') or
                 '/' in name or '\\' in name or any(ord(c) < 32 for c in name) or len(name.encode('utf-8')) > 200):
             raise ValueError('Use a plain attachment filename')
-        if Path(name).suffix.lower() in {'.md', '.txt', '.base'}:
+        if not upload and Path(name).suffix.lower() in {'.md', '.txt', '.base'}:
             raise ValueError('Use the note tools for Markdown, TXT and Base files')
         return name
 
@@ -79,7 +80,7 @@ class FileOperations:
     def _file_name(self, file):
         fallback = 'attachment-' + digest(file['file_id'])[:12]
         extension = mimetypes.guess_extension(file.get('mime_type', ''), strict=False) or ''
-        return self._name(file.get('file_name') or fallback + extension)
+        return self._name(file.get('file_name') or fallback + extension, upload=True)
 
     def _revision(self, p, revision):
         info = p.stat()
@@ -589,7 +590,8 @@ class FileOperations:
         self._purge()
         if sum(row['owner'] == owner for row in self.transfers.values()) >= 1024:
             raise ValueError('Too many transfers; wait for unused transfers to expire')
-        self._name(name)
+        self._name(name, upload=True)
+        require_allowed(self.runtime.files,name)
         folder = relative(folder or self.config.data.get('attachment_folder', '_attachments'))
         self.config.path_for(folder, writable=True)
         key = uuid.uuid4().hex
@@ -627,8 +629,15 @@ class FileOperations:
                 result = self._publish(row, p, row['name'], operation_id, fingerprint, grant, check)
                 row.update(state='completed', results=[result])
                 return {**self._transfer_info(row), **result}
+            except AttachmentTypeError:
+                row['state']='staging'
+                row['error']='attachment_file_type_not_allowed'
+                raise
+            except Exception:
+                if row['state']!='interrupted':row['state']='failed'
+                raise
             finally:
-                if row['state'] != 'interrupted':
+                if row['state'] not in {'interrupted','staging'}:
                     if row['state'] != 'completed':
                         row['state'] = 'failed'
                     p.unlink(missing_ok=True)
@@ -643,7 +652,7 @@ class FileOperations:
             for f in files:
                 if not f['file_id']:
                     raise ValueError('File reference requires file_id')
-                self._file_name(f)
+                require_allowed(self.runtime.files,self._file_name(f))
             name = self._file_name(files[0])
             row = self._allocate(revision, owner, name, folder=request.folder, storage_id=request.storage_id)
             row['state'] = 'running'
@@ -700,6 +709,7 @@ class FileOperations:
 
     def _publish(self, row, source, name, operation_id, fingerprint, grant, check, *, receipt_owner=None):
         revision, owner = row['workspace_revision'], receipt_owner or row['owner']
+        require_allowed(self.runtime.files,name)
         if self.remote and row.get('storage_id', 'local') != 'local':
             self._check(revision, check)
             if row['expected_size'] is not None:
@@ -725,7 +735,7 @@ class FileOperations:
                 self.notes.check_workspace(revision)
                 check()
                 target = UploadTarget(self.runtime, folder=row['folder'], name=name, root=str(self.config.root),
-                                      revision=revision, create_folder=True, unique=True)
+                                      revision=revision, create_folder=True, unique=True, attachment=True)
             sha = hashlib.sha256()
             written = 0
             with source.open('rb') as stream:
@@ -812,13 +822,13 @@ class FileOperations:
                         self._save_receipt(row['owner'], operation_id, fingerprint, self._transfer_info(row))
             row['state'] = 'completed'
         except Exception as error:
-            row['state'] = 'cancelled' if isinstance(error, InterruptedError) else 'failed'
-            row['error_code'] = ('permission_denied' if isinstance(error, PermissionError) else
+            row['state'] = 'conflict' if isinstance(error, AttachmentTypeError) else 'cancelled' if isinstance(error, InterruptedError) else 'failed'
+            row['error_code'] = ('attachment_file_type_not_allowed' if isinstance(error, AttachmentTypeError) else 'permission_denied' if isinstance(error, PermissionError) else
                                  'write_conflict' if isinstance(error, ConflictError) else 'upload_failed')
             # Never reflect a signed URL, HTTP exception, path or credential.
             row['error'] = 'Upload stopped; inspect completed results before retrying remaining files'
         finally:
-            p.unlink(missing_ok=True)
+            if row.get('error_code')!='attachment_file_type_not_allowed':p.unlink(missing_ok=True)
             with self.config.lock:
                 if str(self.config.root) == row['root']:
                     self._save_receipt(row['owner'], operation_id, fingerprint, self._transfer_info(row))

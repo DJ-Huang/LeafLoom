@@ -2137,7 +2137,7 @@ as.testFailed|连接测试未通过。请查看连接状态，处理后重试。
 as.scanFailed|服务器附件扫描未完成。请查看连接状态后重试，已有元数据会保留。|Server attachment scan did not complete. Check the connection status and retry; existing metadata is retained.|添付のスキャンは完了していません。接続状態を確認して再試行してください。既存のメタデータは保持されます。
 as.connectionState.scanning|正在扫描目录|Scanning directories|ディレクトリをスキャン中
 as.scanStarted|目录扫描已开始，已发现的附件会逐批显示。|Directory scanning started. Discovered attachments will appear in batches.|ディレクトリのスキャンを開始しました。見つかった添付は順次表示されます。
-as.scanProgress|已发现 {files} 个附件 · 已扫描 {directories} 个目录 · 待扫描 {pending} 个目录|{files} attachments found · {directories} directories scanned · {pending} directories pending|添付 {files} 件を検出 · {directories} ディレクトリをスキャン済み · {pending} ディレクトリを待機中
+as.scanProgress|已检查 {files} 个文件 · 已处理 {directories} 个目录 · 待处理 {pending} 个目录|{files} files checked · {directories} directories processed · {pending} directories pending|ファイル {files} 件を確認 · {directories} ディレクトリを処理済み · {pending} ディレクトリを待機中
 aw.sourceFilter|附件来源|Attachment source|添付の保存先
 aw.sourceAll|全部来源|All sources|すべての保存先
 aw.sourceLocal|本地附件|Local attachments|ローカルの添付
@@ -2482,7 +2482,7 @@ aw.lastSynced|最近成功同步|Last successful sync|最終同期成功
 aw.notSynced|尚未同步|Not synced yet|未同期
 aw.nextSync|下次检查|Next check|次の確認
 aw.authPaused|请更新账号或密码以恢复同步|Update your account or password to resume sync|同期を再開するにはアカウントまたはパスワードを更新してください
-aw.autoSyncHelp|自动复用已扫描目录，断线后继续；目录缓存 10 分钟后重新核对。需要立即检查全部变化时使用“完整核对”。原文件按需下载。|Completed directories are reused and interrupted scans resume. Cached directories are rechecked after 10 minutes. Use Check all directories to verify all changes now. Originals download on demand.|走査済みのディレクトリを再利用し、中断した走査を再開します。キャッシュは 10 分後に再確認します。すぐに全変更を確認する場合は「全ディレクトリを確認」を使います。元ファイルは必要な時に取得します。
+aw.autoSyncHelp|启动先使用已有列表，后台约每 30 分钟检查一次，重启保留检查时间。暂停只停止目录发现，不影响现有附件和待提交资料。完整核对只检查所选目录并绕过缓存；原件按需下载。|Startup uses the saved list and preserves check times. Background checks run about every 30 minutes. Pausing stops directory discovery while existing attachments and queued metadata remain available. Check all directories bypasses cache within the selected scope. Originals download on demand.|起動時は保存済みの一覧と確認日時を使用し、約30分ごとに確認します。一時停止はディレクトリの検出のみを止め、既存の添付や未送信資料には影響しません。全確認は選択範囲のキャッシュを使わずに行います。元ファイルは必要時に取得します。
 aw.listUpdated|列表已更新，查看最新内容|List updated — show latest|一覧が更新されました。最新を表示
 as.simpleTitle|附件服务器|Attachment servers|添付サーバー
 as.simpleHelp|填写服务器地址、账号和密码，即可自动同步附件目录与资料。|Enter a server address, account and password to sync attachment directories and metadata automatically.|サーバーのアドレス、アカウント、パスワードを入力すると一覧と資料が自動同期されます。
@@ -2521,7 +2521,7 @@ aw.scanMode.incremental|增量检查|Incremental check|差分確認
 aw.scanMode.resume|继续上次扫描|Resuming the previous scan|前回のスキャンを再開
 aw.scanReused|复用 {count} 个目录|{count} directories reused|{count} ディレクトリを再利用
 aw.fullCheck|完整核对|Check all directories|全ディレクトリを確認
-aw.fullCheckHelp|重新查询所有目录，立即核对新增、修改与删除；不下载原附件。|Read every directory again to check additions, changes and removals now. Original files are not downloaded.|全ディレクトリを再確認し、追加・変更・削除を確認します。元の添付はダウンロードしません。
+aw.fullCheckHelp|绕过缓存，核对所选目录范围内的新增、修改与删除。|Bypass cache to check additions, changes and deletions within the selected directories.|キャッシュを使わず、選択範囲の追加・変更・削除を確認します。
 aw.autoRetry|连接暂时中断，将自动重试|Connection interrupted; retrying automatically|接続が一時中断しました。自動的に再試行します
 aw.reconnecting|正在重新连接…|Reconnecting…|再接続中…
 aw.recoveredSyncing|连接已恢复，正在同步资料|Connection restored; syncing metadata|接続が復旧し、資料を同期しています
@@ -2770,6 +2770,37 @@ db.initialStatus|初始状态|Initial status|初期状態
 db.completedStatuses|完成状态|Completed states|完了とする状態
 db.chooseOption|选择一个选项|Choose an option|選択してください
 db.createView|创建视图|Create view|ビューを作成
+db.viewActions|视图操作|View actions|ビューの操作
+db.viewLeft|向左移动|Move left|左へ移動
+db.viewRight|向右移动|Move right|右へ移動
+db.viewReorderHint|拖动调整视图顺序；也可使用菜单或 Alt＋左右方向键|Drag to reorder views, or use the menu or Alt + Left/Right|ドラッグ、メニュー、Alt＋左右キーでビューを並べ替え
+db.moreProperties|更多属性（{count}）|More properties ({count})|その他のプロパティ（{count}）
+db.addFieldDetailHint|字段保存到此数据库，并显示在当前详情布局中。|The property is saved to this database and shown in this detail layout.|項目をこのデータベースに保存し、現在の詳細レイアウトに表示します。
+db.fieldOptionsHint|用逗号或换行分隔选项。|Separate options with commas or new lines.|選択肢はカンマまたは改行で区切ります。
+db.propertyActions|字段操作|Property actions|プロパティの操作
+db.dragProperty|拖动调整字段顺序|Drag to reorder property|ドラッグして項目を並べ替え
+db.deleteField|删除字段|Delete field|フィールドを削除
+db.deleteFieldDescription|从此数据库的所有视图中移除“{name}”字段。原笔记中的属性值和正文会保留。|Remove “{name}” from every view of this database. Original note property values and bodies are preserved.|このデータベースの全ビューから「{name}」を削除します。元のノートの属性値と本文は保持します。
+db.deleteFieldDependencies|此字段用于分组、筛选、排期或任务配置，相关配置也会移除。|This property is used by grouping, filters, scheduling or task settings; related settings will also be removed.|この項目を使うグループ・フィルター・日程・タスク設定も削除します。
+db.builtInFieldProtected|内置或只读字段不能重命名或删除，仍可调整显示顺序。|Built-in or read-only properties cannot be renamed or deleted; their display order can still change.|組み込み・読み取り専用項目の名前変更や削除はできません。表示順序は変更できます。
+db.fieldNameRequired|请输入字段名称。|Enter a property name.|項目名を入力してください。
+db.editField|编辑字段|Edit field|フィールドを編集
+db.fieldChoices|选项|Options|選択肢
+db.optionColor|选项颜色|Option color|選択肢の色
+db.defaultOptionColor|默认颜色|Default color|既定の色
+db.newOptionName|新选项名称|New option name|新しい選択肢の名前
+db.addOption|新增选项|Add option|選択肢を追加
+db.deleteOption|删除选项|Delete option|選択肢を削除
+db.noOptions|还没有选项，可在下方新增。|No options yet. Add one below.|選択肢はまだありません。下で追加できます。
+db.optionNameRequired|请输入选项名称。|Enter an option name.|選択肢の名前を入力してください。
+db.duplicateOption|选项名称重复，请使用不同名称。|Option names must be distinct.|選択肢には異なる名前を付けてください。
+db.optionDraftPending|请先新增或清空下方待添加的选项。|Add or clear the pending new option first.|入力中の選択肢を追加するか、入力を消してください。
+db.optionEditingHint|直接修改名称，点击色板调整颜色；删除选项时保留旧记录的值。|Edit names directly and use the palette for colors. Removing an option keeps values in existing records.|名前を直接編集し、パレットで色を変更します。選択肢を削除しても既存記録の値は保持します。
+db.deleteOptionDescription|从可选列表移除“{name}”。已有记录保留原值，作为历史选项显示；保存字段后生效。|Remove “{name}” from the available choices. Existing records keep the value as a historical option. Changes apply when you save the field.|「{name}」を選択肢から削除します。既存の記録には履歴値として保持され、フィールド保存後に反映します。
+db.optionTaskRolesHint|删除初始或完成状态后，请在此选择接替状态，原任务状态值保持不变。|After removing an initial or completed state, select its replacement here. Existing task values are preserved.|初期・完了状態を削除した場合はここで引き継ぐ状態を選びます。既存タスクの値は保持します。
+db.fieldSharedHint|字段名称、选项和颜色在此数据库的所有视图中共享，保存不会改写笔记正文。|Field names, options and colors are shared across this database. Saving does not rewrite note bodies.|名前・選択肢・色はデータベース内で共有し、保存でノート本文を書き換えません。
+db.fieldTypeInUse|此字段用于看板、排期或任务配置，类型保持不变。|This field is used by boards, scheduling or tasks; its type is fixed.|ボード・日程・タスクで使用中の項目のため、種類は固定です。
+db.fieldTypeKeepsValues|更改类型不会自动转换已有记录的属性值。|Changing type does not convert existing property values.|種類を変更しても既存の属性値は変換しません。
 db.boardTaskFields|请选择不同且类型兼容的状态、优先级和日期字段；已有字段不会自动转换类型。|Choose distinct compatible status, priority and date fields. Existing field types are never converted automatically.|ステータス、優先度、日付に互換性のある別々の項目を選んでください。既存の型は自動変換されません。
 db.boardChooseStates|请选择有效的初始状态和至少一个完成状态。|Choose a valid initial state and at least one completed state.|有効な初期状態と少なくとも一つの完了状態を選択してください。
 db.invalidOption|选项显示名称或颜色无效。|Invalid option label or color.|選択肢の表示名または色が無効です。
@@ -2844,3 +2875,41 @@ db.deleteGroupCount|共影响 {count} 条记录，包含当前筛选隐藏和尚
 db.moveRecordsTo|将记录移到|Move records to|記録の移動先
 db.deleteGroupTaskTarget|此分组用作初始状态或唯一完成状态，请选择另一个状态接替；至少保留一个任务状态。|This group is the initial or sole completed state. Choose another status to take over; keep at least one task status.|このグループは初期状態または唯一の完了状態です。引き継ぐ状態を選び、少なくとも1つのタスク状態を残してください。
 db.groupDeleted|分组已删除，记录已保留|Group deleted; records preserved|グループを削除しました。記録は保持されています
+
+at.title|附件文件类型|Attachment file types|添付ファイルの種類
+at.help|只有列出的后缀会被识别为附件。本地与全部服务器使用同一规则，也适用于附件上传。|Only the listed extensions are treated as attachments. The same rule applies to local files, all servers and attachment uploads.|一覧にある拡張子のみを添付ファイルとして扱います。ローカル、すべてのサーバー、添付アップロードに同じルールを適用します。
+at.extensions|允许的后缀|Allowed extensions|許可する拡張子
+at.format|用逗号、空格或换行分隔，例如 .png, .pdf, .unitypackage, .tar.gz；不支持通配符和路径。|Separate with commas, spaces or newlines, for example .png, .pdf, .unitypackage, .tar.gz. Wildcards and paths are not supported.|カンマ、空白、改行で区切ります。例：.png, .pdf, .unitypackage, .tar.gz。ワイルドカードやパスは使用できません。
+at.empty|留空表示不识别任何附件。更改不会删除原文件或已有链接；此设置按知识库保存在当前设备。|An empty list disables attachment recognition. Changes preserve original files and existing links. Settings are saved per workspace on this device.|空欄の場合は添付ファイルを認識しません。元ファイルや既存のリンクは保持します。この端末にワークスペースごとに保存します。
+at.defaults|恢复默认类型|Restore default types|既定の種類に戻す
+at.saved|附件文件类型已保存，本地与服务器列表将按新规则更新。|Attachment file types saved. Local and server lists will use the new rules.|添付ファイルの種類を保存しました。ローカルとサーバーの一覧に新しいルールを適用します。
+at.notAllowed|此类型不在附件白名单中，请在设置的“附件文件类型”中添加后缀，或通过普通文件导入。|This file type is not allowed for attachments. Add its extension in Settings → Attachment file types, or use ordinary file import.|この種類は添付ファイルに許可されていません。設定の「添付ファイルの種類」に拡張子を追加するか、通常のファイルインポートを使用してください。
+Invalid attachment file types|附件文件类型格式无效|Invalid attachment file types|添付ファイルの種類の形式が無効です
+Enter filename extensions without wildcards or paths|请填写文件后缀，不要包含通配符或路径|Enter filename extensions without wildcards or paths|ワイルドカードやパスを含まない拡張子を入力してください
+This file type is not allowed for attachments; update Attachment file types in Settings|此类型不允许作为附件，请在设置的“附件文件类型”中添加后缀|This file type is not allowed for attachments; update Attachment file types in Settings|この種類は添付ファイルに許可されていません。設定の「添付ファイルの種類」を更新してください
+attachment_file_type_not_allowed|附件类型已禁用，暂存文件已保留；请更新“附件文件类型”后重试|Attachment file type disabled. Staged bytes are retained; update Attachment file types and retry.|この添付ファイルの種類は無効です。一時ファイルは保持しています。「添付ファイルの種類」を更新して再試行してください。
+Attachment file types changed|附件文件类型已变化，请重新扫描|Attachment file types changed; scan again|添付ファイルの種類が変更されました。再スキャンしてください
+Attachment file types changed; preview again before moving attachments|附件文件类型已变化，请重新预览后再移动附件|Attachment file types changed; preview again before moving attachments|添付ファイルの種類が変更されました。移動前にプレビューし直してください
+
+sc.roots|服务器扫描目录|Server scan directories|サーバーの走査対象ディレクトリ
+sc.rootsHelp|每行一个相对于服务器根目录的路径，如 Attachments 或 Assets/Packages。留空检查整个根目录；请包含需要显示的上传目录。范围外文件保留，已有链接仍可用。|One path per line, relative to the server root, such as Attachments or Assets/Packages. Leave empty to check the whole root. Include upload folders you want listed. Files outside the scope and existing links are preserved.|サーバールートからの相対パスを1行ずつ入力します（例：Attachments、Assets/Packages）。空欄は全体を走査します。表示したいアップロード先も含めてください。対象外のファイルと既存リンクは保持します。
+sc.available|已有附件可以直接使用。后台只核对目录、引用和资料，不会批量下载原件。|Existing attachments are available now. Background checks cover directories, references and metadata; originals are not downloaded in bulk.|既存の添付ファイルはすぐ利用できます。バックグラウンドでは一覧、参照、資料を確認し、元ファイルを一括ダウンロードしません。
+sc.currentDirectory|当前目录|Current directory|現在のディレクトリ
+sc.networkDirectories|实际向服务器读取 {count} 个目录|{count} directories read from the server|サーバーから {count} ディレクトリを取得
+sc.pause|暂停目录检查|Pause directory checks|ディレクトリ確認を一時停止
+sc.resume|恢复目录检查|Resume directory checks|ディレクトリ確認を再開
+sc.paused|目录检查已暂停|Directory checks paused|ディレクトリ確認は一時停止中
+sc.phase.reading_cache|读取已保存的目录缓存|Reading saved directory cache|保存済みのディレクトリキャッシュを読込中
+sc.phase.checking_directories|检查服务器目录变化|Checking server directory changes|サーバーのディレクトリ変更を確認中
+sc.phase.confirming|确认未列出文件是否仍存在|Verifying files absent from the listing|一覧にないファイルの存在を確認中
+sc.phase.verifying_rules|核对服务器忽略规则|Verifying server ignore rules|サーバーの除外ルールを確認中
+sc.phase.syncing_references|同步已有文件引用|Synchronizing existing file references|既存ファイルの参照を同期中
+sc.metadata.pulling|检查标签、分类与资料更新|Checking tag, category and metadata updates|タグ、分類、資料の更新を確認中
+sc.metadata.publishing|提交本机待同步资料|Publishing queued local metadata|この端末の未送信資料を送信中
+sc.metadata.projecting|更新本机资料汇总|Updating the local metadata summary|この端末の資料一覧を更新中
+sc.metadataProgress|已处理 {done} / {total} 项资料|{done} / {total} metadata records processed|資料 {done} / {total} 件を処理済み
+Enter up to 32 server scan directories|最多填写 32 个服务器扫描目录|Enter up to 32 server scan directories|走査対象のディレクトリを32個以内で入力してください
+Invalid automatic scan setting|自动目录检查设置无效|Invalid automatic scan setting|ディレクトリ自動確認の設定が無効です
+Resume automatic directory checks before scanning|请先恢复目录检查，再开始扫描|Resume directory checks before scanning|ディレクトリ確認を再開してから走査してください
+Attachment directory scan paused|附件目录扫描已暂停|Attachment directory scan paused|添付ディレクトリの走査を一時停止しました
+Attachment scan directories changed|服务器扫描目录已变化，请重新检查|Server scan directories changed; check again|サーバーの走査対象が変更されました。再確認してください

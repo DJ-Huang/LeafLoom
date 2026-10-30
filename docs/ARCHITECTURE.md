@@ -159,7 +159,7 @@ job-scoped and retain accepted results and the frozen revision.
 
 设置入口为“设置 → 文件与导入 → 附件存储”。`attachment_storage_routes.py` 提供同一工作区认证下的 `/api/attachments/storage` 设置、连接测试和显式扫描、元数据编辑、缓存清理与后台任务接口；`file_operations.py` 让公共 MCP 使用相同的来源和任务，并继续按连接检查读取与修改授权。来源使用 UUID、WebDAV 服务地址、服务器根目录和上传子目录，配置及默认上传目标按关联知识库保存在 应用私有目录的 `attachment-workspaces/<workspace-key>/remote-attachments/settings.json`。打开设置或列出已有资产不会触发 NAS 扫描。显式扫描在后台逐目录提交元数据，不读取附件正文；页面和 MCP 的 `vault_files status.attachment_storage` 返回扫描数量和连接状态，失败保留已发现记录。
 
-`remote_attachments.py` 在该目录的 `manifest.sqlite` 保存稳定 `asset_id`、来源、服务器物理路径、逻辑别名、标签、分类、简介、对象版本、缓存记录与上传／迁移日志。用户元数据不是可随意删除的派生索引。`attachment_catalog.py` 将本地路径索引与 manifest 在 SQLite 内合并、筛选、汇总和分页，只将当前页交给 Python；游标同时绑定来源配置、本地索引和 manifest 代次。验证并释放本地原件后，迁移别名覆盖本地旧索引残留；迁移尚未完成时保留本地入口。远程 Markdown、HTML 和明确源码扩展默认不参与附件发现；它们不会自动加入笔记读取或检索范围。
+`remote_attachments.py` 在该目录的 `manifest.sqlite` 保存稳定 `asset_id`、来源、服务器物理路径、逻辑别名、标签、分类、简介、对象版本、缓存记录与上传／迁移日志。用户元数据不是可随意删除的派生索引。`attachment_catalog.py` 将本地路径索引与 manifest 在 SQLite 内合并、筛选、汇总和分页，只将当前页交给 Python；游标同时绑定来源配置、本地索引和 manifest 代次。验证并释放本地原件后，迁移别名覆盖本地旧索引残留；迁移尚未完成时保留本地入口。本地与远程通过 `attachment_policy.py` 共用后缀白名单，默认常用格式加 SVG／Unity 资源包，源码默认不参与附件发现；它们不会自动加入笔记读取或检索范围。
 
 迁移通过持久身份重定向保留旧本地资产 ID，并退役原路径槽，避免同路径新文件复用旧身份。目录响应缺少 ETag 不作为版本已变化的证据；大小与修改时间不变时保留既有验证标记。未缓存读取先用 HEAD 同步实际版本，再将内容与该版本绑定；大媒体的条件响应和 Range 头也使用同一版本。未知的当前 SHA 不从历史迁移日志推断，只有实际完整读取并计算后才记录。
 
@@ -256,7 +256,7 @@ permissions. Display loss or missed heartbeats mute, pause and hide output.
 
 附件来源支持 `webdav` 与 `smb`，从管理 API 的地址推断协议；SMB 使用 `smbprotocol` 的独立连接池，显式凭据、签名、共享根边界与版本校验，不使用系统挂载或默认登录。两种传输统一提供目录扫描、范围读取、独占上传与不可变资料读写，浏览器仍只访问 LeafLoom 媒体接口。旧 WebDAV 配置及官方客户端提示保持兼容。
 
-`RemoteAttachments` 在连接就绪后启动目录发现，每个 root/source 去重，自动发现全局串行，完成五分钟后再次检查；连接恢复唤醒发现，认证失败暂停。成功时间写入 manifest 的 `sync_checkpoints`，状态接口提供 `auto_sync`、`last_success_at` 与 `next_scan_at`。成功扫描唤醒已绑定资料库；资料提交通知前端并唤醒分组同步。任务继续执行来源、凭据和知识库版本检查，不自动搬迁原件。资料库绑定与新上传默认位置独立。
+`RemoteAttachments` 在连接就绪后启动目录发现，每个 root/source 去重，自动发现全局串行，沿用持久成功时间与启动缓冲，完成三十分钟后再次检查；连接恢复唤醒发现，认证失败暂停。成功时间写入 manifest 的 `sync_checkpoints`，状态接口提供 `auto_sync`、`last_success_at` 与 `next_scan_at`。成功扫描唤醒已绑定资料库；资料提交通知前端并唤醒分组同步。任务继续执行来源、凭据和知识库版本检查，不自动搬迁原件。资料库绑定与新上传默认位置独立。
 
 设置分类内部保留 `files` 标识以兼容导航，显示为“附件服务器”。目录操作通过独立的新建与导入弹窗复用文件 API。附件概览、同步状态与详情开关位于紧凑工具栏，后台目录事件使用保留浏览状态的刷新路径，过期分页保留当前快照等待用户查看最新内容。
 
@@ -264,17 +264,29 @@ permissions. Display loss or missed heartbeats mute, pause and hide output.
 
 目录发现由 `remote_discovery.DirectoryCheckpoints` 管理本机断点，复用现有 manifest SQLite 的 `discovery_runs` 与 `discovery_directories` 表。上下文摘要绑定知识库、来源配置版本、凭据版本和资料目录；不保存密码。每个目录的直接子项与有界 ignore 规则，在该批 manifest 提交后才发布完成回执；扫描未完成时重放已提交目录并重建剩余遍历队列，失败后再次连接或进程重启均可续扫。只有 ignore 校验、引用恢复和缺失确认全部成功后才标记整轮完成。显式 `force_full: true` 启动完整核对，普通管理 API 与自动调度使用增量检查。
 
-后续轮次缓存 TTL 为 600 秒，缓存命中仍遍历子目录各自的到期状态；未完成轮次的已提交目录不受 TTL 影响，避免长扫描中断后重新读一遍。无 [RFC 6578 WebDAV Sync](https://www.rfc-editor.org/rfc/rfc6578.html) 变更日志时不宣称强一致变更流，也不使用父目录 mtime/ETag 推断后代未变化。每个来源最多两个目录读取线程，各自持有独立 provider/session，自动来源仍全局串行。扫描状态增加 `scan_mode`（`full | incremental | resume`）与 `cached_directories`。目录缓存命中只恢复成员关系，不回写覆盖后来 HEAD/PUT 取得的文件元数据；未变化的 `_upsert` 不增加目录版本，避免无效刷新。忽略规则发生变化时废弃对应子树断点，未完整成功时不判定缺失。
+后续轮次缓存 TTL 为 1800 秒，缓存命中仍遍历子目录各自的到期状态；未完成轮次的已提交目录不受 TTL 影响，避免长扫描中断后重新读一遍。无 [RFC 6578 WebDAV Sync](https://www.rfc-editor.org/rfc/rfc6578.html) 变更日志时不宣称强一致变更流，也不使用父目录 mtime/ETag 推断后代未变化。每个来源最多两个目录读取线程，各自持有独立 provider/session，自动来源仍全局串行。扫描状态增加 `scan_mode`（`full | incremental | resume`）与 `cached_directories`。目录缓存命中只恢复成员关系，不回写覆盖后来 HEAD/PUT 取得的文件元数据；未变化的 `_upsert` 不增加目录版本，避免无效刷新。忽略规则发生变化时废弃对应子树断点，未完整成功时不判定缺失。
 
-资料同步运行态由 `AssetLibrary.active_sync` 在进程内维护，状态读取复用同一只读事务校验来源与凭据上下文，避免把旧任务的运行状态投射到新绑定。`phase=connecting|syncing`、`retrying` 与 `sync_started_at` 描述当前重试，优先于上一轮失败；连接成功后持久状态退为可恢复的 `queued`，只有整轮完成才写入 `ready`。不持久化运行标志，防止崩溃后假装仍在同步；所有排队和失败更新保留 `last_synced_at`。`RemoteAttachments.on_connection_ready` 仅在当前上下文从非就绪转为就绪时唤醒资料工作线程。前端运行中两秒刷新；临时网络失败显示自动重试并折叠旧原因，健康、排队和运行态均不渲染残留错误字段，认证和资料错误仍需明确显示。
+资料同步运行态由 `AssetLibrary.active_sync` 在进程内维护，状态读取复用同一只读事务校验来源与凭据上下文，避免把旧任务的运行状态投射到新绑定。`phase=connecting|syncing|pulling|publishing|projecting`、`retrying` 与 `sync_started_at` 描述当前重试，优先于上一轮失败；连接成功后持久状态退为可恢复的 `queued`，只有整轮完成才写入 `ready`。不持久化运行标志，防止崩溃后假装仍在同步；所有排队和失败更新保留 `last_synced_at`。`RemoteAttachments.on_connection_ready` 仅在当前上下文从非就绪转为就绪时唤醒资料工作线程。前端运行中两秒刷新；临时网络失败显示自动重试并折叠旧原因，健康、排队和运行态均不渲染残留错误字段，认证和资料错误仍需明确显示。
 
 附件列表对主动筛选与后台刷新使用不同的显示策略：主动切换分组、来源、类型、搜索和排序时清除旧分页快照与选择，显示当前分组名称和加载状态；后台更新仍保留列表、选择与草稿。状态轮询只以就绪状态和保存位置等稳定字段判断刷新需求，进度及文件计数不再直接取消正在读取的列表。新读取失败时不把旧分组内容显示在新标签下；超时使用统一语言键直接提示重试。分组条件仍由现有 `group_id` 查询及后端规则匹配完成，不更改既有分组定义、分类资料和 AI 检索范围。
 
 ## 笔记数据库
 
+`database-field-editor` 从记录属性菜单及顶部字段列表共用入口；选项草稿以固定值标识，编辑显示名和颜色，移除只影响可选数组，保留历史 optionMeta、labelKey 与未知键。新选项避免复用已移除的原值，受管理的选项以 `allowCustomOptions:false` 保证空列表仍拒绝新赋值，同时兼容旧的无限制空列表。名称／类型／选项与可选任务映射由 `field.set` 同次原子保存，未提供显示名时保留已有显示名。`task_setup` 在字段合并后验证并设置初始／完成状态，不迁移原任务值。`validate_values` 仅允许更新时保留该记录已持有的历史选项，仍拒绝新赋值的未知选项；多选单元格显示已持有的历史项以便清除。界面检查为 `tests/frontend_database_field_editor.cjs`，结合详情字段、看板及公共 MCP 针对性测试。
+
+记录属性操作由 `database-record-properties` 共用 `field.set` 显示名称、`field.remove` 配置清理和 `view.update` 布局保存。主属性使用 `leafloom.detailFields`，折叠属性使用 `detailExtraOrder`，排序不改写笔记。`database-property-drag` 从独立手柄捕获指针，提供阈值、插入线、浮层、自动滚动及 Escape 取消，按拖动开始版本保存并在失败时恢复。行内重命名保留输入和读取版本；删除确认显示全库共享影响及引用依赖，服务端拒绝删除内置／只读字段并清理两份布局引用。`ActionMenu.portalTarget` 将属性菜单放在当前原生 dialog 的顶层范围内，避免菜单被模态惰性区域阻挡，保留键盘导航与焦点恢复。检查复用 `tests.test_database_detail_fields`、`tests.test_database_mcp` 和 `tests/frontend_database_record_properties.cjs`。
+
+`database-record-properties` 通过视图的 `leafloom.detailFields` 显示精简属性，其余配置字段折叠；综合视图可复用全部等值条件匹配的显式分类布局，否则回退到当前视图的显示字段和上下文字段。底部添加入口生成稳定属性键，只让用户填写名称和类型。`field.set` 的可选 `detail_view_id`／`detail_fields` 在同一次配置版本校验及原子保存中合并字段和详情布局；失败不留下部分配置，`field.remove` 同步清理详情显示引用，原笔记属性不变。针对性检查为 `tests.test_database_detail_fields`、`tests.test_database_mcp` 和 `node tests/frontend_database_record_properties.cjs`。
+
+`database-view-tabs` 共用全屏与嵌入的视图排序，使用指针阈值、插入标记、边缘滚动和可取消的文档事件监听，触屏保留横向浏览及菜单操作。菜单、右键、Shift+F10 和 Alt＋左右键共用 `view.move`，传入固定视图 ID、相邻视图位置和拖动开始时的配置版本；本地暂排在失败时恢复。服务端仅重排 `views` 数组，保留完整视图对象和旧视图 ID，沿用原子保存、历史与读写权限。默认选中视图绑定稳定 ID，外部排序不会切换显示内容。检查为 `tests.test_database_view_order`、`tests.test_database_mcp` 和 `node tests/frontend_database_view_order.cjs`。
+
+`database_commands.py` 为公共 MCP 的 `vault_database_update` 发布按 type 区分的完整命令 schema，仍将原 JSON 交给 Databases 共用服务执行，省略的参数不注入默认值以保持操作 ID 回执签名兼容。`vault_database` 的 capabilities 提供操作映射，record 在数据库目录边界内复用 NoteOperations 的正文分页读取，query 同步支持 recent_paths。`board.group.set` 更新共享单选选项并保留固定值；列设置沿用 view.update。`.base` 仅在 NoteOperations 的文件生命周期与历史恢复路径扩展支持，普通正文写入仍保留原格式边界，移动／回收需预览令牌。针对性公共 HTTP MCP 检查为 `tests.test_database_mcp`，使用隔离虚构知识库。
+
 `databases.py` 为网页和公共 HTTP/Tunnel MCP 提供共用服务；Markdown frontmatter 是记录真源，`.base` 是配置真源。通用字段和各类视图的附加设置位于 `leafloom` 命名空间，包含 schemaVersion、folder、fields 和各视图稳定 ID；保留旧筛选、未知 YAML 字段与注释。旧 `Catalog.base` 委托给兼容适配器，任务看板和日历继续使用旧展示。
 
 新查询在目录快照上完成安全筛选、类型排序、分组后分页；游标绑定配置版本、目录代次和查询。模型和向量检索不参与。写入复用 Files 的根目录与内容版本校验、原子保存及历史；创建使用知识库内操作回执，可恢复发布后未完成回执的重试。记录回收复用 NoteOperations 的预览令牌。前端共用文档状态，拒绝覆盖未保存正文；Gallery 按卡片行虚拟化，Timeline 按固定可导航日期窗口和记录虚拟化。嵌入以 `#view=<id>` 固定视图，编辑器特殊区块隔离内部事件。
+
+`record.create` 在共用服务中根据创建视图的 `leafloom.conditions` 推断可写且通过字段校验的无冲突 `eq` 默认值。优先级依次为任务初始状态、视图等值条件、看板 `group_key`、显式 `values`；标题保留用户输入。搜索、表达式、范围、空值、冲突及只读条件不参与推断。回执重试复用首次落盘结果，后续视图配置变化不改写已创建记录；复制仍保留源笔记属性。针对性检查为 `tests.test_database_creation_defaults`、`tests.test_database_mcp` 以及 `node tests/frontend_database_view_defaults.cjs`，覆盖五视图、列内新增与固定视图嵌入。
 
 最小检查为 `python -m unittest tests.test_databases`、前端构建以及 `node tests/frontend_databases.cjs`（构建后运行）。界面夹具使用临时目录、随机回环端口和虚构数据，不读取用户配置、不准备模型、不截图。
 
@@ -319,3 +331,19 @@ permissions. Display loss or missed heartbeats mute, pause and hide output.
 已完整准备的目录通过 `Catalog.apply` 解析变更条目并更新 ID／引用后继续保持就绪，不为每次卡片移动重新全库扫描；内容与文件状态未变的重复监听通知不推进目录版本。未准备完整的目录仍需原有后台准备流程，`NoteOperations.metadata` 复查准备与读取之间的就绪切换。HTTP 将中途发生的 `metadata_pending` 返回为带 `pending`／`retry_after_ms` 的 503，沿用前端等待重试；其他输入错误及版本冲突的状态码不变。对应检查为 `python -m unittest tests.test_database_board_metadata`。
 
 嵌入数据库的 pointer 生命周期暂时关闭可拖祖先 NodeView 的 DOM draggable 标志，在 pointerup／pointercancel／失焦／卸载时恢复，避免浏览器以父区块为原生 dragstart 目标；不修改父 ProseMirror 文档。属性移动检查共享文档 dirty／pending 状态，仅调整视图顺序允许保留未保存正文。详情属性可接收外部刷新，字段草稿仍绑定原读取版本。浏览器验收包含草稿阻断、视图排序不覆盖正文、父笔记不变、双窗口同步及浏览器原生触摸长按。
+
+### Attachment extension policy
+
+Workspace-private `remote-attachments/settings.json` stores `allowed_extensions`. Missing means defaults; an explicit empty list disables attachment classification. `GET/PUT /api/attachments/storage` expose/preserve this field (omitted PUT fields retain the current policy); GET also supplies `default_extensions` for the reset control. `/api/attachments/status` exposes `allowed_extensions`. Extensions are normalized lowercase literal filename endings, including compound extensions, without paths or wildcards. Settings use the existing revision conflict guard.
+
+The complete local filename index remains available for link resolution; the legacy `attachment` column is no longer authoritative. A snapshot-bound SQLite predicate filters local/unified catalogs, group and AI queries, pagination and totals. Policy changes invalidate cursors and reset visible pagination/selection/preview without rebuilding the index. Remote scans apply the same policy before hierarchical ignore rules, retaining identities and aliases for excluded assets; raw directory caches are re-evaluated on subsequent scans. Existing references remain resolvable.
+
+`/api/upload` with `central=true` identifies attachment management/editor uploads; ordinary file imports keep `central=false`. MCP file uploads are attachment uploads. Backends validate before staging and publication; remote outbox jobs persist the upload purpose, recheck before publication, retain bytes on policy conflicts and replay completed receipts before validation. Migration candidates intersect this policy with existing supported types and dependency safeguards; rollback remains available. Changing the policy does not advance the general workspace revision or revoke existing transfers and references.
+
+### Bounded background attachment checks
+
+`attachment_scan_policy.py` sets a 30-minute directory interval and a 60-second startup grace. Startup derives the due time from persisted successful checks instead of forcing an immediate walk. Per-source `scan_roots` (server-root-relative; empty list or empty path means all) and `scan_paused` are available through the existing storage settings API; older clients that omit them preserve their values. They are discovery preferences, excluded from transfer authorization revisions. `POST /api/attachments/storage/scan-pause` accepts `root,storage_id,paused`; resuming starts discovery explicitly. Pausing preserves receipts and does not cancel transfers or metadata submissions.
+
+Discovery traverses only selected subtrees, loads and verifies ancestor ignore rules, and confirms absence only inside the current scope. Out-of-scope records, aliases, caches and originals remain intact; catalog queries hide them without restricting exact reference resolution. Full checks bypass directory caches only inside the same scope. Raw cached receipts retain their original age and are not rewritten on reuse; known unchanged cached membership avoids per-directory manifest writers. Manifest schema initialization is reused by database identity, with future schema checks on every connection.
+
+Asset metadata persists an authorization-bound successful-pull receipt and uses the same 30-minute pull cadence across restart. Background work without pending records returns without network activity while fresh; authorized queued changes still flush promptly. Local entity projection is keyed by immutable state-event identities and hashes, avoiding repeated delete/reinsert work. Sync status distinguishes directory cache/server reads, missing-file confirmation, reference/rule checks and metadata pull/publish/project phases, with current directory and record progress.

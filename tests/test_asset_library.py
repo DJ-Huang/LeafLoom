@@ -14,7 +14,7 @@ import xml.sax.saxutils
 import httpx
 
 from tests import test_remote_attachments as fixtures
-from vault_rag.asset_library import AssetLibrary
+from vault_rag.asset_library import AssetLibrary, BACKGROUND_PULL_INTERVAL
 from vault_rag.local_state import LocalConfig,ConflictError
 from vault_rag.remote_attachments import RemoteAttachments
 from vault_rag.remote_webdav import RemoteStorageError,WebDAVSource
@@ -212,7 +212,7 @@ class AssetLibraryTests(unittest.TestCase):
             self.assertEqual(pull.call_count,1,'A burst of edits must flush verified events without rescanning 256 shards per product')
             self.library.sync(self.root)
             self.assertEqual(pull.call_count,2,'Explicit synchronization must always pull the entire event history')
-            clock.return_value=130
+            clock.return_value=100+BACKGROUND_PULL_INTERVAL
             self.library.sync(self.root,_background=True)
             self.assertEqual(pull.call_count,3,'Background synchronization must still periodically discover concurrent changes')
             self.remote.set_credentials('a'*32,'leafloom',fixtures.SECRET,revision='replacement')
@@ -450,7 +450,7 @@ class AssetLibraryTests(unittest.TestCase):
         def queue(product):self.library.update(self.root,'official',{'product_id':str(product),'official':{'title':'Product '+str(product)}})
         self.remote.transports['a'*32]=httpx.MockTransport(server)
         with patch('vault_rag.asset_library.time.monotonic',return_value=100) as clock,patch.object(self.library,'_pull',side_effect=pull):
-            self.library.sync(self.root);order.clear();clock.return_value=131;queue(100)
+            self.library.sync(self.root);order.clear();clock.return_value=101+BACKGROUND_PULL_INTERVAL;queue(100)
             with self.assertLogs('vault_rag.remote_webdav',level='WARNING') as captured:
                 failed=self.library.sync(self.root,_background=True)
             self.assertEqual((failed['state'],failed['pending']),('unreachable',1))

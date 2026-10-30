@@ -279,6 +279,22 @@ class DatabaseBoard:
             raise
         return self.result(record)
 
+    def set_group(self, data, command):
+        view = self.db.view(data, command['view_id'])
+        key = view.get('groupBy', {}).get('property')
+        spec = self.db.fields(data).get(key, {})
+        if view.get('type') != 'leafloomBoard' or spec.get('type') != 'select' or spec.get('readonly'):
+            raise ValueError('db.boardSelectField')
+        value = command['value']
+        if not isinstance(value, str) or not value: raise ValueError('db.boardMissingGroup')
+        field = data.setdefault('leafloom', {}).setdefault('fields', {}).setdefault(key, {})
+        field['options'] = list(dict.fromkeys([*spec.get('options', []), value]))
+        meta = field.setdefault('optionMeta', {}).setdefault(value, {})
+        for name in ('label', 'color'):
+            if name in command:
+                if not isinstance(command[name], str): raise ValueError('db.invalidOption')
+                meta[name] = command[name]
+
     def remove_group(self, database, data, yaml, value, command, operation_id):
         from vault_rag.databases import cell
         view = self.db.view(data, command['view_id'])

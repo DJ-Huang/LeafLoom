@@ -4,6 +4,22 @@
 
 ## Unreleased
 
+- Add **Edit field** directly to record property menus, sharing a compact editor with the toolbar. Single/multi-select options support add, display-name editing, color palettes and confirmed removal while preserving stored values and unknown metadata. Task state replacements save atomically with options; historical multi-select values remain editable without allowing new unknown assignments.
+
+- Add direct record-property actions: click/right-click names or use **⋯** for inline rename, guarded configuration deletion and up/down movement. Drag handles reorder visible and collapsed properties separately, with rollback on save failure, keyboard alternatives and narrow-screen menus. Rename/delete apply across the database while preserving original note values and bodies.
+
+- Keep record details focused on the configured property layout, with remaining properties collapsed. Add a Notion-style **Add field** row at the bottom, with a compact name/type form and an atomic create-and-show save shared by UI and MCP; preserve note bodies and original property values.
+
+- Reorder database view tabs by dragging, the left/right menu actions or Alt+Left/Right. Persist stable view order across full pages and embeds, preserve the current view, roll back failed saves, and expose the same version-checked operation through MCP.
+
+- Automatically prefill new database records from the selected view's unambiguous writable equality filters, including task/document/setting types. Share this behavior across all views, board columns, embeds and MCP; preserve explicit values and retry receipts.
+
+- Complete database MCP workflows with typed command discovery, a capability map, paged record-body reads, saved-record reconciliation and direct board group creation/editing. Enable guarded `.base` move/trash/history recovery while preserving record folders, note-text boundaries and existing permissions/revision checks.
+
+- Reduce repeated startup synchronization: preserve due times, check directories and metadata every 30 minutes, add server scan scopes and persistent pause/resume, reuse unchanged cached receipts and projections, and show concrete sync phases and progress.
+
+- Add configurable attachment extension allowlists shared by local files and all servers, with default source-file exclusion, immediate list/count filtering, guarded attachment uploads and preserved originals and links.
+
 - Add **Delete group** to database board column menus, with a full affected-record preview, migration to Ungrouped or an existing group, shared option cleanup, explicit task-role replacement, draft/version guards and recoverable saves. Preserve note bodies and support narrow-screen confirmation.
 
 - Show newly created database records directly from the saved receipt, without waiting for indexing or a page query. Keep a marked recent row visible outside the loaded page, reconcile it without duplicates, and retain filtering, failure and retry safeguards.

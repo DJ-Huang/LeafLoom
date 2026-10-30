@@ -25,7 +25,7 @@ class AttachmentPresentation:
                 official, personal = product.get('official', {}), product.get('personal', {})
                 categories = official.get('categories_zh') or official.get('categories') or []
                 tags = list(dict.fromkeys((personal.get('tags') or []) + (official.get('keywords_zh') or []) + (official.get('keywords') or [])))
-                inherited = {'description': personal.get('description') or official.get('summary_zh') or official.get('description') or '',
+                inherited = {'description': personal.get('description') or official.get('summary_zh') or official.get('description') or official.get('source_excerpt') or '',
                              'category': personal.get('category') or (categories[0] if categories else ''), 'tags': tags}
                 for file in product.get('files', []):
                     result[file['asset_id']] = {**inherited, 'cover_id': product.get('product_id') if official.get('cover_source_url') else '',
