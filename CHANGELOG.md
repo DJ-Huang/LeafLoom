@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Add a reproducible DUFS symlink-isolation patch, a disposable multi-account verification harness and three-language single-container setup/migration guides; preserve existing passwords, attachment identities and read-only originals.
+
 - Add **Edit field** directly to record property menus, sharing a compact editor with the toolbar. Single/multi-select options support add, display-name editing, color palettes and confirmed removal while preserving stored values and unknown metadata. Task state replacements save atomically with options; historical multi-select values remain editable without allowing new unknown assignments.
 
 - Add direct record-property actions: click/right-click names or use **⋯** for inline rename, guarded configuration deletion and up/down movement. Drag handles reorder visible and collapsed properties separately, with rollback on save failure, keyboard alternatives and narrow-screen menus. Rename/delete apply across the database while preserving original note values and bodies.

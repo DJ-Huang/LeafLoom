@@ -347,3 +347,11 @@ The complete local filename index remains available for link resolution; the leg
 Discovery traverses only selected subtrees, loads and verifies ancestor ignore rules, and confirms absence only inside the current scope. Out-of-scope records, aliases, caches and originals remain intact; catalog queries hide them without restricting exact reference resolution. Full checks bypass directory caches only inside the same scope. Raw cached receipts retain their original age and are not rewritten on reuse; known unchanged cached membership avoids per-directory manifest writers. Manifest schema initialization is reused by database identity, with future schema checks on every connection.
 
 Asset metadata persists an authorization-bound successful-pull receipt and uses the same 30-minute pull cadence across restart. Background work without pending records returns without network activity while fresh; authorized queued changes still flush promptly. Local entity projection is keyed by immutable state-event identities and hashes, avoiding repeated delete/reinsert work. Sync status distinguishes directory cache/server reads, missing-file confirmation, reference/rule checks and metadata pull/publish/project phases, with current directory and record progress.
+
+## DUFS 单容器账号目录
+
+DUFS 的账号和路径权限在附件服务器端管理；LeafLoom 继续使用已有 Basic 凭据和来源设置 API，不增加集中式用户数据库。每个账号使用独立的 `base_url` 子目录，`remote_root` 保持原值；DJ 沿用原来源 UUID、密码、上传／资料目录及本机目录状态。通过容器绑定挂载调整公开前缀，不搬动 NAS 原件，原件只读和 Incoming 可写的挂载保护保持不变。各用户使用独立的客户端状态。
+
+原版 DUFS 0.47.0 的 `allow-symlink: false` 只约束全局根目录，不能阻止根内账号间符号链接。`templates/dufs/no-symlinks.patch` 基于固定源码构建 `0.47.0-leafloom.1`，在该开关关闭时拒绝所有符号链接与路径中的链接父目录，检查读写及 COPY/MOVE 目标，并从目录列表、搜索和 ZIP 中排除链接。配置仍需关闭匿名访问，账号不获得全局 `/` 权限；本机 NAS 管理员及文件系统写入者属于可信边界，补丁不提供对恶意本机路径竞争替换的内核级隔离。
+
+`scripts/check_dufs_isolation.py` 支持本机二进制或实际 Docker 镜像，使用临时双账号、随机回环端口和虚构哈希验证访问边界；失败阻止部署。构建镜像、上游源码校验值和 Cargo 锁文件固定，实际部署保留旧配置、只读挂载状态和停止自动启动的旧容器作为恢复副本。操作见[英文](en/DUFS_MULTIUSER.md)、[中文](zh-CN/DUFS_MULTIUSER.md)和[日文](ja/DUFS_MULTIUSER.md)指南。

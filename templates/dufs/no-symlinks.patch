@@ -1,0 +1,67 @@
+--- a/src/server.rs
++++ b/src/server.rs
+@@ -728,0 +729,4 @@
++        if self.guard_root_contained(&index_path).await {
++            status_not_found(res);
++            return Ok(());
++        }
+@@ -780,0 +785,4 @@
++            if self.guard_root_contained(&path).await {
++                status_not_found(res);
++                return Ok(());
++            }
+@@ -1470,0 +1479,6 @@
++        // LeafLoom: an in-root link can cross an account boundary too.
++        // Check every existing component, including dangling links and parents
++        // of new uploads, rather than only the final canonical server root.
++        if contains_symlink(&self.args.serve_path, path).await {
++            return true;
++        }
+@@ -1617,0 +1632,3 @@
++        if self.guard_root_contained(path).await {
++            return Ok(None);
++        }
+@@ -2076,0 +2094,25 @@
++// Strict no-link policy when allow-symlink is false. The configured serve
++// root is canonicalized by Args; account directories must be real directories
++// or bind mounts. Local administrators remain trusted storage administrators.
++async fn contains_symlink(root: &Path, path: &Path) -> bool {
++    let relative = match path.strip_prefix(root) {
++        Ok(value) => value,
++        Err(_) => return true,
++    };
++    let mut current = root.to_path_buf();
++    for component in relative.components() {
++        match component {
++            Component::Normal(value) => current.push(value),
++            Component::CurDir => continue,
++            _ => return true,
++        }
++        match fs::symlink_metadata(&current).await {
++            Ok(meta) if meta.file_type().is_symlink() => return true,
++            Ok(_) => {}
++            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return false,
++            Err(_) => return true,
++        }
++    }
++    false
++}
++
+@@ -2091 +2133,4 @@
+-        let mut it = WalkDir::new(&dir).follow_links(true).into_iter();
++        if !follow_symlinks && contains_symlink(&serve_path, &dir).await {
++            continue;
++        }
++        let mut it = WalkDir::new(&dir).follow_links(follow_symlinks).into_iter();
+@@ -2110,0 +2156,6 @@
++            if !follow_symlinks && contains_symlink(&serve_path, entry_path).await {
++                if is_dir {
++                    it.skip_current_dir();
++                }
++                continue;
++            }
+--- a/src/args.rs
++++ b/src/args.rs
+@@ -18 +18 @@
+-        .version(env!("CARGO_PKG_VERSION"))
++        .version(concat!(env!("CARGO_PKG_VERSION"), "-leafloom.1"))

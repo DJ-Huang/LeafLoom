@@ -1,0 +1,20 @@
+# Copy outside the served data directory, e.g. /config/config.yaml.
+# Retain the existing SHA-512 crypt hash; never put a real password in Git.
+# Use the patched image from Dockerfile: upstream v0.47.0 permits in-root links.
+serve-path: /data
+bind: 0.0.0.0
+port: 5000
+auth:
+  - 'DJ:$6$REPLACE_WITH_EXISTING_SHA512_CRYPT_HASH@/DJ:ro,/DJ/Incoming:rw'
+# Add one rule and one independent directory mount for each new account:
+# - 'Alice:$6$REPLACE_WITH_ALICE_SHA512_CRYPT_HASH@/Alice:rw'
+# These deliberately invalid hashes reject login until replaced in full.
+# No anonymous rule and no account with access to /.
+allow-all: false
+allow-upload: true
+allow-delete: false
+allow-search: false
+allow-archive: false
+allow-hash: false
+allow-symlink: false
+enable-cors: false
