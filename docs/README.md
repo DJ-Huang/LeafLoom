@@ -4,7 +4,7 @@
 
 **Help center · 帮助中心 · ヘルプセンター:** [English](https://dj-huang.github.io/LeafLoom/docs/en/) · [中文](https://dj-huang.github.io/LeafLoom/docs/zh-CN/) · [日本語](https://dj-huang.github.io/LeafLoom/docs/ja/)
 
-The public help center has 39 task guides and four full guide/release references per language, with topic navigation, local full-text search, article contents, previous/next navigation, image zoom and copyable examples. Sources live in `docs/{en,zh-CN,ja}/help/`; [navigation.json](help/navigation.json) lists every article. The website build validates and publishes them with the existing guides. See [website maintenance](WEBSITE.md#help-center).
+The public help center has 39 task guides and five full guide/release references per language, with topic navigation, local full-text search, article contents, previous/next navigation, image zoom and copyable examples. Sources live in `docs/{en,zh-CN,ja}/help/`; [navigation.json](help/navigation.json) lists every article. The website build validates and publishes them with the existing guides. See [website maintenance](WEBSITE.md#help-center).
 
 ## Start here · 从这里开始 · はじめに
 
@@ -15,6 +15,7 @@ The public help center has 39 task guides and four full guide/release references
 | AI Chat, MCP and Skills | [AI connections](en/AI.md) | [AI 接入](zh-CN/AI.md) | [AI 連携](ja/AI.md) |
 | Attachment workspace, remote storage, previews, organization and recovery | [Attachments](en/GUIDE.md#attachment-manager) | [附件管理](zh-CN/GUIDE.md#附件管理) | [添付ファイル](ja/GUIDE.md#添付ファイルの管理) |
 | Change history | [Changelog](../CHANGELOG.md) | [更新记录](zh-CN/CHANGELOG.md) | [変更履歴](ja/CHANGELOG.md) |
+| LeafLoom 0.1.6 release notes | [Release notes](en/RELEASE_NOTES_0.1.6.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.6.md) | [リリースノート](ja/RELEASE_NOTES_0.1.6.md) |
 | LeafLoom 0.1.5 release notes | [Release notes](en/RELEASE_NOTES_0.1.5.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.5.md) | [リリースノート](ja/RELEASE_NOTES_0.1.5.md) |
 | LeafLoom 0.1.4 release notes | [Release notes](en/RELEASE_NOTES_0.1.4.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.4.md) | [リリースノート](ja/RELEASE_NOTES_0.1.4.md) |
 | LeafLoom 0.1.3 release notes | [Release notes](en/RELEASE_NOTES_0.1.3.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.3.md) | [リリースノート](ja/RELEASE_NOTES_0.1.3.md) |

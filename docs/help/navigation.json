@@ -97,6 +97,6 @@
       "zh-CN": "docs/zh-CN/CHANGELOG.md",
       "ja": "docs/ja/CHANGELOG.md"
     },
-    "release-notes": "docs/{lang}/RELEASE_NOTES_0.1.3.md"
+    "release-notes": "docs/{lang}/RELEASE_NOTES_0.1.6.md"
   }
 }
