@@ -1078,7 +1078,7 @@ site.optional_body|AI Chat 会向所选服务发送启用的上下文；ChatGPT 
 site.privacy_link|了解存储与隐私边界|Read about storage and privacy|保存とプライバシーについて
 site.ai_eyebrow|需要 AI 时，知识就在身边|WHEN YOU WANT AI, YOUR KNOWLEDGE IS READY|AI が必要なとき、知識をそばに。
 site.ai_title|把自己的知识，带进对话。|Give your AI something worth knowing.|自分の知識を、対話につなぐ。
-site.ai_body|在笔记旁使用 AI Chat，追溯引用、审阅建议；通过 MCP 与 Skill 连接常用助手，或使用内置 Tunnel 接入 ChatGPT。|Chat beside your notes, follow citations and review suggestions. Connect your assistant through MCP and the bundled Skill, or use the built-in Tunnel to bring your knowledge into ChatGPT.|ノートの隣で AI Chat を使い、引用をたどり、提案を確認。MCP と同梱 Skill でアシスタントを接続したり、内蔵 Tunnel で ChatGPT と連携できます。
+site.ai_body|在笔记旁使用 AI Chat，追溯引用、审阅建议；通过 MCP 与 Skill 连接助手。工作中枢可记录多项目工作、管理任务和汇报，并按需配置多个办公软件。|Chat beside your notes, follow citations and review suggestions. Connect assistants through MCP and Skills; use work-hub to capture projects, manage tasks and reports, and choose multiple office platforms.|ノートの隣で AI Chat を使い、引用や提案を確認。MCP と Skill で接続し、ワークハブで複数プロジェクトの記録、タスク、レポートと利用するオフィス製品を管理できます。
 site.ai_link|查看 AI 接入指南|Explore AI connections|AI 連携ガイドを見る
 site.ai_alt|LeafLoom 笔记旁的 AI Chat，使用明确标识的虚构演示对话|AI Chat beside a LeafLoom note, with a clearly labeled fictional conversation|LeafLoom のノート横の AI Chat。架空の会話であることを明記したデモ
 site.ai_caption|虚构的 AI 对话演示，未调用外部 AI。ChatGPT 连接需要账号、网络与相应权限，且 LeafLoom 须保持运行。|Fictional AI conversation; no external AI was called. ChatGPT needs an account, network access and the relevant permissions, with LeafLoom running.|架空の AI 会話です。外部 AI は呼び出していません。ChatGPT 連携にはアカウント、ネットワーク、必要な権限、および LeafLoom の起動が必要です。

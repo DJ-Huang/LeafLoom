@@ -3,6 +3,10 @@
 [English](CHANGELOG.md) · [中文](docs/zh-CN/CHANGELOG.md) · [日本語](docs/ja/CHANGELOG.md)
 
 ## Unreleased
+
+## 0.1.7 — 2026-11-02
+
+- Add **Copy element location** to canvas/layer context menus and the single-element inspector, including canonical source paths, stable IDs, hierarchy, revision and HTML/resource references for pasting into external AI chats.
 - Allow multiple office platforms in work-hub settings and chat, with immediate checkbox saves, exclusive automatic/local-only modes and backward-compatible reading of single selections. Preserve multi-selections against old scalar clients.
 
 - Add work-hub office preferences in Settings and chat, backed by the same version-checked configuration note. Support automatic/local-only defaults, preserve custom hub folders, and clearly distinguish unimplemented platform preferences from connected integrations.
