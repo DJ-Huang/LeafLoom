@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vault-rag"
-version = "0.1.5"
+version = "0.1.6"
 description = "LeafLoom: local-first knowledge base and personal wiki for Markdown and HTML, with MCP, Skills, AI Chat and ChatGPT integration"
 keywords = ["knowledge-management", "personal-wiki", "local-first", "markdown", "html", "mcp", "agent-skills", "ai-chat", "chatgpt", "rag", "knowledge-graph"]
 license = "MIT"
