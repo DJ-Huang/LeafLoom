@@ -1072,7 +1072,7 @@
   "site.privacy_link": "保存とプライバシーについて",
   "site.ai_eyebrow": "AI が必要なとき、知識をそばに。",
   "site.ai_title": "自分の知識を、対話につなぐ。",
-  "site.ai_body": "ノートの隣で AI Chat を使い、引用をたどり、提案を確認。MCP と同梱 Skill でアシスタントを接続したり、内蔵 Tunnel で ChatGPT と連携できます。",
+  "site.ai_body": "ノートの隣で AI Chat を使い、引用や提案を確認。MCP と Skill で接続し、ワークハブで複数プロジェクトの記録、タスク、レポートと利用するオフィス製品を管理できます。",
   "site.ai_link": "AI 連携ガイドを見る",
   "site.ai_alt": "LeafLoom のノート横の AI Chat。架空の会話であることを明記したデモ",
   "site.ai_caption": "架空の AI 会話です。外部 AI は呼び出していません。ChatGPT 連携にはアカウント、ネットワーク、必要な権限、および LeafLoom の起動が必要です。",

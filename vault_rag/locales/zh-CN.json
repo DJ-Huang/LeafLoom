@@ -1072,7 +1072,7 @@
   "site.privacy_link": "了解存储与隐私边界",
   "site.ai_eyebrow": "需要 AI 时，知识就在身边",
   "site.ai_title": "把自己的知识，带进对话。",
-  "site.ai_body": "在笔记旁使用 AI Chat，追溯引用、审阅建议；通过 MCP 与 Skill 连接常用助手，或使用内置 Tunnel 接入 ChatGPT。",
+  "site.ai_body": "在笔记旁使用 AI Chat，追溯引用、审阅建议；通过 MCP 与 Skill 连接助手。工作中枢可记录多项目工作、管理任务和汇报，并按需配置多个办公软件。",
   "site.ai_link": "查看 AI 接入指南",
   "site.ai_alt": "LeafLoom 笔记旁的 AI Chat，使用明确标识的虚构演示对话",
   "site.ai_caption": "虚构的 AI 对话演示，未调用外部 AI。ChatGPT 连接需要账号、网络与相应权限，且 LeafLoom 须保持运行。",
