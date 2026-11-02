@@ -75,6 +75,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     ai_app=ai_mcp.streamable_http_app()
     mcp_access=McpAccess(config)
     notes=NoteOperations(config,runtime)
+    from vault_rag.work_hub import WorkHubSettings
+    work_hub_settings=WorkHubSettings(notes)
     from vault_rag.databases import Databases
     databases=Databases(config,runtime,notes)
     from vault_rag.remote_attachments import RemoteAttachments
@@ -331,14 +333,27 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     async def choose_current_directory():
         # Triggered only by an explicit click in the local webpage, not at login.
         return json_response(await asyncio.to_thread(choose_directory))
-    @app.get('/api/skills/wiki-search')
-    async def installed_search_skill():
-        try:return json_response(await asyncio.to_thread(skill_status))
-        except OSError as e:return json_response({'error':f'无法读取技能安装状态：{e}'},400)
-    @app.post('/api/skills/wiki-search/install')
-    async def install_search_skill():
-        try:return json_response(await asyncio.to_thread(install_skill))
-        except OSError as e:return json_response({'error':f'无法安装 wiki-search：{e}'},400)
+    @app.get('/api/skills/{name}')
+    async def installed_bundled_skill(name:str):
+        if name not in {'wiki-search','work-hub'}:return json_response({'error':'Unknown bundled skill'},404)
+        try:return json_response(await asyncio.to_thread(skill_status,name))
+        except (OSError,ValueError) as e:return json_response({'error':f'无法读取技能安装状态：{e}'},400)
+    @app.post('/api/skills/{name}/install')
+    async def install_bundled_skill(name:str):
+        if name not in {'wiki-search','work-hub'}:return json_response({'error':'Unknown bundled skill'},404)
+        try:return json_response(await asyncio.to_thread(install_skill,name))
+        except (OSError,ValueError) as e:return json_response({'error':f'无法安装 {name}：{e}'},400)
+    @app.get('/api/work-hub/settings')
+    async def read_work_hub_settings(root:str|None=None):
+        return json_response(await asyncio.to_thread(work_hub_settings.read,root))
+    @app.put('/api/work-hub/settings')
+    async def update_work_hub_settings(request:Request):
+        body=await request.json()
+        if not isinstance(body,dict):raise ValueError('Invalid work hub configuration')
+        return json_response(await asyncio.to_thread(work_hub_settings.write,
+            root=body.get('root'),workspace_revision=body.get('workspace_revision'),
+            revision=body.get('revision'),
+            **{key:body[key] for key in ('office_provider','office_providers') if key in body}))
     @app.get('/api/attachments/migrations')
     async def list_attachment_migrations():
         return await asyncio.to_thread(migrations.list)

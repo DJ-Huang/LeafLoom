@@ -87,7 +87,7 @@ button.index-status:hover { background: var(--hover); }
 .path-navigation button, .path-current { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; padding: 6px 7px; }
 .path-navigation button { border: 0; background: transparent; color: var(--muted); }
 .path-navigation button:hover { background: var(--hover); color: var(--accent); }
-.path-current { color: #37352f; }
+.path-navigation .path-current { color: var(--ink-secondary); }
 .path-navigation svg { flex-shrink: 0; }
 .folder-page { flex: 1; min-height: 0; overflow: auto; width: 100%; max-width: var(--content-width); margin: 0 auto; padding: 48px var(--page-gutter); }
 .folder-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; flex-wrap: wrap; }

@@ -81,7 +81,7 @@ Use your knowledge where you already work, with source references you can check.
 | --- | --- |
 | **MCP** | Connect clients such as Codex, Cursor or Claude Code to the local HTTP MCP endpoint at `http://127.0.0.1:18080/mcp` (default port). Enable full access to find, create, edit, organize and recover connected notes. RAG keeps your selected scope; writing starts disabled. |
 | **Feishu / Lark** | Connect an externally configured lark-cli to verify your account and let MCP clients work with documents and Base records. Local and Tunnel permissions are separate and start disabled. [Setup](docs/en/GUIDE.md#optional-feishu--lark-connection). |
-| **Skills** | Install the included [`wiki-search` Skill](wiki-search/SKILL.md) from **Settings → Skill → Install skill**. It guides compatible assistants through retrieval, Wiki navigation and source checking. Configure MCP separately. |
+| **Skills** | Install [`wiki-search`](wiki-search/SKILL.md) for sourced retrieval or [`work-hub`](work-hub/SKILL.md) for work capture, local tasks and reports, with multi-select office preferences and optional Feishu imports and sync from **Settings → AI integration**. Configure MCP separately. [Work hub guide](docs/WORK_HUB.md). |
 | **AI Chat** | Requires a separately installed, signed-in Codex or Codely CLI. Discuss a note or selection and open cited sources. Preview suggested changes, accept them into a draft, then save when ready. |
 
 [Set up AI Chat, MCP and Skills](docs/en/AI.md)
