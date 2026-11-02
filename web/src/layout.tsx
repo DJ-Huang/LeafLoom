@@ -1,9 +1,9 @@
 import {t,useLocale} from './i18n';
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
-import {BookOpen,Paperclip,Calendar,ChevronRight,FileText,Table2,Folder,Home,Palette,PanelLeftClose,Search,Network,ArrowUpRight} from 'lucide-react';
+import {BookOpen,Paperclip,Calendar,ChevronRight,FileText,Table2,Folder,Home,Palette,PanelLeftClose,Search,Network,ArrowUpRight,Copy} from 'lucide-react';
 import {Config,OpenNote} from './api';
 import {useStatus} from './hooks';
-import {Action} from './ui';
+import {Action,ActionMenu,MenuPoint} from './ui';
 
 export const fileName=(path:string)=>path.replace(/\\/g,'/').split('/').pop()||path;
 export type Preferences={recent:string[],sidebarWidth:number,sidebarCollapsed:boolean,wide:boolean};
@@ -43,15 +43,28 @@ export function Sidebar({children,width,collapsed,mobileOpen,onToggle,onWidth,on
     onKeyDown={event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();onWidth(event.key==='Home'?200:event.key==='End'?360:Math.max(200,Math.min(360,width+(event.key==='ArrowRight'?16:-16))));}}}/>
   </aside></>;
 }
-export function PathNavigation({path,view,onFolder}:{path:string,view:string,onFolder:(path:string)=>void}){
+export function PathNavigation({root,path,view,onFolder,notify}:{root:string,path:string,view:string,onFolder:(path:string)=>void,notify:(message:string)=>void}){
  useLocale();
+ const [menu,setMenu]=useState<{target:string,anchor:HTMLElement,point?:MenuPoint}>();
+ useEffect(()=>setMenu(undefined),[root,path,view]);
  const parts=path.split('/').filter(Boolean),browsing=view==='document'||view==='folder';
- return <nav className="path-navigation" aria-label={t("当前位置")}><ol>
-  {browsing?<><li><button onClick={()=>onFolder('')} title={t("打开知识库根目录")}><BookOpen size={15}/><span>{t("知识库")}</span></button></li>{parts.map((part,index)=>{
+ const openMenu=(target:string,anchor:HTMLElement,point?:MenuPoint)=>setMenu({target,anchor,point});
+ const menuProps=(target:string)=>({
+  'aria-haspopup':'menu' as const,'aria-expanded':menu?.target===target,
+  onContextMenu:(event:React.MouseEvent<HTMLButtonElement>)=>{event.preventDefault();event.stopPropagation();openMenu(target,event.currentTarget,{x:event.clientX,y:event.clientY});},
+  onKeyDown:(event:React.KeyboardEvent<HTMLButtonElement>)=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();openMenu(target,event.currentTarget);}}
+ });
+ const copyPath=async(absolute:boolean)=>{
+  if(!menu)return;
+  const separator=/^(?:[a-z]:\\|\\\\)/i.test(root)?'\\':'/',value=absolute?(menu.target?root+(root.endsWith(separator)?'':separator)+menu.target.replace(/\//g,separator):root):menu.target||'.';
+  try{await navigator.clipboard.writeText(value);notify(t('ui.pathCopied'));}catch{notify(t('ui.pathCopyFailed'));}
+ };
+ return <><nav className="path-navigation" aria-label={t("当前位置")}><ol>
+  {browsing?<><li><button {...menuProps('')} onClick={()=>onFolder('')} title={t("打开知识库根目录")}><BookOpen size={15}/><span>{t("知识库")}</span></button></li>{parts.map((part,index)=>{
    const current=index===parts.length-1,target=parts.slice(0,index+1).join('/');
-   return <li key={target}><ChevronRight size={13} aria-hidden="true"/>{current?<span className="path-current" aria-current="page" title={path}>{view==='document'?(part.endsWith('.base')?<Table2 size={15}/>:<FileText size={15}/>):<Folder size={15}/>}<span>{part.replace(/\.base$/,'')}</span></span>:<button title={t("打开 ")+target} onClick={()=>onFolder(target)}>{part}</button>}</li>;
+   return <li key={target}><ChevronRight size={13} aria-hidden="true"/>{current?<button {...menuProps(target)} className="path-current" aria-current="page" title={path} onClick={event=>openMenu(target,event.currentTarget)}>{view==='document'?(part.endsWith('.base')?<Table2 size={15}/>:<FileText size={15}/>):<Folder size={15}/>}<span>{part.replace(/\.base$/,'')}</span></button>:<button {...menuProps(target)} title={t("打开 ")+target} onClick={()=>onFolder(target)}>{part}</button>}</li>;
   })}</>:<li><span className="path-current" aria-current="page">{view==='attachments'?<Paperclip size={15}/>:view==='knowledge'?<Search size={15}/>:view==='graph'?<Network size={15}/>:view==='design'?<Palette size={15}/>:<Home size={15}/>}<span>{view==='downloads'?t('dl.title'):view==='attachments'?t('attachments.title'):view==='knowledge'?t("知识检索"):view==='graph'?t("关系图谱"):view==='design'?t("设计工作台"):view==='web'?t("网页"):t("首页")}</span></span></li>}
- </ol></nav>;
+ </ol></nav>{browsing&&menu&&<ActionMenu title={t('ui.pathActions')} anchor={menu.anchor} point={menu.point} onClose={()=>setMenu(undefined)}><button onClick={()=>void copyPath(false)}><Copy size={14}/>{t('ui.copyRelativePath')}</button><button onClick={()=>void copyPath(true)}><Copy size={14}/>{t('ui.copyAbsolutePath')}</button></ActionMenu>}</>;
 }
 export function IndexStatus({onOpen}:{onOpen:()=>void}){
  useLocale();const status=useStatus(),failed=!!(status?.last_error||status?.watch?.error);return <button className="index-status" onClick={onOpen} aria-label={t("查看同步与索引")} title={status?.last_error||t("{p0} 篇检索资料 · {p1} 个文件",{p0:status?.num_files||0,p1:status?.catalog_files||0})}><span className={'status-dot '+(failed?'error':'')}/><span>{failed?t("同步需要关注"):t(status?.sync?.state||'正在同步目录')}</span><ChevronRight size={13}/></button>;}

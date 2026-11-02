@@ -2681,6 +2681,11 @@ ui.dailyHint|整理今天的记录与待办|Make room for today's notes|今日�
 ui.searchHint|找到内容和原文依据|Find answers and their sources|内容と出典を見つける
 ui.designHint|把想法变成可视化内容|Turn ideas into visual work|アイデアを視覚化する
 ui.homeSearch|从你的笔记中查找内容与线索…|Find something in your notes…|ノートから内容を探す…
+ui.pathActions|路径操作|Path actions|パスの操作
+ui.copyRelativePath|复制相对路径|Copy relative path|相対パスをコピー
+ui.copyAbsolutePath|复制绝对路径|Copy absolute path|絶対パスをコピー
+ui.pathCopied|路径已复制|Path copied|パスをコピーしました
+ui.pathCopyFailed|未能复制路径，请检查剪贴板权限后重试。|Could not copy the path. Check clipboard permissions and retry.|パスをコピーできませんでした。クリップボードの権限を確認して再試行してください。
 导出 HTML|Export HTML|HTML を書き出し
 取消全选|Clear all|選択をすべて解除
 选择页面并导出已保存的交互式 HTML ZIP。按原顺序播放，首页为第一个所选页面。|Choose pages for an interactive HTML ZIP from the saved version. Pages retain their order, starting with the first selected page.|保存済みの対話型 HTML ZIP に書き出すページを選択します。元の順序を維持し、最初の選択ページから開始します。
@@ -2913,3 +2918,42 @@ Invalid automatic scan setting|自动目录检查设置无效|Invalid automatic 
 Resume automatic directory checks before scanning|请先恢复目录检查，再开始扫描|Resume directory checks before scanning|ディレクトリ確認を再開してから走査してください
 Attachment directory scan paused|附件目录扫描已暂停|Attachment directory scan paused|添付ディレクトリの走査を一時停止しました
 Attachment scan directories changed|服务器扫描目录已变化，请重新检查|Server scan directories changed; check again|サーバーの走査対象が変更されました。再確認してください
+
+工作中枢技能|Work hub skill|ワークハブスキル
+通过 AI 记录多项目工作、管理本地任务并生成汇报；可选接入飞书采集与同步。|Capture multi-project work with AI, manage local tasks and create reports; optionally connect Feishu for imports and sync.|AI で複数プロジェクトの作業記録、ローカルタスク管理、レポート作成を行います。飛書の取り込み・同期は任意で接続できます。
+安装工作中枢技能|Install work hub skill|ワークハブスキルをインストール
+工作中枢技能已就绪。在新的 AI 聊天中使用 $work-hub；首次使用时创建工作中枢。|Work hub skill is ready. Use $work-hub in a new AI chat; the workspace is created on first use.|ワークハブスキルを利用できます。新しい AI チャットで $work-hub を呼び出すと、初回に作業用フォルダーを作成します。
+记录工作、管理本地任务与生成汇报，可选办公工具接入|Record work, manage local tasks and create reports, with optional office integrations|作業記録、ローカルタスク管理、レポート作成と任意のオフィス連携
+Unknown bundled skill|Unknown bundled skill|不明な同梱スキル
+
+wh.title|工作中枢配置|Work hub settings|ワークハブ設定
+wh.help|选择使用的办公软件，可同时勾选多个；工作记录、本地任务和汇报仍可独立使用。|Select the office platforms you use; multiple selections are allowed. Work records, local tasks and reports remain independent.|利用するオフィス製品を複数選択できます。作業記録・ローカルタスク・レポートは単独で利用できます。
+wh.office|使用的软件（可多选）|Office platforms (multiple allowed)|利用する製品（複数選択可）
+wh.autoSave|每次勾选即时保存；取消全部软件后恢复按来源自动选择。|Each change saves immediately. Clearing all platforms restores automatic source selection.|変更はすぐ保存されます。すべて解除すると出典に応じた選択に戻ります。
+wh.provider.auto|按来源自动选择|Choose from the source|出典に応じて選択
+wh.provider.local|仅本地|Local only|ローカルのみ
+wh.provider.feishu|飞书 / Lark|Feishu / Lark|飛書 / Lark
+wh.provider.dingtalk|钉钉|DingTalk|DingTalk
+wh.provider.wecom|企业微信|WeCom|WeCom
+wh.provider.notion|Notion|Notion|Notion
+wh.notImplemented|尚未接入|Not integrated yet|未連携
+wh.unsupported|所选软件中有尚未接入的平台；这些来源目前可整理你提供的文字或导出资料。|Some selected platforms are not integrated yet. For those sources, you can organize text or exports you provide.|選択した製品には未連携のものがあります。それらの出典は、提供されたテキストやエクスポートを整理できます。
+wh.feishuConnection|飞书连接与权限需在“AI 连接”中单独设置。|Set up Feishu sign-in and permissions separately under AI connections.|飛書の接続と権限は「AI 接続」で別途設定してください。
+wh.sharedConfig|设置与对话共用配置笔记：{path}|Settings and chat share this configuration note: {path}|設定画面とチャットで共用する設定ノート：{path}
+wh.explicitSource|明确指定的软件或来源链接优先于此配置；多选不会自动扩大采集范围或授权写回。|An explicit platform or source link overrides these preferences. Multiple selections do not expand collection scope or authorize remote writes.|明示した製品や出典リンクが設定より優先されます。複数選択しても取得範囲や外部書き込みの許可は増えません。
+wh.save|保存工作中枢配置|Save work hub settings|ワークハブ設定を保存
+wh.saved|工作中枢配置已保存。对话中也可说“同时用飞书和 Notion”或“再加上 Notion”。|Work hub settings saved. In chat, you can also request multiple platforms or add another one.|ワークハブ設定を保存しました。チャットでも複数の製品の指定や追加を依頼できます。
+wh.loading|正在读取工作中枢配置…|Loading work hub settings…|ワークハブ設定を読み込み中…
+wh.needsVault|请先关联一个知识库，再选择办公软件。|Connect a vault before choosing an office platform.|知識庫を接続してからオフィス製品を選んでください。
+wh.search|办公软件多选、飞书、钉钉、企业微信、Notion、仅本地|Office platform multi-select, Feishu, Lark, DingTalk, WeCom, Notion, local only|オフィス製品の複数選択、飛書、Lark、DingTalk、WeCom、Notion、ローカルのみ
+wh.folder|工作中枢目录|Work hub folder|ワークハブフォルダー
+Choose a dedicated work hub folder|请选择有效的工作中枢专用目录。|Choose a valid dedicated work hub folder.|有効なワークハブ専用フォルダーを選んでください。
+Invalid work hub configuration|工作中枢配置格式无效，原文件已保留，请检查配置笔记。|The work hub configuration is invalid. The original file was preserved; check the configuration note.|ワークハブ設定の形式が無効です。元のファイルを保持しました。設定ノートを確認してください。
+Unsupported work hub configuration version|暂不支持此工作中枢配置版本，原文件已保留。|This work hub configuration version is not supported. The original file was preserved.|このワークハブ設定バージョンには対応していません。元のファイルを保持しました。
+Invalid work hub office provider|办公软件标识无效，请重新选择。|The office platform identifier is invalid. Choose it again.|オフィス製品の識別子が無効です。もう一度選んでください。
+Workspace changed; reload work hub settings|知识库已切换，请重新载入工作中枢配置。|The vault changed. Reload work hub settings.|知識庫が切り替わりました。ワークハブ設定を再読み込みしてください。
+Work hub settings changed; reload before saving|工作中枢配置已在其他位置修改，未覆盖；请重新载入后再保存。|Work hub settings changed elsewhere and were not overwritten. Reload before saving.|ワークハブ設定が別の場所で変更されたため上書きしていません。再読み込みしてから保存してください。
+wh.mode|来源模式|Source mode|出典モード
+wh.modeHelp|自动选择、仅本地与下方的软件多选互斥。|Automatic and local-only modes are exclusive of the platform selections below.|自動選択・ローカルのみと、下の製品選択は同時に使用できません。
+Automatic and local modes cannot be combined with office platforms|自动选择或仅本地模式不能与其他软件同时选择。|Automatic or local-only mode cannot be combined with other platforms.|自動選択・ローカルのみと他の製品は同時に選択できません。
+Multiple office platforms are configured; reload the updated settings|已配置多个办公软件，请重新载入新版设置后修改，原选择已保留。|Multiple platforms are configured. Reload the updated settings before editing; existing selections were preserved.|複数の製品が設定されています。新版の設定を再読み込みしてください。元の選択は保持しました。

@@ -9,11 +9,19 @@ import {VirtualList} from './virtual';
 import {SettingsResult,joinTarget} from './settings-model';
 import {RunAction,SettingGroup,SettingRow,StatusNotice} from './settings-ui';
 
+type InstalledSkill={name:string,path:string,installed:boolean,up_to_date:boolean};
+function BundledSkillInstaller({name,id,title,description,action,ready,run}:{name:string,id:string,title:string,description:string,action:string,ready:string,run:RunAction}){
+ useLocale();
+ const [skill,setSkill]=useState<InstalledSkill>(),[error,setError]=useState(''),[retry,setRetry]=useState(0);
+ useEffect(()=>{const controller=new AbortController();setError('');api<InstalledSkill>('skills/'+name,undefined,undefined,{force:true,signal:controller.signal}).then(setSkill).catch(e=>{if(!controller.signal.aborted)setError(e.message);});return()=>controller.abort();},[name,retry]);
+ return <SettingGroup id={id} title={title} description={description}><SettingRow label={name}><button disabled={!skill||skill.up_to_date} onClick={()=>void run(action,()=>api<InstalledSkill>('skills/'+name+'/install',{}),setSkill)}>{!skill?t("检查安装状态…"):skill.up_to_date?t("已安装最新版本"):skill.installed?t("更新技能"):t("安装技能")}</button></SettingRow>{skill&&<p className="setting-detail">{t("安装位置：")}<code>{skill.path}</code></p>}{error&&<StatusNotice kind="error"><Diagnostic message={error}/> <button onClick={()=>setRetry(value=>value+1)}>{t("重试")}</button></StatusNotice>}{skill?.up_to_date&&<StatusNotice kind="success">{ready}</StatusNotice>}</SettingGroup>;
+}
 export function SkillInstaller({run}:{run:RunAction}){
  useLocale();
- const [skill,setSkill]=useState<{path:string,installed:boolean,up_to_date:boolean}>(),[error,setError]=useState(''),[retry,setRetry]=useState(0);
- useEffect(()=>{const controller=new AbortController();setError('');api<typeof skill>('skills/wiki-search',undefined,undefined,{force:true,signal:controller.signal}).then(setSkill).catch(e=>{if(!controller.signal.aborted)setError(e.message);});return()=>controller.abort();},[retry]);
- return <SettingGroup id="skill" title={t("知识库查询技能")} description={t("让 AI 优先查询你的知识库，返回简短结论与原文链接。")}><SettingRow label="wiki-search" description={t("按知识检索、主题导航与文件检索补齐依据。")}><button disabled={!skill||skill.up_to_date} onClick={()=>void run(t("安装查询技能"),()=>api('skills/wiki-search/install',{}),setSkill)}>{!skill?t("检查安装状态…"):skill.up_to_date?t("已安装最新版本"):skill.installed?t("更新技能"):t("安装技能")}</button></SettingRow>{skill&&<p className="setting-detail">{t("安装位置：")}<code>{skill.path}</code></p>}{error&&<StatusNotice kind="error">{<Diagnostic message={error}/>} <button onClick={()=>setRetry(value=>value+1)}>{t("重试")}</button></StatusNotice>}{skill?.up_to_date&&<StatusNotice kind="success">{t("查询技能已就绪。MCP 连接沿用现有配置。")}</StatusNotice>}</SettingGroup>;
+ return <>
+  <BundledSkillInstaller name="wiki-search" id="skill" title={t("知识库查询技能")} description={t("让 AI 优先查询你的知识库，返回简短结论与原文链接。")} action={t("安装查询技能")} ready={t("查询技能已就绪。MCP 连接沿用现有配置。")} run={run}/>
+  <BundledSkillInstaller name="work-hub" id="work-hub-skill" title={t("工作中枢技能")} description={t("通过 AI 记录多项目工作、管理本地任务并生成汇报；可选接入飞书采集与同步。")} action={t("安装工作中枢技能")} ready={t("工作中枢技能已就绪。在新的 AI 聊天中使用 $work-hub；首次使用时创建工作中枢。")} run={run}/>
+ </>;
 }
 
 type FileResult=SettingsResult&{error?:string,pending?:boolean,remote_saved?:boolean,job_id?:string,state?:string};

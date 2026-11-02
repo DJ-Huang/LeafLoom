@@ -45,9 +45,11 @@ class LibraryDAV(fixtures.FakeDAV):
                 if parent not in directories:return httpx.Response(409)
                 self.directories.add(path);return httpx.Response(201)
             if path not in directories:return httpx.Response(404)
+            assert request.headers['depth'] in {'0','1'}
             prefix=path+'/' if path else '';names=[(path,True)]
-            names.extend((name,True) for name in sorted(directories) if name!=path and name.startswith(prefix) and '/' not in name[len(prefix):])
-            names.extend((name,False) for name in sorted(self.files) if name.startswith(prefix) and '/' not in name[len(prefix):])
+            if request.headers['depth']=='1':
+                names.extend((name,True) for name in sorted(directories) if name!=path and name.startswith(prefix) and '/' not in name[len(prefix):])
+                names.extend((name,False) for name in sorted(self.files) if name.startswith(prefix) and '/' not in name[len(prefix):])
             entries=[]
             for name,directory in names:
                 href='/'+name+('/' if directory and name else '')
@@ -117,6 +119,33 @@ class AssetLibraryTests(unittest.TestCase):
         with patch.object(self.remote,'stat',side_effect=AssertionError('Must use a batch manifest read')):
             self.assertEqual(self.library.listing(self.root,limit=10)['total'],1187)
         self.assertFalse(any(method=='DELETE' for method,_ in self.dav.calls))
+
+    def test_incremental_projection_and_targeted_detail_match_full_rebuild(self):
+        self.dav.files.update({'Packages/Alpha.unitypackage':b'alpha','Packages/Beta.unitypackage':b'beta',
+                               'Packages/Gamma.unitypackage':b'gamma'})
+        self.scan();self.initialize()
+        candidates=self.library.listing(self.root,limit=10)['items']
+        def compare_projection():
+            with self.library.lock,self.library._db(self.root) as db:
+                before=[tuple(row) for row in db.execute('SELECT * FROM entities ORDER BY id')]
+                self.library._set(db,'projection_revision','force-full-rebuild')
+                self.library._project(db)
+                after=[tuple(row) for row in db.execute('SELECT * FROM entities ORDER BY id')]
+            self.assertEqual(before,after)
+            expected={item['id']:item for item in self.library._items(self.root,include_unavailable=True)}
+            for identity,item in expected.items():self.assertEqual(self.library.detail(self.root,identity),item)
+        compare_projection()
+        self.library.update(self.root,'official',{'product_id':'123','official':{'title':'Fictional'}})
+        compare_projection()
+        for item in candidates[:2]:
+            self.library.update(self.root,'bind',{'asset_id':item['files'][0]['asset_id'],'product_id':'123'},expected_revision=item['revision'])
+            compare_projection()
+        product=self.library.detail(self.root,'123')
+        self.library.update(self.root,'personal',{'product_id':'123','personal':{'tags':['mine'],'description':'keep'}},expected_revision=product['revision'])
+        compare_projection()
+        remaining=next(item for item in self.library._items(self.root) if item['kind']=='candidate')
+        self.library.update(self.root,'review',{'id':remaining['id'],'status':'needs_review','reason':'check'},expected_revision=remaining['revision'])
+        compare_projection()
 
     def test_sync_preserves_safe_transport_reason_for_status_ui(self):
         error=RemoteStorageError('connection_unavailable','unreachable',reason='server_connect_timeout',operation='GET')
@@ -470,6 +499,29 @@ class AssetLibraryTests(unittest.TestCase):
                 self.assertEqual(order,['pull','put'],'A new authorization context needs a complete pull before upload')
         self.assertEqual(self.dav.files['Packages/Tool.unitypackage'],b'original package')
 
+    def test_metadata_directory_checks_use_depth_zero_and_require_directory(self):
+        source=self.remote._source('a'*32,self.root);depths=[];invalid={'mode':''}
+        def server(request):
+            if request.method=='PROPFIND':
+                depths.append((unquote(request.url.path).strip('/'),request.headers['depth']))
+                if invalid['mode']:
+                    href=xml.sax.saxutils.escape(request.url.path)
+                    resource='<resourcetype/>' if invalid['mode']=='file' else ''
+                    body='<multistatus xmlns="DAV:"><response><href>'+href+'</href><propstat><prop>'+resource+'</prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>'
+                    return httpx.Response(207,content=body.encode())
+            return self.dav(request)
+        provider=WebDAVSource(source,('leafloom',fixtures.SECRET),transport=httpx.MockTransport(server))
+        path=source['metadata_directory']+'/media/fixture.webp';data=b'fixture cover'
+        self.assertEqual(provider.put_immutable(path,data,verified_directories=set()),hashlib.sha256(data).hexdigest())
+        self.assertTrue(depths);self.assertTrue(all(depth=='0' for _,depth in depths))
+        self.assertEqual(self.dav.files[path],data)
+        provider._propfind(source['metadata_directory']+'/media')
+        self.assertEqual(depths[-1][1],'1')
+        for mode in ('file','missing'):
+            invalid['mode']=mode
+            with self.subTest(mode=mode),self.assertRaisesRegex(RemoteStorageError,'incomplete_webdav_listing'):
+                provider.ensure_directory(source['metadata_directory']+'/media')
+
     def test_only_official_metadata_session_disables_keepalive_and_still_verifies_readback(self):
         source=self.remote._source('a'*32,self.root)
         official=WebDAVSource({**source,'connection_hint':'official-client'},('leafloom',fixtures.SECRET),transport=self.transport)
@@ -737,7 +789,7 @@ class AssetLibraryTests(unittest.TestCase):
             self.assertEqual(checkpoint['inputs'][0]['id'],candidate['id'])
             self.assertEqual(checkpoint['active']['file_uid'],file['file_uid'])
             real(*args,**kwargs);raise SystemExit('synthetic process exit before result checkpoint')
-        with patch('vault_rag.unity_asset_store.threading.Thread',InlineThread),patch.object(enrichment,'official_url',side_effect=crash_after_binding):
+        with patch('vault_rag.unity_asset_store.CollectionThread',InlineThread),patch.object(enrichment,'official_url',side_effect=crash_after_binding):
             with self.assertRaises(SystemExit):enrichment.start(self.root)
         crash=copy.deepcopy(enrichment.status(self.root))
         self.assertEqual(crash['results'],[]);self.assertEqual(crash['state'],'running')
@@ -746,21 +798,22 @@ class AssetLibraryTests(unittest.TestCase):
         source=Mock();source.search.side_effect=AssertionError('Recovery must not repeat the official request')
         source.product.side_effect=AssertionError('Recovery must not repeat the official request')
         restarted=AssetEnrichment(self.library,source=source)
-        with patch('vault_rag.unity_asset_store.threading.Thread',InlineThread):recovered=restarted.start(self.root)
-        self.assertEqual((recovered['total'],recovered['succeeded'],recovered['needs_review']),(1,1,0))
-        self.assertEqual(recovered['results'][0]['reason'],'checkpoint_recovered');self.assertNotIn('active',recovered)
+        with patch('vault_rag.unity_asset_store.CollectionThread',InlineThread):recovered=restarted.start(self.root)
+        self.assertEqual((recovered['total'],recovered['succeeded'],recovered['needs_review']),(1,0,1))
+        self.assertEqual(recovered['results'][0]['reason'],'official_metadata_incomplete');self.assertNotIn('active',recovered)
+        self.assertEqual(recovered['results'][0]['missing_fields'],['cover','tags','description'])
         source.search.assert_not_called();source.product.assert_not_called()
         self.library.update(self.root,'official',{'product_id':'456','official':{'title':'Different Product','publisher':'Other Studio',
             'url':'https://assetstore.unity.com/packages/tools/different-product-456'}})
         self.library.update(self.root,'bind',{'asset_id':file['asset_id'],'product_id':'456','evidence':{'method':'user_confirmed'}})
         restarted._save(self.root,crash)
-        with patch('vault_rag.unity_asset_store.threading.Thread',InlineThread):changed=restarted.start(self.root)
+        with patch('vault_rag.unity_asset_store.CollectionThread',InlineThread):changed=restarted.start(self.root)
         self.assertEqual((changed['total'],changed['succeeded'],changed['needs_review']),(1,0,1))
         self.assertEqual(changed['results'][0]['reason'],'candidate_binding_changed')
         self.assertEqual(self.library.collection_identity(self.root,file['file_uid'])['product_id'],'456')
         with self.remote._db(self.root) as db:db.execute("UPDATE assets SET state='missing' WHERE id=?",(file['asset_id'],))
         restarted._save(self.root,crash)
-        with patch('vault_rag.unity_asset_store.threading.Thread',InlineThread):missing=restarted.start(self.root)
+        with patch('vault_rag.unity_asset_store.CollectionThread',InlineThread):missing=restarted.start(self.root)
         self.assertEqual((missing['total'],missing['succeeded'],missing['needs_review']),(1,0,1))
         self.assertEqual(missing['results'][0]['reason'],'candidate_unavailable');source.search.assert_not_called()
         # An active item that was never bound must still execute its normal retry.
@@ -771,13 +824,13 @@ class AssetLibraryTests(unittest.TestCase):
         retry['active'].update(id=other['id'],file_uid=other['files'][0]['file_uid'])
         restarted._save(self.root,retry);source.search.side_effect=None;source.search.return_value=[url]
         source.product.side_effect=None;source.product.return_value=facts
-        with patch('vault_rag.unity_asset_store.threading.Thread',InlineThread),patch.object(restarted.stopped,'wait',return_value=False):retried=restarted.start(self.root)
-        self.assertEqual((retried['total'],retried['succeeded'],retried['needs_review']),(1,1,0))
+        with patch('vault_rag.unity_asset_store.CollectionThread',InlineThread),patch.object(restarted.stopped,'wait',return_value=False):retried=restarted.start(self.root)
+        self.assertEqual((retried['total'],retried['succeeded'],retried['needs_review']),(1,0,1))
         source.search.assert_called_once();source.product.assert_called_once();self.assertNotIn('active',retried)
         # No historical input ID means no invented success, even with bound files present.
         restarted._save(self.root,{'job_id':'legacy','state':'running','total':7,'results':[]})
         source.reset_mock()
-        with patch('vault_rag.unity_asset_store.threading.Thread',InlineThread):legacy=restarted.start(self.root)
+        with patch('vault_rag.unity_asset_store.CollectionThread',InlineThread):legacy=restarted.start(self.root)
         self.assertEqual((legacy['total'],legacy['succeeded'],legacy['needs_review']),(7,0,0))
         self.assertEqual(legacy['legacy_unresolved'],7);source.search.assert_not_called()
 

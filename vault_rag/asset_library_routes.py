@@ -99,7 +99,7 @@ def asset_library_router(library,downloads,enrichment):
     async def batch_enrichment(mode:str,request:Request):
         body=await request.json()
         if mode not in {'plan','start'}:raise ValueError('Unknown batch collection mode')
-        if not isinstance(body,dict) or set(body)-{'root','item_ids','limit','refresh','delay'}:
+        if not isinstance(body,dict) or set(body)-{'root','item_ids','asset_ids','limit','refresh','delay'}:
             raise ValueError('Unknown batch collection option')
         options={key:value for key,value in body.items() if key!='root'}
         method=enrichment.plan if mode=='plan' else enrichment.start

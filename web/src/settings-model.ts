@@ -30,6 +30,8 @@ export const settingsEntries:{section:SettingsSection,id:string,title:string,des
  {section:'index',id:'model',get title(){return t("本地检索模型");},get description(){return t("BGE-M3 模型准备与加载状态");}},
  {section:'index',id:'sync',get title(){return t("同步与索引");},get description(){return t("重新同步、进度、文件数量、错误");}},
  {section:'ai',id:'skill',get title(){return t("知识库查询技能");},get description(){return t("安装或更新 wiki-search");}},
+ {section:'ai',id:'work-hub-skill',get title(){return t("工作中枢技能");},get description(){return t("记录工作、管理本地任务与生成汇报，可选办公工具接入");}},
+ {section:'ai',id:'work-hub-settings',get title(){return t('wh.title');},get description(){return t('wh.search');}},
  {section:'history',id:'records',get title(){return t("操作与版本历史");},get description(){return t("目录操作历史、文档版本、恢复");}},
  {section:'trash',id:'trash',get title(){return t("回收区");},get description(){return t("垃圾箱、恢复已删除文件、永久清空");}},
 ];

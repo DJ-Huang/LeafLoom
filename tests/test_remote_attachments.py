@@ -42,15 +42,16 @@ class FakeDAV:
         assert request.headers.get('authorization')==expected
         path=unquote(request.url.path).strip('/')
         if request.method=='PROPFIND':
-            assert request.headers['depth']=='1'
+            assert request.headers['depth'] in {'0','1'}
             directories={'', *self.directories}
             for name in self.files:
                 for parent in Path(name).parents:
                     if str(parent)!='.':directories.add(parent.as_posix())
             prefix=path+'/' if path else ''
             names=[(path,True)]
-            names += [(name,True) for name in sorted(directories) if name!=path and name.startswith(prefix) and '/' not in name[len(prefix):]]
-            names += [(name,False) for name in sorted(self.files) if name.startswith(prefix) and '/' not in name[len(prefix):]]
+            if request.headers['depth']=='1':
+                names += [(name,True) for name in sorted(directories) if name!=path and name.startswith(prefix) and '/' not in name[len(prefix):]]
+                names += [(name,False) for name in sorted(self.files) if name.startswith(prefix) and '/' not in name[len(prefix):]]
             items=[]
             for name,directory in names:
                 href='/'+name+('/' if directory and name else '')
