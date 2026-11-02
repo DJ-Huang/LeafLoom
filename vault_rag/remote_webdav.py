@@ -192,9 +192,10 @@ class WebDAVSource:
         _,headers,_=self._request('HEAD',path,limit=0)
         return self._metadata(path,headers)
 
-    def _propfind(self,path,*,retry_timeouts=0):
+    def _propfind(self,path,*,retry_timeouts=0,depth=1):
+        if type(depth) is not int or depth not in (0,1):raise ValueError('Unsupported WebDAV depth')
         body=b'<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/><getlastmodified/><getetag/><getcontenttype/></prop></propfind>'
-        _,_,data=self._request('PROPFIND',path,headers={'Depth':'1','Content-Type':'application/xml'},content=body,allowed=(207,),limit=16*1024*1024,retry_timeouts=retry_timeouts)
+        _,_,data=self._request('PROPFIND',path,headers={'Depth':str(depth),'Content-Type':'application/xml'},content=body,allowed=(207,),limit=16*1024*1024,retry_timeouts=retry_timeouts)
         if b'<!DOCTYPE' in data.upper() or b'<!ENTITY' in data.upper():raise RemoteStorageError('unsafe_xml')
         try:tree=ET.fromstring(data)
         except ET.ParseError:raise RemoteStorageError('invalid_webdav_xml') from None
@@ -287,7 +288,7 @@ class WebDAVSource:
             if verified is not None and current in verified:continue
             status,_,_=self._request('MKCOL',current,allowed=(201,405,409) if verified is not None else (201,405),limit=65536)
             if status==409:raise RemoteStorageError('metadata_parent_missing')
-            if not any(item['path']==current and item['is_dir'] for item in self._propfind(current)):
+            if not any(item['path']==current and item['is_dir'] for item in self._propfind(current,depth=0)):
                 raise RemoteStorageError('metadata_directory_unavailable')
             if verified is not None:verified.add(current)
 

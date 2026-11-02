@@ -482,6 +482,23 @@ Prepared downloads use a separate 20 GiB staging budget, independently of previe
 
 ### Batch script
 
+Restart an updated LeafLoom backend before using the extended script. Preview the target group first:
+
+```sh
+python3 scripts/collect_unity_catalog.py --root /path/to/vault --group "Unity Asset" --dry-run --report preview.json
+python3 scripts/collect_unity_catalog.py --root /path/to/vault --group "Unity Asset" --start --wait --report collection.json
+```
+
+`--group` accepts an existing group ID or unique name and snapshots membership through the local attachment API, including all pages. Its scope uses stable file IDs so binding a candidate to a product does not reset progress. Only items in the configured product catalog can be collected; other servers require their own catalog configuration. An empty group produces an empty selection. Metadata belongs to a product, so associated copies outside that group also display updated facts. `--limit N` caps the selected inventory (0 means all), `--refresh` includes already-complete products, and `--delay` sets the wait between packages (0.5–60 seconds, default 1). These options require `--start` or `--dry-run`. A preview cannot be combined with `--wait`.
+
+Default collection fills missing covers, official tags and descriptions for linked products as well as matching unknown packages. Known product IDs are fetched directly. New automatic associations require one exact normalized title/publisher match; a unique title without publisher evidence creates a review proposal instead of binding a file. Existing personal fields and previously obtained nonempty facts survive an incomplete refresh. Attachment descriptions fall back to the collected source excerpt. `needs_review` results with `missing_fields` indicate incomplete metadata and are retried on a later run; these are not complete successes. Official rate limits and access challenges pause collection, including failures while fetching a cover.
+
+Transient network errors and temporary server unavailability are retried twice with a short delay; a rate limit or access challenge pauses immediately.
+
+Up to three official reads (including cover downloads) can run concurrently. Metadata changes and checkpoints are committed one item at a time; on rate limits or access challenges no new reads are started and unfinished inputs remain available when the task resumes.
+
+The authenticated local endpoints `POST /api/asset-library/enrichment/plan` and `POST /api/asset-library/enrichment/start` accept `root`, optional `item_ids` (catalog IDs), `asset_ids` (stable file IDs), `limit`, `refresh` and `delay`. When both ID filters are supplied they intersect; either empty list selects nothing. `plan` reads local inventory without store requests, metadata events or checkpoint changes. `start` persists the scope and progress; a running task rejects a different scope with a conflict. A completed or stopped task starts a new inventory when its selection scope changes; changing only the delay on an interrupted task preserves its checkpoint. The preview uses a separate endpoint so an older backend cannot silently treat a preview as a start. Legacy `action:enrich` remains supported with the default scope.
+
 [`scripts/collect_unity_catalog.py`](../scripts/collect_unity_catalog.py) starts or observes the same local collection task without browser automation. Start LeafLoom first and use its connected vault as `--root`. `--start --wait --interval 10 --report collection-report.json` starts/resumes and observes collection; `--status --report status-report.json` reads current progress. Omitting a mode also reads status. The backend persists collection progress, so stopping the script does not cancel a task. Official `succeeded` results do not imply Chinese summaries or translations are complete; inspect those fields separately.
 
 Use `--apply-chinese chinese.json --report chinese-report.json` separately from `--wait`. Input is an array of partial official-field updates:
@@ -583,3 +600,9 @@ Ordinary saves/deletions wait for the active incremental file queue before metad
 All five views use the same public commands. Use `record.update.values` for title, typed properties, attachment references and both timeline dates in one save; use `record.move` for board columns/positions. Read bodies with `vault_database(action="record")`, then use `vault_update_note` for complete-source replace, unique-text edit or append, retaining YAML and read-time versions. Use `vault_files` / `vault_files_update` for media lookup, upload, previews and delivery; no duplicate attachment store is introduced. Stable embeds are ordinary Markdown `![[path.base#view=<id>]]`.
 
 `vault_move` supports moving/renaming `.base` definitions and repairs supported Markdown references, including fixed-view embeds. `vault_delete` recycles only the `.base`, preserving the record directory. Both require an affected-file preview and confirmation token. `vault_list_records`, `vault_read_record` and `vault_restore` expose database history/trash/move recovery with existing version checks. These file-lifecycle operations do not enable arbitrary `.base` edits through the generic note-text writer.
+
+## Work hub workflow
+
+The installable work-hub Skill composes existing workspace/database and Feishu tools for conversation capture, source snapshots, explicit task writes and reports. It does not extend RAG selection or add implicit external permissions. See [Work hub API and workflow](WORK_HUB.md).
+
+For an explicitly requested local Feishu page mirror, the bundled helper can use the same user's local `lark-cli` and authenticated local file/upload APIs. Large media streams directly to the configured attachment server instead of passing through MCP's bounded temporary-file transfer. This requires access to the service host and does not add a new MCP command or permit Feishu writes.

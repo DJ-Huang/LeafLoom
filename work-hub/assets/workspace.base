@@ -1,0 +1,370 @@
+properties:
+  record_type:
+    displayName: 记录类别
+  record_id:
+    displayName: 记录 ID
+  record_key:
+    displayName: 去重键
+  work_date:
+    displayName: 工作日期
+  work_end_date:
+    displayName: 工作结束日期
+  captured_at:
+    displayName: 记录时间
+  activity_type:
+    displayName: 事项类型
+  projects:
+    displayName: 关联项目
+  candidate_projects:
+    displayName: 候选项目
+  actual_hours:
+    displayName: 实际工时（小时）
+  review_state:
+    displayName: 核对状态
+  source_provider:
+    displayName: 来源平台
+  source_kind:
+    displayName: 来源类型
+  source_id:
+    displayName: 来源标识
+  source_version:
+    displayName: 来源版本
+  source_snapshot:
+    displayName: 原文快照
+  project_id:
+    displayName: 项目 ID
+  project_sources:
+    displayName: 来源映射
+  external_updated_at:
+    displayName: 外部更新时间
+  external_due:
+    displayName: 外部原始截止时间
+  external_description:
+    displayName: 外部任务描述
+  sync_baseline:
+    displayName: 同步基线
+  pending_operation:
+    displayName: 待完成同步操作
+  source_url:
+    displayName: 来源链接
+  coverage:
+    displayName: 采集覆盖
+  aliases:
+    displayName: 项目别名
+  tags:
+    displayName: 标签
+  assignee_ids:
+    displayName: 负责人标识
+  status:
+    displayName: 任务状态
+  priority:
+    displayName: 优先级
+  due:
+    displayName: 截止日期
+  completedDate:
+    displayName: 完成日期
+  sync_state:
+    displayName: 同步状态
+  title:
+    displayName: 工作事项 / 名称
+leafloom:
+  schemaVersion: 1
+  folder: 工作中枢/数据
+  workHubVersion: 2
+  fields:
+    record_type:
+      type: select
+      options:
+      - activity
+      - project
+      - task
+      - import
+      allowCustomOptions: false
+      optionMeta:
+        activity:
+          label: 工作事项
+        project:
+          label: 项目档案
+        task:
+          label: 任务
+        import:
+          label: 采集批次
+    record_id:
+      type: text
+    record_key:
+      type: text
+    work_date:
+      type: date
+    work_end_date:
+      type: date
+    captured_at:
+      type: text
+    activity_type:
+      type: select
+      options:
+      - progress
+      - decision
+      - issue
+      - risk
+      - plan
+      allowCustomOptions: false
+      optionMeta:
+        progress:
+          label: 进展
+        decision:
+          label: 决策
+        issue:
+          label: 问题
+        risk:
+          label: 风险
+        plan:
+          label: 计划
+    projects:
+      type: multiselect
+      options: []
+      optionMeta: {}
+      allowCustomOptions: false
+    candidate_projects:
+      type: multiselect
+      options: []
+      optionMeta: {}
+      allowCustomOptions: false
+    actual_hours:
+      type: number
+    review_state:
+      type: select
+      options:
+      - ready
+      - needs_review
+      allowCustomOptions: false
+      optionMeta:
+        ready:
+          label: 已整理
+          color: green
+        needs_review:
+          label: 待确认
+          color: orange
+    source_provider:
+      type: text
+    source_kind:
+      type: select
+      options:
+      - manual
+      - document
+      - chat
+      - meeting
+      - task
+      - code
+      - feishu_doc
+      - feishu_chat
+      - feishu_meeting
+      - feishu_task
+      - gitlab
+      allowCustomOptions: false
+    source_id:
+      type: text
+    source_version:
+      type: text
+    source_snapshot:
+      type: text
+    project_id:
+      type: text
+    project_sources:
+      type: text
+    external_updated_at:
+      type: text
+    external_due:
+      type: text
+    external_description:
+      type: text
+    sync_baseline:
+      type: text
+    pending_operation:
+      type: text
+    source_url:
+      type: url
+    coverage:
+      type: select
+      options:
+      - complete
+      - partial
+      - unavailable
+      - not_generated
+      allowCustomOptions: false
+    aliases:
+      type: multiselect
+      options: []
+    tags:
+      type: multiselect
+      options: []
+    assignee_ids:
+      type: multiselect
+      options: []
+    status:
+      type: select
+      options:
+      - open
+      - in-progress
+      - done
+      allowCustomOptions: false
+      optionMeta:
+        open:
+          label: 待处理
+          color: gray
+        in-progress:
+          label: 进行中
+          color: blue
+        done:
+          label: 已完成
+          color: green
+    priority:
+      type: select
+      options:
+      - none
+      - low
+      - normal
+      - high
+      allowCustomOptions: false
+    due:
+      type: date
+    completedDate:
+      type: date
+    sync_state:
+      type: select
+      options:
+      - synced
+      - local_changes
+      - pending
+      - conflict
+      - unavailable
+      allowCustomOptions: false
+  tasks:
+    statusField: status
+    priorityField: priority
+    dueField: due
+    initialStatus: open
+    completedStatuses:
+    - done
+views:
+- type: table
+  name: 工作事项
+  order: &id001
+  - title
+  - work_date
+  - projects
+  - activity_type
+  - actual_hours
+  - review_state
+  - source_url
+  leafloom:
+    id: activities
+    detailFields: *id001
+    conditions:
+    - field: record_type
+      operator: eq
+      value: activity
+  sort:
+  - property: work_date
+    direction: DESC
+- type: table
+  name: 项目档案
+  order: &id002
+  - title
+  - project_id
+  - aliases
+  - project_sources
+  - source_url
+  leafloom:
+    id: projects
+    detailFields: *id002
+    conditions:
+    - field: record_type
+      operator: eq
+      value: project
+- type: table
+  name: 任务
+  order: &id003
+  - title
+  - projects
+  - status
+  - due
+  - assignee_ids
+  - sync_state
+  - source_url
+  leafloom:
+    id: tasks
+    detailFields: *id003
+    conditions:
+    - field: record_type
+      operator: eq
+      value: task
+- type: table
+  name: 待确认
+  order:
+  - title
+  - record_type
+  - projects
+  - work_date
+  - actual_hours
+  - review_state
+  leafloom:
+    id: review
+    detailFields:
+    - title
+    - record_type
+    - projects
+    - review_state
+    conditions:
+    - field: review_state
+      operator: eq
+      value: needs_review
+- type: table
+  name: 采集记录
+  order: &id004
+  - title
+  - captured_at
+  - source_provider
+  - source_kind
+  - coverage
+  - source_snapshot
+  leafloom:
+    id: imports
+    detailFields: *id004
+    conditions:
+    - field: record_type
+      operator: eq
+      value: import
+- type: leafloomTimeline
+  name: 工作时间线
+  order: &id005
+  - title
+  - projects
+  - activity_type
+  - actual_hours
+  leafloom:
+    id: timeline
+    detailFields: *id005
+    conditions:
+    - field: record_type
+      operator: eq
+      value: activity
+    startField: work_date
+    endField: work_end_date
+- type: leafloomBoard
+  name: 任务看板
+  order: &id006
+  - title
+  - projects
+  - priority
+  - due
+  leafloom:
+    id: task-board
+    detailFields: *id006
+    conditions:
+    - field: record_type
+      operator: eq
+      value: task
+    board: {}
+  groupBy:
+    property: status
+    direction: ASC

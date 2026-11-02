@@ -201,6 +201,58 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.request('PUT','/api/attachments/storage',json=body,expected=400)
         self.assertEqual(self.settings()['storages'][0]['base_url'],'http://100.100.1.20:8068/')
 
+    def test_account_subdirectory_reuses_password_ids_cache_and_metadata_directory(self):
+        self.configure(default=SOURCE)
+        root = str(self.root)
+        self.dav.files['Incoming/photo.png'] = b'fictional-photo'
+        self.remote.scan(root, SOURCE)
+        with self.remote.lock, self.remote._db(root) as db:
+            asset_id = db.execute('SELECT id FROM assets WHERE path=?', ('Incoming/photo.png',)).fetchone()[0]
+            db.execute('INSERT INTO aliases VALUES(?,?)', ('Legacy/photo.png', asset_id))
+        cached = self.remote.materialize(root, asset_id=asset_id)
+        credentials = dict(self.remote.credentials)
+        metadata_directory = self.remote._source(SOURCE, root)['metadata_directory']
+
+        def relocated(request):
+            self.assertEqual(request.headers['authorization'],
+                             'Basic ' + base64.b64encode(('DJ:' + SECRET).encode()).decode())
+            self.assertTrue(request.url.path.startswith('/DJ/'), request.url)
+            headers = dict(request.headers)
+            headers['authorization'] = 'Basic ' + base64.b64encode(('leafloom:' + SECRET).encode()).decode()
+            response = self.dav(httpx.Request(request.method,
+                request.url.copy_with(path=request.url.path.removeprefix('/DJ')),
+                headers=headers, content=request.read()))
+            if request.method == 'PROPFIND':
+                return httpx.Response(response.status_code,
+                    content=response.content.replace(b'<href>/', b'<href>/DJ/'))
+            return response
+
+        self.remote.transports[SOURCE] = httpx.MockTransport(relocated)
+        current = self.settings()
+        profile = current['storages'][0]
+        fields = {'storage_id', 'name', 'base_url', 'remote_root', 'upload_directory',
+                  'username', 'connection_hint', 'enabled', 'scan_roots', 'scan_paused'}
+        profile = {key: value for key, value in profile.items() if key in fields}
+        profile.update(base_url=BASE_URL + 'DJ/', username='DJ')
+        saved = self.request('PUT', '/api/attachments/storage', json={
+            'root': root, 'revision': current['revision'], 'storages': [profile],
+            'default_storage_id': SOURCE,
+        }).json()
+        self.assertTrue(saved['storages'][0]['password_saved'])
+        self.assertEqual(saved['storages'][0]['storage_id'], SOURCE)
+        self.assertEqual(saved['storages'][0]['remote_root'], '')
+        self.assertEqual(saved['storages'][0]['metadata_directory'], metadata_directory)
+        self.assertEqual(saved['default_storage_id'], SOURCE)
+        self.assertEqual(self.remote.credentials, credentials)
+        self.assertTrue(self.remote.scan(root, SOURCE)['ok'])
+        self.assertEqual(self.remote.stat(root, 'Legacy/photo.png')['asset_id'], asset_id)
+        self.dav.calls.clear()
+        self.assertEqual(self.remote.materialize(root, asset_id=asset_id), cached)
+        self.assertEqual(cached.read_bytes(), b'fictional-photo')
+        self.assertFalse(any(method == 'GET' for method, _ in self.dav.calls))
+        with self.remote.lock, self.remote._db(root) as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM assets WHERE source_id=?', (SOURCE,)).fetchone()[0], 1)
+
     def test_settings_credentials_are_private_csrf_guarded_and_atomically_replaced(self):
         saved = self.configure()
         self.assertEqual(saved['storages'][0]['base_url'], BASE_URL)

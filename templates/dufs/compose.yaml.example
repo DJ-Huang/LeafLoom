@@ -1,0 +1,28 @@
+# Import the tested patched image first. Preserve the port, network and limits.
+# These variables contain paths only. Password hashes belong in config.yaml.
+services:
+  leafloom-attachments:
+    image: leafloom/dufs:0.47.0-symlink1
+    container_name: leafloom-attachments
+    command: ['-c', '/config/config.yaml']
+    restart: always
+    ports:
+      - '8068:5000'
+    volumes:
+      - type: bind
+        source: ${DJ_ATTACHMENT_DIRECTORY:?Set the existing attachment directory}
+        target: /data/DJ
+        read_only: true
+      - type: bind
+        source: ${DJ_INCOMING_DIRECTORY:?Set the existing Incoming directory}
+        target: /data/DJ/Incoming
+      - type: bind
+        source: ${DUFS_CONFIG_DIRECTORY:?Set the private config directory}
+        target: /config
+        read_only: true
+      # For a new user, create an empty directory outside DJ's attachment tree:
+      # - type: bind
+      #   source: /absolute/path/to/users/Alice
+      #   target: /data/Alice
+    cpus: 0.5
+    mem_limit: 256m

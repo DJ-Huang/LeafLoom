@@ -52,6 +52,17 @@ class OfficialSourceTests(unittest.TestCase):
                 UnityOfficialSource._fetch('https://127.0.0.1/private',image=True)
             resolve.assert_not_called()
 
+    def test_transient_public_fetches_retry_but_rate_limits_do_not(self):
+        fetch=Mock(side_effect=[OSError('temporary'),OfficialSourceError('official_source_unavailable'),page().encode()])
+        with patch('vault_rag.unity_asset_store.time.sleep') as sleep:
+            self.assertEqual(UnityOfficialSource(fetch=fetch).product(URL)['product_id'],'unity.assetstore:123456')
+        self.assertEqual(fetch.call_count,3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list],[1,2])
+        fetch=Mock(side_effect=OfficialSourceError('official_source_rate_limited'))
+        with patch('vault_rag.unity_asset_store.time.sleep') as sleep,self.assertRaises(OfficialSourceError):
+            UnityOfficialSource(fetch=fetch).product(URL)
+        fetch.assert_called_once();sleep.assert_not_called()
+
     def test_public_entity_identity_without_jsonld_is_still_verified(self):
         entities={'Product':{'123456':{'id':'123456','name':'Fictional Room',
             'description':'A room with modular walls.','publisher':{'type':'id','id':['ProductPublisher','7']}}},
@@ -151,6 +162,8 @@ class OfficialSourceTests(unittest.TestCase):
         self.assertEqual(source.search('Fictional Room','Fictional Studio'),[alias])
         fetch.assert_called_once_with('https://assetstore.unity.com/en-US/search?q=Fictional%20Room')
         with self.assertRaises(OfficialSourceError):UnityOfficialSource(fetch=lambda url:navigation.encode()).search('Room','Studio')
+        empty='<section data-test="empty-state" aria-label="No results found"><h2>No results found</h2></section>'
+        self.assertEqual(UnityOfficialSource(fetch=lambda url:empty.encode()).search('Room','Studio'),[])
 
     def test_search_keeps_all_exact_titles_and_caches_duplicate_failed_hint(self):
         def card(identity,title):
@@ -162,13 +175,13 @@ class OfficialSourceTests(unittest.TestCase):
             'https://assetstore.unity.com/packages/package/2','https://assetstore.unity.com/packages/package/4'])
         library=Mock();library.remote=Mock();source=Mock();source.search.return_value=[]
         enrichment=AssetEnrichment(library,source=source);items=[
-            {'id':'candidate:one','files':[{'path':'Packages/Asset Store-5.x/Fictional Studio/Fictional Room.unitypackage'}]},
-            {'id':'candidate:two','files':[{'path':'Copies/Asset Store-5.x/Fictional Studio/Fictional Room.unitypackage'}]}]
-        job={'state':'running','total':2,'succeeded':0,'needs_review':0,'failed':0,'results':[]}
+            {'id':'candidate:'+str(index),'files':[{'path':'Copies/'+str(index)+'/Asset Store-5.x/Fictional Studio/Fictional Room.unitypackage'}]}
+            for index in range(5)]
+        job={'state':'running','total':5,'succeeded':0,'needs_review':0,'failed':0,'results':[]}
         with patch.object(enrichment,'_save'),patch.object(enrichment,'_review'),patch.object(enrichment.stopped,'wait',return_value=False):
             enrichment._run('/synthetic',items,job,'local',None)
         source.search.assert_called_once_with('Fictional Room','Fictional Studio');source.product.assert_not_called()
-        self.assertEqual(job['needs_review'],2);self.assertEqual(job['state'],'completed')
+        self.assertEqual(job['needs_review'],5);self.assertEqual(job['state'],'completed')
         self.assertTrue(all(result['reason']=='ambiguous_or_unavailable_product' for result in job['results']))
 
     def test_crash_resume_preserves_completed_reviews_but_retries_access_blocks_and_failures(self):
@@ -183,12 +196,12 @@ class OfficialSourceTests(unittest.TestCase):
         for state in ('interrupted','running','completed','paused'):
             with self.subTest(state=state):
                 library=Mock();library.remote=Mock();source=Mock();source.search.return_value=[]
-                library.listing.return_value={'items':[{'id':key,'files':[{'path':'Asset Store-5.x/Fictional Studio/'+key+'.unitypackage'}]} for key,_,_ in outcomes if key!='done'],'next_cursor':''}
+                library._items.return_value=[{'id':key,'files':[{'path':'Asset Store-5.x/Fictional Studio/'+key+'.unitypackage'}]} for key,_,_ in outcomes if key!='done']
                 enrichment=AssetEnrichment(library,source=source);saved=[]
                 old={'job_id':'existing','state':state,'results':[{'id':key,'state':status,'reason':reason} for key,status,reason in outcomes]}
                 with patch.object(enrichment,'status',return_value=old),patch.object(enrichment,'_save',side_effect=lambda root,job:saved.append(copy.deepcopy(job))),\
                      patch.object(enrichment,'_review'),patch.object(enrichment.stopped,'wait',return_value=False),\
-                     patch('vault_rag.unity_asset_store.threading.Thread',InlineThread):
+                     patch('vault_rag.unity_asset_store.CollectionThread',InlineThread):
                     job=enrichment.start('/synthetic')
                 recovering=state in {'interrupted','running'}
                 self.assertEqual(saved[0]['total'],7);self.assertEqual(saved[0]['succeeded'],1)

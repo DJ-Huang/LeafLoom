@@ -185,7 +185,7 @@ NAS 迁移使用 `/api/attachments/storage/migrations`：先预览候选文件�
 
 静态引用规划独立于附件列表扫描，本阶段仅改写支持的 Markdown／Wiki 引用。按用户范围，HTML 文件、项目拥有的资源和 HTML 共享资源保持原位，列为明确排除项，不改写 HTML/CSS。HTML／源码项目、独立脚本和原生工程资源按目录保留，文件字面量引用和目录前缀递归扩大共享资源保留范围；配置文件作为只读依赖源，不作为待改写笔记。保留范围内的动态代码不再单独形成全库阻止项。依赖源无法安全读取、笔记中无法解释或存在歧义的引用仍阻止迁移，不能承诺“没有发现引用”等同于“无引用”。原生二进制文件不作文本解析：其大小、mtime_ns 与 inode 纳入只读漂移快照；文本源仍用流式摘要校验，执行／回滚同时校验完整非附件路径清单，兼容旧日志的纯摘要快照。外部引用与工具不可审计，因此执行前需用户核对风险。操作说明与恢复步骤见三语使用指南的附件管理章节。
 
-服务器目录刷新使用独立的 `scan_id`／`scan_state` 生命周期，不能以健康检查的 ready 代替完成。WebDAV 207 须验证每个响应及目录自身必需属性；成功扫描后，对开始快照中未见的 ready 条目追加 HEAD，只有明确 404／410 且整批确认、来源／凭据／知识库未变，才事务标记 missing。并发上传、迁移保留键及资产修改代次保护未完成或变化的对象。missing 不删除身份、标签、别名或迁移回执，只清可重建正文与 Range 缓存；列表和容量隐藏它，旧引用读取明确返回缺失。content_generation 在标记缺失时递增，防止同路径恢复且 ETag／大小／时间相同时旧缓存或旧缩略图重新生效。扫描失败、取消、权限变化或不完整结果都不清除未见条目。
+服务器目录刷新使用独立的 `scan_id`／`scan_state` 生命周期，不能以健康检查的 ready 代替完成。WebDAV 207 须验证每个响应及目录自身必需属性；元数据上传仅用 `Depth: 0` 验证目标目录自身，目录扫描仍用 `Depth: 1`，写入回读校验不变。成功扫描后，对开始快照中未见的 ready 条目追加 HEAD，只有明确 404／410 且整批确认、来源／凭据／知识库未变，才事务标记 missing。并发上传、迁移保留键及资产修改代次保护未完成或变化的对象。missing 不删除身份、标签、别名或迁移回执，只清可重建正文与 Range 缓存；列表和容量隐藏它，旧引用读取明确返回缺失。content_generation 在标记缺失时递增，防止同路径恢复且 ETag／大小／时间相同时旧缓存或旧缩略图重新生效。扫描失败、取消、权限变化或不完整结果都不清除未见条目。
 
 `remote_ignore.py` 使用有界 UTF-8 `leafloom.ignore` 和固定首行 `# leafloom-ignore v1` 维护默认与逐层目录规则，复用 pathspec 的匹配语法。目录始终遍历以发现子级覆盖；控制文件本身永不成为附件。规则每文件最多 64 KiB／2048 行、每行 2048 字符，整扫描最多 1 MiB；只通过既有 WebDAV 只读 GET 取得，不放宽隐藏路径访问。全部规则读取和最终哈希复核成功后，才提交 excluded 状态及恢复变更。excluded 隐藏发现／统计，但保留 ID、标签、别名、缓存和旧引用读取；未见的旧路径也先匹配有效规则，被排除时不执行缺失确认或清理。MCP 扫描状态另返回 scan_excluded，确认删除阶段可返回 phase／pending_missing。
 
@@ -193,7 +193,13 @@ NAS 迁移使用 `/api/attachments/storage/migrations`：先预览候选文件�
 
 ## Unity 资源商品目录与独立下载
 
+`scripts/collect_unity_catalog.py` 通过本机鉴权端点 `POST /api/asset-library/enrichment/plan|start` 预览或启动补全，支持附件分组库存快照、数量限制、包间等待和完整商品刷新。预览仅读取本地库存，不访问商店、写资料事件或改任务断点；与启动分离，避免旧后端忽略预览选项。断点绑定选项范围，运行中的不同范围请求返回冲突。默认库存包含未关联包与缺封面／关键词／简介的已关联商品；已关联条目按官方商品 ID 取得资料，保留原关联。新自动关联仍需标题和发布者唯一精确匹配；仅标题命中保存待核对提案。缺失字段在结果 `missing_fields` 中记录并允许重试，封面限流也会暂停任务。空字段不擦除已有非空资料，个人元数据独立；`attachment_presentation.py` 在个人简介和中文摘要缺失时使用官方 `source_excerpt` 作为卡片说明。
+
 `asset_library.py` 在已配置的 WebDAV/NAS 元数据目录维护商品目录，默认 `Incoming/LeafLoomCatalog/v1`。原资源包和附件 alias 保持不变；同一官方产品 ID 可关联多份包版本／副本，未关联包作为独立 candidate。NAS 保存带父修订的不可变 JSON 事件和封面，本地 `asset-library/library.sqlite` 保存可重建查询投影、离线待同步事件与操作回执。官方信息与个人标签／分类／笔记分区；文件级个人信息不隐式提升为产品信息。并发分支保留为冲突，不采用后写覆盖。已有绑定禁止静默换服务器或元数据目录。
+
+本地元数据写入在 `BEGIN IMMEDIATE` 事务中先验证完整投影，再将新增事件的受影响实体增量投影并更新全局版本；远程拉取仍重建完整投影，保持并发分支与缺失父事件检测。单条详情只读取相关实体及文件，返回格式和可用性语义与完整库存一致。采集中断后可调整包间等待时间，其他选择范围相同时保留原断点。
+
+官方搜索、商品页和封面请求共享最多三个并发槽位；采集协调器根据完成顺序串行提交资料事件，并在每次修改前持久保存当前身份。遇到限流或访问验证时取消未开始的读取，已在途请求不再重试，未完成输入保留在断点中；限流暂停后同范围续跑保留既有结果。
 
 `asset_library_routes.py` 复用管理会话与 CSRF，提供商品列表、详情、封面、设置和显式动作。React `asset-library.tsx` 与原附件文件页共存，显示 candidate／product、真实 review 和 sync 状态；文件名版本标明推断来源，未知不补造。官方链接、实际采集成功、人工匹配确认及账号购买权属分别处理。批量官方资料采集必须显式触发，返回真实取得／待核对／失败进度；资料不可得时保留空描述与封面图标，不生成替代图片，中文摘要待整理时保持明确状态。人工 URL 提案不因标题或发布者不一致而自动绑定；确认用 candidate 当前修订绑定文件，再按返回的商品修订确认 review。
 
@@ -347,3 +353,19 @@ The complete local filename index remains available for link resolution; the leg
 Discovery traverses only selected subtrees, loads and verifies ancestor ignore rules, and confirms absence only inside the current scope. Out-of-scope records, aliases, caches and originals remain intact; catalog queries hide them without restricting exact reference resolution. Full checks bypass directory caches only inside the same scope. Raw cached receipts retain their original age and are not rewritten on reuse; known unchanged cached membership avoids per-directory manifest writers. Manifest schema initialization is reused by database identity, with future schema checks on every connection.
 
 Asset metadata persists an authorization-bound successful-pull receipt and uses the same 30-minute pull cadence across restart. Background work without pending records returns without network activity while fresh; authorized queued changes still flush promptly. Local entity projection is keyed by immutable state-event identities and hashes, avoiding repeated delete/reinsert work. Sync status distinguishes directory cache/server reads, missing-file confirmation, reference/rule checks and metadata pull/publish/project phases, with current directory and record progress.
+
+## Bundled work-hub Skill
+
+The work-hub core uses the existing database and note MCP contracts, independently of office platforms. Feishu and GitLab references are loaded only for their supported source operations; only Feishu currently implements page/media mirroring and remote task sync. The template separates source_provider from source_kind and stores external task metadata in generic fields. Existing Feishu fields are handled by its adapter with additive, version-checked updates rather than bulk migration. The offline task comparator retains its v1 contract and adds an explicit v2 protocol for provider-validated JSON due objects. Its template is a file-backed workspace; project associations are managed multiselect values, not native foreign keys. The allowlisted installer publishes all bundled resources to the user profile, validates resource status and preserves edited copies as backups. See [Work hub](WORK_HUB.md).
+
+Office preferences are stored in `<hub>/配置.md` as versioned YAML frontmatter (`work_hub.schema_version`, `work_hub.office_providers`). The hub uses `write_targets.work_hub` or the existing default. The settings API and existing MCP note tools share this file; reads do not initialize it, and updates use normal workspace/file revision and history protections. Multiple platforms are stored as a nonempty list; auto/local are exclusive singleton modes. Legacy scalar settings are read without mutation, and old scalar clients cannot overwrite multi-selections. Unsupported provider preferences do not grant connectivity or permissions.
+
+The optional page-tree mirror is an on-demand local helper, not a background service. It reads Feishu through the authenticated local CLI, writes Markdown through LeafLoom's version-checked file APIs, and streams media through the existing `/api/upload` endpoint. Server upload receipts gate permanent references. Page hashes, media/job identities and incoming conflicts live under `.vault-rag/work-hub-sync/`; no separate media backend or RAG scope is introduced.
+
+## DUFS 单容器账号目录
+
+DUFS 的账号和路径权限在附件服务器端管理；LeafLoom 继续使用已有 Basic 凭据和来源设置 API，不增加集中式用户数据库。每个账号使用独立的 `base_url` 子目录，`remote_root` 保持原值；DJ 沿用原来源 UUID、密码、上传／资料目录及本机目录状态。通过容器绑定挂载调整公开前缀，不搬动 NAS 原件，原件只读和 Incoming 可写的挂载保护保持不变。各用户使用独立的客户端状态。
+
+原版 DUFS 0.47.0 的 `allow-symlink: false` 只约束全局根目录，不能阻止根内账号间符号链接。`templates/dufs/no-symlinks.patch` 基于固定源码构建 `0.47.0-leafloom.1`，在该开关关闭时拒绝所有符号链接与路径中的链接父目录，检查读写及 COPY/MOVE 目标，并从目录列表、搜索和 ZIP 中排除链接。配置仍需关闭匿名访问，账号不获得全局 `/` 权限；本机 NAS 管理员及文件系统写入者属于可信边界，补丁不提供对恶意本机路径竞争替换的内核级隔离。
+
+`scripts/check_dufs_isolation.py` 支持本机二进制或实际 Docker 镜像，使用临时双账号、随机回环端口和虚构哈希验证访问边界；失败阻止部署。构建镜像、上游源码校验值和 Cargo 锁文件固定，实际部署保留旧配置、只读挂载状态和停止自动启动的旧容器作为恢复副本。操作见[英文](en/DUFS_MULTIUSER.md)、[中文](zh-CN/DUFS_MULTIUSER.md)和[日文](ja/DUFS_MULTIUSER.md)指南。

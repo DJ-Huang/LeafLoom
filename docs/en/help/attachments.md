@@ -10,6 +10,8 @@ The simplified servers, automatic resumable discovery and dedicated Downloads pa
 
 For remote files, open **Settings → Attachment servers**, add an address, account and password, then **Save and connect**. HTTP(S) addresses use WebDAV; `smb://host/share/subfolder` and Windows shared paths use SMB2/3. No brand selection or system mount is required. Use HTTPS for public WebDAV; existing numeric private/VPN HTTP connections remain supported. Official-client bridges still need their client and configured port to stay available.
 
+For a shared DUFS server, use your own account-specific address and credentials. See [separate accounts in one DUFS container](../DUFS_MULTIUSER.md) for administrator setup and safe DJ migration.
+
 ## Steps
 
 1. Open **Attachments**. Use the source selector for all, local, remote or an individual server. Prepare the local catalog when needed; this indexes filenames without moving files. Changing the default upload server affects future uploads only.

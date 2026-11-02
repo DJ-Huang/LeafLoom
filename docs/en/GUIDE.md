@@ -4,6 +4,14 @@
 
 Use **Settings → Skill** to install or update the bundled `wiki-search` skill.
 
+The same AI integration page also installs **work-hub** to `~/.agents/skills/work-hub/`. Start a new Codex chat with `$work-hub` to capture multi-project work, manage local tasks and create reports without connecting an office platform. Data stays in the connected vault's `工作中枢/` folder. Feishu imports, page mirroring and remote task sync are optional; GitLab activity imports remain available for selected repositories. Other office platforms are not yet integrated, but supplied text and exports can be archived. Existing Feishu records are reused and missing generic fields are added only as needed, preserving notes and sync history. Remote writes require an explicit request; hours use recorded values. See [Work hub](../WORK_HUB.md).
+
+**Choose your office platforms:** Open **Settings → Skill → Work hub settings** and check all the platforms you use, such as Feishu/Lark and Notion together. Each change saves immediately. Automatic source selection and local-only mode are separate, exclusive choices; clearing every platform restores automatic selection. DingTalk, WeCom and Notion currently save preferences only and are marked not integrated. Sign-in and permissions are separate. In chat, say “use Feishu and Notion” or “add Notion.” Both edit `工作中枢/配置.md`; old single selections are read compatibly. Multiple platforms do not expand collection scope or broadcast task writes. Reload settings after chat edits. Change the hub directory under **Templates and writing → Default write locations** without moving existing notes.
+
+Weekly and biweekly reports use `工作中枢/模板/周报模板.md` when present.
+
+To read the original journal, ask work-hub to mirror a Feishu page and its children into `工作中枢/工作目录/`. This on-demand, one-way sync uploads images/videos to the attachment server and rewrites references only after verification, including videos over 500 MB. It preserves local edits and copies of removed source pages, with checkpoints for recovery. Requires local LeafLoom, Python 3.11+ and an authenticated `lark-cli`; see [Work hub](../WORK_HUB.md).
+
 [English](GUIDE.md) · [中文](../zh-CN/GUIDE.md) · [日本語](../ja/GUIDE.md)
 
 [All documentation](../README.md)
@@ -71,6 +79,8 @@ Only `.md` and `.txt` are indexed. Images, videos and other attachments remain b
 4. Open a search result to read the original evidence. Check its context and verification status before relying on it.
 5. Explore **Knowledge graph**. Search a note, filter folders, and follow nearby connections. A backlink needs another note that links to this one.
 6. The home checklist is optional. Mark steps complete, hide it, or reopen it with **Getting started** in the sidebar.
+
+Right-click any folder or filename in the top path bar, including **Vault**, to choose **Copy relative path** or **Copy absolute path**. The relative path starts at the connected vault root (`.` for the root); the absolute path uses the service computer's native path separators. Focus a path and press **Shift+F10** for the same menu, or click the current filename/folder name. Copying an ancestor uses that ancestor's path.
 
 ![Reading](../../assets/screenshots/en/03-reading.png)
 ![Knowledge search](../../assets/screenshots/en/04-search.png)
@@ -204,9 +214,13 @@ Background scan notifications are coalesced while a list request is in progress,
 
 Open **Settings → Attachment servers** and add a connection. Enter the address, account and password, then **Save and connect**. WebDAV uses an HTTP(S) service address; SMB uses `smb://host/share/subfolder` or a Windows shared-folder path. SMB2/3 uses explicit account/password authentication, not a system mount or the current OS login. DFS referrals and reparse paths are not followed. Public WebDAV requires HTTPS; numeric private/local HTTP addresses remain supported. No server brand is required. Existing profiles, roots, upload directories and metadata bindings are retained.
 
+Use separate accounts on a shared DUFS server: each person connects to their own account URL. Administrators can follow the [single-container DUFS setup and DJ migration guide](DUFS_MULTIUSER.md); it includes the strict symlink patch, password preservation and rollback.
+
 Each card offers **Edit connection**, enable/disable and **Use for new attachments**. The first server in a new configuration becomes the upload destination. Changing that destination affects future uploads only; it does not move originals or change an existing metadata-library binding. Notes stay in the local vault. New servers use `Incoming` for uploads and `Incoming/LeafLoomCatalog/v1` for metadata. Preview cache and upload-queue limits retain their existing values. Download capacity remains in Download settings.
 
 After credential recovery, directory discovery respects the saved due time and a short startup grace; a reconnection may request an earlier check. Later checks run 30 minutes after completion. Automatic scans run one server at a time. Metadata, groups, covers and attachment references synchronize in the background; originals download only when requested. A failed/incomplete scan preserves existing records. Authentication failures pause until credentials are updated. Sync stops when the app fully exits and resumes on its next launch. Desktop passwords remain system-encrypted; browser passwords remain in backend process memory. Existing official-client bridges retain their connection behavior and still require the official client to remain available.
+
+For WebDAV metadata uploads, the destination check reads only the directory itself, so a large existing cover directory does not need to be listed for each upload. Uploaded data is still read back and verified before it is marked synchronized.
 
 Discovery now journals each completed directory on this device. After a network interruption or app restart, the unfinished pass reuses those directories and continues the remaining work. Later automatic checks reuse directory listings for 30 minutes and independently revalidate expired child directories, even when their parent is cached. Each server uses at most two directory readers. The Sync status dialog identifies the initial, incremental or resumed pass and shows how many directories were reused. **Sync now** uses this same cache; **Check all directories** bypasses it to verify additions, changes and deletions immediately without downloading originals. Failed passes never mark files missing; deletion still needs a completed pass and a not-found check. Changing the vault, address, account, credential version or metadata namespace invalidates the old checkpoint. A first baseline is necessary after upgrading from a version without directory checkpoints.
 
@@ -255,12 +269,22 @@ Some official pages omit JSON-LD. Collection can still read the official structu
 With LeafLoom running and the catalog configured, run the repository's [collection script](../../scripts/collect_unity_catalog.py) against the same vault:
 
 ```sh
+python3 scripts/collect_unity_catalog.py --root /path/to/vault --group "Unity Asset" --dry-run --report /path/to/preview.json
+python3 scripts/collect_unity_catalog.py --root /path/to/vault --group "Unity Asset" --start --wait --report /path/to/collection-report.json
 python3 scripts/collect_unity_catalog.py --root /path/to/vault --start --wait --interval 10 --report /path/to/collection-report.json
 python3 scripts/collect_unity_catalog.py --root /path/to/vault --status --report /path/to/status-report.json
 python3 scripts/collect_unity_catalog.py --root /path/to/vault --apply-chinese /path/to/chinese.json --report /path/to/chinese-report.json
 ```
 
 The script controls the local backend; it does not automate a browser, use store-account cookies or download package originals. Collection resumes the backend's saved progress, preserving completed review-needed judgments after interruption while retrying blocked access and network failures. Background synchronization coalesces repeated scans and resumes pending uploads before checking the remote catalog when a verified checkpoint is available; first-time or explicit synchronization still checks the remote catalog first. Stopping the monitor with Ctrl-C does not cancel the backend task. `succeeded` counts obtained official facts, not completed Chinese summaries; check Chinese summaries and translation status separately. A reported `legacy_unresolved` count is unverified work from an older checkpoint without sufficient identity data, not a success count; reconcile complete progress with the package inventory. Chinese input updates only supplied official translation fields and preserves personal tags and notes. See the [input format and connection options](../MCP.md#batch-script).
+
+Update and restart LeafLoom before using the batch options. `--dry-run` previews local inventory without contacting the store or submitting metadata changes. `--group` accepts a group ID or unique name; omit it to use the configured product catalog. An empty group selects nothing. Default collection includes unmatched packages and linked products missing a cover, tags or description. Linked products use their recorded official ID; automatic new associations require a unique exact title/publisher match. Title-only matches produce a review proposal. `--limit 100` limits a trial batch; `--refresh` also refreshes complete products; `--delay 2` waits two seconds between packages. Product metadata is shared by all copies of that product, including copies outside the selected group. Cover, tag or description gaps remain `needs_review` with `missing_fields`; they are retried on the next run. Rate limits or access challenges pause the task. Attachment cards display the collected source excerpt when no personal description or Chinese summary is available; personal metadata stays intact.
+
+Temporary network and server errors are retried twice with a short delay. Rate limits and access challenges pause immediately.
+
+When resuming an interrupted collection, `--delay` can be changed from 0.5 to 60 seconds without discarding completed results, provided the selected items, group and refresh settings remain the same. Local edits update the affected catalog projection instead of rebuilding every entry; remote reconciliation and conflict checks remain in place.
+
+Collection reads up to three official pages or covers concurrently, then writes results one at a time as lookups finish. Rate limits and access challenges stop new requests; requests already in flight may finish, while unfinished items remain in the checkpoint for a later resume.
 
 ### File-operation recovery
 

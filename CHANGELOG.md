@@ -3,6 +3,31 @@
 [English](CHANGELOG.md) · [中文](docs/zh-CN/CHANGELOG.md) · [日本語](docs/ja/CHANGELOG.md)
 
 ## Unreleased
+- Allow multiple office platforms in work-hub settings and chat, with immediate checkbox saves, exclusive automatic/local-only modes and backward-compatible reading of single selections. Preserve multi-selections against old scalar clients.
+
+- Add work-hub office preferences in Settings and chat, backed by the same version-checked configuration note. Support automatic/local-only defaults, preserve custom hub folders, and clearly distinguish unimplemented platform preferences from connected integrations.
+
+- Decouple work-hub work records, local tasks and reports from office platforms; load optional Feishu/GitLab adapters on demand, use generic source/task fields with legacy Feishu compatibility, and add a backward-compatible v2 task comparison protocol.
+
+- Mirror selected Feishu pages and child pages into a local work directory through work-hub, with verified attachment-server storage for images/videos, streaming large uploads, resumable checkpoints and protection for local edits.
+
+- Add the installable `work-hub` Skill with a file-backed multi-project workspace, Feishu source archiving, task conflict comparison and report workflows; Settings installs and updates its complete bundle in the user's `.agents/skills` directory.
+- Let work-hub use a workspace weekly report template for weekly and biweekly reports when available.
+
+- Add a menu to each folder and filename in the top path bar to copy its vault-relative or absolute path, with keyboard access and clipboard feedback.
+
+- Fetch up to three official Unity pages or covers concurrently while committing matches serially; stop starting new requests on rate limits or access challenges and preserve unfinished work for recovery.
+
+- Speed up Unity catalog collection by projecting local changes per item and reading only the requested item; interrupted collections can resume with a different delay without losing their checkpoint.
+
+- Avoid repeatedly listing entire WebDAV cover directories when verifying metadata upload folders; uploaded objects still require exact readback before synchronization is acknowledged.
+
+- Retry transient Unity Asset Store connection failures with a short backoff, and recognize the official empty-search page as a valid no-match result.
+
+- Extend the Unity Asset Store collection script with group-scoped previews, batch limits, pacing and refreshes of linked products missing covers, tags or descriptions. Preserve known facts and personal metadata, propose title-only matches for review, report partial results truthfully and display collected excerpts in attachment cards.
+
+
+- Add a reproducible DUFS symlink-isolation patch, a disposable multi-account verification harness and three-language single-container setup/migration guides; preserve existing passwords, attachment identities and read-only originals.
 
 ## 0.1.6 — 2026-10-30
 

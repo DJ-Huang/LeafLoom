@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Start/observe LeafLoom's local collector; never fetch websites or packages."""
+"""Preview, start or observe official Unity Asset Store metadata completion."""
 from __future__ import annotations
 
 import argparse
@@ -112,8 +112,43 @@ def redacted_job(value):
     result.update({key:value[key] for key in ('total','succeeded','needs_review','failed','legacy_unresolved') if type(value.get(key))is int and value[key]>=0})
     result['results']=[]
     for item in value.get('results',[]):
-        if isinstance(item,dict):result['results'].append({key:_code(item[key]) for key in ('id','state','reason','product_id') if key in item})
+        if isinstance(item,dict):
+            entry={key:_code(item[key]) for key in ('id','state','reason','product_id','proposed_product_id') if key in item}
+            if isinstance(item.get('missing_fields'),list):entry['missing_fields']=[key for key in item['missing_fields'] if key in {'cover','tags','description'}]
+            result['results'].append(entry)
     return result
+
+
+def group_items(api,root,group_name):
+    """Freeze membership from the existing attachment API; empty stays empty."""
+    groups=api.request('GET','/api/attachment-groups?'+urlencode({'root':root})).get('groups',[])
+    matches=[group for group in groups if group.get('id')==group_name]
+    if not matches:matches=[group for group in groups if group.get('name')==group_name]
+    if len(matches)!=1:raise CollectionError('group_not_unique','Use an existing group ID or a unique group name.')
+    assets=set();cursor=''
+    while True:
+        page=api.request('GET','/api/attachments?'+urlencode({'root':root,'group_id':matches[0]['id'],'limit':500,'cursor':cursor}))
+        assets.update(item['asset_id'] for item in page.get('items',[]) if item.get('asset_id'))
+        following=page.get('next_cursor','')
+        if not following:break
+        if following==cursor:raise CollectionError('invalid_pagination','Attachment pagination did not advance.')
+        cursor=following
+    return sorted(assets)
+
+
+def batch_options(arguments,api,root):
+    options={'root':root,'limit':arguments.limit,'refresh':arguments.refresh,'delay':arguments.delay}
+    if arguments.group:options['asset_ids']=group_items(api,root,arguments.group)
+    return options
+
+
+def preview_report(value):
+    if not isinstance(value,dict) or value.get('state')!='preview' or not isinstance(value.get('items'),list):
+        raise CollectionError('invalid_collection_preview','The local API returned an invalid collection preview; update and restart LeafLoom.')
+    return {'mode':'preview','state':'preview',
+            **{key:value[key] for key in ('total','candidates','products') if type(value.get(key))is int and value[key]>=0},
+            'results':[{'id':_code(item.get('id','')),'missing_fields':[key for key in item.get('missing_fields',[]) if key in {'cover','tags','description'}]}
+                       for item in value['items'] if isinstance(item,dict)]}
 
 
 def atomic_report(path,value):
@@ -199,9 +234,14 @@ def parser():
     result.add_argument('--api-url',default='http://127.0.0.1:18080',help='Bare loopback IP origin; no path or trailing slash.')
     result.add_argument('--token-file',type=Path,default=default_token_file(),help='Local private API token file; never written to reports.')
     mode=result.add_mutually_exclusive_group()
-    mode.add_argument('--start',action='store_true',help='Start/resume the backend enrichment task.')
+    mode.add_argument('--start',action='store_true',help='Match unknown packages and fill missing official metadata, including linked products.')
+    mode.add_argument('--dry-run',action='store_true',help='Preview the local inventory without store requests or metadata writes.')
     mode.add_argument('--status',action='store_true',help='Read current collection status (the default).')
     mode.add_argument('--apply-chinese',type=Path,metavar='FILE',help='Apply validated partial Chinese metadata serially.')
+    result.add_argument('--group',help='Restrict collection to an attachment group ID or unique name.')
+    result.add_argument('--limit',type=int,default=0,help='Maximum items in this batch; 0 means all (default).')
+    result.add_argument('--refresh',action='store_true',help='Also refresh linked products whose metadata is already complete.')
+    result.add_argument('--delay',type=float,default=1,help='Seconds between packages, from 0.5 through 60 (default: 1).')
     result.add_argument('--wait',action='store_true',help='Poll collection status until completed, paused, interrupted or failed.')
     result.add_argument('--interval',type=float,default=10,help='Polling seconds, from 1 through 60 (default: 10).')
     result.add_argument('--report',type=Path,help='Atomically save redacted JSON results and summary (mode 0600).')
@@ -212,12 +252,17 @@ def main(argv=None):
     arguments=parser().parse_args(argv);report={};report_path=None
     def publish(value):
         if report_path:atomic_report(report_path,value)
-        summary={key:value[key] for key in ('mode','state','total','succeeded','needs_review','failed','applied','unchanged') if key in value}
+        summary={key:value[key] for key in ('mode','state','total','candidates','products','succeeded','needs_review','failed','applied','unchanged') if key in value}
         if 'job' in value:summary.update({key:item for key,item in value['job'].items() if key!='results'})
         print(json.dumps(summary,ensure_ascii=False),flush=True)
     try:
         origin=api_origin(arguments.api_url)
         if not 1<=arguments.interval<=60:raise CollectionError('invalid_interval','Use --interval between 1 and 60 seconds.')
+        if not 0<=arguments.limit<=100000:raise CollectionError('invalid_limit','Use --limit between 0 and 100000.')
+        if not .5<=arguments.delay<=60:raise CollectionError('invalid_delay','Use --delay between 0.5 and 60 seconds.')
+        if (arguments.group or arguments.limit or arguments.refresh or arguments.delay!=1) and not (arguments.start or arguments.dry_run):
+            raise CollectionError('invalid_mode','Collection options require --start or --dry-run.')
+        if arguments.dry_run and arguments.wait:raise CollectionError('invalid_mode','A preview finishes immediately; do not combine --dry-run with --wait.')
         if arguments.apply_chinese and arguments.wait:raise CollectionError('invalid_mode','--wait tracks collection; do not combine it with --apply-chinese.')
         root=str(Path(arguments.root).expanduser().resolve())
         token_path=arguments.token_file.expanduser()
@@ -234,7 +279,10 @@ def main(argv=None):
         api=LocalAPI(origin,token)
         if entries is not None:
             apply_chinese(api,root,entries,report,publish);return 0
-        job=api.request('POST','/api/asset-library/actions',{'root':root,'action':'enrich'}) if arguments.start else api.status(root).get('enrichment')
+        if arguments.dry_run:
+            report.update(preview_report(api.request('POST','/api/asset-library/enrichment/plan',batch_options(arguments,api,root))))
+            publish(report);return 0
+        job=api.request('POST','/api/asset-library/enrichment/start',batch_options(arguments,api,root)) if arguments.start else api.status(root).get('enrichment')
         while True:
             report.update(mode='collection',job=redacted_job(job));publish(report)
             if not arguments.wait:return 0

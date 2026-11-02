@@ -137,7 +137,8 @@ class AssetLibraryApiTests(unittest.TestCase):
         with patch.object(service.source,'search',return_value=[url]) as search,patch.object(service.source,'product',return_value=data) as product:
             service._run(str(self.root),items,job,'local',None)
         self.assertEqual(job['state'],'completed',job)
-        self.assertEqual(job['succeeded'],2,job)
+        self.assertEqual(job['needs_review'],2,job)
+        self.assertTrue(all(result['missing_fields']==['cover','tags','description'] for result in job['results']))
         self.assertEqual(search.call_count,1)
         self.assertEqual(product.call_count,1)
         result=self.app.state.asset_library.detail(str(self.root),'123456')
