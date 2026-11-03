@@ -2917,5 +2917,20 @@
   "wh.mode": "出典モード",
   "wh.modeHelp": "自動選択・ローカルのみと、下の製品選択は同時に使用できません。",
   "Automatic and local modes cannot be combined with office platforms": "自動選択・ローカルのみと他の製品は同時に選択できません。",
-  "Multiple office platforms are configured; reload the updated settings": "複数の製品が設定されています。新版の設定を再読み込みしてください。元の選択は保持しました。"
+  "Multiple office platforms are configured; reload the updated settings": "複数の製品が設定されています。新版の設定を再読み込みしてください。元の選択は保持しました。",
+  "site.more_eyebrow": "さらに広がる使い方",
+  "site.more_title": "知識を、創作と協働へ。",
+  "site.workhub_title": "WorkHub Skill",
+  "site.workhub_body": "複数プロジェクトのローカルタスクとレポートをまとめます。必要に応じて Feishu を接続し、指定した GitLab リポジトリから作業情報を取得できます。各サービスの設定と認証が必要です。",
+  "site.studio_title": "デザインスタジオ",
+  "site.studio_body": "ビジュアルキャンバスでゲーム UI やウェブ画面を制作。ページ、レイヤー、素材を整理し、アニメーションやスクリプトを加えて HTML に書き出せます。編集は元に戻す・やり直すことができます。",
+  "site.attachments_title": "添付ファイル管理",
+  "site.attachments_body": "ローカルと設定済みサーバーのファイルをまとめて閲覧。名前やパスで検索し、グループ分け、プレビュー、アップロード、ダウンロードができます。AI 素材検索に使うグループも選べます。",
+  "site.learn_more": "使い方を見る",
+  "site.workhub_alt": "ワークハブの出典とオフィス製品の設定。未連携の製品は明示されています",
+  "site.workhub_caption": "ワークハブ設定画面",
+  "site.studio_alt": "空白プロジェクトと内蔵テンプレートを表示するデザインスタジオの新規作成画面",
+  "site.studio_caption": "新規デザインプロジェクトと内蔵テンプレート",
+  "site.attachments_alt": "添付ファイル管理に表示されたデモ画像と素材",
+  "site.attachments_caption": "内蔵テンプレートの素材を使ったデモ添付ライブラリ"
 }

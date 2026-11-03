@@ -2917,5 +2917,20 @@
   "wh.mode": "来源模式",
   "wh.modeHelp": "自动选择、仅本地与下方的软件多选互斥。",
   "Automatic and local modes cannot be combined with office platforms": "自动选择或仅本地模式不能与其他软件同时选择。",
-  "Multiple office platforms are configured; reload the updated settings": "已配置多个办公软件，请重新载入新版设置后修改，原选择已保留。"
+  "Multiple office platforms are configured; reload the updated settings": "已配置多个办公软件，请重新载入新版设置后修改，原选择已保留。",
+  "site.more_eyebrow": "更多工作方式",
+  "site.more_title": "从知识到创作，再到协作。",
+  "site.workhub_title": "WorkHub Skill",
+  "site.workhub_body": "汇集多个项目的本地任务与工作报告；按需连接飞书，并从指定 GitLab 仓库获取工作信息。相关服务需要先配置和授权。",
+  "site.studio_title": "设计工作台",
+  "site.studio_body": "在可视化画布上制作游戏界面或网页，组织页面、图层和素材，添加动画与脚本，完成后导出 HTML。设计修改可撤销、重做。",
+  "site.attachments_title": "附件管理",
+  "site.attachments_body": "集中浏览本地和已配置服务器上的文件，按名称或路径查找、分组、预览、上传和下载。可选择分组供 AI 素材检索。",
+  "site.learn_more": "查看使用指南",
+  "site.workhub_alt": "工作中枢的来源与办公软件设置，未接入的平台明确标注",
+  "site.workhub_caption": "工作中枢配置界面",
+  "site.studio_alt": "设计工作台的新建项目窗口，显示空白项目和内置模板",
+  "site.studio_caption": "新建设计项目与内置模板",
+  "site.attachments_alt": "附件管理中列出的演示图片和素材",
+  "site.attachments_caption": "使用内置模板素材的演示附件库"
 }

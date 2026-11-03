@@ -2917,5 +2917,20 @@
   "wh.mode": "Source mode",
   "wh.modeHelp": "Automatic and local-only modes are exclusive of the platform selections below.",
   "Automatic and local modes cannot be combined with office platforms": "Automatic or local-only mode cannot be combined with other platforms.",
-  "Multiple office platforms are configured; reload the updated settings": "Multiple platforms are configured. Reload the updated settings before editing; existing selections were preserved."
+  "Multiple office platforms are configured; reload the updated settings": "Multiple platforms are configured. Reload the updated settings before editing; existing selections were preserved.",
+  "site.more_eyebrow": "More ways to work",
+  "site.more_title": "From knowledge to creation and collaboration.",
+  "site.workhub_title": "WorkHub Skill",
+  "site.workhub_body": "Bring together local tasks and reports across projects. Connect Feishu when needed and retrieve work information from specified GitLab repositories; those services require configuration and authorization.",
+  "site.studio_title": "Design Studio",
+  "site.studio_body": "Create game interfaces or web layouts on a visual canvas. Organize pages, layers and assets, add animation and scripts, then export HTML. Design changes support undo and redo.",
+  "site.attachments_title": "Attachment management",
+  "site.attachments_body": "Browse local files and configured servers in one place. Find files by name or path, organize them into groups, preview, upload and download. Choose which groups are available for AI asset search.",
+  "site.learn_more": "Read the guide",
+  "site.workhub_alt": "Work hub source and office platform settings, with unintegrated platforms labeled",
+  "site.workhub_caption": "Work hub settings",
+  "site.studio_alt": "The Design Studio new project dialog showing a blank project and built-in templates",
+  "site.studio_caption": "New design project and built-in templates",
+  "site.attachments_alt": "Demo images and assets listed in attachment management",
+  "site.attachments_caption": "Demo attachment library using built-in template assets"
 }

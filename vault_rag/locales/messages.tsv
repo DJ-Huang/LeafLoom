@@ -2957,3 +2957,18 @@ wh.mode|来源模式|Source mode|出典モード
 wh.modeHelp|自动选择、仅本地与下方的软件多选互斥。|Automatic and local-only modes are exclusive of the platform selections below.|自動選択・ローカルのみと、下の製品選択は同時に使用できません。
 Automatic and local modes cannot be combined with office platforms|自动选择或仅本地模式不能与其他软件同时选择。|Automatic or local-only mode cannot be combined with other platforms.|自動選択・ローカルのみと他の製品は同時に選択できません。
 Multiple office platforms are configured; reload the updated settings|已配置多个办公软件，请重新载入新版设置后修改，原选择已保留。|Multiple platforms are configured. Reload the updated settings before editing; existing selections were preserved.|複数の製品が設定されています。新版の設定を再読み込みしてください。元の選択は保持しました。
+site.more_eyebrow|更多工作方式|More ways to work|さらに広がる使い方
+site.more_title|从知识到创作，再到协作。|From knowledge to creation and collaboration.|知識を、創作と協働へ。
+site.workhub_title|WorkHub Skill|WorkHub Skill|WorkHub Skill
+site.workhub_body|汇集多个项目的本地任务与工作报告；按需连接飞书，并从指定 GitLab 仓库获取工作信息。相关服务需要先配置和授权。|Bring together local tasks and reports across projects. Connect Feishu when needed and retrieve work information from specified GitLab repositories; those services require configuration and authorization.|複数プロジェクトのローカルタスクとレポートをまとめます。必要に応じて Feishu を接続し、指定した GitLab リポジトリから作業情報を取得できます。各サービスの設定と認証が必要です。
+site.studio_title|设计工作台|Design Studio|デザインスタジオ
+site.studio_body|在可视化画布上制作游戏界面或网页，组织页面、图层和素材，添加动画与脚本，完成后导出 HTML。设计修改可撤销、重做。|Create game interfaces or web layouts on a visual canvas. Organize pages, layers and assets, add animation and scripts, then export HTML. Design changes support undo and redo.|ビジュアルキャンバスでゲーム UI やウェブ画面を制作。ページ、レイヤー、素材を整理し、アニメーションやスクリプトを加えて HTML に書き出せます。編集は元に戻す・やり直すことができます。
+site.attachments_title|附件管理|Attachment management|添付ファイル管理
+site.attachments_body|集中浏览本地和已配置服务器上的文件，按名称或路径查找、分组、预览、上传和下载。可选择分组供 AI 素材检索。|Browse local files and configured servers in one place. Find files by name or path, organize them into groups, preview, upload and download. Choose which groups are available for AI asset search.|ローカルと設定済みサーバーのファイルをまとめて閲覧。名前やパスで検索し、グループ分け、プレビュー、アップロード、ダウンロードができます。AI 素材検索に使うグループも選べます。
+site.learn_more|查看使用指南|Read the guide|使い方を見る
+site.workhub_alt|工作中枢的来源与办公软件设置，未接入的平台明确标注|Work hub source and office platform settings, with unintegrated platforms labeled|ワークハブの出典とオフィス製品の設定。未連携の製品は明示されています
+site.workhub_caption|工作中枢配置界面|Work hub settings|ワークハブ設定画面
+site.studio_alt|设计工作台的新建项目窗口，显示空白项目和内置模板|The Design Studio new project dialog showing a blank project and built-in templates|空白プロジェクトと内蔵テンプレートを表示するデザインスタジオの新規作成画面
+site.studio_caption|新建设计项目与内置模板|New design project and built-in templates|新規デザインプロジェクトと内蔵テンプレート
+site.attachments_alt|附件管理中列出的演示图片和素材|Demo images and assets listed in attachment management|添付ファイル管理に表示されたデモ画像と素材
+site.attachments_caption|使用内置模板素材的演示附件库|Demo attachment library using built-in template assets|内蔵テンプレートの素材を使ったデモ添付ライブラリ

@@ -57,3 +57,7 @@ Reusable sources are in `assets/promo/recordings/`: five WebM takes and `take.js
 ## 日本語
 
 3 言語のウェルカム、ホーム、閲覧、検索、グラフ、AI、検索範囲と、各言語のモバイル画面で計 24 枚です。独立したポートと一時設定、架空の資料を使い、AI の外部呼び出しを無効にします。環境パスを画面上で隠してから撮影します。動画は英語のみ、横向き 35 秒。実際の入力、検索、原文表示、グラフ操作、AI の変更確認、検索範囲の保存を収録しています。各シーンの冒頭で一度だけズームし、0.6 秒後はカメラを固定します。ブランドカードと章タイトルも固定し、クリック表示、トランジション、オリジナルのリズム音楽を加えています。ナレーションはありません。
+
+## Website feature screenshots
+
+The website's `showcase-{workhub,studio,attachments}.jpg` images show the actual application in Chinese, English and Japanese. They depict the Work hub settings, the Design Studio template picker, and the attachment library using the repository's built-in template previews in an isolated demo vault. The Work hub image is a crop of its settings panel to exclude local installation paths; no connection to an external service is implied. The Design Studio image shows the template picker rather than the editing canvas, which could not be rendered by the cloud browser's separate project origin. No user vault or credentials are included.
