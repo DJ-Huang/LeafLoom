@@ -2966,3 +2966,9 @@ site.studio_body|在可视化画布上制作游戏界面或网页，组织页面
 site.attachments_title|附件管理|Attachment management|添付ファイル管理
 site.attachments_body|集中浏览本地和已配置服务器上的文件，按名称或路径查找、分组、预览、上传和下载。可选择分组供 AI 素材检索。|Browse local files and configured servers in one place. Find files by name or path, organize them into groups, preview, upload and download. Choose which groups are available for AI asset search.|ローカルと設定済みサーバーのファイルをまとめて閲覧。名前やパスで検索し、グループ分け、プレビュー、アップロード、ダウンロードができます。AI 素材検索に使うグループも選べます。
 site.learn_more|查看使用指南|Read the guide|使い方を見る
+site.workhub_alt|工作中枢的来源与办公软件设置，未接入的平台明确标注|Work hub source and office platform settings, with unintegrated platforms labeled|ワークハブの出典とオフィス製品の設定。未連携の製品は明示されています
+site.workhub_caption|工作中枢配置界面|Work hub settings|ワークハブ設定画面
+site.studio_alt|设计工作台的新建项目窗口，显示空白项目和内置模板|The Design Studio new project dialog showing a blank project and built-in templates|空白プロジェクトと内蔵テンプレートを表示するデザインスタジオの新規作成画面
+site.studio_caption|新建设计项目与内置模板|New design project and built-in templates|新規デザインプロジェクトと内蔵テンプレート
+site.attachments_alt|附件管理中列出的演示图片和素材|Demo images and assets listed in attachment management|添付ファイル管理に表示されたデモ画像と素材
+site.attachments_caption|使用内置模板素材的演示附件库|Demo attachment library using built-in template assets|内蔵テンプレートの素材を使ったデモ添付ライブラリ

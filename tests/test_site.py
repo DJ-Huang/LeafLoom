@@ -51,6 +51,8 @@ class WebsiteTests(unittest.TestCase):
                 self.assertNotIn("{{", content)
                 self.assertIn('more-feature-grid', content)
                 self.assertIn('WorkHub Skill', content)
+                for shot in ('workhub', 'studio', 'attachments'):
+                    self.assertIn(f'/LeafLoom/assets/{lang}/showcase-{shot}.jpg', content)
                 self.assertIn(f'/LeafLoom/docs/{lang}/design-studio/', content)
                 self.assertIn(f'/LeafLoom/docs/{lang}/attachments/', content)
                 self.assertIn('LeafLoom/blob/main/work-hub/SKILL.md', content)

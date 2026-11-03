@@ -2926,5 +2926,11 @@
   "site.studio_body": "Create game interfaces or web layouts on a visual canvas. Organize pages, layers and assets, add animation and scripts, then export HTML. Design changes support undo and redo.",
   "site.attachments_title": "Attachment management",
   "site.attachments_body": "Browse local files and configured servers in one place. Find files by name or path, organize them into groups, preview, upload and download. Choose which groups are available for AI asset search.",
-  "site.learn_more": "Read the guide"
+  "site.learn_more": "Read the guide",
+  "site.workhub_alt": "Work hub source and office platform settings, with unintegrated platforms labeled",
+  "site.workhub_caption": "Work hub settings",
+  "site.studio_alt": "The Design Studio new project dialog showing a blank project and built-in templates",
+  "site.studio_caption": "New design project and built-in templates",
+  "site.attachments_alt": "Demo images and assets listed in attachment management",
+  "site.attachments_caption": "Demo attachment library using built-in template assets"
 }
