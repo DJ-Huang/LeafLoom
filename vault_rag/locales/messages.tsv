@@ -2958,7 +2958,7 @@ wh.modeHelp|自动选择、仅本地与下方的软件多选互斥。|Automatic 
 Automatic and local modes cannot be combined with office platforms|自动选择或仅本地模式不能与其他软件同时选择。|Automatic or local-only mode cannot be combined with other platforms.|自動選択・ローカルのみと他の製品は同時に選択できません。
 Multiple office platforms are configured; reload the updated settings|已配置多个办公软件，请重新载入新版设置后修改，原选择已保留。|Multiple platforms are configured. Reload the updated settings before editing; existing selections were preserved.|複数の製品が設定されています。新版の設定を再読み込みしてください。元の選択は保持しました。
 site.more_eyebrow|更多工作方式|More ways to work|さらに広がる使い方
-site.more_title|从知识到创作，再到协作。|From knowledge to creation and collaboration.|知識から、創作とコラボレーションへ。
+site.more_title|从知识到创作，再到协作。|From knowledge to creation and collaboration.|知識を、創作と協働へ。
 site.workhub_title|WorkHub Skill|WorkHub Skill|WorkHub Skill
 site.workhub_body|汇集多个项目的本地任务与工作报告；按需连接飞书，并从指定 GitLab 仓库获取工作信息。相关服务需要先配置和授权。|Bring together local tasks and reports across projects. Connect Feishu when needed and retrieve work information from specified GitLab repositories; those services require configuration and authorization.|複数プロジェクトのローカルタスクとレポートをまとめます。必要に応じて Feishu を接続し、指定した GitLab リポジトリから作業情報を取得できます。各サービスの設定と認証が必要です。
 site.studio_title|设计工作台|Design Studio|デザインスタジオ
