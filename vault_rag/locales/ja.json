@@ -2952,5 +2952,11 @@
   "design.deselectPages": "すべて選択解除",
   "design.ungroupedPages": "未分類",
   "design.movePageToFolder": "フォルダーへ移動",
-  "design.managePageFolder": "フォルダーを整理：{name}"
+  "design.managePageFolder": "フォルダーを整理：{name}",
+  "document.outline": "このページの目次",
+  "document.showOutline": "目次を開く",
+  "document.hideOutline": "目次を閉じる",
+  "document.emptyOutline": "見出しはまだありません。追加するとここに表示されます。",
+  "document.expandSection": "「{title}」の下位見出しを開く",
+  "document.collapseSection": "「{title}」の下位見出しを閉じる"
 }

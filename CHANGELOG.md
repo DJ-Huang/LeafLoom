@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Add a borderless left-hand outline for Markdown notes: collapse/expand in place, fold individual heading subtrees by clicking the title or arrow, follow the current section in blue, jump near the top in page/source modes, update headings while editing and use an overlay in narrow panes.
+
 - Group the Design Studio page list into collapsible folders with page counts. Add or move multiple pages, rename/merge folders and ungroup pages using existing page groups and undo history.
 
 - Design Studio’s left layers panel and right properties panel can now be collapsed and restored independently in Edit and Compare modes, preserving panel state.

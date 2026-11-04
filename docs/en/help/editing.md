@@ -18,6 +18,8 @@ Hover beside a block to insert with **+**, or use its handle to convert, duplica
 
 Files remain ordinary Markdown; unchanged blocks and document properties retain their original source. The page and source views share undo history. Equations and Mermaid stay rendered and have dedicated editing panels. Complex or unsupported content is preserved for display and can be located in source. Changing the interface language keeps the editor and its history. Tables use simple Markdown structures, without merged cells or nested blocks inside cells.
 
+**On this page** shows the current Markdown note’s headings in a borderless outline to the left of the text. Click the double chevron at its upper left to collapse it; a list icon stays in the same place to expand it again. For headings with subsections, clicking the heading text both folds or unfolds its subtree and navigates to the section. The arrow toggles folding only; headings without subsections simply navigate. Nested folding is retained while editing or hiding the outline. Reading a hidden subsection highlights its collapsed ancestor without reopening it. The current section is blue and follows document scrolling; click a heading to jump near the top of the page or source view. The outline updates while you edit, includes underlined headings and keeps repeated headings separate. Code blocks and frontmatter are excluded. Each note’s open/closed choice is remembered for the current session. Narrow document panes start collapsed; expanding shows an overlay that stays open when toggling a parent heading and closes after choosing a heading without subsections or pressing Esc.
+
 ## What to expect
 
 Ordinary edits autosave. Rich text and source share undo history.

@@ -1,6 +1,6 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {defaultRangeExtractor,useVirtualizer} from '@tanstack/react-virtual';
-export function VirtualList<T>({items,render,itemKey,height=480,estimate=40,scrollIndex,threshold=200,pinnedKey}:{items:T[],render:(item:T,index:number)=>React.ReactNode,itemKey:(item:T)=>string,height?:number,estimate?:number,scrollIndex?:number,threshold?:number,pinnedKey?:string}){
+export function VirtualList<T>({items,render,itemKey,height=480,estimate=40,scrollIndex,threshold=200,pinnedKey}:{items:T[],render:(item:T,index:number)=>React.ReactNode,itemKey:(item:T)=>string,height?:React.CSSProperties['height'],estimate?:number,scrollIndex?:number,threshold?:number,pinnedKey?:string}){
  const parent=useRef<HTMLDivElement>(null),[focused,setFocused]=useState<number>();
  const key=useCallback((index:number)=>itemKey(items[index]),[items,itemKey]);
  const pinned=pinnedKey===undefined?-1:items.findIndex(item=>itemKey(item)===pinnedKey);

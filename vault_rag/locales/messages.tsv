@@ -2993,3 +2993,10 @@ design.deselectPages|取消全选|Deselect all|すべて選択解除
 design.ungroupedPages|未分组|Ungrouped|未分類
 design.movePageToFolder|移动到文件夹|Move to folder|フォルダーへ移動
 design.managePageFolder|整理文件夹：{name}|Organize folder: {name}|フォルダーを整理：{name}
+
+document.outline|本页目录|On this page|このページの目次
+document.showOutline|展开目录|Expand outline|目次を開く
+document.hideOutline|收起目录|Collapse outline|目次を閉じる
+document.emptyOutline|暂无标题，添加标题后会显示在这里。|No headings yet. Add headings to see them here.|見出しはまだありません。追加するとここに表示されます。
+document.expandSection|展开“{title}”的子目录|Expand subsections of “{title}”|「{title}」の下位見出しを開く
+document.collapseSection|折叠“{title}”的子目录|Collapse subsections of “{title}”|「{title}」の下位見出しを閉じる

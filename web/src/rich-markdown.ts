@@ -22,6 +22,25 @@ function parser(){
  });
  return md;
 }
+export type DocumentHeading={label:string,depth:number,pos:number};
+export function documentHeadings(text:string):DocumentHeading[]{
+ // Token line maps preserve distinct destinations for repeated headings and
+ // skip code blocks. Translate lines back to the original (possibly CRLF) source.
+ const front=/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(text)?.[0]||'',body=text.slice(front.length),offsets=[front.length];
+ for(const match of body.matchAll(/\r\n?|\n/g))offsets.push(front.length+match.index!+match[0].length);
+ const tokens=parser().parse(body,{}),headings:DocumentHeading[]=[];
+ for(let i=0;i<tokens.length;i++){
+  const token=tokens[i];if(token.type!=='heading_open'||!token.map)continue;
+  const children=tokens[i+1]?.children||[];
+  const label=children.map(child=>{
+   if(child.type==='vault_link'){const [target,...labels]=child.content.split('|');return labels.join('|')||target.split('/').pop()||target;}
+   if(['text','code_inline','image','vault_math'].includes(child.type))return child.content;
+   return child.type==='softbreak'||child.type==='hardbreak'?' ':'';
+  }).join('').trim();
+  headings.push({label,depth:Number(token.tag.slice(1)),pos:offsets[token.map[0]]});
+ }
+ return headings;
+}
 function inline(tokens:Token[]):JSONContent[]{
  const nodes:JSONContent[]=[],marks:NonNullable<JSONContent['marks']>=[];
  const names:Record<string,string>={strong:'bold',em:'italic',s:'strike'};

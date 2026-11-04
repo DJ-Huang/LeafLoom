@@ -22,7 +22,7 @@ import {AnchorRect,BlockMenu,CommandMenu,CommandRow,FormatBar,LinkPopover,TableB
 import './rich-editor.css';
 
 const DatabaseInsert=lazy(()=>import('./database-insert').then(m=>({default:m.DatabaseInsert})));
-type EditorFacade={state:{selection:{main:{from:number,to:number,head:number,empty:boolean}},doc:{length:number,sliceString:(from:number,to?:number)=>string}},dom:HTMLElement,dispatch:(spec:{selection?:{anchor:number,head?:number},scrollIntoView?:boolean})=>void,focus:()=>void};
+type EditorFacade={state:{selection:{main:{from:number,to:number,head:number,empty:boolean}},doc:{length:number,sliceString:(from:number,to?:number)=>string}},dom:HTMLElement,sourceAtHeight:(top:number)=>number|null,sourceTop:(position:number)=>number|null,dispatch:(spec:{selection?:{anchor:number,head?:number},scrollIntoView?:boolean})=>void,focus:()=>void};
 type Props={initial:string,path:string,root:string,session:DocumentState,active:boolean,onChange:(text:string,meta?:EditMeta)=>void,onOpen:OpenNote,onReady?:(view:EditorFacade)=>void,onRelease?:(view:EditorFacade)=>void,onSource:(position:number)=>void,annotations?:Annotation[],onAnnotation?:(kind:AnnotationAction,color:AnnotationColor|undefined,range:AnnotationSelection)=>void,onOpenAnnotation?:(id:string)=>void};
 type ManualMenu={kind:'insert'|'block',anchor:AnchorRect,target:BlockTarget,query:string};
 type LinkState={id:string,label:string,target:string,wiki:boolean,anchor:AnchorRect};
@@ -242,6 +242,8 @@ export function RichEditor(props:Props){
    facade={
     get state(){const bridge=bridgeRef.current!,selection=current.state.selection,{from,to}=markdownSelection(current,bridge);return {selection:{main:{from,to,head:bridge.toSource(current.state.doc,selection.head),empty:selection.empty}},doc:{length:bridge.text.length,sliceString:(from:number,to?:number)=>bridge.text.slice(from,to)}};},
     dom:current.view.dom,
+    sourceAtHeight(top){const box=current.view.dom.getBoundingClientRect(),point=current.view.posAtCoords({left:box.left+4,top:Math.max(box.top+1,Math.min(top,box.bottom-1))});return point?bridgeRef.current!.toSource(current.state.doc,point.pos):null;},
+    sourceTop(position){return current.view.coordsAtPos(bridgeRef.current!.toEditor(current.state.doc,position)).top;},
     dispatch(spec){if(!spec.selection)return;const bridge=bridgeRef.current!,from=bridge.toEditor(current.state.doc,spec.selection.anchor),to=bridge.toEditor(current.state.doc,spec.selection.head??spec.selection.anchor),tr=current.state.tr;tr.setSelection(from===to?TextSelection.near(tr.doc.resolve(from)):TextSelection.between(tr.doc.resolve(from),tr.doc.resolve(to)));current.view.dispatch(spec.scrollIntoView?tr.scrollIntoView():tr);},
     focus(){current.commands.focus();}
    };
