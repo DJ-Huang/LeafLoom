@@ -1,7 +1,8 @@
 'use strict';
+const {Blob} = require('node:buffer');
 
 // Only the management window's trusted main frame may write to the clipboard.
-function registerClipboardIpc(ipcMain, authorize, clipboard, nativeImage) {
+function registerClipboardIpc(ipcMain, authorize, clipboard, nativeImage, ClipboardItem) {
   ipcMain.handle('leafloom:clipboard-write-text', async (event, text) => {
     authorize(event);
     if (typeof text !== 'string' || text.length > 1024 * 1024) throw new Error('Invalid clipboard text');
@@ -18,7 +19,7 @@ function registerClipboardIpc(ipcMain, authorize, clipboard, nativeImage) {
     if (image.isEmpty()) throw new Error('Invalid clipboard image');
     const actual = image.getSize();
     if (actual.width !== width || actual.height !== height) throw new Error('Invalid clipboard image size');
-    await clipboard.writeImage(image);
+    await clipboard.write([new ClipboardItem({'image/png': new Blob([bytes], {type: 'image/png'})})]);
   });
 }
 

@@ -635,3 +635,5 @@ See the [upstream focus-emulation contract](https://github.com/ChromeDevTools/de
 **复制源图片。** 在设计工作台单选图片，切到右侧 **设计** 页签，在 **图片来源** 卡片点击 **复制图片**。卡片显示缩略图、文件名及知识库相对路径，并解析当前绑定、变体和以图片为根的组件覆盖所使用的素材。复制保留源图片尺寸与透明背景，不包含画布裁剪、圆角或旋转。锁定图片和只读变体也可复制，无需先保存，不增加项目历史。画布或图层列表获得焦点时，**⌘C / Ctrl+C** 复制单张图片；其他元素和多选仍复制定位信息，图片菜单也保留 **复制控件定位信息**。输入框正常复制文字。PNG 可粘贴到其他软件或笔记，笔记沿用已有附件上传流程。SVG 转为静态图片，动图只复制首帧。仅支持项目内源图，外链需先导入；文件缺失、读取或解码失败会明确提示并支持重试，不会改成复制链接或文字。源文件及 PNG 不超过 32 MiB，图片不超过 6400 万像素。桌面端更新原生剪贴板支持后需重启 LeafLoom。
 
 专项检查：`node --test tests/test_design_image_copy.cjs tests/test_clipboard.cjs desktop/tests/clipboard.test.cjs`；前端构建后运行 `node tests/frontend_studio_image_copy.cjs`。浏览器夹具使用临时虚构知识库和随机端口，原生桥接用测试替身，另测真实浏览器 PNG 剪贴板与笔记粘贴流程；截图和结果位于 `.cache/design-image-copy/`。此检查不代表 Windows 或飞书／微信原生粘贴验收。
+
+Electron 44 的原生图片复制另用 `./desktop/node_modules/.bin/electron desktop/tests/clipboard-native-smoke.cjs` 验证，覆盖真实 preload、IPC 和系统剪贴板 PNG 回读；夹具使用隐藏的临时窗口，原剪贴板内容只在内存中保存并恢复。此检查与上面的浏览器替身检查分别报告。
