@@ -114,6 +114,24 @@ App Key 由操作系统加密保存。连接随应用启动，关闭窗口留在
 
 ![LeafLoom 内的本地 HTML 阅览室预览](../../assets/screenshots/zh-CN/showcase-html.png)
 
+### 工作中枢 Skill
+
+记录多项目工作、管理本地任务和生成汇报，按需配置办公软件与连接飞书。标记为「尚未接入」的平台不能用于采集或同步。参阅[工作中枢指南](../WORK_HUB.md)。下图为真实配置界面。
+
+![工作中枢来源和办公软件设置，未接入的平台有明确标注](../../assets/screenshots/zh-CN/showcase-workhub.jpg)
+
+### 设计工作台
+
+从空白画板或内置模板开始，组织页面和图层，并导出独立 HTML 项目。下图为真实的新建设计项目模板选择界面。参阅[设计工作台指南](help/design-studio.md)。
+
+![设计工作台的新建项目窗口，显示空白项目与内置模板](../../assets/screenshots/zh-CN/showcase-studio.jpg)
+
+### 附件管理
+
+集中浏览和搜索本地及已配置服务器上的文件，按分组整理、预览或下载原件；可选择供 AI 素材检索的分组。下图的演示附件库使用内置模板素材。参阅[附件管理指南](help/attachments.md)。
+
+![附件管理中的演示图片与素材](../../assets/screenshots/zh-CN/showcase-attachments.jpg)
+
 ## 开始使用
 
 **推荐直接安装 [最新 Release](https://github.com/DJ-Huang/LeafLoom/releases/latest) 中的桌面应用。** 无需克隆仓库，也无需预装 Python、Node 或 Ollama。

@@ -114,6 +114,24 @@ App Key は OS によって暗号化して保存されます。接続はアプ�
 
 ![LeafLoom 内で表示したローカル HTML の読書室](../../assets/screenshots/ja/showcase-html.png)
 
+### ワークハブ Skill
+
+複数プロジェクトの作業記録、ローカルタスク、レポートを管理し、必要に応じてオフィス製品の設定や Feishu 接続ができます。「未連携」と表示された製品からの収集・同期はできません。[ワークハブガイド](../WORK_HUB.md)。画像は実際の設定画面です。
+
+![ワークハブの出典とオフィス製品の設定。未連携の製品は明示されています](../../assets/screenshots/ja/showcase-workhub.jpg)
+
+### デザインスタジオ
+
+空白のボードや内蔵テンプレートから始め、ページとレイヤーを整理して、独立した HTML プロジェクトを書き出せます。画像は実際の新規プロジェクトのテンプレート選択画面です。[デザインスタジオガイド](help/design-studio.md)。
+
+![空白プロジェクトと内蔵テンプレートを表示するデザインスタジオの新規作成画面](../../assets/screenshots/ja/showcase-studio.jpg)
+
+### 添付ファイル管理
+
+ローカルと設定済みサーバーのファイルをまとめて閲覧・検索し、グループ分け、プレビュー、原本のダウンロードができます。AI 素材検索に使うグループも選べます。画像のデモライブラリには内蔵テンプレートの素材を使用しています。[添付ファイルガイド](help/attachments.md)。
+
+![添付ファイル管理に表示されたデモ画像と素材](../../assets/screenshots/ja/showcase-attachments.jpg)
+
 ## 使い始める
 
 **[最新の Release](https://github.com/DJ-Huang/LeafLoom/releases/latest) のデスクトップアプリがおすすめです。** リポジトリのクローンや、Python・Node・Ollama の事前インストールは不要です。
