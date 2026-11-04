@@ -4,6 +4,7 @@ if (process.isMainFrame) {
   const invoke = (name, ...args) => ipcRenderer.invoke('leafloom:' + name, ...args);
   contextBridge.exposeInMainWorld('leafloomDesktop', Object.freeze({
     appInfo: () => invoke('info'),
+    writeClipboardText: text => invoke('clipboard-write-text', text),
     publishDesign: jobId => invoke('design-publish', jobId),
     presenter: Object.freeze({
       displays: () => invoke('presenter-displays'),

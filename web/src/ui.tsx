@@ -18,19 +18,20 @@ export function Modal({title,children,onClose,wide=false,className='',hideHeader
   {hideHeader?<h2 id={label} className="sr-only">{title}</h2>:<header><h2 id={label}>{title}</h2><Action title={t("关闭")} onClick={onClose}><X size={18}/></Action></header>}{children}
  </dialog>;
 }
-export function ActionMenu({title,anchor,children,onClose}:{title:string,anchor:HTMLElement,children:React.ReactNode,onClose:()=>void}){
+export type MenuPoint={x:number,y:number};
+export function ActionMenu({title,anchor,point,children,onClose}:{title:string,anchor:HTMLElement,point?:MenuPoint,children:React.ReactNode,onClose:()=>void}){
  useLocale();
  const ref=useRef<HTMLDivElement>(null),close=useRef(onClose);close.current=onClose;
  useLayoutEffect(()=>{
   const menu=ref.current!;
-  const place=()=>{const box=anchor.getBoundingClientRect();menu.style.left=Math.max(8,Math.min(box.left,window.innerWidth-menu.offsetWidth-8))+'px';menu.style.top=Math.max(8,Math.min(box.bottom+5,window.innerHeight-menu.offsetHeight-8))+'px';};
+  const place=()=>{const box=anchor.getBoundingClientRect();menu.style.left=Math.max(8,Math.min(point?.x??box.left,window.innerWidth-menu.offsetWidth-8))+'px';menu.style.top=Math.max(8,Math.min(point?.y??box.bottom+5,window.innerHeight-menu.offsetHeight-8))+'px';};
   const items=()=>Array.from(menu.querySelectorAll<HTMLElement>('button:not(:disabled),a[href]'));
   items().forEach(item=>item.setAttribute('role','menuitem'));place();items()[0]?.focus();
   const outside=(event:PointerEvent)=>{if(!menu.contains(event.target as Node)&&!anchor.contains(event.target as Node))close.current();};
   const key=(event:KeyboardEvent)=>{if(event.key==='Escape'||event.key==='Tab'){if(event.key==='Escape')event.preventDefault();close.current();return;}const list=items(),index=list.indexOf(document.activeElement as HTMLElement);if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();list[event.key==='Home'?0:event.key==='End'?list.length-1:(index+(event.key==='ArrowDown'?1:list.length-1))%list.length]?.focus();}};
   document.addEventListener('pointerdown',outside);menu.addEventListener('keydown',key);window.addEventListener('resize',place);window.addEventListener('scroll',place,true);
   return()=>{document.removeEventListener('pointerdown',outside);menu.removeEventListener('keydown',key);window.removeEventListener('resize',place);window.removeEventListener('scroll',place,true);if(anchor.isConnected)anchor.focus();};
- },[anchor]);
+ },[anchor,point?.x,point?.y]);
  return createPortal(<div ref={ref} className="action-menu action-list" role="menu" aria-label={title} onClick={event=>{if((event.target as HTMLElement).closest('button:not(:disabled),a[href]'))onClose();}}>{children}</div>,document.body);
 }
 export type FormField={name:string,label:string,value?:string,multiline?:boolean,required?:boolean,options?:{value:string,label:string}[]};

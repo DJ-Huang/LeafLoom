@@ -4,6 +4,8 @@ The desktop application uses the existing local workspace in its own Electron
 window. It includes a private Python interpreter and locked dependencies. End
 users do not need a browser, Python, Node, uv, a cloned repository or Ollama.
 
+Design Studio element-location copying uses `leafloom:clipboard-write-text` through the management main-frame preload. The IPC handler applies the existing `isMain` origin/window/frame checks and accepts plain text up to 1 Mi characters; it exposes no clipboard reader. Project/draft origins retain their separate preload and denied management access. The web helper retains selection copying for older desktop preloads or rejected browser clipboard writes, restoring focus and selection afterward. Copy menus retain focus until the write completes. Restart LeafLoom after main/preload updates.
+
 ## Install and use
 
 ### ChatGPT connection

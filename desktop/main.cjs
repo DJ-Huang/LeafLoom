@@ -1,5 +1,5 @@
 'use strict';
-const {app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, nativeImage, screen, session, safeStorage, powerMonitor} = require('electron');
+const {app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, nativeImage, screen, session, safeStorage, powerMonitor, clipboard} = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
@@ -8,6 +8,7 @@ const {publishJob} = require('./design-publisher.cjs');
 const {DesignPresenter} = require('./design-presenter.cjs');
 const {TunnelSettings, tunnelBinary} = require('./tunnel.cjs');
 const {AttachmentSecrets, registerAttachmentCredentialIpc} = require('./attachment-secrets.cjs');
+const {registerClipboardIpc} = require('./clipboard.cjs');
 const {Updater} = require('./updater.cjs');
 const policy = require('./policy.cjs');
 const {strings, resolve} = require('./strings.cjs');
@@ -415,6 +416,7 @@ else {
     ipcMain.handle('leafloom:presentation-output-ready', event => presenter.outputReady(event));
     ipcMain.on('leafloom:presentation-output-report', (event, value) => {try {presenter.outputReport(event, value);} catch (error) {log(error);}});
     registerAttachmentCredentialIpc(ipcMain, event => isMain(event), attachmentSecrets);
+    registerClipboardIpc(ipcMain, event => isMain(event), clipboard);
     // Also support legacy Stop scripts without depending on a Python install.
     fs.mkdirSync(control, {recursive: true});
     try {fs.unlinkSync(path.join(control, 'quit'));} catch {}

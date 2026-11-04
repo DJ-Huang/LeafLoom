@@ -14,6 +14,7 @@ declare global {
   leafloomDesktop?:{
    presenter:PresenterDesktop;
    appInfo:()=>Promise<DesktopInfo>;
+   writeClipboardText?:(text:string)=>Promise<void>;
    publishDesign:(jobId:string)=>Promise<unknown>;
    updateStatus:()=>Promise<UpdateInfo>;
    checkUpdate:()=>Promise<UpdateInfo>;

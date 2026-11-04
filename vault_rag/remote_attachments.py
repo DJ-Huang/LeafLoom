@@ -25,6 +25,7 @@ import uuid
 from vault_rag.local_state import ConflictError, Files, atomic_write, relative, under
 from vault_rag.platform_support import is_link, private_file_mode, move_exclusive
 from vault_rag.remote_webdav import RemoteStorageError, WebDAVSource, remote_path, validate_source
+from vault_rag.attachment_scan_policy import SCAN_INTERVAL, STARTUP_GRACE, retry_interval
 from vault_rag.remote_ignore import RemoteIgnore
 
 
@@ -78,7 +79,7 @@ class RemoteAttachments:
         self.auto_scans={}
         self.on_scan_completed=None;self.on_connection_ready=None
         self.asset_locks={}
-        self.redirect_backfilled=set()
+        self.redirect_backfilled=set();self.schema_ready={}
         # Assigned by the router. A nonlocal owner must still be authorized now,
         # including after restart; neither a persisted owner nor a token is enough.
         self.authorize_owner=None
@@ -134,56 +135,62 @@ class RemoteAttachments:
             connection.execute('PRAGMA foreign_keys=ON');connection.execute('PRAGMA synchronous=FULL')
             version=connection.execute('PRAGMA user_version').fetchone()[0]
             if version>1:raise ValueError('Attachment manifest belongs to a newer version')
-            connection.executescript('''
-                CREATE TABLE IF NOT EXISTS sync_checkpoints(source_id TEXT PRIMARY KEY, source_revision TEXT NOT NULL, last_success REAL NOT NULL);
-                CREATE TABLE IF NOT EXISTS assets(
-                    id TEXT PRIMARY KEY,source_id TEXT NOT NULL,path TEXT NOT NULL,name TEXT NOT NULL,
-                    size INTEGER NOT NULL,mtime TEXT NOT NULL DEFAULT '',etag TEXT NOT NULL DEFAULT '',
-                    mime TEXT NOT NULL,sha256 TEXT NOT NULL DEFAULT '',state TEXT NOT NULL DEFAULT 'ready',
-                    description TEXT NOT NULL DEFAULT '',tags TEXT NOT NULL DEFAULT '[]',category TEXT NOT NULL DEFAULT '',
-                    metadata_revision TEXT NOT NULL,updated REAL NOT NULL,UNIQUE(source_id,path));
-                CREATE TABLE IF NOT EXISTS aliases(path TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES assets(id));
-                CREATE TABLE IF NOT EXISTS reference_ids(old_id TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES assets(id));
-                CREATE TABLE IF NOT EXISTS reference_records(digest TEXT PRIMARY KEY,data BLOB NOT NULL);
-                CREATE TABLE IF NOT EXISTS asset_redirects(old_id TEXT PRIMARY KEY REFERENCES assets(id),
-                    new_id TEXT NOT NULL REFERENCES assets(id),source_path TEXT NOT NULL,job_id TEXT NOT NULL,
-                    active INTEGER NOT NULL DEFAULT 0,created REAL NOT NULL,CHECK(old_id!=new_id));
-                CREATE TABLE IF NOT EXISTS cache(asset_id TEXT PRIMARY KEY REFERENCES assets(id),file TEXT NOT NULL,
-                    size INTEGER NOT NULL,sha256 TEXT NOT NULL,etag TEXT NOT NULL,mtime TEXT NOT NULL,accessed REAL NOT NULL);
-                CREATE TABLE IF NOT EXISTS ranges(asset_id TEXT NOT NULL REFERENCES assets(id),start INTEGER NOT NULL,end INTEGER NOT NULL,
-                    file TEXT NOT NULL,size INTEGER NOT NULL,object_size INTEGER NOT NULL,sha256 TEXT NOT NULL,etag TEXT NOT NULL,mtime TEXT NOT NULL,
-                    accessed REAL NOT NULL,verified REAL NOT NULL,identity TEXT NOT NULL,PRIMARY KEY(asset_id,start,end));
-                CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,kind TEXT NOT NULL,state TEXT NOT NULL,payload TEXT NOT NULL,
-                    created REAL NOT NULL,updated REAL NOT NULL);
-                CREATE TABLE IF NOT EXISTS upload_receipts(owner TEXT NOT NULL,operation_key TEXT NOT NULL,
-                    fingerprint TEXT NOT NULL,job_id TEXT NOT NULL REFERENCES jobs(id),PRIMARY KEY(owner,operation_key));
-                CREATE TABLE IF NOT EXISTS connection_recovery(source_id TEXT PRIMARY KEY,source_revision TEXT NOT NULL,
-                    credential_revision TEXT NOT NULL,payload TEXT NOT NULL);
-                CREATE INDEX IF NOT EXISTS remote_assets_name ON assets(name);
-                CREATE INDEX IF NOT EXISTS remote_jobs_state ON jobs(state);
-                CREATE TABLE IF NOT EXISTS catalog_state(id INTEGER PRIMARY KEY CHECK(id=1),generation INTEGER NOT NULL);
-                INSERT OR IGNORE INTO catalog_state VALUES(1,0);
-                PRAGMA user_version=1;
-            ''')
-            columns={r[1] for r in connection.execute('PRAGMA table_info(assets)')}
-            if 'mtime_ns' not in columns:connection.execute('ALTER TABLE assets ADD COLUMN mtime_ns INTEGER NOT NULL DEFAULT 0')
-            if 'reconcile_revision' not in columns:connection.execute('ALTER TABLE assets ADD COLUMN reconcile_revision INTEGER NOT NULL DEFAULT 0')
-            if 'content_generation' not in columns:connection.execute('ALTER TABLE assets ADD COLUMN content_generation INTEGER NOT NULL DEFAULT 0')
-            connection.execute('''CREATE TRIGGER IF NOT EXISTS remote_asset_reconcile_revision AFTER UPDATE ON assets
-                WHEN NEW.reconcile_revision=OLD.reconcile_revision BEGIN
-                UPDATE assets SET reconcile_revision=reconcile_revision+1 WHERE id=NEW.id; END''')
-            cache_columns={r[1] for r in connection.execute('PRAGMA table_info(cache)')}
-            if 'verified' not in cache_columns:connection.execute('ALTER TABLE cache ADD COLUMN verified REAL NOT NULL DEFAULT 0')
-            if 'identity' not in cache_columns:connection.execute("ALTER TABLE cache ADD COLUMN identity TEXT NOT NULL DEFAULT ''")
-            for table in ('assets','aliases','cache','ranges','asset_redirects','reference_ids'):
-                for action in ('INSERT','UPDATE','DELETE'):
-                    connection.execute(f'CREATE TRIGGER IF NOT EXISTS catalog_{table}_{action.lower()} AFTER {action} ON {table} BEGIN UPDATE catalog_state SET generation=generation+1 WHERE id=1; END')
+            identity=(path.stat().st_dev,path.stat().st_ino)
+            prepare=self.schema_ready.get(str(path))!=identity or version!=1
+            if prepare:
+                connection.executescript('''
+                    CREATE TABLE IF NOT EXISTS sync_checkpoints(source_id TEXT PRIMARY KEY, source_revision TEXT NOT NULL, last_success REAL NOT NULL);
+                    CREATE TABLE IF NOT EXISTS discovery_changes(source_id TEXT NOT NULL,path TEXT NOT NULL,changed_at REAL NOT NULL,PRIMARY KEY(source_id,path));
+                    CREATE TABLE IF NOT EXISTS scan_retries(source_id TEXT PRIMARY KEY,context TEXT NOT NULL,failures INTEGER NOT NULL,next_retry_at REAL NOT NULL);
+                    CREATE TABLE IF NOT EXISTS assets(
+                        id TEXT PRIMARY KEY,source_id TEXT NOT NULL,path TEXT NOT NULL,name TEXT NOT NULL,
+                        size INTEGER NOT NULL,mtime TEXT NOT NULL DEFAULT '',etag TEXT NOT NULL DEFAULT '',
+                        mime TEXT NOT NULL,sha256 TEXT NOT NULL DEFAULT '',state TEXT NOT NULL DEFAULT 'ready',
+                        description TEXT NOT NULL DEFAULT '',tags TEXT NOT NULL DEFAULT '[]',category TEXT NOT NULL DEFAULT '',
+                        metadata_revision TEXT NOT NULL,updated REAL NOT NULL,UNIQUE(source_id,path));
+                    CREATE TABLE IF NOT EXISTS aliases(path TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES assets(id));
+                    CREATE TABLE IF NOT EXISTS reference_ids(old_id TEXT PRIMARY KEY,asset_id TEXT NOT NULL REFERENCES assets(id));
+                    CREATE TABLE IF NOT EXISTS reference_records(digest TEXT PRIMARY KEY,data BLOB NOT NULL);
+                    CREATE TABLE IF NOT EXISTS asset_redirects(old_id TEXT PRIMARY KEY REFERENCES assets(id),
+                        new_id TEXT NOT NULL REFERENCES assets(id),source_path TEXT NOT NULL,job_id TEXT NOT NULL,
+                        active INTEGER NOT NULL DEFAULT 0,created REAL NOT NULL,CHECK(old_id!=new_id));
+                    CREATE TABLE IF NOT EXISTS cache(asset_id TEXT PRIMARY KEY REFERENCES assets(id),file TEXT NOT NULL,
+                        size INTEGER NOT NULL,sha256 TEXT NOT NULL,etag TEXT NOT NULL,mtime TEXT NOT NULL,accessed REAL NOT NULL);
+                    CREATE TABLE IF NOT EXISTS ranges(asset_id TEXT NOT NULL REFERENCES assets(id),start INTEGER NOT NULL,end INTEGER NOT NULL,
+                        file TEXT NOT NULL,size INTEGER NOT NULL,object_size INTEGER NOT NULL,sha256 TEXT NOT NULL,etag TEXT NOT NULL,mtime TEXT NOT NULL,
+                        accessed REAL NOT NULL,verified REAL NOT NULL,identity TEXT NOT NULL,PRIMARY KEY(asset_id,start,end));
+                    CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,kind TEXT NOT NULL,state TEXT NOT NULL,payload TEXT NOT NULL,
+                        created REAL NOT NULL,updated REAL NOT NULL);
+                    CREATE TABLE IF NOT EXISTS upload_receipts(owner TEXT NOT NULL,operation_key TEXT NOT NULL,
+                        fingerprint TEXT NOT NULL,job_id TEXT NOT NULL REFERENCES jobs(id),PRIMARY KEY(owner,operation_key));
+                    CREATE TABLE IF NOT EXISTS connection_recovery(source_id TEXT PRIMARY KEY,source_revision TEXT NOT NULL,
+                        credential_revision TEXT NOT NULL,payload TEXT NOT NULL);
+                    CREATE INDEX IF NOT EXISTS remote_assets_name ON assets(name);
+                    CREATE INDEX IF NOT EXISTS remote_jobs_state ON jobs(state);
+                    CREATE TABLE IF NOT EXISTS catalog_state(id INTEGER PRIMARY KEY CHECK(id=1),generation INTEGER NOT NULL);
+                    INSERT OR IGNORE INTO catalog_state VALUES(1,0);
+                    PRAGMA user_version=1;
+                ''')
+                columns={r[1] for r in connection.execute('PRAGMA table_info(assets)')}
+                if 'mtime_ns' not in columns:connection.execute('ALTER TABLE assets ADD COLUMN mtime_ns INTEGER NOT NULL DEFAULT 0')
+                if 'reconcile_revision' not in columns:connection.execute('ALTER TABLE assets ADD COLUMN reconcile_revision INTEGER NOT NULL DEFAULT 0')
+                if 'content_generation' not in columns:connection.execute('ALTER TABLE assets ADD COLUMN content_generation INTEGER NOT NULL DEFAULT 0')
+                connection.execute('''CREATE TRIGGER IF NOT EXISTS remote_asset_reconcile_revision AFTER UPDATE ON assets
+                    WHEN NEW.reconcile_revision=OLD.reconcile_revision BEGIN
+                    UPDATE assets SET reconcile_revision=reconcile_revision+1 WHERE id=NEW.id; END''')
+                cache_columns={r[1] for r in connection.execute('PRAGMA table_info(cache)')}
+                if 'verified' not in cache_columns:connection.execute('ALTER TABLE cache ADD COLUMN verified REAL NOT NULL DEFAULT 0')
+                if 'identity' not in cache_columns:connection.execute("ALTER TABLE cache ADD COLUMN identity TEXT NOT NULL DEFAULT ''")
+                for table in ('assets','aliases','cache','ranges','asset_redirects','reference_ids'):
+                    for action in ('INSERT','UPDATE','DELETE'):
+                        connection.execute(f'CREATE TRIGGER IF NOT EXISTS catalog_{table}_{action.lower()} AFTER {action} ON {table} BEGIN UPDATE catalog_state SET generation=generation+1 WHERE id=1; END')
             private_file_mode(path)
             backfill=expected not in self.redirect_backfilled
             if backfill:self._backfill_redirects(connection,expected)
             yield connection
             self._root(expected)
             connection.commit()
+            if prepare:self.schema_ready[str(path)]=identity
             if backfill:self.redirect_backfilled.add(expected)
         except Exception:
             connection.rollback();raise
@@ -455,19 +462,24 @@ class RemoteAttachments:
             context=self._connection_context(root,source_id)
             key=(root,source_id);previous=self.auto_scans.get(key,{})
             if previous.get('context')!=context:
-                with self._db(root) as db:checkpoint=db.execute('SELECT last_success FROM sync_checkpoints WHERE source_id=? AND source_revision=?',(source_id,context[2])).fetchone()
-                previous={'context':context,'next_scan_at':0,'last_success_at':checkpoint[0] if checkpoint else None};self.auto_scans[key]=previous
+                with self._db(root) as db:
+                    checkpoint=db.execute('SELECT last_success FROM sync_checkpoints WHERE source_id=? AND source_revision=?',(source_id,context[2])).fetchone()
+                    retry=db.execute('SELECT * FROM scan_retries WHERE source_id=? AND context=?',(source_id,_json(context))).fetchone()
+                last=checkpoint[0] if checkpoint else None
+                previous={'context':context,'next_scan_at':max(now+STARTUP_GRACE,(last or 0)+SCAN_INTERVAL,retry['next_retry_at'] if retry else 0),
+                          'retry_at':retry['next_retry_at'] if retry else 0,'last_success_at':last};self.auto_scans[key]=previous
             connection=self._connection_state(root,source_id)
             was=previous.get('connection_state');previous['connection_state']=connection['state']
             if connection.get('retry_paused') or connection['state']!='ready':continue
-            if was and was!='ready':previous['next_scan_at']=0
+            if was and was!='ready':previous['next_scan_at']=previous.get('retry_at',0)
             lifecycle=self.scan_statuses.get(key,{})
             finished=lifecycle.get('scan_finished_at')
             if finished and lifecycle.get('source_revision')==context[2] and finished!=previous.get('observed'):
-                previous.update(observed=finished,next_scan_at=finished+(300 if lifecycle['scan_state']=='completed' else 60))
+                with self._db(root) as db:retry=db.execute('SELECT next_retry_at FROM scan_retries WHERE source_id=? AND context=?',(source_id,_json(context))).fetchone()
+                retry_at=retry[0] if retry else 0
+                previous.update(observed=finished,retry_at=retry_at,next_scan_at=max(retry_at,finished+(SCAN_INTERVAL if lifecycle['scan_state']=='completed' else 60)))
                 if lifecycle['scan_state']=='completed':
                     previous['last_success_at']=finished
-                    with self._db(root) as db:db.execute('INSERT OR REPLACE INTO sync_checkpoints VALUES(?,?,?)',(source_id,context[2],finished))
                     callback=self.on_scan_completed
                     if callable(callback):callback(root,source_id)
             if previous.get('next_scan_at',0)>now:continue
@@ -544,6 +556,7 @@ class RemoteAttachments:
     def scan(self,root,source_id,*,guard=None,_scan_id='',_incremental=False,force_full=False):
         self._root(root)
         source_revision=self._source_revision(self._source(source_id,root))
+        context=self._connection_context(root,source_id) if source_id!='local' else None
         key=(str(root),source_id)
         with self.lock:
             scan_lock=self.scan_locks.setdefault(key,threading.Lock())
@@ -559,11 +572,27 @@ class RemoteAttachments:
             result=self._scan(root,source_id,guard=guard,incremental=_incremental or force_full,force_full=force_full)
             lifecycle.update(scan_state='completed' if result.get('ok') else 'cancelled' if result.get('state')=='cancelled' else 'failed',
                              scan_finished_at=time.time(),scan_scanned=result.get('scanned',0),scan_missing=result.get('missing',0),scan_excluded=result.get('excluded',0))
+            if result.get('ok') and source_id!='local':
+                with self.lock,self._db(root) as db:
+                    db.execute('INSERT OR REPLACE INTO sync_checkpoints VALUES(?,?,?)',(source_id,source_revision,lifecycle['scan_finished_at']))
+            self._scan_retry(root,source_id,lifecycle,context)
             return {**result,'scan_id':lifecycle['scan_id']}
         except Exception as error:
             lifecycle.update(scan_state='cancelled' if isinstance(error,(InterruptedError,ConflictError,PermissionError)) else 'failed',scan_finished_at=time.time())
+            self._scan_retry(root,source_id,lifecycle,context)
             raise
         finally:scan_lock.release()
+
+    def _scan_retry(self,root,source_id,lifecycle,context):
+        if source_id=='local' or lifecycle['scan_state']=='cancelled':return
+        if self._connection_context(root,source_id)!=context:return
+        with self.lock,self._db(root) as db:
+            if lifecycle['scan_state']=='completed':db.execute('DELETE FROM scan_retries WHERE source_id=?',(source_id,))
+            else:
+                row=db.execute('SELECT failures FROM scan_retries WHERE source_id=? AND context=?',(source_id,_json(context))).fetchone()
+                failures=(row[0] if row else 0)+1
+                db.execute('INSERT OR REPLACE INTO scan_retries VALUES(?,?,?,?)',
+                           (source_id,_json(context),failures,lifecycle['scan_finished_at']+retry_interval(failures)))
 
     @staticmethod
     def _reserved_paths(db,source_id):
@@ -670,7 +699,8 @@ class RemoteAttachments:
                 if incremental:
                     from vault_rag.remote_discovery import DirectoryCheckpoints,discovery_context
                     checkpoint=DirectoryCheckpoints(self.manifest_path(root),source_id,
-                        discovery_context(root,source_revision,credential_revision,metadata_directory),check,force_full=force_full)
+                        discovery_context(root,source_revision,credential_revision,metadata_directory),check,force_full=force_full,
+                        upload_directory=self._source(source_id,root).get('upload_directory','Incoming'))
                 items=provider.scan(on_batch=commit_batch,ignore=ignore,**({'checkpoint':checkpoint} if checkpoint else {}))
                 ignored_paths={item['path'] for item in items if item.get('excluded')}
                 ignored_paths.update(path for path,revision,state in snapshot.values() if ignore.excluded(path))
@@ -1373,6 +1403,11 @@ class RemoteAttachments:
         self._check_job(value)
         with self.lock,self._db(root) as db:
             self._upsert(db,value['source_id'],result,asset_id=value['asset_id'],sha256=value['sha256'])
+            # The catalog is already current. Only the changed directory and
+            # ancestors need a fresh receipt, never unrelated cached branches.
+            parts=value['remote_path'].split('/')
+            db.executemany('INSERT OR REPLACE INTO discovery_changes VALUES(?,?,?)',
+                           [(value['source_id'],'/'.join(parts[:depth]),time.time()) for depth in range(len(parts))])
         from vault_rag.attachment_server_references import publish
         publish(self,root,value['source_id'],value['asset_id'],provider)
         self._check_job(value)

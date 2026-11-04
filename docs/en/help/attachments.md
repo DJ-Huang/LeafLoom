@@ -16,7 +16,7 @@ For remote files, open **Settings → Attachment servers**, add an address, acco
 2. Search names/paths, filter by type, sort and choose a grid or list. Create manual groups or rules using source, directory, format, category and tags. A group change updates its heading and clears the old list while loading; Retry stays in the selected group after a failed read.
 3. Open **Attachment information** to inspect a selected file. The panel starts collapsed and remembers its preference. Images, PDF, audio and video retain their viewers. Unsupported formats use an existing cover without downloading the original; a missing cover offers the file icon and download action.
 4. Upload files here or drag them into the manager. Existing same-name originals are retained. Notes and new folders/imports use the file directory actions. Server cards can be edited, disabled or selected as the new-upload destination without moving existing attachments.
-5. Open **Sync status** for discovered files, scanned/pending directories, reused-directory counts and retry details. Scanning resumes from device-local checkpoints after disconnection or restart; automatic sources run serially, with at most two directory readers per server. After a completed pass, the next check is five minutes later. Directory caches last ten minutes; expired children are checked independently. **Check all directories** bypasses the cache without downloading originals.
+5. Open **Sync status** for discovered files, scanned/pending directories, reused-directory counts and retry details. Scanning resumes from device-local checkpoints after disconnection or restart; automatic sources run serially, with at most two directory readers per server. Checks reuse unchanged archive directories for progressively longer intervals, up to one week; the upload tree remains on a 30-minute cadence. Expired children are checked independently. **Check all directories** bypasses the cache without downloading originals.
 6. Use **Downloads** to monitor original-file preparation and ZIP tasks. A verified remote file can be saved to the device; the staging limit is configured in Download settings. Releasing staged files removes local temporary copies, not server originals. Rename, move and recycle retain reference/version checks; server capabilities can differ.
 
 ### Metadata, AI scope and server rules
@@ -26,6 +26,13 @@ Categories, tags, personal notes, source metadata and real covers enrich the sam
 Enable **Use for AI asset search** only on the groups that AI should search. No selected groups returns no asset results. AI can inspect metadata/previews and request verified delivery to a configured local directory; it does not automatically import into Unity or verify purchase rights. See the [complete guide](../GUIDE.md#attachment-manager).
 
 A visible `leafloom.ignore` at the server root or a subdirectory may exclude files using Gitignore-style patterns. Its first line must be exactly `# leafloom-ignore v1`; a child rule or `!` can reinclude files. Rules are read without requiring NAS write permission. A completed successful scan applies exclusions while retaining original files, IDs and existing references.
+
+
+### Background checks
+
+Startup shows the saved attachment list immediately and preserves directory receipts across restarts. Background checks start after a short startup grace. The configured upload directory, its descendants and ancestors are checked about every 30 minutes; other unchanged directories double their intervals from 30 minutes up to one week. Each descendant has its own schedule, independent of parent modification times. LeafLoom uploads update the local catalog immediately and mark only the affected directory and ancestors for rechecking. Idle product metadata and group pulls back off from 30 minutes up to six hours; local edits still submit promptly. Failed scans and synchronization retry with increasing delays from one minute up to one hour. Progress, schedules and retry delays survive restart.
+
+Changes made through other tools can take until the affected directory’s next check to appear (up to one week in stable archives, or six hours for idle metadata/groups). Use **Check all directories** for an immediate directory check, or explicit metadata synchronization to fetch remote metadata now. No additional NAS service is required; this policy uses periodic checks, not a server change feed.
 
 ## What to expect
 

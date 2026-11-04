@@ -1,8 +1,8 @@
 """Device-local directory checkpoints. Cache hits never authorize original bytes.
 
 Servers without a change feed need eventual directory revalidation. An unfinished
-pass reuses committed directories regardless of age; later passes refresh entries
-after ten minutes. Parent collection ETags never stand in for descendant changes.
+pass reuses committed directories regardless of age; unchanged directories back
+off independently, up to a week. Parent ETags never stand in for descendant changes.
 """
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import ExitStack
@@ -13,10 +13,11 @@ import threading
 import time
 import uuid
 
+from vault_rag.attachment_scan_policy import SCAN_INTERVAL, MAX_DIRECTORY_INTERVAL, idle_interval
 from vault_rag.remote_ignore import IGNORE_NAME, MAX_IGNORE_BYTES, IgnoreRuleError, RemoteIgnore
 from vault_rag.remote_webdav import RemoteStorageError, remote_path
 
-DIRECTORY_TTL = 600
+DIRECTORY_TTL = SCAN_INTERVAL
 DIRECTORY_WORKERS = 2
 
 
@@ -25,12 +26,16 @@ def discovery_context(root, source_revision, credential_revision, metadata_direc
 
 
 class DirectoryCheckpoints:
-    def __init__(self, path, source_id, context, check, *, force_full=False):
+    def __init__(self, path, source_id, context, check, *, force_full=False, upload_directory=None):
         self.source_id,self.context,self.check=source_id,context,check
+        self.upload_directory=upload_directory
         self.db=sqlite3.connect(path,timeout=15);self.db.row_factory=sqlite3.Row
         try:
             check()
             self.db.executescript('''
+                CREATE TABLE IF NOT EXISTS discovery_changes(source_id TEXT NOT NULL,path TEXT NOT NULL,changed_at REAL NOT NULL,PRIMARY KEY(source_id,path));
+                CREATE TABLE IF NOT EXISTS discovery_intervals(source_id TEXT NOT NULL,path TEXT NOT NULL,
+                    checked_at REAL NOT NULL,check_interval REAL NOT NULL,PRIMARY KEY(source_id,path));
                 CREATE TABLE IF NOT EXISTS discovery_runs(source_id TEXT PRIMARY KEY,context TEXT NOT NULL,
                     cycle TEXT NOT NULL,mode TEXT NOT NULL,complete INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS discovery_directories(source_id TEXT NOT NULL,path TEXT NOT NULL,
@@ -47,17 +52,28 @@ class DirectoryCheckpoints:
                 self.mode='full' if force_full or not populated else 'incremental'
             with self.db:
                 check()
-                if not valid:self.db.execute('DELETE FROM discovery_directories WHERE source_id=?',(source_id,))
+                if not valid:
+                    self.db.execute('DELETE FROM discovery_directories WHERE source_id=?',(source_id,))
+                    self.db.execute('DELETE FROM discovery_intervals WHERE source_id=?',(source_id,))
                 self.db.execute('INSERT OR REPLACE INTO discovery_runs VALUES(?,?,?,?,0)',(source_id,context,self.cycle,self.mode))
         except BaseException:self.db.close();raise
 
     @property
     def label(self):return 'resume' if self.resumed else self.mode
 
+    def interval_limit(self, path):
+        upload=self.upload_directory
+        # Check the upload tree and its ancestors promptly, including a newly
+        # created upload directory. Other branches age independently.
+        hot=upload is not None and (not path or not upload or path==upload or path.startswith(upload+'/') or upload.startswith(path+'/'))
+        return DIRECTORY_TTL if hot else MAX_DIRECTORY_INTERVAL
+
     def load(self, path):
-        row=self.db.execute('SELECT * FROM discovery_directories WHERE source_id=? AND path=? AND context=?',(self.source_id,path,self.context)).fetchone()
+        if self.db.execute('SELECT 1 FROM discovery_changes WHERE source_id=? AND path=?',(self.source_id,path)).fetchone():return None
+        row=self.receipt(path)
         if row is None:return None
-        if row['cycle']!=self.cycle and (self.mode=='full' or time.time()-row['checked_at']>=DIRECTORY_TTL):return None
+        interval=min(self.interval_limit(path),max(DIRECTORY_TTL,row['check_interval']))
+        if row['cycle']!=self.cycle and (self.mode=='full' or time.time()-row['checked_at']>=interval):return None
         try:
             if len(row['entries'])>32*1024*1024:raise ValueError
             entries=json.loads(row['entries'])
@@ -74,28 +90,58 @@ class DirectoryCheckpoints:
         except (ValueError,TypeError,KeyError):
             self.invalidate(path);return None
 
+    def receipt(self, path):
+        # Keep the original receipt schema readable/writable by older releases.
+        # If one rewrites a receipt, its old adaptive interval no longer applies.
+        return self.db.execute('''SELECT d.*,COALESCE(i.check_interval,?) AS check_interval FROM discovery_directories d
+            LEFT JOIN discovery_intervals i ON i.source_id=d.source_id AND i.path=d.path AND i.checked_at=d.checked_at
+            WHERE d.source_id=? AND d.path=? AND d.context=?''',(DIRECTORY_TTL,self.source_id,path,self.context)).fetchone()
+
     def invalidate(self, directory):
         self.check()
         with self.db:
-            self.db.execute('DELETE FROM discovery_directories WHERE source_id=? AND (path=? OR substr(path,1,?)=?)',
-                            (self.source_id,directory,len(directory)+1,directory+'/'))
-            if not directory:self.db.execute('DELETE FROM discovery_directories WHERE source_id=?',(self.source_id,))
+            for table in ('discovery_directories','discovery_intervals'):
+                self.db.execute(f'DELETE FROM {table} WHERE source_id=? AND (path=? OR substr(path,1,?)=?)',
+                                (self.source_id,directory,len(directory)+1,directory+'/'))
+                if not directory:self.db.execute(f'DELETE FROM {table} WHERE source_id=?',(self.source_id,))
             self.check()
+
+    def failed_directory(self, directory, error):
+        if directory and isinstance(error,RemoteStorageError) and error.code=='remote_not_found':
+            # A cached parent may still name a directory deleted externally.
+            # Re-read that parent on resume rather than retrying the missing
+            # child forever inside the same unfinished cycle.
+            self.check()
+            with self.db:
+                self.db.execute('DELETE FROM discovery_directories WHERE source_id=? AND path=?',
+                                (self.source_id,directory.rpartition('/')[0]))
 
     def save(self, path, entries, rule, checked_at):
         # Publish only after the corresponding manifest batch committed. A crash
         # before this receipt costs a re-read, never a skipped uncommitted batch.
         self.check()
-        before=self.db.execute('SELECT entries FROM discovery_directories WHERE source_id=? AND path=?',(self.source_id,path)).fetchone()
+        before=self.receipt(path)
+        interval=DIRECTORY_TTL
         if before:
             try:
-                old={item['path'] for item in json.loads(before[0]) if item['is_dir'] and item['path']!=path}
+                def signature(items):
+                    # Directory validators are not recursive change signals.
+                    return sorted((item['path'],item['is_dir'],
+                        *(str(item.get(key,'')) if not item['is_dir'] else '' for key in ('size','etag','mtime','mime')))
+                        for item in items if item['path']!=path)
+                unchanged=signature(json.loads(before['entries']))==signature(entries) and before['rule']==rule
+                interval=idle_interval(before['check_interval'],changed=not unchanged,maximum=self.interval_limit(path))
+                old={item['path'] for item in json.loads(before['entries']) if item['is_dir'] and item['path']!=path}
                 new={item['path'] for item in entries if item['is_dir'] and item['path']!=path}
                 for directory in old-new:self.invalidate(directory)
             except (ValueError,TypeError,KeyError):self.invalidate(path)
         with self.db:
             self.db.execute('INSERT OR REPLACE INTO discovery_directories VALUES(?,?,?,?,?,?,?)',
                 (self.source_id,path,self.context,self.cycle,checked_at,json.dumps(entries,ensure_ascii=False,separators=(',',':')),rule))
+            self.db.execute('INSERT OR REPLACE INTO discovery_intervals VALUES(?,?,?,?)',(self.source_id,path,checked_at,interval))
+            # A local upload racing this read keeps its dirty marker for the
+            # next pass; a pre-existing change has now been observed.
+            self.db.execute('DELETE FROM discovery_changes WHERE source_id=? AND path=? AND changed_at<=?',(self.source_id,path,checked_at))
             self.check()
 
     def complete(self):
@@ -115,6 +161,7 @@ class DirectoryCheckpoints:
 
         def fetch(directory):
             provider.guard()
+            started=time.time()
             if not hasattr(local,'provider'):
                 local.provider=provider.fork();stack=ExitStack()
                 with resources_lock:resources.append(stack)
@@ -131,7 +178,7 @@ class DirectoryCheckpoints:
                             if error.code!='remote_not_found':raise
                         break
             peer.guard()
-            return entries,rule,time.time()
+            return entries,rule,started
 
         def accept(directory, depth, data, cached):
             nonlocal excluded,reused
@@ -159,7 +206,7 @@ class DirectoryCheckpoints:
             counts={'scanned':len(result),'directories':len(seen),'pending_directories':len(pending)+len(remote_pending)+len(active),
                     'excluded':excluded,'cached_directories':reused,'scan_mode':self.label}
             if on_batch is not None:on_batch(batch,counts)
-            self.save(directory,entries,rule,checked_at)
+            if not cached:self.save(directory,entries,rule,checked_at)
 
         try:
             with ThreadPoolExecutor(max_workers=DIRECTORY_WORKERS,thread_name_prefix='attachment-directory') as workers:
@@ -186,13 +233,14 @@ class DirectoryCheckpoints:
                         for future in completed:
                             directory,depth=active.pop(future)
                             try:accept(directory,depth,future.result(),False)
-                            except BaseException as error:failure=failure or error
+                            except BaseException as error:
+                                self.failed_directory(directory,error);failure=failure or error
                         if failure is not None:
                             # The other bounded worker may already have completed
                             # useful work. Journal it before returning the error.
                             for future,(directory,depth) in list(active.items()):
                                 try:accept(directory,depth,future.result(),False)
-                                except BaseException:pass  # Preserve the first failure.
+                                except BaseException as error:self.failed_directory(directory,error)
                                 active.pop(future,None)
                             raise failure
                 finally:

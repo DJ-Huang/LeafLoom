@@ -696,6 +696,7 @@
     }
 
     function wheel(event) {
+      if (mode === 'edit') emit('studio-dismiss-context-menu', {});
       if (mode !== 'edit' || textEdit || gesture || marquee || panGesture) return;
       event.preventDefault();
       if (event.ctrlKey || event.metaKey) setZoom(zoom * Math.exp(-event.deltaY * .01), { x: event.clientX, y: event.clientY });
@@ -1008,6 +1009,7 @@
     }
 
     function pointerDown(event) {
+      if (mode === 'edit') emit('studio-dismiss-context-menu', {});
       if (mode !== 'edit' || ![0, 1].includes(event.button) || gesture || marquee || panGesture) return;
       if (event.button === 1 || tool === 'hand' || spaceDown) {
         event.preventDefault(); finishTextEdit(false); viewport.focus({ preventScroll: true });
@@ -1692,10 +1694,35 @@
       if (gesture || !hovered || viewport.contains(event.relatedTarget)) return;
       hovered.classList.remove('studio-hovered'); hovered = null;
     };
+    const openContextMenu = (entry, x, y) => {
+      finishTextEdit(false); cancelGesture();
+      if (!selected.has(entry.node.id)) select([entry.node.id], true);
+      emit('studio-context-menu', { pageId: currentPageId, nodeId: entry.node.id, ids: [...selected], x, y });
+    };
+    const contextMenu = event => {
+      if (mode !== 'edit' || textEdit && textEdit.entry.visual.contains(event.target)) return;
+      const wrapper = event.target.closest('[data-studio-select-id]');
+      const entry = wrapper && stage.contains(wrapper) && editable.get(wrapper.dataset.studioSelectId);
+      if (!entry) { emit('studio-dismiss-context-menu', {}); return; }
+      event.preventDefault();
+      openContextMenu(entry, event.clientX, event.clientY);
+    };
+    // Electron's Edit > Copy accelerator can dispatch copy without a keydown.
+    const copyContext = event => {
+      const target = event.target?.closest ? event.target : doc.activeElement;
+      if (event.defaultPrevented || mode !== 'edit' || textEdit || !selected.size || !target?.closest || target.isContentEditable || target.closest('input,textarea,select,[role="textbox"]') || win.getSelection?.()?.isCollapsed === false) return;
+      event.preventDefault();
+      emit('studio-copy-context', { pageId: currentPageId, ids: [...selected] });
+    };
     const keyDown = event => {
       if (textEdit && (event.key === 'Escape' || event.key === 'Enter' && !event.shiftKey)) { event.preventDefault(); finishTextEdit(event.key === 'Escape'); viewport.focus({ preventScroll: true }); return; }
       if (event.key === 'Escape') { cancelGesture(); if (mode === 'edit') select([], true); else if (overlayStop) closeOverlay(); else emit('studio-exit-preview', {}); return; }
       if (mode !== 'edit' || event.target.isContentEditable || event.target.closest('input, textarea')) return;
+      if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') {
+        const entry = editable.get([...selected][0]);
+        if (entry) { event.preventDefault(); const box = entry.wrapper.getBoundingClientRect(); openContextMenu(entry, box.left + box.width / 2, box.top + box.height / 2); }
+        return;
+      }
       const key = event.key.toLowerCase(), modifier = event.metaKey || event.ctrlKey;
       if (!modifier && !event.altKey && ['arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(key)) { event.preventDefault(); const amount = event.shiftKey ? 10 : 1; nudge(key === 'arrowleft' ? -amount : key === 'arrowright' ? amount : 0, key === 'arrowup' ? -amount : key === 'arrowdown' ? amount : 0); return; }
       if (key === ' ' && !modifier) { event.preventDefault(); spaceDown = true; syncTool(); return; }
@@ -1718,6 +1745,7 @@
     ['click', 'dblclick', 'keydown'].forEach(type => viewport.addEventListener(type, disabledActivation, true));
     viewport.addEventListener('wheel', wheel, { passive: false });
     viewport.addEventListener('pointerdown', pointerDown);
+    viewport.addEventListener('contextmenu', contextMenu);
     viewport.addEventListener('pointermove', pointerMove);
     viewport.addEventListener('pointerover', hoverOver);
     viewport.addEventListener('pointerout', hoverOut);
@@ -1729,6 +1757,7 @@
     win.addEventListener('keyup', keyUp);
     win.addEventListener('blur', blur);
     doc.addEventListener('visibilitychange', onVisibility);
+    doc.addEventListener('copy', copyContext);
     win.addEventListener('message', htmlMessage);
     const resize = new win.ResizeObserver(restoreCamera); resize.observe(viewport);
     redraw();
@@ -1751,6 +1780,7 @@
         if (disposed) return;
         finishTextEdit(true); cancelGesture(); disposed = true; if (presenterTimer !== null) win.clearInterval(presenterTimer); releasePreview(); resize.disconnect();
         doc.removeEventListener('visibilitychange', onVisibility);
+        doc.removeEventListener('copy', copyContext);
         stage.removeEventListener('play', quietMedia, true);
         win.removeEventListener('message', htmlMessage);
         win.removeEventListener('keyup', keyUp); win.removeEventListener('blur', blur); htmlFrames.clear();

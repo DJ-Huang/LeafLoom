@@ -9,6 +9,7 @@ from tests.test_remote_attachments import FakeDAV, SOURCE, SECRET
 from vault_rag.local_state import LocalConfig
 from vault_rag.remote_attachments import RemoteAttachments
 from vault_rag.attachment_storage_routes import save_settings, public_settings
+from vault_rag.attachment_scan_policy import SCAN_INTERVAL, STARTUP_GRACE
 
 class AutoSyncTests(TestCase):
     def setUp(self):
@@ -26,17 +27,24 @@ class AutoSyncTests(TestCase):
         for thread in list(self.remote.scan_threads.values()):thread.join(3)
         self.assertFalse(any(thread.is_alive() for thread in self.remote.scan_threads.values()))
 
-    def test_initial_scan_then_five_minutes_and_metadata_callback(self):
+    def test_initial_scan_after_grace_then_thirty_minutes_and_metadata_callback(self):
         self.dav.files['Incoming/a.bin']=b'a';callback=Mock();self.remote.on_scan_completed=callback
-        self.remote.poll_scans();self.finish();self.remote.poll_scans()
+        started=time.time();self.remote.poll_scans();callback.assert_not_called()
+        due=self.remote.auto_scans[(str(self.root),SOURCE)]['next_scan_at']
+        self.assertGreaterEqual(due,started+STARTUP_GRACE)
+        with patch('vault_rag.remote_attachments.time.time',return_value=due+1):
+            self.remote.poll_scans();self.finish();self.remote.poll_scans()
         callback.assert_called_once_with(str(self.root),SOURCE)
         state=public_settings(self.remote,str(self.root))['storages'][0]['connection']
-        self.assertEqual(state['next_scan_at']-state['last_success_at'],300)
+        self.assertEqual(state['next_scan_at']-state['last_success_at'],SCAN_INTERVAL)
         with patch.object(self.remote,'start_scan') as start:self.remote.poll_scans();start.assert_not_called()
         with patch('vault_rag.remote_attachments.time.time',return_value=state['next_scan_at']+1),patch.object(self.remote,'start_scan') as start:
             self.remote.poll_scans();start.assert_called_once()
         self.remote.auto_scans.clear()
         self.assertEqual(public_settings(self.remote,str(self.root))['storages'][0]['connection']['last_success_at'],state['last_success_at'])
+        with patch.object(self.remote,'start_scan') as start:
+            self.remote.poll_scans();start.assert_not_called()
+        self.assertEqual(self.remote.auto_scans[(str(self.root),SOURCE)]['next_scan_at'],state['next_scan_at'])
 
     def test_auth_pause_and_disabled_source_do_not_start_scans(self):
         self.dav.failure_status=401;self.remote.test(str(self.root),SOURCE)
@@ -50,7 +58,10 @@ class AutoSyncTests(TestCase):
         self.remote.scan_threads[('fictional','other')]=Mock(is_alive=Mock(return_value=True))
         with patch.object(self.remote,'start_scan') as start:self.remote.poll_scans();start.assert_not_called()
         self.remote.scan_threads.clear()
-        self.remote.poll_scans();self.finish()
+        self.remote.poll_scans()
+        due=self.remote.auto_scans[(str(self.root),SOURCE)]['next_scan_at']
+        with patch('vault_rag.remote_attachments.time.time',return_value=due+1):
+            self.remote.poll_scans();self.finish()
         self.assertEqual(self.remote.status()['sources'][0]['connection']['scan_state'],'completed')
 
     def test_reconnection_wakes_scan_before_regular_interval(self):

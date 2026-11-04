@@ -2482,7 +2482,7 @@ aw.lastSynced|最近成功同步|Last successful sync|最終同期成功
 aw.notSynced|尚未同步|Not synced yet|未同期
 aw.nextSync|下次检查|Next check|次の確認
 aw.authPaused|请更新账号或密码以恢复同步|Update your account or password to resume sync|同期を再開するにはアカウントまたはパスワードを更新してください
-aw.autoSyncHelp|自动复用已扫描目录，断线后继续；目录缓存 10 分钟后重新核对。需要立即检查全部变化时使用“完整核对”。原文件按需下载。|Completed directories are reused and interrupted scans resume. Cached directories are rechecked after 10 minutes. Use Check all directories to verify all changes now. Originals download on demand.|走査済みのディレクトリを再利用し、中断した走査を再開します。キャッシュは 10 分後に再確認します。すぐに全変更を確認する場合は「全ディレクトリを確認」を使います。元ファイルは必要な時に取得します。
+aw.autoSyncHelp|启动使用已有列表。上传目录约每 30 分钟检查，稳定归档逐步延至最长一周；空闲资料／分组拉取最长 6 小时，重启保留计划。完整核对立即绕过目录缓存；原件按需下载。|Startup uses the saved list. Upload directories check about every 30 minutes; stable archives back off up to one week, idle metadata/groups up to six hours. Schedules survive restart. Check all directories bypasses cache immediately; originals download on demand.|起動時は保存済み一覧を使用します。アップロード先は約30分ごと、安定したアーカイブは最長1週間、資料・グループは最長6時間まで間隔を延ばし、再起動後も保持します。全確認はキャッシュをすぐに無視し、原本は必要時に取得します。
 aw.listUpdated|列表已更新，查看最新内容|List updated — show latest|一覧が更新されました。最新を表示
 as.simpleTitle|附件服务器|Attachment servers|添付サーバー
 as.simpleHelp|填写服务器地址、账号和密码，即可自动同步附件目录与资料。|Enter a server address, account and password to sync attachment directories and metadata automatically.|サーバーのアドレス、アカウント、パスワードを入力すると一覧と資料が自動同期されます。
@@ -2528,3 +2528,25 @@ aw.recoveredSyncing|连接已恢复，正在同步资料|Connection restored; sy
 aw.syncQueued|等待同步资料|Metadata sync queued|資料の同期待ち
 aw.lastConnectionIssue|查看上次连接问题|View last connection issue|前回の接続問題を表示
 ag.loading|正在读取“{name}”分组…|Loading group “{name}”…|グループ「{name}」を読み込み中…
+design.elementActions|控件操作|Element actions|要素の操作
+design.copyElementContext|复制控件定位信息|Copy element location|要素の位置情報をコピー
+design.copyElementsContext|复制 {count} 个控件定位信息|Copy locations of {count} elements|{count} 個の要素の位置情報をコピー
+design.elementContextCopied|已复制控件定位信息，可粘贴给 AI|Element location copied. Paste it into your AI chat.|要素の位置情報をコピーしました。AI チャットに貼り付けられます。
+design.elementContextCopyFailed|复制失败，请重试；桌面端可重启 LeafLoom 后再试|Copy failed. Try again; in the desktop app, restart LeafLoom if it persists.|コピーできませんでした。再試行し、デスクトップ版では改善しない場合 LeafLoom を再起動してください。
+design.compare|对比|Compare|比較
+design.panelSwitch|工作台面板|Workbench panels|ワークベンチのパネル
+design.canvas|画布|Canvas|キャンバス
+design.viewModes|编辑、预览与对比|Edit, preview and compare|編集・プレビュー・比較
+design.comparePreview|对比预览|Comparison preview|比較プレビュー
+design.hideLeftPanel|收起左侧面板|Collapse left panel|左パネルを折りたたむ
+design.showLeftPanel|展开左侧面板|Expand left panel|左パネルを展開
+design.hideRightPanel|收起右侧面板|Collapse right panel|右パネルを折りたたむ
+design.showRightPanel|展开右侧面板|Expand right panel|右パネルを展開
+design.organizePages|文件夹分组|Organize page folders|ページのフォルダー分け
+design.pageFolderName|文件夹名称|Folder name|フォルダー名
+design.pageFolderHint|选择已有文件夹或输入新名称，将勾选的页面归入其中；留空移回未分组。选中整个文件夹后修改名称即可重命名；文件夹至少包含一个页面。|Choose an existing folder or enter a new name for the checked pages; leave blank to ungroup them. Select all pages in a folder to rename it. Folders contain at least one page.|既存のフォルダーを選ぶか新しい名前を入力し、チェックしたページをまとめます。空欄にするとグループを解除します。フォルダー内の全ページを選ぶと名前を変更できます。フォルダーには少なくとも1ページが必要です。
+design.selectAllPages|全选页面|Select all pages|全ページを選択
+design.deselectPages|取消全选|Deselect all|すべて選択解除
+design.ungroupedPages|未分组|Ungrouped|未分類
+design.movePageToFolder|移动到文件夹|Move to folder|フォルダーへ移動
+design.managePageFolder|整理文件夹：{name}|Organize folder: {name}|フォルダーを整理：{name}
