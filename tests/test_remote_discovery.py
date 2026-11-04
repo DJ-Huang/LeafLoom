@@ -12,6 +12,7 @@ from tests import test_remote_attachments as fixtures
 SOURCE,SECRET=fixtures.SOURCE,fixtures.SECRET
 from vault_rag.local_state import ConflictError
 from vault_rag.remote_webdav import RemoteStorageError, WebDAVSource
+from vault_rag.attachment_scan_policy import SCAN_INTERVAL, MAX_DIRECTORY_INTERVAL
 
 
 class IncrementalDiscoveryTests(unittest.TestCase):
@@ -31,6 +32,18 @@ class IncrementalDiscoveryTests(unittest.TestCase):
     def row(self,path):
         with self.manager._db(str(self.root)) as db:
             return dict(db.execute('SELECT * FROM assets WHERE source_id=? AND path=?',(SOURCE,path)).fetchone())
+
+    def test_cached_pass_preserves_receipt_age_and_adaptive_interval(self):
+        self.dav.files['Archive/file.bin']=b'file'
+        self.assertTrue(self.run_scan()['ok'])
+        def receipts():
+            with self.manager._db(str(self.root)) as db:
+                return ([tuple(row) for row in db.execute('SELECT * FROM discovery_directories ORDER BY path')],
+                        [tuple(row) for row in db.execute('SELECT * FROM discovery_intervals ORDER BY path')])
+        before=receipts();self.dav.calls.clear()
+        self.assertTrue(self.run_scan()['ok'])
+        self.assertEqual(self.listings(),[])
+        self.assertEqual(receipts(),before)
 
     def test_interrupted_scan_resumes_completed_directories_after_restart(self):
         self.dav.files.update({'a/first.bin':b'first','a/b/last.bin':b'last'})
@@ -66,6 +79,86 @@ class IncrementalDiscoveryTests(unittest.TestCase):
         self.dav.files['a/b/new.bin']=b'new';self.dav.calls.clear()
         self.assertTrue(self.run_scan()['ok']);self.assertEqual(self.listings(),['a/b'])
         self.assertEqual(self.row('a/b/new.bin')['state'],'ready')
+
+    def test_stable_archive_backs_off_but_upload_tree_remains_frequent(self):
+        self.dav.files.update({'Archive/deep/file.bin':b'first','Incoming/file.bin':b'upload'})
+        now=time.time()
+        with patch('vault_rag.remote_discovery.time.time',return_value=now):self.assertTrue(self.run_scan()['ok'])
+        self.dav.calls.clear()
+        with patch('vault_rag.remote_discovery.time.time',return_value=now+SCAN_INTERVAL+1):self.assertTrue(self.run_scan()['ok'])
+        self.assertEqual(set(self.listings()),{'','Archive','Archive/deep','Incoming'})
+        self.dav.calls.clear()
+        manager=self.manager_for_config();manager.set_credentials(SOURCE,'leafloom',SECRET,revision='stable-revision')
+        with patch('vault_rag.remote_discovery.time.time',return_value=now+2*SCAN_INTERVAL+2):self.assertTrue(self.run_scan(manager)['ok'])
+        self.assertEqual(set(self.listings()),{'','Incoming'})
+        # Expired descendants must still be checked under unchanged/fresh parents.
+        with manager._db(str(self.root)) as db:db.execute("UPDATE discovery_directories SET checked_at=0 WHERE path='Archive/deep'")
+        self.dav.files['Archive/deep/new.bin']=b'new';self.dav.calls.clear()
+        self.assertTrue(self.run_scan(manager)['ok']);self.assertEqual(self.listings(),['Archive/deep'])
+
+    def test_archive_interval_is_bounded_and_changes_reset_it(self):
+        self.dav.files['a/file.bin']=b'first';self.assertTrue(self.run_scan()['ok'])
+        for _ in range(12):self.assertTrue(self.run_scan(force_full=True)['ok'])
+        with self.manager._db(str(self.root)) as db:
+            self.assertEqual(db.execute("SELECT check_interval FROM discovery_intervals WHERE path='a'").fetchone()[0],MAX_DIRECTORY_INTERVAL)
+        self.dav.files['a/new.bin']=b'new';self.assertTrue(self.run_scan(force_full=True)['ok'])
+        with self.manager._db(str(self.root)) as db:
+            self.assertEqual(db.execute("SELECT check_interval FROM discovery_intervals WHERE path='a'").fetchone()[0],SCAN_INTERVAL)
+
+    def test_upload_only_dirties_ancestors_and_keeps_catalog_current(self):
+        self.dav.files.update({'Archive/keep.bin':b'keep','Incoming/old.bin':b'old'})
+        self.assertTrue(self.run_scan()['ok'])
+        job=self.manager.queue_upload(str(self.root),SOURCE,'new.bin',b'new')
+        self.manager.process_pending()
+        self.assertEqual(self.manager.job(str(self.root),job['id'])['state'],'completed')
+        self.dav.calls.clear();self.assertTrue(self.run_scan()['ok'])
+        self.assertTrue({'','Incoming'}<=set(self.listings()))
+        self.assertFalse(any(path.startswith('Archive') for path in self.listings()))
+        with self.manager._db(str(self.root)) as db:self.assertEqual(db.execute('SELECT COUNT(*) FROM discovery_changes').fetchone()[0],0)
+
+    def test_upload_racing_a_listing_keeps_dirty_marker(self):
+        self.dav.files['Incoming/old.bin']=b'old';self.assertTrue(self.run_scan()['ok'])
+        original=WebDAVSource._propfind
+        def racing(provider,path,*args,**kwargs):
+            entries=original(provider,path,*args,**kwargs)
+            if path=='Incoming':
+                with self.manager._db(str(self.root)) as db:
+                    db.execute('INSERT OR REPLACE INTO discovery_changes VALUES(?,?,?)',(SOURCE,'Incoming',time.time()+1))
+            return entries
+        with patch.object(WebDAVSource,'_propfind',racing):self.assertTrue(self.run_scan(force_full=True)['ok'])
+        self.dav.calls.clear();self.assertTrue(self.run_scan()['ok']);self.assertEqual(self.listings(),['Incoming'])
+
+    def test_missing_cached_child_refreshes_parent_on_resume(self):
+        self.dav.files['a/b/gone.bin']=b'gone';self.assertTrue(self.run_scan()['ok'])
+        del self.dav.files['a/b/gone.bin']
+        with self.manager._db(str(self.root)) as db:db.execute("UPDATE discovery_directories SET checked_at=0 WHERE path='a/b'")
+        original=WebDAVSource._propfind
+        def gone(provider,path,*args,**kwargs):
+            if path=='a/b':raise RemoteStorageError('remote_not_found')
+            return original(provider,path,*args,**kwargs)
+        with patch.object(WebDAVSource,'_propfind',gone):self.assertFalse(self.run_scan()['ok'])
+        self.dav.calls.clear();self.assertTrue(self.run_scan()['ok'])
+        self.assertIn('a',self.listings());self.assertNotIn('a/b',self.listings())
+        self.assertEqual(self.row('a/b/gone.bin')['state'],'missing')
+
+    def test_legacy_directory_schema_remains_writable_without_discarding_receipts(self):
+        import sqlite3
+        from vault_rag.remote_discovery import DirectoryCheckpoints
+        path=self.home/'legacy.sqlite'
+        with sqlite3.connect(path) as db:
+            db.executescript('''CREATE TABLE discovery_runs(source_id TEXT PRIMARY KEY,context TEXT,cycle TEXT,mode TEXT,complete INTEGER);
+                CREATE TABLE discovery_directories(source_id TEXT,path TEXT,context TEXT,cycle TEXT,checked_at REAL,entries TEXT,rule BLOB,PRIMARY KEY(source_id,path));''')
+            db.execute('INSERT INTO discovery_runs VALUES(?,?,?,?,?)',(SOURCE,'context','cycle','full',0))
+            db.execute('INSERT INTO discovery_directories VALUES(?,?,?,?,?,?,?)',(SOURCE,'','context','cycle',0,json.dumps([{'path':'','is_dir':True,'size':0}]),None))
+        cache=DirectoryCheckpoints(path,SOURCE,'context',lambda:None)
+        try:
+            self.assertTrue(cache.resumed);self.assertIsNotNone(cache.load(''))
+            self.assertEqual(cache.receipt('')['check_interval'],SCAN_INTERVAL)
+            # An older release can still write the original seven-column row.
+            cache.db.execute('INSERT OR REPLACE INTO discovery_directories VALUES(?,?,?,?,?,?,?)',
+                (SOURCE,'','context','cycle',1,json.dumps([{'path':'','is_dir':True,'size':0}]),None))
+            cache.db.commit();self.assertIsNotNone(cache.load(''))
+        finally:cache.close()
 
     def test_cache_never_rolls_back_newer_head_metadata_or_revives_missing(self):
         self.dav.files['a/file.bin']=b'first';self.assertTrue(self.run_scan()['ok'])

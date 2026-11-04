@@ -25,6 +25,7 @@ import warnings
 from vault_rag.local_state import ConflictError,atomic_write
 from vault_rag.platform_support import private_file_mode,is_link
 from vault_rag.remote_webdav import RemoteStorageError,remote_path
+from vault_rag.attachment_scan_policy import SCAN_INTERVAL, MAX_METADATA_INTERVAL, idle_interval, retry_interval
 
 logger=logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ LIBRARY_SCHEMA='leafloom.asset-library.v1'
 MAX_EVENT_BYTES=256*1024
 MAX_COVER_BYTES=2*1024*1024
 MAX_SYNC_BYTES=256*1024*1024
-BACKGROUND_PULL_INTERVAL=30*60
+BACKGROUND_PULL_INTERVAL=SCAN_INTERVAL
 METADATA_WORKERS=4
 REVIEW={'unmatched','needs_review','confirmed','rejected'}
 OFFICIAL_FIELDS={'product_id','url','title','publisher','summary_zh','description','categories','keywords',
@@ -576,7 +577,7 @@ class AssetLibrary:
         self._root(root)
         if storage_id and storage_id!=self.settings(root)['storage_id']:raise ConflictError('Select the configured asset library storage')
         if not self.sync_lock.acquire(blocking=False):return {**self.status(root),'state':'syncing'}
-        sessions=ExitStack();pulled=0
+        sessions=ExitStack();pulled=0;context=None
         try:
             context=copy.deepcopy(_saved_context) if _saved_context is not None else self._context(root,owner)
             self._check(context)
@@ -587,15 +588,19 @@ class AssetLibrary:
             with self._read_db(root) as db:
                 previous=self._get(db,'sync',{})
                 saved=self._get(db,'pull_checkpoint',{})
+                retry=self._get(db,'background_retry',{})
                 known_library=self._get(db,'library_id','')
                 unexported=bool(db.execute('SELECT 1 FROM files WHERE exported=0 LIMIT 1').fetchone())
             known_fingerprint=_sha(_bytes([context,known_library]))
+            retry_context=_sha(_bytes(context))
+            if _background and retry.get('context')==retry_context and retry.get('retry_at',0)>time.time():return self.status(root)
+            interval=min(MAX_METADATA_INTERVAL,max(BACKGROUND_PULL_INTERVAL,saved.get('interval',BACKGROUND_PULL_INTERVAL))) if saved.get('fingerprint')==known_fingerprint else BACKGROUND_PULL_INTERVAL
             if known_library and str(root) not in self.last_pull and saved.get('fingerprint')==known_fingerprint:
                 age=time.time()-saved.get('pulled_at',0)
-                if 0<=age<BACKGROUND_PULL_INTERVAL:self.last_pull[str(root)]=(known_fingerprint,time.monotonic()-age)
+                if age>=0:self.last_pull[str(root)]=(known_fingerprint,time.monotonic()-age)
             receipt=self.last_pull.get(str(root))
             if (_background and receipt and receipt[0]==known_fingerprint
-                    and time.monotonic()-receipt[1]<BACKGROUND_PULL_INTERVAL
+                    and time.monotonic()-receipt[1]<interval
                     and previous.get('state') in {'ready','queued'}
                     and not unexported and not self._has_sendable(root)):
                 if previous.get('state')=='queued':
@@ -613,16 +618,14 @@ class AssetLibrary:
             self.active_sync={**self.active_sync,'phase':'syncing'}
             fingerprint=_sha(_bytes([context,library_id]));previous=self.last_pull.get(str(root))
             same_checkpoint=previous is not None and previous[0]==fingerprint
-            pull_due=not _background or not same_checkpoint or time.monotonic()-previous[1]>=BACKGROUND_PULL_INTERVAL
+            pull_due=not _background or not same_checkpoint or time.monotonic()-previous[1]>=interval
             # Resume a finite, already-authorized queue before repeating a slow
             # full directory walk. A failed transfer keeps the successful pull
             # checkpoint; first/new-context and explicit syncs still pull first.
             deferred_pull=pull_due and _background and same_checkpoint and self._has_sendable(root)
             if pull_due and not deferred_pull:
                 pulled+=self._pull(root,provider,context)
-                self.last_pull[str(root)]=(fingerprint,time.monotonic())
-                with self.lock,self._db(root) as db:
-                    self._check(context,db=db);self._set(db,'pull_checkpoint',{'fingerprint':fingerprint,'pulled_at':time.time()})
+                self._save_pull(root,context,fingerprint,pulled,_background)
             self._discover(root);self._seed(root,context)
             if resume:
                 with self.lock,self._db(root) as db:
@@ -638,18 +641,26 @@ class AssetLibrary:
             completed=self._flush(root,queued)
             if deferred_pull:
                 pulled+=self._pull(root,provider,context)
-                self.last_pull[str(root)]=(fingerprint,time.monotonic())
-                with self.lock,self._db(root) as db:
-                    self._check(context,db=db);self._set(db,'pull_checkpoint',{'fingerprint':fingerprint,'pulled_at':time.time()})
+                self._save_pull(root,context,fingerprint,pulled,_background)
                 self._discover(root)
-            with self.lock,self._db(root) as db:self._set_sync(db,{'state':'ready','last_synced_at':time.time()});self._project(db)
+            with self.lock,self._db(root) as db:
+                self._set_sync(db,{'state':'ready','last_synced_at':time.time()});self._project(db)
+                self._set(db,'background_retry',{})
+                if completed:
+                    checkpoint=self._get(db,'pull_checkpoint',{})
+                    if checkpoint:self._set(db,'pull_checkpoint',{**checkpoint,'interval':BACKGROUND_PULL_INTERVAL})
             if (pulled or completed) and callable(self.on_changed):
                 try:self.on_changed(root)
                 except Exception:logger.warning('Asset metadata notification unavailable')
             self.active_sync=None
             return {**self.status(root),'completed':len(completed)}
         except RemoteStorageError as error:
-            with self.lock,self._db(root) as db:self._set_sync(db,{'state':error.state,'code':error.code,'reason':error.reason,'operation':error.operation,'checked_at':time.time()})
+            with self.lock,self._db(root) as db:
+                self._set_sync(db,{'state':error.state,'code':error.code,'reason':error.reason,'operation':error.operation,'checked_at':time.time()})
+                if context is not None:
+                    retry=self._get(db,'background_retry',{});key=_sha(_bytes(context))
+                    failures=retry.get('failures',0)+1 if retry.get('context')==key else 1
+                    self._set(db,'background_retry',{'context':key,'failures':failures,'retry_at':time.time()+retry_interval(failures)})
             self.active_sync=None
             return self.status(root)
         except PermissionError:
@@ -660,6 +671,14 @@ class AssetLibrary:
             self.active_sync=None
             try:sessions.close()
             finally:self.sync_lock.release()
+
+    def _save_pull(self,root,context,fingerprint,count,background):
+        with self.lock,self._db(root) as db:
+            self._check(context,db=db)
+            previous=self._get(db,'pull_checkpoint',{})
+            interval=idle_interval(previous.get('interval',BACKGROUND_PULL_INTERVAL),changed=bool(count)) if background and previous.get('fingerprint')==fingerprint else BACKGROUND_PULL_INTERVAL
+            self._set(db,'pull_checkpoint',{'fingerprint':fingerprint,'pulled_at':time.time(),'interval':interval})
+        self.last_pull[str(root)]=(fingerprint,time.monotonic())
 
     def rebuild(self,root,*,owner='local',guard=None):
         return self.sync(root,owner=owner,guard=guard)

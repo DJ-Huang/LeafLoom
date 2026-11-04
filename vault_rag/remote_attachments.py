@@ -25,7 +25,7 @@ import uuid
 from vault_rag.local_state import ConflictError, Files, atomic_write, relative, under
 from vault_rag.platform_support import is_link, private_file_mode, move_exclusive
 from vault_rag.remote_webdav import RemoteStorageError, WebDAVSource, remote_path, validate_source
-from vault_rag.attachment_scan_policy import SCAN_INTERVAL, STARTUP_GRACE, in_scan_scope, register_scan_scope
+from vault_rag.attachment_scan_policy import SCAN_INTERVAL, STARTUP_GRACE, retry_interval, in_scan_scope, register_scan_scope
 from vault_rag.remote_ignore import RemoteIgnore
 from vault_rag.attachment_policy import AttachmentTypeError, DEFAULT_EXTENSIONS, allows, extensions_for, normalize_extensions, register_policy, require_allowed
 
@@ -142,6 +142,8 @@ class RemoteAttachments:
             if prepare:
                 connection.executescript('''
                     CREATE TABLE IF NOT EXISTS sync_checkpoints(source_id TEXT PRIMARY KEY, source_revision TEXT NOT NULL, last_success REAL NOT NULL);
+                    CREATE TABLE IF NOT EXISTS discovery_changes(source_id TEXT NOT NULL,path TEXT NOT NULL,changed_at REAL NOT NULL,PRIMARY KEY(source_id,path));
+                    CREATE TABLE IF NOT EXISTS scan_retries(source_id TEXT PRIMARY KEY,context TEXT NOT NULL,failures INTEGER NOT NULL,next_retry_at REAL NOT NULL);
                     CREATE TABLE IF NOT EXISTS assets(
                         id TEXT PRIMARY KEY,source_id TEXT NOT NULL,path TEXT NOT NULL,name TEXT NOT NULL,
                         size INTEGER NOT NULL,mtime TEXT NOT NULL DEFAULT '',etag TEXT NOT NULL DEFAULT '',
@@ -463,17 +465,22 @@ class RemoteAttachments:
             context=self._connection_context(root,source_id)
             key=(root,source_id);previous=self.auto_scans.get(key,{})
             if previous.get('context')!=context:
-                with self._db(root) as db:checkpoint=db.execute('SELECT last_success FROM sync_checkpoints WHERE source_id=? AND source_revision=?',(source_id,context[2])).fetchone()
+                with self._db(root) as db:
+                    checkpoint=db.execute('SELECT last_success FROM sync_checkpoints WHERE source_id=? AND source_revision=?',(source_id,context[2])).fetchone()
+                    retry=db.execute('SELECT * FROM scan_retries WHERE source_id=? AND context=?',(source_id,_json(context))).fetchone()
                 last=checkpoint[0] if checkpoint else None
-                previous={'context':context,'next_scan_at':max(now+STARTUP_GRACE,(last or 0)+SCAN_INTERVAL),'last_success_at':last};self.auto_scans[key]=previous
+                previous={'context':context,'next_scan_at':max(now+STARTUP_GRACE,(last or 0)+SCAN_INTERVAL,retry['next_retry_at'] if retry else 0),
+                          'retry_at':retry['next_retry_at'] if retry else 0,'last_success_at':last};self.auto_scans[key]=previous
             connection=self._connection_state(root,source_id)
             was=previous.get('connection_state');previous['connection_state']=connection['state']
             if connection.get('retry_paused') or connection['state']!='ready':continue
-            if was and was!='ready':previous['next_scan_at']=0
+            if was and was!='ready':previous['next_scan_at']=previous.get('retry_at',0)
             lifecycle=self.scan_statuses.get(key,{})
             finished=lifecycle.get('scan_finished_at')
             if finished and lifecycle.get('source_revision')==context[2] and finished!=previous.get('observed'):
-                previous.update(observed=finished,next_scan_at=finished+(SCAN_INTERVAL if lifecycle['scan_state']=='completed' else 60))
+                with self._db(root) as db:retry=db.execute('SELECT next_retry_at FROM scan_retries WHERE source_id=? AND context=?',(source_id,_json(context))).fetchone()
+                retry_at=retry[0] if retry else 0
+                previous.update(observed=finished,retry_at=retry_at,next_scan_at=max(retry_at,finished+(SCAN_INTERVAL if lifecycle['scan_state']=='completed' else 60)))
                 if lifecycle['scan_state']=='completed':
                     previous['last_success_at']=finished
                     callback=self.on_scan_completed
@@ -552,6 +559,7 @@ class RemoteAttachments:
     def scan(self,root,source_id,*,guard=None,_scan_id='',_incremental=False,force_full=False):
         self._root(root)
         source_revision=self._source_revision(self._source(source_id,root))
+        context=self._connection_context(root,source_id) if source_id!='local' else None
         key=(str(root),source_id)
         with self.lock:
             scan_lock=self.scan_locks.setdefault(key,threading.Lock())
@@ -570,11 +578,24 @@ class RemoteAttachments:
             if result.get('ok') and source_id!='local':
                 with self.lock,self._db(root) as db:
                     db.execute('INSERT OR REPLACE INTO sync_checkpoints VALUES(?,?,?)',(source_id,source_revision,lifecycle['scan_finished_at']))
+            self._scan_retry(root,source_id,lifecycle,context)
             return {**result,'scan_id':lifecycle['scan_id']}
         except Exception as error:
             lifecycle.update(scan_state='cancelled' if isinstance(error,(InterruptedError,ConflictError,PermissionError)) else 'failed',scan_finished_at=time.time())
+            self._scan_retry(root,source_id,lifecycle,context)
             raise
         finally:scan_lock.release()
+
+    def _scan_retry(self,root,source_id,lifecycle,context):
+        if source_id=='local' or lifecycle['scan_state']=='cancelled':return
+        if self._connection_context(root,source_id)!=context:return
+        with self.lock,self._db(root) as db:
+            if lifecycle['scan_state']=='completed':db.execute('DELETE FROM scan_retries WHERE source_id=?',(source_id,))
+            else:
+                row=db.execute('SELECT failures FROM scan_retries WHERE source_id=? AND context=?',(source_id,_json(context))).fetchone()
+                failures=(row[0] if row else 0)+1
+                db.execute('INSERT OR REPLACE INTO scan_retries VALUES(?,?,?,?)',
+                           (source_id,_json(context),failures,lifecycle['scan_finished_at']+retry_interval(failures)))
 
     @staticmethod
     def _reserved_paths(db,source_id):
@@ -697,7 +718,8 @@ class RemoteAttachments:
                 if incremental:
                     from vault_rag.remote_discovery import DirectoryCheckpoints,discovery_context
                     checkpoint=DirectoryCheckpoints(self.manifest_path(root),source_id,
-                        discovery_context(root,source_revision,credential_revision,metadata_directory),check,force_full=force_full)
+                        discovery_context(root,source_revision,credential_revision,metadata_directory),check,force_full=force_full,
+                        upload_directory=self._source(source_id,root).get('upload_directory','Incoming'))
                 items=provider.scan(on_batch=commit_batch,ignore=ignore,roots=scan_roots,**({'checkpoint':checkpoint} if checkpoint else {}))
                 ignored_paths={item['path'] for item in items if item.get('excluded')}
                 ignored_paths.update(path for path,revision,state in snapshot.values() if ignore.excluded(path))
@@ -1426,6 +1448,11 @@ class RemoteAttachments:
         with self.lock,self._db(root) as db:
             self._check_job(value)
             self._upsert(db,value['source_id'],result,asset_id=value['asset_id'],sha256=value['sha256'])
+            # The catalog is already current. Only the changed directory and
+            # ancestors need a fresh receipt, never unrelated cached branches.
+            parts=value['remote_path'].split('/')
+            db.executemany('INSERT OR REPLACE INTO discovery_changes VALUES(?,?,?)',
+                           [(value['source_id'],'/'.join(parts[:depth]),time.time()) for depth in range(len(parts))])
         from vault_rag.attachment_server_references import publish
         publish(self,root,value['source_id'],value['asset_id'],provider)
         self._check_job(value)

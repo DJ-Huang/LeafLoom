@@ -53,7 +53,7 @@ libraries are retained. Cleanup is journaled and resumes after an interruption.
    exporting. Unzip the export and open `index.html`; keep its companion files. Choose pages in the export dialog; the ZIP contains selected pages and detected dependencies. Known unselected page targets are listed, omitted embeds are blank, and dynamic script references need manual review.
 
 `Ctrl/⌘+Z` undoes, `Ctrl/⌘+Shift+Z` or `Ctrl+Y` redoes, `Ctrl/⌘+D` duplicates,
-and Delete removes selected elements. Focused source/text fields retain their
+`Ctrl/⌘+C` copies the selected elements’ compact location information, and Delete removes selected elements. Focused source/text fields retain their
 normal editing shortcuts. A new edit after undo starts a new history branch.
 
 ## Publish interactive courses to Miaoda
@@ -61,6 +61,12 @@ normal editing shortcuts. A new edit after undo starts a new history branch.
 Choose **Publish to**, then **Miaoda**, select pages, and create a frontend app or associate a compatible Design Studio course app by its app ID. The selected saved revision replaces the app's course; previously unselected pages are excluded. For a new app, an empty scaffold is released first because Miaoda only permits access configuration after publication. Course content is uploaded only after organization access is confirmed; two approvals may be needed. Associated apps retain their existing scope. Media is uploaded to the app's storage; dynamically computed references may require manual review. Publication jobs show progress, require inspection after uncertain writes, and stop while an approver is pending. A changed remote branch blocks replacement. The resulting link is available only after release completes. Feishu CLI authentication and the apps read/write scopes are required.
 
 ## Canvas navigation and inspection
+
+The page list aggregates equal `page.group` values into collapsible folders, ordered by first occurrence; pages retain their document order within each folder. Ungrouped pages remain root entries. The folder organizer submits ordinary `page.update` commands as one undoable operation for the checked pages. Renaming all members renames or merges a folder, and blank group values ungroup pages. Folders are inferred from members, so no empty-folder metadata, file moves, schema migration or document reorder is introduced. Folder collapse is local view state; navigating to a page expands its folder.
+
+Layers and properties panels have independent collapse controls in their tab bars and separate restore/toggle controls in the canvas toolbar. Visibility changes keep panels and both runtimes mounted, preserving drafts, selection and preview state. Narrow workbenches use the panel tabs to reopen a collapsed panel and its header control to return to the canvas.
+
+The **Compare** mode keeps the edit iframe mounted on the left and mounts a second, read-only preview runtime on the right under the same isolated session origin. Each message receiver checks its own iframe source, origin and session. Only the editor can submit design operations; comparison navigation and overlays stay local to the preview. Saved document updates and editor page/variant changes reinitialize the comparison preview; Replay returns to the editor page. Leaving comparison unmounts its iframe. Narrow workbenches expose panel tabs while retaining the horizontal comparison.
 
 Use Select (`V`) for editing and Hand (`H`) for panning, or temporarily hold Space
 while dragging. Ctrl/Command + wheel zooms around the pointer. The toolbar shows
@@ -83,7 +89,11 @@ Full-screen presenting uses the same isolated preview iframe and saved document.
 ## Portable document and durable history
 
 The editable source of truth is `Design/studio/project.json`, not generated
-HTML. Its schema starts with:
+HTML.
+
+Right-click an element on the edit canvas or in the layer list and choose **Copy element location**. The inspector offers the same action for the current selection; Shift+F10 or the context-menu key opens the menu from a focused layer or selected canvas element. The compact clipboard JSON contains only the canonical document’s absolute `file` path, `page_id` (or `component_id` for a master component) and `node_id` for a single element or `node_ids` for multiple elements. Hold Shift to select several elements; right-clicking an already-selected element preserves the selection, while right-clicking an unselected element selects only that element. The source path and page/component identity are copied once for the entire selection. With canvas/layer focus, Cmd+C on Mac or Ctrl+C on Windows invokes the same copy action, including the native Edit → Copy command. Text/input/source editing and ordinary text selections retain normal copying; preview mode does not intercept it. It adds `variant_id` or `has_pending_changes:true` only when applicable. Duplicate paths, names, revisions, layer ancestry, JSON Pointers, HTML attributes and instructions are omitted. Runtime URLs are not source paths. Original HTML text fields retain their native text context menu while editing. Copying does not mutate the design; wait for pending saves and read the latest revision before applying version-checked design operations.
+
+Its schema starts with:
 
 ```json
 {

@@ -4,6 +4,22 @@
 
 ## Unreleased
 
+- Group the Design Studio page list into collapsible folders with page counts. Add or move multiple pages, rename/merge folders and ungroup pages using existing page groups and undo history.
+
+- Design Studio’s left layers panel and right properties panel can now be collapsed and restored independently in Edit and Compare modes, preserving panel state.
+
+- Add Design Studio **Compare** mode: edit on the left and run an independent interactive preview on the right, refreshed after saved changes.
+
+- Reduce repeated attachment-server scans with per-directory adaptive intervals (30 minutes to one week), prompt upload-tree checks and targeted upload invalidation. Back off idle metadata/group pulls to six hours and failed retries to one hour, retain schedules across restart, and recover when a cached directory was deleted externally. Manual full checks remain immediate.
+
+- Add Cmd+C / Ctrl+C copying of compact element locations for single and multiple selections in Design Studio, including native Edit → Copy commands. Preserve normal text/input/source copying and preview behavior.
+
+- Support copying locations for multiple selected elements with shared file/page information and a compact `node_ids` array. Canvas/layer context menus preserve an existing selection, and the inspector supports copying it directly.
+
+- Shorten copied element locations to the absolute source file path and stable page/component and element IDs; include variant and pending-save information only when applicable.
+
+- Fix element-location copying blocked by desktop web clipboard permissions. Use a trusted main-frame system clipboard bridge, retain focus during copying, and provide a selection-based fallback for older desktop sessions and restricted browsers.
+
 ## 0.1.7 — 2026-11-02
 
 - Add **Copy element location** to canvas/layer context menus and the single-element inspector, including canonical source paths, stable IDs, hierarchy, revision and HTML/resource references for pasting into external AI chats.

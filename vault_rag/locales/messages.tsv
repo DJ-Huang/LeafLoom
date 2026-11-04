@@ -2482,7 +2482,7 @@ aw.lastSynced|最近成功同步|Last successful sync|最終同期成功
 aw.notSynced|尚未同步|Not synced yet|未同期
 aw.nextSync|下次检查|Next check|次の確認
 aw.authPaused|请更新账号或密码以恢复同步|Update your account or password to resume sync|同期を再開するにはアカウントまたはパスワードを更新してください
-aw.autoSyncHelp|启动先使用已有列表，后台约每 30 分钟检查一次，重启保留检查时间。暂停只停止目录发现，不影响现有附件和待提交资料。完整核对只检查所选目录并绕过缓存；原件按需下载。|Startup uses the saved list and preserves check times. Background checks run about every 30 minutes. Pausing stops directory discovery while existing attachments and queued metadata remain available. Check all directories bypasses cache within the selected scope. Originals download on demand.|起動時は保存済みの一覧と確認日時を使用し、約30分ごとに確認します。一時停止はディレクトリの検出のみを止め、既存の添付や未送信資料には影響しません。全確認は選択範囲のキャッシュを使わずに行います。元ファイルは必要時に取得します。
+aw.autoSyncHelp|启动使用已有列表。上传目录约每 30 分钟检查，稳定归档逐步延至最长一周；空闲资料／分组拉取最长 6 小时，重启保留计划。完整核对立即绕过目录缓存；原件按需下载。 暂停只停止目录发现，完整核对仅检查所选范围。|Startup uses the saved list. Upload directories check about every 30 minutes; stable archives back off up to one week, idle metadata/groups up to six hours. Schedules survive restart. Check all directories bypasses cache immediately; originals download on demand. Pausing stops directory discovery; full checks stay within the selected scope.|起動時は保存済み一覧を使用します。アップロード先は約30分ごと、安定したアーカイブは最長1週間、資料・グループは最長6時間まで間隔を延ばし、再起動後も保持します。全確認はキャッシュをすぐに無視し、原本は必要時に取得します。 一時停止はディレクトリ検出のみを止め、全確認は選択範囲に限定します。
 aw.listUpdated|列表已更新，查看最新内容|List updated — show latest|一覧が更新されました。最新を表示
 as.simpleTitle|附件服务器|Attachment servers|添付サーバー
 as.simpleHelp|填写服务器地址、账号和密码，即可自动同步附件目录与资料。|Enter a server address, account and password to sync attachment directories and metadata automatically.|サーバーのアドレス、アカウント、パスワードを入力すると一覧と資料が自動同期されます。
@@ -2972,3 +2972,24 @@ site.studio_alt|设计工作台的新建项目窗口，显示空白项目和内�
 site.studio_caption|新建设计项目与内置模板|New design project and built-in templates|新規デザインプロジェクトと内蔵テンプレート
 site.attachments_alt|附件管理中列出的演示图片和素材|Demo images and assets listed in attachment management|添付ファイル管理に表示されたデモ画像と素材
 site.attachments_caption|使用内置模板素材的演示附件库|Demo attachment library using built-in template assets|内蔵テンプレートの素材を使ったデモ添付ライブラリ
+
+design.elementActions|控件操作|Element actions|要素の操作
+design.copyElementContext|复制控件定位信息|Copy element location|要素の位置情報をコピー
+design.copyElementsContext|复制 {count} 个控件定位信息|Copy locations of {count} elements|{count} 個の要素の位置情報をコピー
+design.elementContextCopied|已复制控件定位信息，可粘贴给 AI|Element location copied. Paste it into your AI chat.|要素の位置情報をコピーしました。AI チャットに貼り付けられます。
+design.elementContextCopyFailed|复制失败，请重试；桌面端可重启 LeafLoom 后再试|Copy failed. Try again; in the desktop app, restart LeafLoom if it persists.|コピーできませんでした。再試行し、デスクトップ版では改善しない場合 LeafLoom を再起動してください。
+design.compare|对比|Compare|比較
+design.viewModes|编辑、预览与对比|Edit, preview and compare|編集・プレビュー・比較
+design.comparePreview|对比预览|Comparison preview|比較プレビュー
+design.hideLeftPanel|收起左侧面板|Collapse left panel|左パネルを折りたたむ
+design.showLeftPanel|展开左侧面板|Expand left panel|左パネルを展開
+design.hideRightPanel|收起右侧面板|Collapse right panel|右パネルを折りたたむ
+design.showRightPanel|展开右侧面板|Expand right panel|右パネルを展開
+design.organizePages|文件夹分组|Organize page folders|ページのフォルダー分け
+design.pageFolderName|文件夹名称|Folder name|フォルダー名
+design.pageFolderHint|选择已有文件夹或输入新名称，将勾选的页面归入其中；留空移回未分组。选中整个文件夹后修改名称即可重命名；文件夹至少包含一个页面。|Choose an existing folder or enter a new name for the checked pages; leave blank to ungroup them. Select all pages in a folder to rename it. Folders contain at least one page.|既存のフォルダーを選ぶか新しい名前を入力し、チェックしたページをまとめます。空欄にするとグループを解除します。フォルダー内の全ページを選ぶと名前を変更できます。フォルダーには少なくとも1ページが必要です。
+design.selectAllPages|全选页面|Select all pages|全ページを選択
+design.deselectPages|取消全选|Deselect all|すべて選択解除
+design.ungroupedPages|未分组|Ungrouped|未分類
+design.movePageToFolder|移动到文件夹|Move to folder|フォルダーへ移動
+design.managePageFolder|整理文件夹：{name}|Organize folder: {name}|フォルダーを整理：{name}

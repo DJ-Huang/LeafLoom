@@ -17,6 +17,7 @@ from pathlib import PurePosixPath
 from vault_rag.platform_support import private_file_mode
 from vault_rag.local_state import ConflictError
 from vault_rag.remote_webdav import RemoteStorageError, remote_path
+from vault_rag.attachment_scan_policy import SCAN_INTERVAL, idle_interval, retry_interval
 
 
 def encoded(value):
@@ -31,6 +32,7 @@ class AttachmentGroups:
     def __init__(self, remote, library):
         self.remote, self.library = remote, library
         self.lock = threading.RLock()
+        self.sync_lock = threading.Lock()
         self.scope_changed = lambda: None
         self.wake, self.stopped = threading.Event(), threading.Event()
         self.thread = threading.Thread(target=self._loop, daemon=True, name='attachment-groups')
@@ -299,16 +301,46 @@ class AttachmentGroups:
                 self._accept(db,event,encoded(event),False)
             self.scope_changed()
 
-    def sync(self, root):
+    def sync(self, root, *, _background=False):
+        if not self.sync_lock.acquire(blocking=False):return
+        context=None
+        try:
+            if not self.library.settings(root)['storage_id']:return
+            context=self.library._context(root)
+            return self._sync(root,context,_background=_background)
+        except Exception:
+            if context is not None:
+                try:self.library._check(context)
+                except (PermissionError,ConflictError):pass
+                else:
+                    with self.lock,self._db(root) as db:
+                        row=db.execute("SELECT value FROM state WHERE key='background_retry'").fetchone()
+                        retry=json.loads(row[0]) if row else {};key=digest(context)
+                        failures=retry.get('failures',0)+1 if retry.get('context')==key else 1
+                        db.execute('INSERT OR REPLACE INTO state VALUES(?,?)',('background_retry',json.dumps(
+                            {'context':key,'failures':failures,'retry_at':time.time()+retry_interval(failures)})))
+            raise
+        finally:self.sync_lock.release()
+
+    def _sync(self, root, context, *, _background):
         settings = self.library.settings(root)
         if not settings['storage_id']: return
         self.reconcile_members(root)
-        context = self.library._context(root)
+        self.library._check(context)
         binding={key:context[key] for key in ('source_id','metadata_directory')}
         with self.lock,self._db(root) as db:
             old=db.execute("SELECT value FROM state WHERE key='binding'").fetchone()
             if old and json.loads(old[0])!=binding:raise ConflictError('Group metadata storage changed; explicit relocation is required')
             db.execute('INSERT OR IGNORE INTO state VALUES(?,?)',('binding',json.dumps(binding)))
+            row=db.execute("SELECT value FROM state WHERE key='pull_checkpoint'").fetchone()
+            checkpoint=json.loads(row[0]) if row else {}
+            row=db.execute("SELECT value FROM state WHERE key='background_retry'").fetchone()
+            retry=json.loads(row[0]) if row else {}
+            pending=any(db.execute(f'SELECT 1 FROM {table} WHERE synced=0 LIMIT 1').fetchone() for table in ('events','scope_events'))
+        key=digest(context)
+        if _background and retry.get('context')==key and retry.get('retry_at',0)>time.time():return
+        pull_due=not _background or checkpoint.get('context')!=key or time.time()-checkpoint.get('at',0)>=checkpoint.get('interval',SCAN_INTERVAL)
+        if not pull_due and not pending:return
         directory = context['metadata_directory'] + '/attachment-groups/events'
         provider = self.library._provider(context)
         with provider.session():
@@ -331,20 +363,27 @@ class AttachmentGroups:
             with self.lock,self._db(root) as db:
                 self.library._check(context)
                 db.execute('INSERT OR IGNORE INTO state VALUES(?,?)',('remote_identity',marker['library_id']))
-            self._sync_events(root,context,provider,directory)
-            self._sync_events(root,context,provider,context['metadata_directory']+'/attachment-groups/search-scope/events',scope=True)
+            pulled=self._sync_events(root,context,provider,directory,pull=pull_due)
+            pulled+=self._sync_events(root,context,provider,context['metadata_directory']+'/attachment-groups/search-scope/events',scope=True,pull=pull_due)
         with self.lock, self._db(root) as db:
+            self.library._check(context)
             db.execute('INSERT OR REPLACE INTO state VALUES(?,?)', ('sync', json.dumps({'state': 'synced', 'at': time.time()})))
+            db.execute("DELETE FROM state WHERE key='background_retry'")
+            if pull_due:
+                interval=idle_interval(checkpoint.get('interval',SCAN_INTERVAL),changed=bool(pulled or pending)) if _background and checkpoint.get('context')==key else SCAN_INTERVAL
+                db.execute('INSERT OR REPLACE INTO state VALUES(?,?)',('pull_checkpoint',json.dumps({'context':key,'at':time.time(),'interval':interval})))
+            elif pending:
+                db.execute('INSERT OR REPLACE INTO state VALUES(?,?)',('pull_checkpoint',json.dumps({**checkpoint,'interval':SCAN_INTERVAL})))
 
-    def _sync_events(self, root, context, provider, directory, *, scope=False):
+    def _sync_events(self, root, context, provider, directory, *, scope=False, pull=True):
         table = 'scope_events' if scope else 'events'
-        try: entries = provider.scan(directory, max_files=20000, max_depth=1, prune_reserved=False, read_ignore=False)
+        try: entries = provider.scan(directory, max_files=20000, max_depth=1, prune_reserved=False, read_ignore=False) if pull else []
         except RemoteStorageError as error:
             if error.code != 'remote_not_found': raise
             entries = []
         with self.lock, self._db(root) as db:
             known = {row['id']: hashlib.sha256(row['data']).hexdigest() for row in db.execute(f'SELECT id,data FROM {table}')}
-        pulled=0
+        pulled=0;count=0
         for item in entries:
             match = re.fullmatch(re.escape(directory) + r'/([0-9a-f]{32})-([0-9a-f]{64})\.json', item['path'])
             if not match or item['size'] > 2 * 1024**2: raise ValueError('Invalid remote group event')
@@ -362,6 +401,7 @@ class AttachmentGroups:
                 self.library._check(context)
                 self._accept(db, event, data, True, scope=scope)
             self.scope_changed()
+            count+=1
         with self.lock, self._db(root) as db:
             queued = [dict(row) for row in db.execute(f'SELECT id,data FROM {table} WHERE synced=0')]
         directories=set()
@@ -371,6 +411,7 @@ class AttachmentGroups:
             provider.put_immutable(directory + '/' + row['id'] + '-' + hashlib.sha256(data).hexdigest() + '.json', data, max_bytes=2 * 1024**2,verified_directories=directories)
             self.library._check(context)
             with self.lock, self._db(root) as db: db.execute(f'UPDATE {table} SET synced=1 WHERE id=?', (row['id'],))
+        return count
 
     def _loop(self):
         while not self.stopped.is_set():
@@ -379,7 +420,7 @@ class AttachmentGroups:
             root = str(self.remote.config.root)
             try:
                 # Do not initialize a database for untouched vaults merely by starting LeafLoom.
-                if self.remote._files().state_path('attachment-groups', 'groups.sqlite').exists(): self.sync(root)
+                if self.remote._files().state_path('attachment-groups', 'groups.sqlite').exists(): self.sync(root,_background=True)
             except Exception as error:
                 try:
                     with self.lock, self._db(root) as db:

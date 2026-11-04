@@ -12,7 +12,6 @@
 .dw-toolbar-group{gap:4px}
 .dw-toolbar-group:first-child{gap:8px;margin-right:4px}
 .dw-toolbar-group strong{font-size:12px;font-weight:600;letter-spacing:-.1px;max-width:210px}
-.design-workbench .dw-toolbar-group>button:not(.dw-icon){padding:5px 9px}
 .dw-toolbar-group+.dw-toolbar-group{border-left:1px solid var(--line);padding-left:12px}
 .dw-toolbar .dw-tools{gap:3px}
 .design-workbench .dw-tools>button{width:32px;height:32px;padding:0;border:0;background:transparent;color:var(--muted)}
@@ -202,7 +201,6 @@
 /* Preview is the same isolated runtime, with editing chrome out of the way. */
 .dw-mode-switch{display:flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sidebar)}
 .design-workbench .dw-mode-switch>button{min-width:66px;border:0;background:transparent;color:var(--muted);padding:5px 12px}
-.design-workbench .dw-mode-switch>button.active{background:var(--paper);color:var(--accent);box-shadow:0 1px 4px #0002}
 .dw-preview-toolbar,.dw-preview-status{display:flex;align-items:center;gap:12px;padding:10px 16px;flex-wrap:wrap;border-bottom:1px solid var(--line);background:var(--sidebar);font-size:11px}
 .dw-preview-toolbar>span{color:var(--muted)}
 .dw-preview-toolbar>select{max-width:360px;min-width:160px;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--accent)}
@@ -317,10 +315,8 @@
 .dw-zoom-controls select{font-size:12px;width:66px}
 
 /* Explicit canvas focus keeps panel state mounted and leaves the restore control visible. */
-.design-workbench.is-canvas-focused>.dw-body>.dw-sidebar,
-.design-workbench.is-canvas-focused>.dw-body>.dw-inspector{display:none}
 .design-workbench .dw-panel-toggle{margin-right:4px;border:1px solid var(--dw-subtle-line);border-radius:6px}
-.design-workbench .dw-panel-toggle[aria-pressed=true]{background:var(--dw-selection);color:var(--dw-focus);border-color:color-mix(in srgb,var(--dw-focus) 25%,var(--line))}
+.design-workbench .dw-panel-toggle[aria-expanded=false]{background:var(--dw-selection);color:var(--dw-focus);border-color:color-mix(in srgb,var(--dw-focus) 25%,var(--line))}
 
 /* Full-screen presenting keeps the existing runtime and its interaction state. */
 .design-workbench.is-presenting{position:fixed;inset:0;z-index:1500;width:100vw;height:100dvh;min-width:0;min-height:0;background:#111816;isolation:isolate}
@@ -383,6 +379,48 @@
 .design-workbench.is-presenting>.dw-mobile-panels{display:none}
 @media(max-width:600px){.dw-insert-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.dw-insert-content{padding:16px 20px}.dw-source-editor footer{flex-wrap:wrap}.design-studio-toolbar{padding:8px 12px}.design-studio-left{min-width:0;width:100%}.design-project-select{width:100%;min-width:0;max-width:100%;flex:1}.design-studio-actions{max-width:100%}.design-studio-actions button{font-size:11px}.dw-publish-variants{min-width:0}}
 @media(max-width:600px){.design-studio-left>.design-badge{display:none}.design-studio-left>.design-project-select{order:2;flex:1 1 100%;width:100%}.design-studio-left>button.primary{margin-left:auto}}
+@container studio-workbench (max-width:700px){.dw-canvas-controls>.dw-panel-toggle{display:none}}
+
+/* Keep the edit iframe mounted when entering or leaving side-by-side comparison. */
+.dw-runtime-panes{display:flex;flex:1;min-width:0;min-height:0}
+.dw-edit-runtime,.dw-compare-preview{position:relative;display:flex;flex:1;flex-direction:column;min-width:0;min-height:0}
+.dw-compare-preview{border-left:1px solid var(--line)}
+.dw-compare-runtime{display:block;flex:1;width:100%;min-height:0;border:0}
+.dw-compare-heading{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;height:36px;box-sizing:border-box;padding:4px 12px;border-bottom:1px solid var(--line);background:var(--paper);color:var(--muted)}
+.dw-compare-heading button{padding:3px 7px;background:transparent;border:0}
+.is-comparing .dw-canvas-controls{flex-wrap:wrap}
+.is-comparing .dw-canvas-heading{height:auto;min-height:44px;flex-wrap:wrap;gap:5px;padding:6px 12px}
+@container studio-workbench (max-width:1100px){
+ .design-workbench.is-comparing>.dw-body>.dw-sidebar,.design-workbench.is-comparing>.dw-body>.dw-inspector{display:none}
+ .is-comparing .dw-mobile-panels{display:flex}
+ .is-comparing[data-mobile-panel=layers]>.dw-body>.dw-sidebar,.is-comparing[data-mobile-panel=inspector]>.dw-body>.dw-inspector{display:flex;position:absolute;inset:0;z-index:5;width:100%;min-width:0;background:var(--paper)}
+ .is-comparing .dw-body{position:relative}
+}
+
+/* Independent panel visibility keeps drafts and canvas runtimes mounted. */
+.design-workbench.is-left-panel-collapsed>.dw-body>.dw-sidebar,
+.design-workbench.is-right-panel-collapsed>.dw-body>.dw-inspector{display:none}
+.design-workbench .dw-tabs>.dw-panel-collapse{margin-left:auto;flex-shrink:0;width:24px;padding:3px;border:0;color:var(--muted)}
+.design-workbench .dw-tabs>.dw-panel-collapse:hover{background:var(--hover);color:var(--ink,var(--accent))}
+@container studio-workbench (max-width:1100px){.is-comparing .dw-canvas-controls>.dw-panel-toggle{display:none}}
+
+/* Page folders use existing page.group values; document/presentation order stays intact. */
+.dw-page-heading-actions{display:flex;align-items:center;gap:3px}
+.dw-page-folder{display:flex;align-items:center;gap:3px;margin-top:5px;min-width:0}
+.design-workbench .dw-page-folder-toggle{display:flex;flex:1;min-width:0;justify-content:flex-start;gap:5px;padding:7px 4px;border:0;background:transparent;color:var(--muted);text-align:left}
+.dw-page-folder-toggle>svg{flex-shrink:0}
+.dw-page-folder-toggle>span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:550}
+.dw-page-folder-toggle>small{font-size:10px}
+.dw-page-folder-toggle:hover,.dw-page-folder-toggle:focus-visible{background:var(--hover)}
+.dw-page-list>button.is-grouped-page{padding-left:25px}
+.dw-page-folders-form{padding:12px 20px 20px}
+.dw-folder-selection{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px 0 8px}
+.dw-folder-page-options{max-height:40vh;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.dw-folder-page-options>label{display:flex;align-items:center;gap:9px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--line-soft,var(--line))}
+.dw-folder-page-options>label:last-child{border-bottom:0}
+.dw-folder-page-options input{flex-shrink:0;accent-color:var(--primary)}
+.dw-folder-page-options span{min-width:0;overflow-wrap:anywhere}
+.dw-folder-page-options small{display:block;margin-top:3px;color:var(--muted);font-size:10px}
 .dw-export-modal input[type=checkbox]{accent-color:var(--primary)}
 @container studio-workbench (max-width:700px){.dw-canvas-controls>.dw-panel-toggle{display:none}}
 .dw-miaoda-associate{display:flex;gap:8px;margin:10px 0}.dw-miaoda-associate input{flex:1;min-width:0;border:1px solid var(--line);border-radius:6px;padding:7px;background:var(--paper);color:var(--accent)}.dw-export-body details summary{cursor:pointer;font-weight:600}.dw-export-warning a{color:var(--dw-focus);text-decoration:underline}

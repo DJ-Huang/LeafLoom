@@ -10,6 +10,8 @@ Open a design project and wait for its saved state.
 
 ## Steps
 
+Choose **Compare** beside Edit and Preview to keep an editable canvas on the left and an interactive preview on the right. Saved changes and editor page/variant switches refresh the preview and restart its interactions. Navigation in the right pane stays independent of the editor; **Replay** returns it to the editor’s current page. Narrow workbenches offer **Canvas / Layers / Properties** tabs while keeping the two canvases side by side.
+
 Choose **Preview** at the top of the workbench to play the current page’s animation, scripts and navigation without exporting a ZIP. The workbench commits active text input and waits for pending saves first. If saving fails, your changes remain queued and editing stays open with retry guidance, rather than showing stale content. Preview hides layers, properties, selection outlines and handles. Use **Preview page** to switch existing artboards, including desktop/mobile layouts included in a template, and **Replay** to restart the current page. **Edit** or **Back to editing** restores the page, selected layers and canvas position from before preview.
 
 In **Preview**, choose **Present full screen** to hide the application chrome and fit the entire artboard to the screen without stretching. The current interaction continues without restarting. Move the pointer to the bottom to show page controls and **Exit full screen**, or press **Esc** to return to ordinary preview. You can then return to editing as usual. If native full screen is unavailable, presentation still fills the application window.

@@ -276,6 +276,16 @@ permissions. Display loss or missed heartbeats mute, pause and hide output.
 
 附件列表对主动筛选与后台刷新使用不同的显示策略：主动切换分组、来源、类型、搜索和排序时清除旧分页快照与选择，显示当前分组名称和加载状态；后台更新仍保留列表、选择与草稿。状态轮询只以就绪状态和保存位置等稳定字段判断刷新需求，进度及文件计数不再直接取消正在读取的列表。新读取失败时不把旧分组内容显示在新标签下；超时使用统一语言键直接提示重试。分组条件仍由现有 `group_id` 查询及后端规则匹配完成，不更改既有分组定义、分类资料和 AI 检索范围。
 
+### Bounded background attachment checks
+
+`attachment_scan_policy.py` sets a 30-minute scheduler cadence and a 60-second startup grace. Startup derives the due time from persisted successful checks instead of forcing an immediate walk. Per-directory `check_interval` starts at 30 minutes, doubles after unchanged server listings, and caps at seven days; changed child membership, file validators or ignore-rule bytes reset it. Collection validators are not recursive change signals. The configured upload directory, its descendants and ancestors are capped at 30 minutes, including discovery of a newly created upload tree. Each expired descendant is checked even under a fresh parent.
+
+Manifest schema initialization is reused by database identity, with future schema checks on every connection.
+
+Verified uploads already update the manifest directly; durable `discovery_changes` mark only the changed directory and its ancestors. Receipts clear changes only up to the listing's start time so a concurrent upload cannot be lost. A missing cached child invalidates its parent's listing before resume, avoiding an unfinished-cycle retry loop; absence still requires complete reconciliation and not-found confirmation. Per-source context-bound `scan_retries` persist exponential delays from one minute to one hour; reconnect does not bypass them, while explicit checks can run immediately. Adaptive intervals live in a separate `discovery_intervals` table keyed to receipt timestamps, preserving older releases' seven-column receipt writes without discarding old receipts or changing attachment IDs.
+
+Asset metadata and attachment groups persist authorization-bound successful-pull receipts. Idle pull intervals double from 30 minutes up to six hours; observed remote changes or local publications return them to 30 minutes. Fresh background work without pending records returns without network activity; queued changes publish without waiting for the next pull. The group worker's 30-second wakeup is no longer a network polling interval. Both synchronizers persist failure backoff from one minute to one hour and explicit sync bypasses that delay. No NAS watcher/change-feed protocol is introduced; external archive changes can take up to a week to appear and idle metadata/group changes up to six hours.
+
 ## 笔记数据库
 
 `database-field-editor` 从记录属性菜单及顶部字段列表共用入口；选项草稿以固定值标识，编辑显示名和颜色，移除只影响可选数组，保留历史 optionMeta、labelKey 与未知键。新选项避免复用已移除的原值，受管理的选项以 `allowCustomOptions:false` 保证空列表仍拒绝新赋值，同时兼容旧的无限制空列表。名称／类型／选项与可选任务映射由 `field.set` 同次原子保存，未提供显示名时保留已有显示名。`task_setup` 在字段合并后验证并设置初始／完成状态，不迁移原任务值。`validate_values` 仅允许更新时保留该记录已持有的历史选项，仍拒绝新赋值的未知选项；多选单元格显示已持有的历史项以便清除。界面检查为 `tests/frontend_database_field_editor.cjs`，结合详情字段、看板及公共 MCP 针对性测试。
