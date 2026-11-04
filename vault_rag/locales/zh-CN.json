@@ -2952,5 +2952,11 @@
   "design.deselectPages": "取消全选",
   "design.ungroupedPages": "未分组",
   "design.movePageToFolder": "移动到文件夹",
-  "design.managePageFolder": "整理文件夹：{name}"
+  "design.managePageFolder": "整理文件夹：{name}",
+  "document.outline": "本页目录",
+  "document.showOutline": "展开目录",
+  "document.hideOutline": "收起目录",
+  "document.emptyOutline": "暂无标题，添加标题后会显示在这里。",
+  "document.expandSection": "展开“{title}”的子目录",
+  "document.collapseSection": "折叠“{title}”的子目录"
 }

@@ -1,0 +1,20 @@
+.document-outline{display:flex;flex:0 0 240px;flex-direction:column;min-height:0;min-width:0;padding:14px 12px 16px 8px;background:var(--paper);box-sizing:border-box}
+.document-outline.is-collapsed{flex-basis:44px;padding-right:8px}
+.document-outline-controls{display:flex;flex-shrink:0;align-items:center;padding:0 0 9px 2px}
+.document-outline-toggle{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:3px;border:0;background:transparent;color:var(--primary);border-radius:4px;cursor:pointer}
+.document-outline-toggle:hover{background:var(--hover)}
+.document-outline-toggle:focus-visible,.document-outline-entry:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
+.document-outline-list{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:transparent transparent}
+.document-outline-list:hover,.document-outline-list:focus-within{scrollbar-color:var(--line) transparent}
+.document-outline-row{display:flex;align-items:flex-start;gap:2px;min-width:0;border-radius:4px}
+.document-outline-row:hover{background:var(--hover)}
+.document-outline-fold,.document-outline-fold-space{display:inline-flex;flex:0 0 18px;width:18px;height:24px;align-items:center;justify-content:center;margin-top:4px}
+.document-outline-fold{padding:0;border:0;border-radius:3px;background:transparent;color:var(--muted);cursor:pointer}
+.document-outline-fold:hover{color:var(--primary);background:var(--line)}
+.document-outline-fold:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
+.document-outline-entry{display:block;flex:1;min-width:0;border:0;background:transparent;border-radius:4px;padding:6px 4px;color:var(--muted);font-size:13px;line-height:1.6;text-align:left;overflow-wrap:anywhere;cursor:pointer}
+.document-outline-entry.is-top-level{font-weight:500}
+.document-outline-entry:hover{background:transparent}
+.document-outline-entry[aria-current=location]{color:var(--primary)}
+.document-outline-empty{padding:5px 8px;color:var(--muted);font-size:12px;line-height:1.7}
+.document-outline.is-overlay{position:absolute;inset:0 auto 0 0;width:min(256px,85%);z-index:15;box-shadow:6px 0 18px #00000012}

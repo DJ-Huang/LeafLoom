@@ -2952,5 +2952,11 @@
   "design.deselectPages": "Deselect all",
   "design.ungroupedPages": "Ungrouped",
   "design.movePageToFolder": "Move to folder",
-  "design.managePageFolder": "Organize folder: {name}"
+  "design.managePageFolder": "Organize folder: {name}",
+  "document.outline": "On this page",
+  "document.showOutline": "Expand outline",
+  "document.hideOutline": "Collapse outline",
+  "document.emptyOutline": "No headings yet. Add headings to see them here.",
+  "document.expandSection": "Expand subsections of “{title}”",
+  "document.collapseSection": "Collapse subsections of “{title}”"
 }

@@ -1,6 +1,6 @@
 import {Diagnostic} from './i18n';
 import {t,useLocale} from './i18n';
-import React,{lazy,memo,Suspense,useCallback,useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
+import React,{lazy,memo,Suspense,useCallback,useEffect,useId,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {BookOpen,Download,FileText,Code,Eye,Search,History,PanelRight,MessageCircle,Link2,MoreHorizontal,Maximize2,Minimize2,Undo2,Redo2} from 'lucide-react';
 import {api,affected,Change,media,Note,OpenNote} from './api';
 import {useApi} from './hooks';
@@ -11,6 +11,9 @@ import {VirtualList} from './virtual';
 import {acceptDiskVersion,applyProperties,changeAnnotation,changeDocument,discardAiDraft,documentHistory,documentState,loadDocument,saveDocument,travelDocument} from './document-state';
 import {addAiReference} from './ai-context';
 import {MarkdownPreview} from './reader';
+import {documentHeadings} from './rich-markdown';
+import type {DocumentHeading} from './rich-markdown';
+import {DocumentOutline} from './document-outline';
 import {Annotation,AnnotationAction,AnnotationColor,AnnotationSelection,makeAnchor,resolveAnchor,selectedHighlights} from './annotations';
 import {CommentsPanel} from './annotations-ui';
 const LiveEditor=lazy(()=>import('./editor').then(module=>({default:module.LiveEditor})));
@@ -32,6 +35,12 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
  const ext=(path.split('.').pop()||'').toLowerCase(),isHtml=ext==='html'||ext==='htm';
  const textFile=['md','txt','base','html','htm','json','yaml','yml','toml','csv','srt','vtt','py','js','ts','css','log'].includes(ext);
  const viewKey='view:'+vaultRoot+'\n'+path;
+ const body=useRef<HTMLDivElement>(null),outlineToggle=useRef<HTMLButtonElement>(null),outlineId=useId();
+ const [outlinePreference,setOutlinePreference]=useState<boolean|null>(()=>{const value=sessionStorage.getItem(viewKey+':outline');return value===null?null:value==='true';});
+ const [compactOutline,setCompactOutline]=useState(()=>window.innerWidth<1100);
+ const outlineVisible=ext==='md'&&(outlinePreference??!compactOutline);
+ const [currentHeading,setCurrentHeading]=useState<number>();
+ const pendingOutlineJump=useRef<DocumentHeading|undefined>(undefined);
  const [mode,setMode]=useState<'live'|'source'|'read'>(()=>{const editing=sessionStorage.getItem('edit:'+path),stored=sessionStorage.getItem(viewKey+':mode');if(editing)sessionStorage.removeItem('edit:'+path);if(ext==='md')return stored==='source'&&!editing?'source':'live';if(editing)return 'source';return (stored as 'live'|'source'|'read')||'read';});
  const [side,setSide]=useState(()=>sessionStorage.getItem(viewKey+':side')==='true'),[more,setMore]=useState(false),[find,setFind]=useState(false),[search,setSearch]=useState(''),[match,setMatch]=useState(0);
  const [commentsOpen,setCommentsOpen]=useState(false),[annotations,setAnnotations]=useState<Annotation[]>([]);
@@ -98,7 +107,23 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
   if(!anchor)throw new Error(t('选区无效'));
   await annotationWrite('annotations/'+item.id,{revision:item.revision,anchor,etag},'PATCH');
  };
- const outline=useMemo(()=>[...text.matchAll(/^(#{1,6}) (.+)$/gm)].map(item=>({label:item[2],depth:item[1].length,pos:item.index!})),[text]);
+ const outline=useMemo(()=>ext==='md'?documentHeadings(text):[],[text,ext]);
+ useEffect(()=>{
+  const element=area.current;if(!element||!active||ext!=='md')return;
+  let frame=0;
+  const update=()=>{frame=0;if(!visible.current||!outline.length)return;
+   const position=element.scrollTop>0&&element.scrollTop+element.clientHeight>=element.scrollHeight-2?session.text.length:editor.current?.sourceAtHeight?.(element.getBoundingClientRect().top+32);
+   if(position==null)return;
+   let from=0,to=outline.length;
+   while(from<to){const middle=(from+to)>>>1;if(outline[middle].pos<=position)from=middle+1;else to=middle;}
+   setCurrentHeading(outline[Math.max(0,from-1)].pos);
+  };
+  const schedule=()=>{if(!frame)frame=requestAnimationFrame(update);};
+  element.addEventListener('scroll',schedule,{passive:true});element.addEventListener('vault-document-rendered',schedule);element.addEventListener('load',schedule,true);
+  const mutation=new MutationObserver(schedule);mutation.observe(element,{subtree:true,childList:true});
+  const resize=new ResizeObserver(schedule);resize.observe(element);schedule();
+  return()=>{cancelAnimationFrame(frame);mutation.disconnect();resize.disconnect();element.removeEventListener('scroll',schedule);element.removeEventListener('vault-document-rendered',schedule);element.removeEventListener('load',schedule,true);};
+ },[active,ext,mode,outline,session,!!note]);
  const matches=useMemo(()=>{if(!search)return [];const lower=text.toLocaleLowerCase(),needle=search.toLocaleLowerCase(),out:number[]=[];let at=0;while((at=lower.indexOf(needle,at))>=0&&out.length<10000){out.push(at);at+=Math.max(1,needle.length);}return out;},[text,search]);
  useEffect(()=>{if(textFile||!active)return;const changed=(event:Event)=>{if(affected('file?path='+encodeURIComponent(path),(event as CustomEvent<Change>).detail))setResourceVersion(value=>value+1);};window.addEventListener('vault-data-changed',changed);return()=>window.removeEventListener('vault-data-changed',changed);},[path,textFile,active]);
  useEffect(()=>{
@@ -110,6 +135,18 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
  },[session,active,textFile,ext,path]);
  useEffect(()=>{sessionStorage.setItem(viewKey+':mode',mode);},[mode,viewKey]);
  useEffect(()=>{sessionStorage.setItem(viewKey+':side',String(side));},[side,viewKey]);
+ useEffect(()=>{if(outlinePreference!==null)sessionStorage.setItem(viewKey+':outline',String(outlinePreference));},[outlinePreference,viewKey]);
+ useEffect(()=>{
+  const element=body.current;if(!element||!active||ext!=='md')return;
+  const resize=()=>setCompactOutline(element.clientWidth<900);
+  const observer=new ResizeObserver(resize);observer.observe(element);resize();
+  return()=>observer.disconnect();
+ },[active,ext,!!note]);
+ useEffect(()=>{
+  if(!active||!compactOutline||!outlineVisible)return;
+  const key=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!event.defaultPrevented&&!event.isComposing&&!document.querySelector('dialog[open]')){setOutlinePreference(false);outlineToggle.current?.focus();}};
+  window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);
+ },[active,compactOutline,outlineVisible]);
  useEffect(()=>{if(!active)setMore(false);},[active]);
  useEffect(()=>{
   if(!active)return;
@@ -134,8 +171,19 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
   while((node=walker.nextNode())){const content=node.textContent?.toLocaleLowerCase()||'';let at=0;while(needle&&(at=content.indexOf(needle,at))>=0){if(count++===wanted){const range=document.createRange();range.setStart(node,at);range.setEnd(node,at+search.length);window.getSelection()?.removeAllRanges();window.getSelection()?.addRange(range);node.parentElement?.scrollIntoView({block:'center'});return;}at+=needle.length;}}
 
  };
+ const jumpToOutline=(heading:DocumentHeading)=>{
+  setCurrentHeading(heading.pos);
+  if(!editor.current){pendingOutlineJump.current=heading;return;}
+  const view=editor.current;pendingOutlineJump.current=undefined;
+  jump(heading.pos,heading.label);
+  requestAnimationFrame(()=>{
+   if(editor.current!==view||!visible.current||!area.current)return;
+   const top=view.sourceTop?.(heading.pos);
+   if(top!=null)area.current.scrollTop+=top-area.current.getBoundingClientRect().top-32;
+  });
+ };
  const releaseEditor=(view:any)=>{sessionStorage.setItem(viewKey+':cursor',String(view.state.selection.main.head));editor.current=null;};
- const readyEditor=(view:any)=>{editor.current=view;area.current?.dispatchEvent(new CustomEvent('vault-document-rendered'));const stored=sessionStorage.getItem('cursor:'+path)||sessionStorage.getItem(viewKey+':cursor');if(stored!==null){sessionStorage.removeItem('cursor:'+path);view.dispatch({selection:{anchor:Math.min(Number(stored)||0,view.state.doc.length)},scrollIntoView:true});}view.dom.addEventListener('keyup',()=>sessionStorage.setItem(viewKey+':cursor',String(view.state.selection.main.head)));};
+ const readyEditor=(view:any)=>{editor.current=view;area.current?.dispatchEvent(new CustomEvent('vault-document-rendered'));const stored=sessionStorage.getItem('cursor:'+path)||sessionStorage.getItem(viewKey+':cursor');if(stored!==null){sessionStorage.removeItem('cursor:'+path);view.dispatch({selection:{anchor:Math.min(Number(stored)||0,view.state.doc.length)},scrollIntoView:true});}view.dom.addEventListener('keyup',()=>sessionStorage.setItem(viewKey+':cursor',String(view.state.selection.main.head)));if(pendingOutlineJump.current)jumpToOutline(pendingOutlineJump.current);};
  if(ext==='base')return <LazyBoundary><Suspense fallback={<p>{t("正在打开视图…")}</p>}><BaseViewer path={path} onOpen={onOpen} notify={notify}/></Suspense></LazyBoundary>;
  if(!textFile)return <div className="media-view"><div className="media-heading"><h2>{name(path)}</h2><a className="button" href={media(path,true)}><Download size={15}/> {" "}{t("下载原文件")}</a></div>{/^(png|jpg|jpeg|webp|gif|svg|avif)$/.test(ext)?<img src={media(path)} alt={name(path)} decoding="async"/>:/^(mp4|webm|mov|m4v)$/.test(ext)?<VideoPlayer path={path} active={active} stateKey={viewKey}/>:/^(mp3|m4a|wav|ogg|flac)$/.test(ext)?<AudioPlayer path={path} active={active} stateKey={viewKey}/>:ext==='pdf'?active&&<iframe className="pdf-view" src={media(path)} title={name(path)}/>:<div className="empty-state"><BookOpen size={40}/><h2>{t("文件已保存在本地")}</h2><p>{t("此格式可下载后使用对应程序打开。")}</p></div>}</div>;
  if(!note&&!(isHtml&&mode==='read'))return <div className={'empty-state '+(session.error?'error':'')}>{session.error||t("正在打开文档…")}{session.error&&<button onClick={()=>void loadDocument(session,undefined,true)}>{t("重试")}</button>}</div>;
@@ -155,7 +203,7 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
    <button autoFocus role="menuitem" onClick={()=>{addAiReference({root:vaultRoot,path,text:selectionMenu.text});setSelectionMenu(undefined);}}>{t("添加到 AI 对话")}</button>
    {ext==='md'&&selectionMenu.range&&<><button role="menuitem" onClick={()=>{requestAnnotation('highlight','yellow',selectionMenu.range!);setSelectionMenu(undefined);}}>{t('添加高亮')}</button><button role="menuitem" disabled={!selectedHighlights(session.text,annotations,selectionMenu.range).length} onClick={()=>{requestAnnotation('clear-highlight',undefined,selectionMenu.range!);setSelectionMenu(undefined);}}>{t('清除高亮')}</button><button role="menuitem" onClick={()=>{requestAnnotation('comment',undefined,selectionMenu.range!);setSelectionMenu(undefined);}}>{t('添加评论')}</button></>}
   </div>}
-  <div className="document-body"><div ref={area} className={'writing-area'+(isHtml?' html-writing-area':'')} onContextMenu={event=>{
+  <div ref={body} className="document-body">{ext==='md'&&<DocumentOutline id={outlineId} headings={outline} compact={compactOutline} expanded={outlineVisible} current={outline.some(heading=>heading.pos===currentHeading)?currentHeading:outline[0]?.pos} toggleRef={outlineToggle} onToggle={()=>setOutlinePreference(!outlineVisible)} onJump={(heading,keepOutline)=>{jumpToOutline(heading);if(compactOutline&&!keepOutline)setOutlinePreference(false);}}/>}<div ref={area} className={'writing-area'+(isHtml?' html-writing-area':'')} onContextMenu={event=>{
    if(!active||!['md','txt'].includes(ext))return;
    const selection=window.getSelection();let selected='';
    const range=editor.current?.state.selection.main as {from:number,to:number}|undefined;
