@@ -114,6 +114,24 @@ Open a local `.html` or `.htm` file, confirm its project folder once, and run th
 
 ![Local HTML reading room previewed inside LeafLoom](assets/screenshots/en/showcase-html.png)
 
+### Work hub Skill
+
+Keep work records, local tasks and reports across projects. Configure office-platform preferences and connect Feishu when needed; platforms marked as not integrated are not available for collection or sync. [Work hub guide](docs/WORK_HUB.md). The image shows the actual settings panel.
+
+![Work hub source and office-platform settings, with unintegrated platforms labeled](assets/screenshots/en/showcase-workhub.jpg)
+
+### Design Studio
+
+Start from a blank board or a built-in template, organize pages and layers, and export an independent HTML project. The screenshot shows the actual new-project template picker. [Design Studio guide](docs/en/help/design-studio.md).
+
+![Design Studio new-project dialog with blank project and built-in templates](assets/screenshots/en/showcase-studio.jpg)
+
+### Attachment management
+
+Browse and search local files and configured servers, organize files into groups, and preview or download originals. Select the groups available for AI asset search. This demo library uses built-in template assets. [Attachment guide](docs/en/help/attachments.md).
+
+![Demo images and assets in attachment management](assets/screenshots/en/showcase-attachments.jpg)
+
 ## Get started
 
 **Recommended: install the desktop app from the [latest Release](https://github.com/DJ-Huang/LeafLoom/releases/latest).** No repository clone or preinstalled Python, Node or Ollama is needed.
