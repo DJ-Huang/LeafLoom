@@ -6,6 +6,7 @@ import time
 import uuid
 from contextlib import closing
 
+from vault_rag.attachment_policy import DEFAULT_EXTENSIONS, extensions_for, register_policy
 from vault_rag.local_state import ConflictError, atomic_write
 from vault_rag.platform_support import private_file_mode
 
@@ -40,6 +41,7 @@ class AttachmentIndexJobs:
                 for suffix in ('-journal', '-wal', '-shm'):
                     files.state_path('attachments.sqlite' + suffix)
                 with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=1)) as db:
+                    register_policy(db, extensions_for(files))
                     version = db.execute('PRAGMA user_version').fetchone()[0]
                     result['schema_version'] = version
                     if version > 1:
@@ -50,7 +52,7 @@ class AttachmentIndexJobs:
                         row = db.execute('SELECT scanned_at FROM state WHERE root=?', (root,)).fetchone()
                         if row:
                             result.update(state='ready', usable=True, last_scanned_at=row[0],
-                                          files=db.execute('SELECT count(*) FROM assets WHERE attachment=1').fetchone()[0])
+                                          files=db.execute('SELECT count(*) FROM assets WHERE attachment_allowed(path)=1').fetchone()[0])
         except (OSError, ValueError, sqlite3.Error) as error:
             result.update(state='failed', error=str(error))
         if result['state'] == 'unsupported':
@@ -85,10 +87,10 @@ class AttachmentIndexJobs:
     def _workspace_status(self, local, root):
         """Upload destination never hides an already configured catalog."""
         remote = getattr(self.runtime, 'remote_attachments', None)
-        settings = remote._settings(root) if remote else {}
+        settings = remote._settings(root) if remote else {'allowed_extensions': list(extensions_for(self.index._snapshot()))}
         default = settings.get('default_source', 'local')
         result = {**local, 'local_index': dict(local), 'storage_mode': 'local' if default == 'local' else 'server',
-                  'default_storage_id': default}
+                  'default_storage_id': default, 'allowed_extensions': settings.get('allowed_extensions', list(DEFAULT_EXTENSIONS))}
         if settings.get('sources'):
             result['usable'] = True
             if not local['usable'] and local['state'] != 'building':

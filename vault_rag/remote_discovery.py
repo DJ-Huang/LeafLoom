@@ -13,7 +13,7 @@ import threading
 import time
 import uuid
 
-from vault_rag.attachment_scan_policy import SCAN_INTERVAL, MAX_DIRECTORY_INTERVAL, idle_interval
+from vault_rag.attachment_scan_policy import SCAN_INTERVAL, MAX_DIRECTORY_INTERVAL, idle_interval, normalize_scan_roots
 from vault_rag.remote_ignore import IGNORE_NAME, MAX_IGNORE_BYTES, IgnoreRuleError, RemoteIgnore
 from vault_rag.remote_webdav import RemoteStorageError, remote_path
 
@@ -153,10 +153,11 @@ class DirectoryCheckpoints:
 
     def close(self):self.db.close()
 
-    def scan(self, provider, path='', *, max_files=100000,max_depth=32,on_batch=None,ignore=None,prune_reserved=True,read_ignore=True):
-        path=remote_path(path);pending=[(path,0)];remote_pending=[];seen=set();result=[];active={}
+    def scan(self, provider, path='', *, max_files=100000,max_depth=32,on_batch=None,ignore=None,prune_reserved=True,read_ignore=True,roots=None):
+        path=remote_path(path);pending=[(p,0) for p in (normalize_scan_roots(roots) if roots is not None else [path])];remote_pending=[];seen=set();result=[];active={}
         reserved=(provider.source['metadata_directory'],) if prune_reserved else ()
         ignore=ignore or RemoteIgnore(reserved);provider.ignore_checks=[];provider.scan_checkpoint=self
+        if roots is not None and read_ignore:provider._scan_ancestor_rules(roots,ignore)
         excluded=0;reused=0;resources=[];resources_lock=threading.Lock();local=threading.local()
 
         def fetch(directory):
@@ -204,8 +205,10 @@ class DirectoryCheckpoints:
                     excluded+=int(item['excluded']);result.append(item);batch.append(item)
                 if len(result)+len(pending)+len(remote_pending)+len(active)>max_files:raise RemoteStorageError('directory_count_limit')
             counts={'scanned':len(result),'directories':len(seen),'pending_directories':len(pending)+len(remote_pending)+len(active),
-                    'excluded':excluded,'cached_directories':reused,'scan_mode':self.label}
+                    'excluded':excluded,'cached_directories':reused,'server_directories':len(seen)-reused,
+                    'current_directory':directory,'phase':'reading_cache' if cached else 'checking_directories','scan_mode':self.label}
             if on_batch is not None:on_batch(batch,counts)
+            # Reusing a receipt must not rewrite it or extend its freshness.
             if not cached:self.save(directory,entries,rule,checked_at)
 
         try:
@@ -224,6 +227,10 @@ class DirectoryCheckpoints:
                             else:remote_pending.append((directory,depth))
                         while remote_pending and len(active)<DIRECTORY_WORKERS:
                             directory,depth=remote_pending.pop()
+                            if on_batch is not None:
+                                on_batch([],{'scanned':len(result),'directories':len(seen),'pending_directories':len(pending)+len(remote_pending)+len(active)+1,
+                                    'excluded':excluded,'cached_directories':reused,'server_directories':len(seen)-reused,
+                                    'current_directory':directory,'phase':'checking_directories','scan_mode':self.label})
                             active[workers.submit(fetch,directory)]=(directory,depth)
                         if not active:continue
                         completed,_=wait(active,return_when=FIRST_COMPLETED)

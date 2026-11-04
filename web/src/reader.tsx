@@ -27,8 +27,8 @@ export function QueryView({query,onOpen}:{query:string,onOpen:OpenNote}){
 
 function Embed({target,source,onOpen,depth}:{target:string,source:string,onOpen:OpenNote,depth:number}){
  useLocale();
- const [path,setPath]=useState(''),[text,setText]=useState(''),[error,setError]=useState('');
- useEffect(()=>{const controller=new AbortController();let alive=true;api('resolve?target='+encodeURIComponent(target)+'&source='+encodeURIComponent(source),undefined,undefined,{signal:controller.signal}).then(async data=>{
+ const [path,setPath]=useState(''),[text,setText]=useState(''),[error,setError]=useState(''),[message,setMessage]=useState('');
+ useEffect(()=>{const controller=new AbortController();let alive=true;api('resolve?target='+encodeURIComponent(target.split('#')[0])+'&source='+encodeURIComponent(source),undefined,undefined,{signal:controller.signal}).then(async data=>{
   if(data.candidates.length!==1){if(alive)setError(data.candidates.length?t("同名附件，请点击选择"):t("嵌入目标不存在"));return;}const next=data.candidates[0];if(!alive)return;setPath(next);
   if(next.endsWith('.md')&&depth<2){const note=await api('file?path='+encodeURIComponent(next),undefined,undefined,{signal:controller.signal});if(!alive)return;let body=note.text;const anchor=target.split('#')[1];if(anchor){const lines=body.split('\n');if(anchor.startsWith('^')){const i=lines.findIndex((line:string)=>line.trim().endsWith(anchor));if(i>=0){let start=i;while(start>0&&lines[start-1].trim())start--;body=lines.slice(start,i+1).join('\n');}}else{const i=lines.findIndex((line:string)=>/^#{1,6} /.test(line)&&line.replace(/^#+ /,'').trim()===anchor);if(i>=0){const level=lines[i].match(/^#+/)![0].length;let end=i+1;while(end<lines.length&&!new RegExp('^#{1,'+level+'} ').test(lines[end]))end++;body=lines.slice(i,end).join('\n');}}}setText(body);}
  }).catch(e=>{if(alive&&e.name!=='AbortError')setError(e.message);});return()=>{alive=false;controller.abort();};},[target,source,depth]);
@@ -37,7 +37,7 @@ function Embed({target,source,onOpen,depth}:{target:string,source:string,onOpen:
  if(/\.(png|jpe?g|webp|gif|avif|svg)$/i.test(path))return <img src={media(path)} alt={target} loading="lazy" decoding="async"/>;
  if(/\.(mp4|webm|mov|m4v)$/i.test(path))return <VideoPlayer path={path}/>;
  if(/\.(mp3|m4a|wav|ogg|flac)$/i.test(path))return <audio controls preload="metadata" src={media(path)}/>;
- if(path.endsWith('.base'))return <Suspense fallback={<p>{t("正在打开视图…")}</p>}><BaseViewer path={path} onOpen={onOpen} notify={setError}/></Suspense>;
+ if(path.endsWith('.base'))return <Suspense fallback={<p>{t("正在打开视图…")}</p>}><div>{message&&<p role="status">{message}</p>}<BaseViewer key={target} path={path} onOpen={onOpen} notify={setMessage} embedded viewId={target.split('#view=')[1]||''}/></div></Suspense>;
  if(path.endsWith('.md')&&text)return <div className="embedded-note"><button className="text-link" onClick={()=>onOpen(path)}>{path.split('/').pop()}</button><MarkdownPreview text={text} path={path} onOpen={onOpen} depth={depth+1}/></div>;
  return <button className="text-link" onClick={()=>onOpen(path)}>{target}</button>;
 }

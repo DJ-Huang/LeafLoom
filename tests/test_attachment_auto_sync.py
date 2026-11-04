@@ -22,12 +22,16 @@ class AutoSyncTests(TestCase):
         self.remote.save(str(self.root),{'sources':[{'id':SOURCE,'base_url':'https://fixture.invalid/','username':'leafloom'}]})
         self.remote.set_credentials(SOURCE,'leafloom',SECRET)
         self.remote.poll_connections()
+        # Most scheduler tests start after the startup grace; dedicated tests cover launch deferral.
+        self.remote.poll_scans()
+        for state in self.remote.auto_scans.values():state['next_scan_at']=0
 
     def finish(self):
         for thread in list(self.remote.scan_threads.values()):thread.join(3)
         self.assertFalse(any(thread.is_alive() for thread in self.remote.scan_threads.values()))
 
     def test_initial_scan_after_grace_then_thirty_minutes_and_metadata_callback(self):
+        self.remote.auto_scans.clear()  # This case starts before the fixture's simulated grace expires.
         self.dav.files['Incoming/a.bin']=b'a';callback=Mock();self.remote.on_scan_completed=callback
         started=time.time();self.remote.poll_scans();callback.assert_not_called()
         due=self.remote.auto_scans[(str(self.root),SOURCE)]['next_scan_at']

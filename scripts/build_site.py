@@ -172,6 +172,13 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
         features = []
         for number, key, shot in (("01", "markdown", "showcase-markdown"), ("02", "graph", "showcase-graph"), ("03", "html", "showcase-html"), ("04", "search", "04-search")):
             features.append(f'<article class="feature"><div class="feature-copy"><span class="feature-index">{number} /</span><h3>{t(key + "_title")}</h3><p>{t(key + "_body")}</p></div><figure><img src="{escape(base)}assets/{lang}/{shot}.png" width="1800" height="1125" loading="lazy" alt="{t(key + "_alt")}"></figure></article>')
+        more_features = "".join(
+            f'<article><h3>{t(key + "_title")}</h3><p>{t(key + "_body")}</p>' +
+            f'<figure><a href="{escape(base)}assets/{lang}/showcase-{key}.jpg"><img src="{escape(base)}assets/{lang}/showcase-{key}.jpg" loading="lazy" alt="{t(key + "_alt")}"></a><figcaption>{t(key + "_caption")}</figcaption></figure>' +
+            (f'<a class="text-link" href="{base}docs/{lang}/{slug}/">{t("learn_more")} <span aria-hidden="true">↗</span></a>' if slug else f'<a class="text-link" href="{REPO}/blob/main/work-hub/SKILL.md">{t("learn_more")} <span aria-hidden="true">↗</span></a>') +
+            '</article>'
+            for key, slug in (("workhub", ""), ("studio", "design-studio"), ("attachments", "attachments"))
+        )
         principles = "".join(f'<article><h3>{t(key + "_title")}</h3><p>{t(key + "_body")}</p></article>' for key in ("files", "scope", "optional"))
         values.update({
             "lang": lang, "og_locale": og_locale, "base": escape(base), "base_url": escape(base_url),
@@ -182,7 +189,7 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
             "privacy_url": f"{base}docs/{lang}/privacy/",
             "release_url": escape(info["url"]), "release_tag": escape(info["tag"]),
             "hero_downloads": download_button("windows") + download_button("macos", secondary=True),
-            "platforms": "".join(platforms), "features": "\n".join(features), "principles": principles,
+            "platforms": "".join(platforms), "features": "\n".join(features), "more_features": more_features, "principles": principles,
             "headline": t("headline").replace("\n", "<br>"),
         })
         folder = output / route
@@ -209,6 +216,8 @@ def build(output: Path, release: dict, base_url: str = DEFAULT_URL) -> None:
         target.mkdir(exist_ok=True)
         for shot in SHOTS:
             shutil.copy2(ROOT / f"assets/screenshots/{lang}/{shot}.png", target / f"{shot}.png")
+        for shot in ("workhub", "studio", "attachments"):
+            shutil.copy2(ROOT / f"assets/screenshots/{lang}/showcase-{shot}.jpg", target / f"showcase-{shot}.jpg")
     help_urls = Documentation(base_url).build(output)
     urls = "".join(f"<url><loc>{escape(url)}</loc></url>" for url in
                    [base_url + page for _, route, _ in LANGUAGES.values() for page in (route, route + "about/")] + help_urls)

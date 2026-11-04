@@ -157,7 +157,7 @@ bytes back to the caller. Import still registers one undoable operation, and
 original bytes are retained when registration is undone. `design_library` lists published personal items;
 `design_publish_library` publishes a versioned component/asset/style/script and
 `design_import_library` explicitly imports or updates it with local dependency
-copies. `design_export` creates an independent HTML ZIP. Reading requires full
+copies. `design_export` creates an independent HTML ZIP. Optional `page_ids` limits the export to selected pages and their detected dependencies; omitted retains the full-project behavior. An optional `expected_revision` rejects stale exports. Script-generated references require manual review. Reading requires full
 note access; modifying tools use the connection's separate note-write grant.
 The legacy tools remain compatible, with managed-project adapters preserving
 version checks and transaction history.
@@ -482,6 +482,23 @@ Prepared downloads use a separate 20 GiB staging budget, independently of previe
 
 ### Batch script
 
+Restart an updated LeafLoom backend before using the extended script. Preview the target group first:
+
+```sh
+python3 scripts/collect_unity_catalog.py --root /path/to/vault --group "Unity Asset" --dry-run --report preview.json
+python3 scripts/collect_unity_catalog.py --root /path/to/vault --group "Unity Asset" --start --wait --report collection.json
+```
+
+`--group` accepts an existing group ID or unique name and snapshots membership through the local attachment API, including all pages. Its scope uses stable file IDs so binding a candidate to a product does not reset progress. Only items in the configured product catalog can be collected; other servers require their own catalog configuration. An empty group produces an empty selection. Metadata belongs to a product, so associated copies outside that group also display updated facts. `--limit N` caps the selected inventory (0 means all), `--refresh` includes already-complete products, and `--delay` sets the wait between packages (0.5–60 seconds, default 1). These options require `--start` or `--dry-run`. A preview cannot be combined with `--wait`.
+
+Default collection fills missing covers, official tags and descriptions for linked products as well as matching unknown packages. Known product IDs are fetched directly. New automatic associations require one exact normalized title/publisher match; a unique title without publisher evidence creates a review proposal instead of binding a file. Existing personal fields and previously obtained nonempty facts survive an incomplete refresh. Attachment descriptions fall back to the collected source excerpt. `needs_review` results with `missing_fields` indicate incomplete metadata and are retried on a later run; these are not complete successes. Official rate limits and access challenges pause collection, including failures while fetching a cover.
+
+Transient network errors and temporary server unavailability are retried twice with a short delay; a rate limit or access challenge pauses immediately.
+
+Up to three official reads (including cover downloads) can run concurrently. Metadata changes and checkpoints are committed one item at a time; on rate limits or access challenges no new reads are started and unfinished inputs remain available when the task resumes.
+
+The authenticated local endpoints `POST /api/asset-library/enrichment/plan` and `POST /api/asset-library/enrichment/start` accept `root`, optional `item_ids` (catalog IDs), `asset_ids` (stable file IDs), `limit`, `refresh` and `delay`. When both ID filters are supplied they intersect; either empty list selects nothing. `plan` reads local inventory without store requests, metadata events or checkpoint changes. `start` persists the scope and progress; a running task rejects a different scope with a conflict. A completed or stopped task starts a new inventory when its selection scope changes; changing only the delay on an interrupted task preserves its checkpoint. The preview uses a separate endpoint so an older backend cannot silently treat a preview as a start. Legacy `action:enrich` remains supported with the default scope.
+
 [`scripts/collect_unity_catalog.py`](../scripts/collect_unity_catalog.py) starts or observes the same local collection task without browser automation. Start LeafLoom first and use its connected vault as `--root`. `--start --wait --interval 10 --report collection-report.json` starts/resumes and observes collection; `--status --report status-report.json` reads current progress. Omitting a mode also reads status. The backend persists collection progress, so stopping the script does not cancel a task. Official `succeeded` results do not imply Chinese summaries or translations are complete; inspect those fields separately.
 
 Use `--apply-chinese chinese.json --report chinese-report.json` separately from `--wait`. Input is an array of partial official-field updates:
@@ -533,3 +550,59 @@ Notes participate in normal undo/redo and copies. Audience runtime documents,
 project-origin `Design/studio/project.json`, HTML ZIPs and static-publish snapshots
 omit notes. Presenter window control is a desktop-only main-frame interface,
 not a general MCP or project-script debugging endpoint.
+
+## Note databases
+
+`vault_database(action="list"|"config"|"query"|"record"|"capabilities", path?, folder?, view_id?, search?, limit=100, cursor="", group_key?, anchor_path?, recent_paths?, record_path?, offset=0, text_limit=12000)` discovers local `.base` files, reads typed fields and stable view IDs, queries Markdown records, reads a database-scoped record body, or lists all database workflows. Results include workspace revision, configuration revision and per-record revisions. Limits are 1–200; stale cursors require restarting the query.
+
+`vault_database_update(path, command, workspace_revision, expected_revision, operation_id?)` uses the same service as the UI. Workspace read/write permissions apply independently to local and Tunnel connections; legacy retrieval credentials gain no database access. `create`, `record.create` and `record.duplicate` require a unique operation ID; identical retries reuse that ID. Other commands require the read-time configuration revision.
+
+The existing command JSON shape remains compatible. `tools/list` now publishes a discriminated command schema with required arguments for every database write, instead of an opaque object. Call `vault_database(action="capabilities")` for the complete operation map, supported views/fields, pagination limits and related file/body/attachment tools. `action="record"` requires `path` (the database) and exact `record_path`; it reads character pages using offset/text_limit (1–24000) and returns both record and configuration revisions. It cannot read a record outside that database folder.
+
+Commands:
+
+- Edit select/multi-select choices using `field.set.field.options` (stable values) and `optionMeta[value]` (`label`, `color`). Use `allowCustomOptions:false` for managed choices, so deleting every option still rejects new assignments; legacy unrestricted empty lists remain compatible. Copy unchanged metadata entries so historical labels, `labelKey` and unknown keys survive. Omitted `displayName` preserves the current name. Removing a value from `options` keeps original note values; record updates may retain their own historical selections but cannot add unknown values, and new records cannot receive removed choices. To replace task initial/completed states, include `field.set.task_setup` in that same write, using valid remaining/new options. Validation rejects incomplete mappings without partially saving the field or rewriting notes.
+- Property actions reuse `field.set {key,field:{},displayName}` for a shared display-name change and `field.remove {key}` for shared definition removal. Both preserve original Markdown property values and bodies; removal clears field references in views and refuses built-in/read-only properties. Reorder primary detail properties with `view.update.patch.leafloom.detailFields`; reorder collapsed properties with `detailExtraOrder`. These configuration writes retain workspace/config revision checks and never modify the record body.
+- Record detail layouts use `view.update.patch.leafloom.detailFields` (an ordered list of configured field keys); other properties stay expandable. `field.set` optionally accepts **both** `detail_view_id` and `detail_fields` to merge a field definition and append its key to that detail layout in one version-checked save. Invalid layout keys or stale revisions reject the entire change. Removing a field also removes its detail-layout reference and retains the original Markdown values.
+- `view.move {view_id,before_view_id? or after_view_id?}` reorders a tab using stable IDs. Supply exactly one neighbor; self-targets and missing IDs are rejected. Keep read-time workspace/config revisions. Only the `views` array order changes; settings, records and fixed-view embeds are preserved. An unchanged position returns `changed:false` without saving. A repeated request with a stale revision is rejected; reload before another move.
+- `create`: `{type:"create", folder?:"Projects"}`; path ends in `.base`. Omitted folder creates a sibling directory named after the database.
+- `field.set`: `{type:"field.set",key:"status",displayName:"Status",field:{type:"select",options:["Open","Done"]}}`. Types: text, number, select, multiselect, date (YYYY-MM-DD), checkbox, url, attachment (list of `[[vault/path]]` references). `field.remove {key}` removes configuration, preserving note values. Keys are fixed; change displayName for renaming.
+- `view.add {view:{name,type,order?,leafloom?}}`, `view.update {view_id,patch}`, `view.remove {view_id}`. Types: table, list, cards, leafloomTimeline, leafloomBoard. Standard sort/groupBy and namespaced coverField/cardSize/fit/startField/endField/conditions are supported. Conditions are ANDed and use field/operator/value; operators eq, neq, contains, empty, not_empty, gt, lt, gte, lte.
+- `record.create {title,values,view_id?}` writes a distinct Markdown note. The selected view (first view if omitted) prefills unambiguous writable `leafloom.conditions` equalities, including record type. Precedence is task initial state, view equality values, board `group_key`, then explicit `values`. Search, expressions, ranges, conflicting equalities and read-only fields do not supply defaults; titles retain the caller's input. Retries reuse the original saved defaults even if the view changes. `record.update {path,record_revision,values}` updates configured properties with a note revision check. Titles use the built-in `title` field.
+- `record.duplicate {path,record_revision,title?,view_id?,search?}` copies the full Markdown note into its current folder with a distinct file name, retaining the literal body, unknown properties and relative attachment references. An existing note `id` receives a fresh value. Original notes are unchanged; the result includes `visible` for the requested view. Read-time workspace/config/source revisions are required; reuse `operation_id` for retries.
+
+Creation and duplication may opt into `return_record: true` inside the command. The persisted receipt then includes `record` (path/title/metadata/file/revision) and a catalog-version marker for immediate UI display; the default receipt remains compact. HTTP and MCP queries accept up to 20 `recent_paths` and return their `recent_records` from the complete filtered result, independent of pagination. Excluded/out-of-scope paths reveal no records. This reconciliation does not alter normal page order, cursor validation or retrieval scopes.
+- `record.trash {path,record_revision?,dry_run:true}` returns a preview and operation_token; execute the same path with `dry_run:false,operation_token`. Supplying `record_revision` rejects a stale source before preview/execution. The original note goes to recoverable trash.
+
+No operation selects notes for RAG. Read note content with existing note tools, and preserve unsaved drafts. Clients must refresh tool discovery after upgrading.
+
+Ordinary saves/deletions wait for the active incremental file queue before metadata queries. Temporary `metadata_pending` responses include `retry_after_ms` (normally 25ms for an incremental batch; initial preparation can be longer). HTTP uses status 503 and `pending: true`; respect the hint and refresh read-time revisions after genuine conflicts. Configuration/query reuse is bound to content and workspace/catalog versions; it does not bypass permissions, source revisions or undo/trash safeguards.
+
+### 数据库看板与任务预设
+
+`vault_database` 与 HTTP `POST /api/bases/query` 对 `leafloomBoard` 首先返回 `groups`（key、value、count、configured、可选名称和颜色）、总数、config_revision 和 catalog_version。将某列返回的 `key` 原样作为 `group_key` 再查询该列；limit 默认 100、最大 200。cursor 仅用于相同列和快照；可选 anchor_path 在刷新后定位记录，并使用 previous_cursor 读取此前的窗口。其他四视图返回结构不变。浏览数据库不更改 RAG 范围。
+
+`vault_database_update` 及 `/api/bases/commands` 新增以下用法，权限和工作区／配置版本保护沿用现有接口：
+
+- `create {folder?, preset: "tasks"}` 创建五视图任务数据库，省略 preset 保留普通数据库行为。
+- `view.add {view: {type: "leafloomBoard", name, groupBy?, leafloom?}, preset: "tasks"}` 复用或创建兼容任务字段；可用 task_setup 明确 statusField、priorityField、dueField、initialStatus、completedStatuses。view.update 也可显式携带 task_setup。普通看板按现有可编辑单选字段 groupBy.property 分列。
+- `field.set` 的单选配置保留字符串 options，并可增加 `optionMeta: {原值: {label?, color?}}`；color 为 gray、blue、green、red、orange、yellow、purple、pink。修改标签不重写笔记值。
+- `record.create` 可携带 view_id、group_key、search，自动填写视图明确的可写等值属性（例如记录类型）和所在列属性；优先级为任务初始状态、视图等值条件、列属性、显式 values。返回 visible 指明是否符合当前视图，显式覆盖后被其他筛选排除时仍保留提示。
+- `record.move {view_id, path, record_revision, group_key, catalog_version, before_path? 或 after_path?, search?}` 保存分组与顺序。自动排序时允许跨列，禁止同列位置调整。相邻记录必须属于查询范围与目标列。
+- `board.undo {move_id}` 撤销对应操作。只有当前文件仍符合操作后像时才执行，避免覆盖后续修改。
+- `board.group.set {view_id, value, label?, color?}` 新增或编辑看板分组选项。value 为固定属性值；同值重复调用不会生成重复选项，修改 label/color 保留笔记原值及未指定的选项设置。列顺序、隐藏、折叠和空列通过 `view.update.patch.leafloom.board` 的 groupOrder、hiddenGroups、collapsedGroups、hideEmpty 配置；字段/列宽、卡片布局、筛选/排序/分组与任务映射也使用 view.update。
+- `board.group.remove {view_id, group_key, dry_run: true}` 预览删除分组，返回 count、全部受影响记录的 `records: [{path, revision}]`、catalog_version 和 config_revision。范围遵循数据库目录和数据库级筛选，忽略当前视图筛选、搜索与分页。确认后携带原 records、catalog_version、`target_value: null`（未分类）或另一现有选项，使用预览的 config_revision 作为 expected_revision，并提供唯一 operation_id。事务共同移除共享字段选项、清理各看板列配置并迁移记录属性，保留笔记和正文；初始状态或唯一完成状态必须指定接替状态，不能删除“未分类”。
+
+移动、分组删除与撤销需要唯一 operation_id；同一请求超时重试复用原 ID，改变请求使用新 ID。成功回执包含 undo_id、config_revision、record_revision；冲突应重新读取，不绕过版本校验。跨文件中断会恢复或安全回滚；外部修改导致的恢复冲突保留资料，需要先检查文件历史。只读 MCP 连接不能执行上述写入。
+
+### Database lifecycle, bodies and attachments
+
+All five views use the same public commands. Use `record.update.values` for title, typed properties, attachment references and both timeline dates in one save; use `record.move` for board columns/positions. Read bodies with `vault_database(action="record")`, then use `vault_update_note` for complete-source replace, unique-text edit or append, retaining YAML and read-time versions. Use `vault_files` / `vault_files_update` for media lookup, upload, previews and delivery; no duplicate attachment store is introduced. Stable embeds are ordinary Markdown `![[path.base#view=<id>]]`.
+
+`vault_move` supports moving/renaming `.base` definitions and repairs supported Markdown references, including fixed-view embeds. `vault_delete` recycles only the `.base`, preserving the record directory. Both require an affected-file preview and confirmation token. `vault_list_records`, `vault_read_record` and `vault_restore` expose database history/trash/move recovery with existing version checks. These file-lifecycle operations do not enable arbitrary `.base` edits through the generic note-text writer.
+
+## Work hub workflow
+
+The installable work-hub Skill composes existing workspace/database and Feishu tools for conversation capture, source snapshots, explicit task writes and reports. It does not extend RAG selection or add implicit external permissions. See [Work hub API and workflow](WORK_HUB.md).
+
+For an explicitly requested local Feishu page mirror, the bundled helper can use the same user's local `lark-cli` and authenticated local file/upload APIs. Large media streams directly to the configured attachment server instead of passing through MCP's bounded temporary-file transfer. This requires access to the service host and does not add a new MCP command or permit Feishu writes.

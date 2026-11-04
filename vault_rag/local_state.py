@@ -419,6 +419,7 @@ class Files:
             if not b.parent.is_dir() or b.is_relative_to(a):raise ValueError('目标目录无效')
             self.snapshot(source)
             allpaths={p.relative_to(self.config.root).as_posix() for p in self.walk()}
+            canonical={path_key(p):p for p in allpaths}
             names={}
             for rel in allpaths:names.setdefault(path_key(rel.rsplit('/',1)[-1]),[]).append(rel)
             mapping={p:destination+p[len(source):] for p in allpaths if under(p,source)}
@@ -428,7 +429,7 @@ class Files:
                 def replace(m):
                     target=m.group(2) if m.group(1) else m.group(5)
                     base,anchor,alias=split_link(target)
-                    found=self.resolve(target,rel,paths=allpaths,names=names)
+                    found=self.resolve(target,rel,paths=allpaths,names=names,canonical=canonical)
                     if len(found)!=1:return m.group(0)
                     resolved=found[0]
                     if resolved not in mapping and newsource==rel:return m.group(0)
@@ -445,6 +446,14 @@ class Files:
                 if new!=text:
                     data=new.encode();data=(b'\xef\xbb\xbf'+data) if old.startswith(b'\xef\xbb\xbf') else data
                     edits[rel]=(old,data)
+            from vault_rag.database_board import rename_board_references
+            for rel in sorted(p for p in allpaths if p.lower().endswith('.base')):
+                p=self.config.root/rel;old=p.read_bytes()
+                try:new=rename_board_references(old.decode('utf-8-sig'),mapping)
+                except (ValueError,TypeError,AttributeError):continue
+                if b'\r\n' in old and b'\n' not in old.replace(b'\r\n',b''):new=new.replace('\r\n','\n').replace('\n','\r\n')
+                data=new.encode();data=(b'\xef\xbb\xbf'+data) if old.startswith(b'\xef\xbb\xbf') else data
+                if data!=old:edits[rel]=(old,data)
             return {'source':source,'destination':destination,'mapping':mapping,'edits':edits}
     def move(self,source,destination,*,expected_state=None):
         with self.config.lock,self.lock:

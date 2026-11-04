@@ -1,5 +1,11 @@
 # File operations and recovery records
 
+Server mode uses the server catalog directly. Local initialization no longer prepares an organization plan; this article describes an optional local file operation. See [server originals and device catalogs](attachments.md).
+
+
+Preview and execute server migration separately in **Settings → Files & import → Attachment storage**. It releases local originals only after upload, readback verification and durable old-path mapping, without adding a permanent local `originals/` archive. The `.vault-rag/attachment-migrations/` recovery directories below belong to local organization; existing history and recycle records are not removed automatically. Old links resolve inside LeafLoom; other editors are not guaranteed to support them. See [server attachments and cache](attachments.md).
+
+
 ## Your goal
 
 Rename, move or recycle supported attachments with reference checks, and keep recovery records from earlier versions.

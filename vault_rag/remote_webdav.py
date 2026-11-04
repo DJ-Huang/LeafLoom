@@ -17,6 +17,7 @@ import xml.etree.ElementTree as ET
 
 import httpx
 
+from vault_rag.attachment_scan_policy import normalize_scan_roots
 from vault_rag.remote_ignore import IGNORE_NAME,MAX_IGNORE_BYTES,RemoteIgnore,IgnoreRuleError
 
 logger=logging.getLogger(__name__)
@@ -57,7 +58,7 @@ def validate_source(source):
     if isinstance(source,dict) and (source.get('type')=='smb' or str(source.get('base_url','')).startswith(('smb://','\\\\'))):
         from vault_rag.remote_smb import validate_smb_source
         return validate_smb_source(source)
-    allowed = {'id','name','type','base_url','remote_root','username','enabled','upload_directory','metadata_directory','secret_ref','allow_private_http','connection_hint','revision'}
+    allowed = {'id','name','type','base_url','remote_root','username','enabled','upload_directory','metadata_directory','secret_ref','allow_private_http','connection_hint','revision','scan_roots','scan_paused'}
     if not isinstance(source, dict) or set(source) - allowed:
         raise ValueError('Unsupported attachment source setting')
     result = dict(source)
@@ -85,6 +86,9 @@ def validate_source(source):
                   upload_directory=remote_path(result.get('upload_directory', 'Incoming')),
                   connection_hint=result.get('connection_hint', 'direct'))
     if result['connection_hint'] not in {'direct','official-client'}:raise ValueError('Invalid connection hint')
+    result['scan_roots']=normalize_scan_roots(result.get('scan_roots',['']))
+    result['scan_paused']=result.get('scan_paused',False)
+    if type(result['scan_paused'])is not bool:raise ValueError('Invalid automatic scan setting')
     if type(result['enabled'])is not bool:raise ValueError('Invalid source enabled setting')
     writable=result['upload_directory']
     result['metadata_directory']=remote_path(result.get('metadata_directory','/'.join(p for p in (writable,'LeafLoomCatalog/v1') if p)),allow_empty=False)
@@ -188,9 +192,10 @@ class WebDAVSource:
         _,headers,_=self._request('HEAD',path,limit=0)
         return self._metadata(path,headers)
 
-    def _propfind(self,path,*,retry_timeouts=0):
+    def _propfind(self,path,*,retry_timeouts=0,depth=1):
+        if type(depth) is not int or depth not in (0,1):raise ValueError('Unsupported WebDAV depth')
         body=b'<?xml version="1.0"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/><getlastmodified/><getetag/><getcontenttype/></prop></propfind>'
-        _,_,data=self._request('PROPFIND',path,headers={'Depth':'1','Content-Type':'application/xml'},content=body,allowed=(207,),limit=16*1024*1024,retry_timeouts=retry_timeouts)
+        _,_,data=self._request('PROPFIND',path,headers={'Depth':str(depth),'Content-Type':'application/xml'},content=body,allowed=(207,),limit=16*1024*1024,retry_timeouts=retry_timeouts)
         if b'<!DOCTYPE' in data.upper() or b'<!ENTITY' in data.upper():raise RemoteStorageError('unsafe_xml')
         try:tree=ET.fromstring(data)
         except ET.ParseError:raise RemoteStorageError('invalid_webdav_xml') from None
@@ -283,7 +288,7 @@ class WebDAVSource:
             if verified is not None and current in verified:continue
             status,_,_=self._request('MKCOL',current,allowed=(201,405,409) if verified is not None else (201,405),limit=65536)
             if status==409:raise RemoteStorageError('metadata_parent_missing')
-            if not any(item['path']==current and item['is_dir'] for item in self._propfind(current)):
+            if not any(item['path']==current and item['is_dir'] for item in self._propfind(current,depth=0)):
                 raise RemoteStorageError('metadata_directory_unavailable')
             if verified is not None:verified.add(current)
 
@@ -319,11 +324,27 @@ class WebDAVSource:
                 if checkpoint is not None:checkpoint.invalidate(path.rpartition('/')[0])
                 raise RemoteStorageError('ignore_rules_changed')
 
-    def scan(self,path='',*,max_files=100000,max_depth=32,on_batch=None,ignore=None,prune_reserved=True,read_ignore=True,checkpoint=None):
-        if checkpoint is not None:return checkpoint.scan(self,path,max_files=max_files,max_depth=max_depth,on_batch=on_batch,ignore=ignore,prune_reserved=prune_reserved,read_ignore=read_ignore)
-        path=remote_path(path);pending=[(path,0)];seen=set();result=[]
+    def _scan_ancestor_rules(self, roots, ignore):
+        parents=set()
+        for root in roots:
+            parts=root.split('/') if root else []
+            parents.update('/'.join(parts[:depth]) for depth in range(len(parts)))
+        for directory in sorted(parents,key=lambda p:(p.count('/'),p)):
+            path='/'.join(p for p in (directory,IGNORE_NAME) if p)
+            try:data=self._ignore_bytes(path)
+            except RemoteStorageError as error:
+                if error.code=='remote_not_found':continue
+                raise
+            try:ignore.add(directory,data)
+            except IgnoreRuleError as error:raise RemoteStorageError(str(error)) from None
+            self.ignore_checks.append((path,hashlib.sha256(data).hexdigest()))
+
+    def scan(self,path='',*,max_files=100000,max_depth=32,on_batch=None,ignore=None,prune_reserved=True,read_ignore=True,checkpoint=None,roots=None):
+        if checkpoint is not None:return checkpoint.scan(self,path,max_files=max_files,max_depth=max_depth,on_batch=on_batch,ignore=ignore,prune_reserved=prune_reserved,read_ignore=read_ignore,roots=roots)
+        path=remote_path(path);pending=[(p,0) for p in (normalize_scan_roots(roots) if roots is not None else [path])];seen=set();result=[]
         reserved=(self.source['metadata_directory'],) if prune_reserved else ()
         ignore=ignore or RemoteIgnore(reserved);self.ignore_checks=[];excluded=0
+        if roots is not None and read_ignore:self._scan_ancestor_rules(roots,ignore)
         while pending:
             current,depth=pending.pop()
             if current in seen:continue

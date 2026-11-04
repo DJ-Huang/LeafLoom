@@ -336,7 +336,7 @@ class Runtime:
         self.knowledge=Knowledge(config,self.catalog,self.model)
         self.event=threading.Event();self.index_event=threading.Event();self.stop_event=threading.Event()
         self.files.changed=self.files_changed;self.thread=None;self.root=None;self.threads=[]
-        self.pending=set();self.pending_lock=threading.Lock();self.watcher=None;self.watcher_stop=None
+        self.pending=set();self.pending_lock=threading.Lock();self.catalog_updating=None;self.watcher=None;self.watcher_stop=None
         self.watching=False;self.watch_error=None;self.policy_revision=None;self.index_root=None
         self.activity_lock=threading.Lock();self.foreground=0;self.last_activity=time.monotonic();self.idle_seconds=5
         self.force_index=False;self.metadata_thread=None;self.metadata_stop=threading.Event()
@@ -372,6 +372,11 @@ class Runtime:
         with self.pending_lock:self.pending.update(paths)
         self.event.set()
 
+    def catalog_pending(self):
+        # Without the file worker, callers explicitly scan/prepare their fixture.
+        if not self.thread or not self.thread.is_alive():return False
+        with self.pending_lock:return bool(self.pending or self.catalog_updating is self.catalog)
+
     def configuration_changed(self):
         self.rag.cancel();self.metadata_stop.set()
         if self.catalog.root!=self.config.data.get('root'):
@@ -402,6 +407,7 @@ class Runtime:
                    (self.config.selected(path,validated=True) and not Path(path).suffix) for path in paths)
 
     def ensure_metadata(self):
+        if self.catalog_pending():return False
         if self.catalog.metadata_ready:return True
         if self.metadata_thread and self.metadata_thread.is_alive():return False
         catalog=self.catalog;stop=threading.Event();self.metadata_stop=stop
@@ -469,13 +475,23 @@ class Runtime:
                 elif changed_policy:self.request_index()
                 self.policy_revision=self.config.data.get('revision')
                 self.event.clear()
-                with self.pending_lock:paths=self.pending;self.pending=set()
+                with self.pending_lock:
+                    paths=self.pending;self.pending=set()
+                    batch_catalog=self.catalog
+                    self.catalog_updating=batch_catalog if paths.difference({'.ragignore'}) else None
                 rag_changed='.ragignore' in paths;paths.discard('.ragignore')
                 if paths:
-                    catalog=self.catalog;catalog.apply(paths)
+                    catalog=batch_catalog
+                    try:catalog.apply(paths)
+                    except BaseException:
+                        catalog.metadata_ready=False
+                        raise
+                    finally:
+                        with self.pending_lock:
+                            if self.catalog_updating is catalog:self.catalog_updating=None
                     if catalog is not self.catalog:continue
                     if catalog.changed_paths:self.publish('files',catalog.changed_paths)
-                    self.metadata['ready']=False
+                    self.metadata['ready']=catalog.metadata_ready
                     if self._needs_index(paths):self.request_index()
                 if rag_changed:self.request_index(force=True);self.publish('files',['.ragignore'])
                 if not self.watching and time.monotonic()>=next_check:

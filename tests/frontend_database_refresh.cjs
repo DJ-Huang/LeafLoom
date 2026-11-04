@@ -1,0 +1,30 @@
+// Refresh regressions in a fictional vault: previews and unrelated files must not refetch the database.
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),net=require('node:net'),{spawn}=require('node:child_process');
+const root=path.resolve(__dirname,'..'),{chromium}=require(path.join(root,'desktop/node_modules/playwright-core'));
+const executable=process.env.CHROMIUM_PATH||['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge','/usr/bin/chromium'].find(p=>fs.existsSync(p));
+let browser,server,page,logs='';
+(async()=>{
+ const port=await new Promise(resolve=>{const s=net.createServer();s.listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(()=>resolve(p));});});
+ server=spawn(process.env.LEAFLOOM_TEST_PYTHON||path.join(root,'.venv/bin/python'),['-u','tests/database_board_server.py','vault_rag/static'],{cwd:root,env:{...process.env,LEAFLOOM_BOARD_TEST_PORT:String(port),LEAFLOOM_BOARD_ASYNC_CATALOG:'1'},stdio:['ignore','pipe','pipe']});server.stdout.on('data',d=>logs+=d);server.stderr.on('data',d=>logs+=d);
+ let info;for(let i=0;i<200;i++){const line=logs.split('\n').find(l=>l.startsWith('{"fixture": true'));if(line){info=JSON.parse(line);try{await fetch(info.ui);break;}catch{}}if(server.exitCode!==null)throw new Error(logs);await new Promise(r=>setTimeout(r,100));}assert.ok(info,logs);
+ browser=await chromium.launch({executablePath:executable,headless:true,args:['--no-sandbox','--no-proxy-server']});page=await browser.newPage({baseURL:info.ui,viewport:{width:1480,height:1000}});page.setDefaultTimeout(15000);
+ const errors=[],requests=[];let tracking=false,previewCompletedAt=0;page.on('response',r=>{if(r.url().endsWith('/api/bases/commands')&&r.request().postDataJSON()?.command?.dry_run===true)previewCompletedAt=Date.now();});page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(tracking&&r.url().includes('/api/bases/'))requests.push({at:Date.now(),url:r.url(),command:r.method()==='POST'?r.postDataJSON()?.command?.type:undefined});});
+ const record='Tasks/Define product scope.md',row=()=>page.locator('.database:visible [data-db-record='+JSON.stringify(record)+']');
+ const frames=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ const config=async()=>(await(await page.request.get('/api/bases/config?path=Product%20roadmap.base')).json());
+ await page.goto('/?note=Product%20roadmap.base');await page.locator('.db-board-title').first().waitFor();let c=await config();const table=c.views.find(v=>v.type==='table');
+ const loaded=page.waitForResponse(r=>r.url().endsWith('/api/bases/query')&&r.request().postDataJSON()?.view_id===table.id);await page.locator('.database:visible .db-view-tabs').getByRole('button',{name:'Table',exact:true}).click();await(await loaded).body();await row().locator('.text-link').waitFor();await frames();
+ const session=await(await page.request.get('/api/session')).json(),headers={'X-Vault-CSRF':session.csrf};
+ await page.evaluate(()=>{window.__unrelatedRefresh=false;window.__refreshChanges=[];window.addEventListener('vault-data-changed',e=>{window.__refreshChanges.push({at:Date.now(),change:e.detail});if(e.detail?.paths?.includes('Many tasks/2398.md'))window.__unrelatedRefresh=true;});});
+ const note=await(await page.request.get('/api/file?path=Many%20tasks%2F2398.md')).json();tracking=true;let response=await page.request.put('/api/file',{headers,data:{...note,text:note.text+'\nUnrelated fictional update.\n'}});assert.ok(response.ok(),await response.text());await page.waitForFunction(()=>window.__unrelatedRefresh);await frames();assert.deepEqual(requests,[],'unrelated folder writes must not reload this database');tracking=false;
+ // Hold the execution request before it reaches the service, observing only the completed preview.
+ let release,arrived;const gate=new Promise(resolve=>release=resolve),executing=new Promise(resolve=>arrived=resolve);
+ await page.route('**/api/bases/commands',async route=>{const command=route.request().postDataJSON()?.command;if(command?.type==='record.trash'&&command.dry_run===false){arrived();await gate;}await route.continue();});
+ await row().locator('.text-link').click({button:'right'});await page.getByRole('menuitem',{name:'Move to trash',exact:true}).click();requests.length=0;tracking=true;await page.getByRole('dialog').getByRole('button',{name:'Move to trash',exact:true}).click();await executing;await frames();
+ assert.equal(requests.filter(r=>r.at>=previewCompletedAt&&(r.url.includes('/api/bases/config')||r.url.endsWith('/api/bases/query'))).length,0,'preview must not invalidate or reread database data: '+JSON.stringify({requests,changes:await page.evaluate(()=>window.__refreshChanges)}));
+ release();await row().waitFor({state:'hidden'});await page.locator('dialog[open]').waitFor({state:'hidden'});await frames();assert.equal(requests.filter(r=>r.url.includes('/api/bases/config')).length,0,'a record deletion does not change the database definition');tracking=false;await page.unroute('**/api/bases/commands');
+ // Configuration changes still refresh, preserving the stable selected view ID.
+ c=await config();response=await page.request.post('/api/bases/commands',{headers,data:{path:c.path,workspace_revision:c.workspace_revision,expected_revision:c.revision,operation_id:crypto.randomUUID(),command:{type:'view.update',view_id:table.id,patch:{name:'Refreshed table'}}}});assert.ok(response.ok(),await response.text());await page.locator('.database:visible .db-view-tabs').getByRole('button',{name:'Refreshed table',exact:true}).waitFor();
+ assert.deepEqual(errors,[]);console.log('Refresh passed: unrelated folders do not query; preview does not invalidate; deletion skips configuration reads; external configuration still synchronizes.');
+})().catch(e=>{console.error(e.stack);console.error(logs.slice(-1500));process.exitCode=1;}).finally(async()=>{await browser?.close();server?.kill('SIGTERM');});

@@ -45,13 +45,25 @@ class NoteOperations:
             raise ValueError('Note operations support Markdown, TXT and HTML/HTM only')
         return path
 
+    def file_operation_path(self, path):
+        # Database definitions share guarded move/trash/history operations, but
+        # generic note text mutation remains limited to its existing formats.
+        path = relative(path)
+        if Path(path).suffix.lower() == '.base':
+            self.config.path_for(path, writable=True)
+            return path
+        return self.note_path(path)
+
     def metadata(self):
         catalog = self.runtime.catalog
+        if self.runtime.catalog_pending():
+            raise NoteError('metadata_pending', 'Workspace metadata is preparing; retry shortly', retry_after_ms=25)
         if catalog.metadata_ready and catalog.complete_namespace and catalog.root == self.config.data.get('root'):
             return catalog
         if not catalog.complete_namespace or catalog.root != self.config.data.get('root'):
             catalog.metadata_ready = False
-        self.runtime.ensure_metadata()
+        if self.runtime.ensure_metadata() and catalog is self.runtime.catalog and catalog.metadata_ready and catalog.complete_namespace and catalog.root == self.config.data.get('root'):
+            return catalog
         raise NoteError('metadata_pending', 'Workspace metadata is preparing; retry shortly', retry_after_ms=600)
 
     def page(self, rows, limit=50, cursor='', *, key=''):
@@ -167,8 +179,10 @@ class NoteOperations:
         # Called under config/files locks: never wait for catalog.update_lock.
         # Catalog workers take that lock before snapshotting config, so doing
         # synchronous catalog work here can deadlock after the file is committed.
-        # Keep queries honest until the existing worker refreshes their metadata.
-        self.runtime.catalog.metadata_ready = False
+        # Readers wait for the queued incremental batch, without rescanning the vault.
+        # Standalone callers without a file worker keep explicit metadata preparation.
+        if not self.runtime.thread or not self.runtime.thread.is_alive():
+            self.runtime.catalog.metadata_ready = False
         self.runtime.files_changed(*paths)
         self.runtime.publish('files', paths)
 
@@ -247,7 +261,9 @@ class NoteOperations:
     def _operation_state(self, kind, source, destination=''):
         path = self.config.path_for(source, writable=True)
         if not path.is_dir():
-            self.note_path(source)
+            self.file_operation_path(source)
+            if kind == 'move' and Path(source).suffix.lower() == '.base' and Path(destination).suffix.lower() != '.base':
+                raise ValueError('Database destinations must end in .base')
         snapshot = self.files.snapshot(source)
         plan = self.files.plan_move(source, destination) if kind == 'move' else None
         edits = {path: [digest(old), digest(new)] for path, (old, new) in plan['edits'].items()} if plan else {}
@@ -297,11 +313,11 @@ class NoteOperations:
             destination = self.config.path_for(record['destination'], writable=True)
             source = self.config.path_for(record['path'], writable=True)
             if not (destination.is_dir() or source.is_dir()):
-                self.note_path(record['path'])
+                self.file_operation_path(record['path'])
         if kind != 'operations':
             content = self.files.state_path(kind, key, 'content')
             if not content.is_dir():
-                self.note_path(record['path'])
+                self.file_operation_path(record['path'])
         content_state = {}
         if validate_content:
             if kind == 'operations':

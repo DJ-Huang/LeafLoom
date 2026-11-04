@@ -17,6 +17,7 @@ from contextlib import closing
 from pathlib import PurePosixPath
 from urllib.parse import quote
 
+from vault_rag.attachment_policy import extensions_for, register_policy
 from vault_rag.local_state import ConflictError, relative
 from vault_rag.platform_support import private_file_mode, path_key
 
@@ -218,12 +219,13 @@ class AttachmentIndex:
             self._ensure();files=self._snapshot();root=files.config.root
             pattern='%'+query.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%'
             with closing(self._connect(files)) as db:
+                extensions=extensions_for(files);register_policy(db,extensions)
                 scanned=db.execute('SELECT scanned_at FROM state WHERE root=?',(str(root),)).fetchone()
-                scope=hashlib.sha256(json.dumps([str(root),query,kind,sort,order,scanned,self.generation],ensure_ascii=False).encode()).hexdigest()[:24]
-                where="attachment=1 AND path LIKE ? ESCAPE '\\'";args=[pattern]
+                scope=hashlib.sha256(json.dumps([str(root),query,kind,sort,order,scanned,self.generation,extensions],ensure_ascii=False).encode()).hexdigest()[:24]
+                where="attachment_allowed(path)=1 AND path LIKE ? ESCAPE '\\'";args=[pattern]
                 if kind!='all':where+=' AND ('+category+')=?';args.append(kind)
                 total=db.execute('SELECT count(*) FROM assets WHERE '+where,args).fetchone()[0]
-                stats=db.execute('SELECT '+category+',count(*),coalesce(sum(size),0) FROM assets WHERE attachment=1 GROUP BY 1').fetchall()
+                stats=db.execute('SELECT '+category+',count(*),coalesce(sum(size),0) FROM assets WHERE attachment_allowed(path)=1 GROUP BY 1').fetchall()
                 summary={'files':sum(r[1] for r in stats),'bytes':sum(r[2] for r in stats),'kinds':{r[0]:r[1] for r in stats}}
                 field=fields[sort];direction='ASC' if order=='asc' else 'DESC';sign='>' if order=='asc' else '<'
                 if cursor:

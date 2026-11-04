@@ -53,6 +53,14 @@ with wave.open(str(root/'Audio/Quiet signal.wav'),'wb') as out:
 (root/'Notes').mkdir();(root/'Notes/Creative brief.md').write_text('# Creative brief\n\n![[Campaign/Autumn collection.png]]\n')
 (root/'Documents/Archive.zip').write_bytes(b'fixture archive')
 (root/'References/Broken image.png').write_bytes(b'broken image fixture')
+if os.environ.get('LEAFLOOM_TOOLS_DESIGN')=='1':
+ for folder,names in {'Notes':['Creative brief','Research journal','Reading notes','Design principles'],
+                      'Projects':['Autumn campaign','Editorial system','Launch checklist'],
+                      'Topics':['Visual design','Knowledge garden','Materials']}.items():
+  for index,name in enumerate(names):
+   target=root/folder/(name+'.md');target.parent.mkdir(exist_ok=True)
+   links=['Creative brief','Research journal','Design principles','Autumn campaign','Visual design','Materials']
+   target.write_text('# '+name+'\n\nA fictional workspace for visual review.\n\n'+' · '.join('[['+link+']]' for n,link in enumerate(links) if link!=name and (n+index)%3!=0)+'\n')
 port=int(os.environ['LEAFLOOM_ATTACHMENT_TEST_PORT'])
 if port==18080:raise ValueError('Do not use the user service port')
 config=LocalConfig(home/'state');config.save({'root':str(root),'port':port,'include_roots':['']})

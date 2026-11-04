@@ -900,19 +900,43 @@ class DesignWorkspace:
                                         label='Update shared library' if imported_before else 'Import shared library', request_identity=request_identity,
                                         include_document=include_document)
 
-    def export(self, directory):
+    def export_preflight(self, directory, page_ids, expected_revision=None):
         value = self.documents.read(directory)
+        if expected_revision and value['revision'] != expected_revision:
+            raise ConflictError('Design changed; refresh before exporting')
+        from vault_rag.design_export_selection import select_export
+        _, report = select_export(value['document'], page_ids)
+        return {'ok': True, 'revision': value['revision'],
+                'missing_pages': report['missing_pages'], 'dynamic_warning': report['dynamic_warning']}
+
+    def export(self, directory, page_ids=None, expected_revision=None, *, snapshot_dir=None):
+        value = self.documents.read(directory)
+        if expected_revision and value['revision'] != expected_revision:
+            raise ConflictError('Design changed; refresh before exporting')
         from vault_rag.design_presenter import audience_document
         document = audience_document(value['document'])
+        selection = None
+        if page_ids is not None:
+            from vault_rag.design_export_selection import select_export
+            document, selection = select_export(document, page_ids)
         with self.config.lock, self.files.lock:
             document['name'] = self._load()['meta'].get(relative(directory), {}).get('name') or document['name']
-        self.install_runtime(directory)
+        if snapshot_dir is None:
+            self.install_runtime(directory)
         project = self.config.path_for(directory)
         # Export the resource graph, not archives, validation records or unrelated
         # source files that happen to live beside a design.
         from urllib.parse import unquote, urlsplit
         import posixpath
         resources = {asset['path'] for asset in document.get('assets', {}).values() if asset.get('path')}
+        if selection is not None:
+            resources.update(selection['paths'])
+            for path in resources:
+                if not self.config.path_for(directory + '/' + relative(path)).is_file():
+                    raise ValueError('Missing export resource: ' + path)
+        virtual_scripts = {(item.get('path', key) if isinstance(item, dict) else key)
+                           for key, item in document.get('scripts', {}).items()
+                           if isinstance(item, str) or isinstance(item, dict) and isinstance(item.get('source'), str)}
         scanned = set()
         def add(reference, base=''):
             if not isinstance(reference, str):
@@ -923,6 +947,10 @@ class DesignWorkspace:
             marker = '__STUDIO_ASSET__/'
             if reference.startswith(marker):
                 reference, base = reference[len(marker):], ''
+            elif reference in document.get('scripts', {}):
+                # A registry module ID is resolved by the runtime, regardless
+                # of the importing module's directory.
+                return
             try:
                 url = urlsplit(reference)
             except ValueError:
@@ -942,6 +970,10 @@ class DesignWorkspace:
                 return
             if target.is_file():
                 resources.add(path)
+            elif path in virtual_scripts:
+                return
+            elif selection is not None:
+                raise ValueError('Missing export resource: ' + path)
         def scan(value, base=''):
             if isinstance(value, dict):
                 if isinstance(value.get('basePath'), str):
@@ -952,7 +984,8 @@ class DesignWorkspace:
                     if key in ('src', 'href', 'xlink:href', 'path', 'poster') and isinstance(child, str): add(child, base)
                     if key in ('srcset', 'imagesrcset') and isinstance(child, str):
                         for reference in _srcset_urls(child): add(reference, base)
-                    scan(child, base)
+                    child_base = posixpath.dirname(value['path']) if key == 'source' and isinstance(value.get('path'), str) else base
+                    scan(child, child_base)
             elif isinstance(value, list):
                 for child in value: scan(child, base)
             elif isinstance(value, str):
@@ -963,7 +996,13 @@ class DesignWorkspace:
                 if '<' in value:
                     parser = _ExportHTMLReferences(lambda reference: add(reference, base))
                     parser.feed(value)
-        scan(document)
+        if selection is None:
+            scan(document)
+        else:
+            for key in ('pages', 'assets', 'components', 'styles', 'bindings', 'variants'):
+                scan(document.get(key, {}))
+            for script_id, script in document.get('scripts', {}).items():
+                scan(script, posixpath.dirname(script_id) if isinstance(script, str) else '')
         for script in document.get('scripts', {}).values():
             if isinstance(script, dict):
                 add(script.get('path', ''))
@@ -976,10 +1015,27 @@ class DesignWorkspace:
                     text = path.read_text(encoding='utf-8')
                     scan(text, posixpath.dirname(rel))
                     if path.suffix.lower() in ('.js', '.mjs'):
+                        if selection is not None:
+                            # Imported local modules may reference asset IDs
+                            # that do not appear in the selected page tree.
+                            for ref in script_references(text):
+                                if ref['kind'] != 'asset':
+                                    continue
+                                asset = value['document'].get('assets', {}).get(ref['value'])
+                                if asset:
+                                    document.setdefault('assets', {})[ref['value']] = copy.deepcopy(asset)
+                                    add(asset.get('path', ''))
+                                else:
+                                    add(ref['value'])
                         document.setdefault('scripts', {})[rel] = {'id': rel, 'path': rel, 'source': text}
-        export_id = uuid.uuid4().hex
-        export_rel = f'Design/exports/{export_id}'
-        dest = self.config.path_for(directory + '/' + export_rel, writable=True)
+        if snapshot_dir is None:
+            export_id = uuid.uuid4().hex
+            export_rel = f'Design/exports/{export_id}'
+            dest = self.config.path_for(directory + '/' + export_rel, writable=True)
+        else:
+            # Internal publication jobs write their immutable snapshot outside
+            # the source project; ordinary HTML exports keep their old location.
+            dest = Path(snapshot_dir)
         dest.mkdir(parents=True, exist_ok=False)
         for name in ('runtime.js', 'runtime.css'):
             atomic_write(dest / name, (RUNTIME / name).read_bytes())
@@ -1000,9 +1056,12 @@ class DesignWorkspace:
             for path in dest.rglob('*'):
                 if path.is_file():
                     archive.write(path, path.relative_to(dest))
+        if snapshot_dir is not None:
+            return {'ok': True, 'snapshot_path': str(bundle), 'revision': value['revision']}
         session = self.session(directory)
         return {'ok': True, 'path': bundle.relative_to(self.config.root).as_posix(),
                 'name': document['name'],
                 'url': session['origin'] + '/' + export_rel + '.zip?session=' + session['id'],
                 'preview_url': session['origin'] + '/' + export_rel + '/index.html?session=' + session['id'],
-                'revision': value['revision']}
+                'revision': value['revision'],
+                **({'missing_pages': selection['missing_pages'], 'dynamic_warning': selection['dynamic_warning']} if selection is not None else {})}

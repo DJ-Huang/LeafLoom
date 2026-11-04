@@ -149,10 +149,16 @@ const GraphCanvas=forwardRef<Camera,{data:GraphData,index:GraphIndex,selected:st
   };
   gpuCanvas?.addEventListener('webglcontextlost',lost);
   if(restore)populate(restore.positions);else worker.postMessage(data);
-  const observer=new ResizeObserver(()=>{if(container.current?.clientWidth&&container.current.clientHeight){const before={x:cy.width()/2,y:cy.height()/2};cy.resize();cy.panBy({x:cy.width()/2-before.x,y:cy.height()/2-before.y});}});observer.observe(container.current);
+  // Cytoscape may resize before our observer; retain the previous measured viewport.
+  let viewport={width:container.current.clientWidth,height:container.current.clientHeight};
+  const observer=new ResizeObserver(()=>{const element=container.current;if(!element?.clientWidth||!element.clientHeight)return;
+   const next={width:element.clientWidth,height:element.clientHeight},focusing=cy.animated();cy.stop();cy.resize();
+   cy.panBy({x:(next.width-viewport.width)/2,y:(next.height-viewport.height)/2});viewport=next;
+   if(focusing&&latest.current.selected)focus(latest.current.selected);
+  });observer.observe(container.current);
   return()=>{alive=false;clearTimeout(settle);clearTimeout(hover);highlighted.current=null;observer.disconnect();worker.terminate();gpuCanvas?.removeEventListener('webglcontextlost',lost);cy.destroy();gpuCanvas?.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext();cyRef.current=null;};
  },[data,index,revision,retry]);
- useEffect(()=>{cyRef.current?.stop();highlight(selected);if(selected)focus(selected);},[selected]);
+ useEffect(()=>{cyRef.current?.stop();highlight(selected);if(selected){cyRef.current?.resize();focus(selected);}},[selected]);
  useEffect(()=>{const cy=cyRef.current;if(cy)cy.emit('zoom');},[labels,arrows]);
  useEffect(()=>{if(active){cyRef.current?.resize();}},[active]);
  return <><div className="graph" ref={container} tabIndex={0} role="region" aria-label={t("笔记关系图。方向键平移，加减号缩放，0 适应画布；可用搜索选择笔记。")} data-renderer={gpu?'webgl2':'canvas'} aria-busy={!failed&&!rendererError&&(busy||completed!==data)} onKeyDown={event=>{

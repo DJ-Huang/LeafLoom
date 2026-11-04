@@ -1,4 +1,4 @@
-import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
+import React,{lazy,Suspense,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {Editor,getMarkRange,JSONContent} from '@tiptap/core';
 import DragHandle from '@tiptap/extension-drag-handle';
 import {NodeSelection,TextSelection} from '@tiptap/pm/state';
@@ -21,6 +21,7 @@ import {uploadEditorAssets} from './editor-assets';
 import {AnchorRect,BlockMenu,CommandMenu,CommandRow,FormatBar,LinkPopover,TableBar,WikiMenu} from './rich-ui';
 import './rich-editor.css';
 
+const DatabaseInsert=lazy(()=>import('./database-insert').then(m=>({default:m.DatabaseInsert})));
 type EditorFacade={state:{selection:{main:{from:number,to:number,head:number,empty:boolean}},doc:{length:number,sliceString:(from:number,to?:number)=>string}},dom:HTMLElement,dispatch:(spec:{selection?:{anchor:number,head?:number},scrollIntoView?:boolean})=>void,focus:()=>void};
 type Props={initial:string,path:string,root:string,session:DocumentState,active:boolean,onChange:(text:string,meta?:EditMeta)=>void,onOpen:OpenNote,onReady?:(view:EditorFacade)=>void,onRelease?:(view:EditorFacade)=>void,onSource:(position:number)=>void,annotations?:Annotation[],onAnnotation?:(kind:AnnotationAction,color:AnnotationColor|undefined,range:AnnotationSelection)=>void,onOpenAnnotation?:(id:string)=>void};
 type ManualMenu={kind:'insert'|'block',anchor:AnchorRect,target:BlockTarget,query:string};
@@ -58,6 +59,7 @@ function reuseSourceIds(parsed:ParsedRichDocument,bridge:MarkdownBridge){
  for(const block of parsed.blocks){const id=available.get(block.raw)?.shift();if(id){block.id=id;block.node.attrs={...block.node.attrs,sourceId:id};}}
 }
 export function RichEditor(props:Props){
+ const [databaseRange,setDatabaseRange]=useState<string>();
  const locale=useLocale(),host=useRef<HTMLDivElement>(null),editorRef=useRef<Editor|undefined>(undefined),bridgeRef=useRef<MarkdownBridge|undefined>(undefined);
  const callbacks=useRef(props);callbacks.current=props;
  const [editor,setEditor]=useState<Editor>(),[version,setVersion]=useState(0),[error,setError]=useState(''),[loading,setLoading]=useState(true);
@@ -106,6 +108,7 @@ export function RichEditor(props:Props){
   if(!menu&&actual?.kind!=='slash')return;
   const after=menu?menu.target.pos+menu.target.node.nodeSize:undefined,range=menu?{from:after!,to:after!}:{from:actual!.from,to:actual!.to};
   remember(id);setManual(undefined);setDismissed(contextKey);setSelected(0);
+  if(id==='database'){setDatabaseRange(trackRichRange(current,range));return;}
   if(id==='image'||id==='file'){chooseFile(id==='image',range);return;}
   if(id==='link'){showLinkDialog(range);return;}
   insertRichCommand(current,id,range,after);
@@ -232,6 +235,7 @@ export function RichEditor(props:Props){
    bridge.bind(instance.state.doc);editorRef.current=instance;setEditor(instance);setLoading(false);
    const current=instance;
    const imeCapture=(event:KeyboardEvent)=>{
+    if((event.target as HTMLElement).closest('.database,dialog'))return;
     if(event.isComposing||event.keyCode===229||composing.current||current.view.composing){event.stopImmediatePropagation();return;}
     if(resyncing.current&&(event.ctrlKey||event.metaKey)&&['z','y'].includes(event.key.toLowerCase())){event.preventDefault();event.stopImmediatePropagation();travelDocument(callbacks.current.session,event.key.toLowerCase()==='y'||event.shiftKey?'redo':'undo');}
    };current.view.dom.addEventListener('keydown',imeCapture,true);
@@ -298,6 +302,7 @@ export function RichEditor(props:Props){
  return <div className="live-editor rich-editor" aria-busy={loading||resyncing.current}>
   {loading&&<p className="pad subtle">{t('正在打开内容…')}</p>}{error&&<div className="conflict-banner" role="alert">{error}<button type="button" onClick={()=>props.onSource(sourceSelection.current.from)}>{t('查看源码')}</button></div>}
   <div ref={host} className="rich-editor-host" onPointerDown={event=>{if(event.target===event.currentTarget&&editor){editor.commands.focus('end');}}}/>
+  {databaseRange&&<Suspense fallback={null}><DatabaseInsert onClose={()=>{if(editor)releaseRichRange(editor,databaseRange);setDatabaseRange(undefined);}} onInsert={reference=>{if(!editor)return;const range=trackedRichRange(editor,databaseRange);if(range)editor.chain().focus().insertContentAt(range,{type:'specialBlock',attrs:{kind:'embed',raw:reference,content:reference.slice(3,-2)}}).run();releaseRichRange(editor,databaseRange);setDatabaseRange(undefined);}}/></Suspense>}
   {editor&&props.active&&anchor&&automatic&&context?.kind==='slash'&&<CommandMenu anchor={anchor} rows={rows} selected={Math.min(selected,Math.max(0,rows.length-1))} onSelected={setSelected} onChoose={chooseCommand} query={context.query} onClose={()=>setDismissed(contextKey)}/>}
   {editor&&props.active&&anchor&&automatic&&context?.kind==='wiki'&&<WikiMenu anchor={anchor} rows={wikiRows} selected={Math.min(selected,Math.max(0,wikiRows.length-1))} onSelected={setSelected} onChoose={chooseWiki} status={wikiStatus} onClose={()=>setDismissed(contextKey)}/>}
   {editor&&props.active&&manual?.kind==='insert'&&<CommandMenu anchor={manual.anchor} rows={rows} selected={Math.min(selected,Math.max(0,rows.length-1))} onSelected={setSelected} onChoose={chooseCommand} query={manual.query} onQuery={query=>setManual(value=>value?{...value,query}:undefined)} onClose={closeManual}/>}

@@ -120,6 +120,7 @@ class AssetLibrary:
                     asset_id TEXT NOT NULL DEFAULT '',storage_id TEXT NOT NULL DEFAULT '',availability TEXT NOT NULL DEFAULT 'unindexed',exported INTEGER NOT NULL DEFAULT 0);
                 CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,kind TEXT NOT NULL,entity TEXT NOT NULL,parents TEXT NOT NULL,
                     payload TEXT NOT NULL,data BLOB NOT NULL,sha256 TEXT NOT NULL,synced INTEGER NOT NULL DEFAULT 0);
+                CREATE INDEX IF NOT EXISTS events_entity_kind ON events(entity,kind);
                 CREATE TABLE IF NOT EXISTS entities(id TEXT PRIMARY KEY,state TEXT NOT NULL,heads TEXT NOT NULL,revision TEXT NOT NULL,conflicts TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS outbox(id TEXT PRIMARY KEY,kind TEXT NOT NULL,path TEXT NOT NULL,data BLOB NOT NULL,sha256 TEXT NOT NULL,
                     context TEXT NOT NULL,dependencies TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'queued',error TEXT NOT NULL DEFAULT '');
@@ -243,7 +244,8 @@ class AssetLibrary:
             self.guards[(str(root),owner,context['workspace_revision'])]=guard
             if guard() is False:raise PermissionError('Asset library owner authorization expired')
         with self.lock,self._db(root) as db:
-            self._set(db,'requested',context);self._set_sync(db,{'state':'queued'})
+            self._set(db,'requested',context)
+            if not self._get(db,'library_id'):self._set_sync(db,{'state':'queued'})
         self._discover(root);self.wake.set()
         return {**self.status(root),'state':'queued'}
 
@@ -329,11 +331,22 @@ class AssetLibrary:
         return {**common,'official':{'product_id':entity[8:],'url':'','title':'','publisher':'','summary_zh':'','categories':[],
                                    'keywords':[],'categories_zh':[],'keywords_zh':[],'compatibility':{},'latest_version':'','fetched_at':None,'cover_source_url':''}}
 
-    def _project(self,db):
+    def _project(self,db,*,changed_entity=None):
+        version=_sha(_bytes([tuple(row) for row in db.execute("SELECT id,sha256 FROM events WHERE kind='state' ORDER BY id")]))
+        if self._get(db,'projection_revision')==version:return
         grouped={}
-        for row in db.execute("SELECT * FROM events WHERE kind='state'"):
+        if changed_entity is None:
+            rows=db.execute("SELECT * FROM events WHERE kind='state'")
+        else:
+            # Only used after a full projection and one local event in the
+            # same IMMEDIATE transaction: no other writer can add events in
+            # between. Remote pulls still rebuild the complete projection.
+            if not db.in_transaction:raise RuntimeError('Incremental projection requires a write transaction')
+            rows=db.execute("SELECT * FROM events WHERE kind='state' AND entity=?",(changed_entity,))
+        for row in rows:
             grouped.setdefault(row['entity'],{})[row['id']]={'parents':json.loads(row['parents']),'state':json.loads(row['payload'])}
-        db.execute('DELETE FROM entities')
+        if changed_entity is None:db.execute('DELETE FROM entities')
+        else:db.execute('DELETE FROM entities WHERE id=?',(changed_entity,))
         for entity,events in grouped.items():
             referenced={parent for event in events.values() for parent in event['parents']};heads=sorted(set(events)-referenced)
             incomplete=any(parent not in events for parent in referenced)
@@ -355,6 +368,8 @@ class AssetLibrary:
                 if incomplete or not heads:conflicts.append({'reason':'incomplete_or_cyclic_history'})
             revision=_sha(_bytes([entity,heads]))
             db.execute('INSERT INTO entities VALUES(?,?,?,?,?)',(entity,_bytes(state).decode(),_bytes(heads).decode(),revision,_bytes(conflicts).decode()))
+
+        self._set(db,'projection_revision',version)
 
     def _entity(self,db,entity):
         row=db.execute('SELECT * FROM entities WHERE id=?',(entity,)).fetchone()
@@ -436,6 +451,7 @@ class AssetLibrary:
     def _pull(self,root,provider,context):
         directory=context['metadata_directory']+'/events'
         self._check(context)
+        if self.active_sync:self.active_sync.update(phase='pulling')
         try:items=provider.scan(directory,max_files=20000,max_depth=2,prune_reserved=False,read_ignore=False)
         except RemoteStorageError as error:
             if error.code=='remote_not_found':self._check(context);return 0
@@ -444,11 +460,14 @@ class AssetLibrary:
         with self._read_db(root) as db:
             known={row['id']:row['sha256'] for row in db.execute('SELECT id,sha256 FROM events WHERE synced=1')}
         total=0;count=0
+        if self.active_sync:self.active_sync.update(phase='pulling',done=0,total=len(items))
         for index,item in enumerate(items):
             # Known immutable identities need no per-event writer/schema setup.
             # Revalidate authorization in bounded batches, and before every
             # unknown-object read/write regardless of the batch position.
-            if index%128==0:self._check(context)
+            if index%128==0:
+                self._check(context)
+                if self.active_sync:self.active_sync['done']=index
             match=re.fullmatch(re.escape(directory)+r'/([0-9a-f]{2})/([0-9a-f]{32})-([0-9a-f]{64})\.json',item['path'])
             if not match or match[1]!=match[2][:2] or item['size']>MAX_EVENT_BYTES:raise RemoteStorageError('invalid_asset_library_event_path')
             if match[2] in known:
@@ -473,6 +492,7 @@ class AssetLibrary:
             # A large projection may spill SQLite's page cache and hold an
             # exclusive lock. Read our binding on this same transaction while
             # retaining live source/credential checks before commit.
+            if self.active_sync:self.active_sync.update(phase='projecting',done=len(items),total=len(items))
             self._check(context,db=db);self._project(db);self._check(context,db=db)
         return count
 
@@ -544,6 +564,7 @@ class AssetLibrary:
                         row=active.pop(future)
                         try:
                             actual=future.result();self._ack_outbox(root,row,actual);completed.add(row['id'])
+                            if self.active_sync:self.active_sync.update(phase='publishing',done=len(completed),total=len(queued))
                         except CancelledError:pass  # Not started; leave its durable queue entry intact.
                         except BaseException as error:
                             failed.set();first_error=first_error or error;self._outbox_failure(root,row,error)
@@ -616,6 +637,7 @@ class AssetLibrary:
                     if requested and requested['owner']==owner and requested['source_id']==context['source_id'] and requested['metadata_directory']==context['metadata_directory']:
                         self._set(db,'requested',context)
             with self.lock,self._db(root) as db:queued=[dict(row) for row in db.execute("SELECT * FROM outbox WHERE state!='authorization_required' ORDER BY CASE kind WHEN 'cover' THEN 0 ELSE 1 END,rowid")]
+            self.active_sync.update(phase='publishing',done=0,total=len(queued))
             completed=self._flush(root,queued)
             if deferred_pull:
                 pulled+=self._pull(root,provider,context)
@@ -661,11 +683,25 @@ class AssetLibrary:
     def rebuild(self,root,*,owner='local',guard=None):
         return self.sync(root,owner=owner,guard=guard)
 
-    def _items(self,root,include_unavailable=False):
+    def _items(self,root,include_unavailable=False,only=None):
         self._discover(root,blocking=False)
         with self._read_db(root) as db:
-            files=[dict(row) for row in db.execute('SELECT * FROM files')]
-            state={row['id']:(json.loads(row['state']),row['revision'],json.loads(row['conflicts'])) for row in db.execute('SELECT * FROM entities')}
+            if only is None:
+                files=[dict(row) for row in db.execute('SELECT * FROM files')]
+                rows=db.execute('SELECT * FROM entities').fetchall()
+            elif only.startswith('candidate:'):
+                uid=only.removeprefix('candidate:')
+                files=[dict(row) for row in db.execute('SELECT * FROM files WHERE file_uid=?',(uid,))]
+                rows=db.execute('SELECT * FROM entities WHERE id=?',('file:'+uid,)).fetchall()
+            elif re.fullmatch(r'unity\.assetstore:[1-9][0-9]{0,17}',only):
+                product=only.removeprefix('unity.assetstore:')
+                files=[dict(row) for row in db.execute("""SELECT f.* FROM files f JOIN entities e ON e.id='file:'||f.file_uid
+                    WHERE json_extract(e.state,'$.product_id')=? ORDER BY f.rowid""",(product,))]
+                rows=db.execute("""SELECT * FROM entities WHERE id=? OR (id LIKE 'file:%' AND json_extract(state,'$.product_id')=?)""",
+                                ('product:'+product,product)).fetchall()
+            else:
+                files=[];rows=[]
+            state={row['id']:(json.loads(row['state']),row['revision'],json.loads(row['conflicts'])) for row in rows}
             pending_rows=db.execute('SELECT kind,entity,payload FROM events WHERE synced=0').fetchall()
             pending={row['entity'] for row in pending_rows}
             pending_file_uids={file['file_uid'] for row in pending_rows if row['kind']=='file_batch'
@@ -721,7 +757,7 @@ class AssetLibrary:
     def detail(self,root,product_id):
         target=str(product_id)
         if target.isdecimal():target='unity.assetstore:'+_pid(target)
-        for item in self._items(root,include_unavailable=True):
+        for item in self._items(root,include_unavailable=True,only=target):
             if item['id']==target:return item
         raise FileNotFoundError('Asset library entry not found')
 
@@ -754,6 +790,7 @@ class AssetLibrary:
         fingerprint=_sha(_bytes([operation,payload,expected_revision]));operation_id=operation_id or uuid.uuid4().hex
         _text(operation_id,512)
         with self.lock,self._db(root) as db:
+            db.execute('BEGIN IMMEDIATE')
             if not self._get(db,'library_id'):raise ConflictError('Wait for asset library initialization')
             receipt=db.execute('SELECT * FROM receipts WHERE owner=? AND operation_id=?',(owner,operation_id)).fetchone()
             if receipt:
@@ -779,7 +816,7 @@ class AssetLibrary:
                     self._validate_state(entity,value);self._queue(db,root,'state',entity,value,heads,context)
                     target='unity.assetstore:'+product_id
                     if operation=='bind':
-                        db.execute('INSERT INTO receipts VALUES(?,?,?,?)',(owner,operation_id,fingerprint,target));self._project(db)
+                        db.execute('INSERT INTO receipts VALUES(?,?,?,?)',(owner,operation_id,fingerprint,target));self._project(db,changed_entity=entity)
                         # No official fields are inferred from the filename.
                         result_target=target
                     else:result_target=None
@@ -810,7 +847,7 @@ class AssetLibrary:
                         incoming={'product_id':product_id,'url':payload['url']} if operation=='official_url' else payload.get('official',{})
                         value['official'].update(_official(incoming,product_id))
                     self._validate_state(entity,value);self._queue(db,root,'state',entity,value,heads,context)
-                    db.execute('INSERT INTO receipts VALUES(?,?,?,?)',(owner,operation_id,fingerprint,target));self._project(db)
+                    db.execute('INSERT INTO receipts VALUES(?,?,?,?)',(owner,operation_id,fingerprint,target));self._project(db,changed_entity=entity)
         self.wake.set();return self.detail(root,target)
 
     def store_cover(self,root,product_id,local_path,source_url,expected_revision='',owner='local'):
@@ -827,6 +864,7 @@ class AssetLibrary:
         digest=_sha(data);path=context['metadata_directory']+'/media/'+digest+'.webp'
         self._check(context)
         with self.lock,self._db(root) as db:
+            db.execute('BEGIN IMMEDIATE')
             self._project(db);entity='product:'+product_id;value,heads,revision,conflicts=self._entity(db,entity)
             if expected_revision and expected_revision!=revision:raise ConflictError('Product metadata changed')
             if conflicts:raise ConflictError('Resolve the conflicting product metadata first')
@@ -835,7 +873,7 @@ class AssetLibrary:
                        (dependency,'cover',path,data,digest,_bytes(context).decode(),'[]'))
             value['official']['cover']={'path':path,'sha256':digest,'size':len(data),'mime':'image/webp'}
             value['official']['cover_source_url']=_url(source_url)
-            self._validate_state(entity,value);self._queue(db,root,'state',entity,value,heads,context,[dependency]);self._project(db)
+            self._validate_state(entity,value);self._queue(db,root,'state',entity,value,heads,context,[dependency]);self._project(db,changed_entity=entity)
         directory=self._path('covers');directory.mkdir(parents=True,exist_ok=True,mode=0o700)
         atomic_write(directory/(digest+'.webp'),data);self.wake.set();return self.detail(root,product_id)
 
@@ -864,7 +902,7 @@ class AssetLibrary:
                 except (ConflictError,PermissionError,RemoteStorageError,InterruptedError,ValueError):pass
                 else:
                     state={**{key:state[key] for key in ('last_synced_at',) if key in state},
-                           'state':'syncing','phase':active['phase'],'retrying':active['retrying'],'sync_started_at':active['started_at']}
+                           'state':'syncing','phase':active['phase'],'retrying':active['retrying'],'sync_started_at':active['started_at'],'done':active.get('done',0),'total':active.get('total',0)}
         return {**settings,**state,'library_id':library_id,'initialized':bool(library_id),'pending':sum(counts.values()),'outbox':counts,
                 'pending_bytes':pending_bytes,'files':files,'conflicts':conflicts}
 

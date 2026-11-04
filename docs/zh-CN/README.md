@@ -10,7 +10,7 @@
 
 **[帮助中心](https://dj-huang.github.io/LeafLoom/docs/zh-CN/)** · 搜索笔记、附件、设计工作台、AI 接入与恢复指南。
 
-**[0.1.5 更新：附件服务器、断点续扫与演示者模式](RELEASE_NOTES_0.1.5.md)**
+**[0.1.7 更新：工作中枢、办公软件多选与可靠资源采集](RELEASE_NOTES_0.1.7.md)**
 
 让零散笔记、项目文档和收藏网页，成为查得到、连得起、用得上的知识。**LeafLoom 是开源、本地优先的知识库管理工具与个人 Wiki**，支持 Markdown 与 HTML，集成来源可追溯的检索、知识图谱、MCP、Skill、AI Chat 和 ChatGPT 连接。
 
@@ -81,7 +81,7 @@ App Key 由操作系统加密保存。连接随应用启动，关闭窗口留在
 | --- | --- |
 | **MCP** | 将 Codex、Cursor、Claude Code 等客户端接入本地 HTTP MCP：`http://127.0.0.1:18080/mcp`（默认端口）。启用完整访问后可查找、创建、编辑、整理和恢复关联笔记；RAG 保持勾选范围，写入默认关闭。 |
 | **飞书** | 使用自行配置的 lark-cli 验证账号，让 MCP 客户端操作飞书文档与多维表格。本机和 Tunnel 权限分别设置，默认关闭。[接入指南](GUIDE.md#可选飞书接入)。 |
-| **Skill** | 在 **设置 → Skill → 安装技能** 中安装内置的 [`wiki-search` Skill](../../wiki-search/SKILL.md)，引导兼容的 AI 助手完成检索、Wiki 导航与来源核对；MCP 连接需另行配置。 |
+| **Skill** | 在 **设置 → AI 集成** 安装 [`wiki-search`](../../wiki-search/SKILL.md) 进行有据检索，或安装 [`work-hub`](../../work-hub/SKILL.md) 记录工作、管理本地任务和生成汇报，可多选办公软件并按需接入飞书采集与同步；MCP 连接需另行配置。[工作中枢指南](../WORK_HUB.md)。 |
 | **AI Chat** | 需另外安装并登录 Codex 或 Codely CLI。围绕当前笔记或选文对话，打开回答中的引用。先预览修改差异，接受到草稿后再决定何时保存。 |
 
 [配置 AI Chat、MCP 与 Skill](AI.md)
@@ -113,6 +113,24 @@ App Key 由操作系统加密保存。连接随应用启动，关闭窗口留在
 打开本地 `.html`、`.htm` 文件，确认一次项目文件夹，即可运行带有配套样式、脚本和资源的网站。支持网页导航、下载与可选 SPA 路由，也可从侧栏「网页」打开已有 HTTP/HTTPS 网站或开发服务。参阅 [HTML 项目指南](GUIDE.md#打开-html-项目网站与设计工作台)。下图的 HTML 阅览室已包含在演示库中。
 
 ![LeafLoom 内的本地 HTML 阅览室预览](../../assets/screenshots/zh-CN/showcase-html.png)
+
+### 工作中枢 Skill
+
+记录多项目工作、管理本地任务和生成汇报，按需配置办公软件与连接飞书。标记为「尚未接入」的平台不能用于采集或同步。参阅[工作中枢指南](../WORK_HUB.md)。下图为真实配置界面。
+
+![工作中枢来源和办公软件设置，未接入的平台有明确标注](../../assets/screenshots/zh-CN/showcase-workhub.jpg)
+
+### 设计工作台
+
+从空白画板或内置模板开始，组织页面和图层，并导出独立 HTML 项目。下图为真实的新建设计项目模板选择界面。参阅[设计工作台指南](help/design-studio.md)。
+
+![设计工作台的新建项目窗口，显示空白项目与内置模板](../../assets/screenshots/zh-CN/showcase-studio.jpg)
+
+### 附件管理
+
+集中浏览和搜索本地及已配置服务器上的文件，按分组整理、预览或下载原件；可选择供 AI 素材检索的分组。下图的演示附件库使用内置模板素材。参阅[附件管理指南](help/attachments.md)。
+
+![附件管理中的演示图片与素材](../../assets/screenshots/zh-CN/showcase-attachments.jpg)
 
 ## 开始使用
 
@@ -182,3 +200,5 @@ cd LeafLoom
 MIT © 2026 DJ。依赖和模型保留各自许可。 [License](../../LICENSE)
 
 Technical compatibility: `vault-rag`, `VAULT_RAG_HOME`, `.vault-rag/`, HTTP MCP `/mcp`.
+
+将 Markdown 笔记组织为本地数据库，支持表格、列表、看板、画廊和可拖动时间线。[数据库指南](GUIDE.md#笔记数据库)。

@@ -1,9 +1,9 @@
 /* Shared interaction surfaces and the settings workspace. */
 .setting-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.action-menu { position: fixed; z-index: 100; width: 240px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 5px 18px #0000001f; }
+.action-menu { position: fixed; z-index: 100; width: 240px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: auto; background: var(--paper); border: 1px solid var(--line); border-radius: 7px; box-shadow: var(--shadow-popover); }
 .action-menu button:focus-visible, .action-menu a:focus-visible { outline: none; background: var(--hover); }
-.modal.settings-modal { width: 1040px; height: min(760px, calc(100dvh - 64px)); max-height: none; max-width: calc(100vw - 64px); overflow: hidden; border: 0; box-shadow: 0 24px 80px #00000030, 0 0 0 1px #0000000d; }
+.modal.settings-modal { width: 1040px; height: min(760px, calc(100dvh - 64px)); max-height: none; max-width: calc(100vw - 64px); overflow: hidden; border: 0; box-shadow: var(--shadow-dialog); }
 .settings-shell { display: flex; height: 100%; min-height: 0; }
 .settings-nav { width: 220px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--sidebar); border-right: 1px solid var(--line); padding: 16px 10px 12px; min-height: 0; }
 .settings-nav-heading { display: flex; align-items: center; gap: 9px; padding: 4px 6px 20px; font-size: 14px; }
@@ -148,3 +148,8 @@
 .update-progress progress { width: 100%; height: 12px; accent-color: var(--accent); }
 .attachment-storage-fields{border:0;padding:0;margin:0;min-width:0;display:grid;gap:12px}.attachment-storage-profile{border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}.attachment-storage-heading,.attachment-storage-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.attachment-storage-heading{justify-content:space-between}.attachment-storage-heading label{display:flex;gap:6px;align-items:center;font-size:12px}.attachment-storage-profile .setting-row{padding:12px 0}.attachment-storage-profile .setting-row-control{min-width:0}.attachment-storage-profile .status-notice{margin:12px 0}.attachment-storage-tasks{display:grid;gap:10px}.attachment-storage-task{border-top:1px solid var(--line);padding-top:10px}.attachment-storage-task>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.attachment-storage-task ul{max-height:180px;overflow:auto;padding-left:20px}.attachment-storage-task li{overflow-wrap:anywhere;font-size:12px}
 .as-card-menu{position:relative;margin-left:auto}.as-card-menu>summary{cursor:pointer;list-style:none;padding:4px 10px}.as-card-menu>div{position:absolute;right:0;top:100%;z-index:5;display:grid;min-width:180px;padding:6px;background:var(--paper);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px #0002}.as-card-menu button{justify-content:flex-start;border:0}.as-server-address{font-size:12px;color:var(--muted);overflow-wrap:anywhere}.as-edit-dialog{width:min(600px,calc(100vw - 24px))}.as-edit-dialog fieldset{border:0;padding:0;margin:0;min-width:0}.as-edit-dialog footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}.as-edit-dialog details{margin-top:16px}.as-edit-dialog details input{margin-top:8px;width:100%}.file-tools-dialog{width:min(800px,calc(100vw - 24px));max-height:90dvh;overflow:auto}.file-tools-dialog>fieldset{border:0;min-width:0}.file-tools-entry{font-size:11px;padding:6px 16px}
+
+.work-hub-options { display: flex; flex-wrap: wrap; gap: 10px 20px; width: 100%; }
+.work-hub-platforms { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.work-hub-choice { display: flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; font-size: 13px; }
+.setting-row-control .work-hub-choice input { flex: none; width: 16px; height: 16px; padding: 0; margin: 0; }

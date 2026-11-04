@@ -12,6 +12,7 @@ from vault_rag.design_templates import load_template, template_path
 class MotionTemplateTests(unittest.TestCase):
     setUp = test_design_studio.DesignStudioTests.setUp
     tearDown = test_design_studio.DesignStudioTests.tearDown
+    mcp_call = test_design_studio.DesignStudioTests.mcp_call
 
     def create(self, directory='Motion'):
         response = self.client.post('/api/design/projects', headers=self.auth, json={
@@ -66,6 +67,31 @@ class MotionTemplateTests(unittest.TestCase):
             self.assertEqual(portable['pages'], saved['document']['pages'])
         self.assertEqual((template_path('motion') / 'project.json').read_bytes(), original)
         self.assertEqual(load_template('motion')['pages'], second['document']['pages'])
+
+    def test_selected_html_export_and_preflight_http(self):
+        created = self.create()
+        pages = created['document']['pages']
+        first = pages[0]['id']
+        payload = {'root': str(self.root), 'directory': 'Motion', 'page_ids': [first],
+                   'expected_revision': created['revision']}
+        report = self.client.post('/api/design/export/preflight', headers=self.auth, json=payload)
+        self.assertEqual(report.status_code, 200, report.text)
+        self.assertEqual(report.json()['revision'], created['revision'])
+        response = self.client.post('/api/design/export', headers=self.auth, json=payload)
+        self.assertEqual(response.status_code, 200, response.text)
+        archive = self.client.get(response.json()['url'])
+        with zipfile.ZipFile(io.BytesIO(archive.content)) as bundle:
+            portable = json.loads(bundle.read('document.js').decode().removeprefix('window.STUDIO_DOCUMENT=').strip().removesuffix(';'))
+            self.assertEqual([page['id'] for page in portable['pages']], [first])
+        self.assertEqual(self.client.get('/api/design/document', headers=self.auth, params={'directory': 'Motion'}).json()['revision'], created['revision'])
+        invalid = self.client.post('/api/design/export', headers=self.auth, json={**payload, 'page_ids': []})
+        self.assertEqual(invalid.status_code, 400, invalid.text)
+        stale = self.client.post('/api/design/export/preflight', headers=self.auth, json={**payload, 'expected_revision': 'stale'})
+        self.assertEqual(stale.status_code, 409, stale.text)
+        receipt = self.mcp_call('design_export', {'directory': 'Motion', 'page_ids': [first],
+                                'workspace_revision': self.config.data['revision'], 'expected_revision': created['revision']})
+        self.assertEqual(receipt['revision'], created['revision'])
+        self.assertIn('missing_pages', receipt)
 
 
 if __name__ == '__main__':

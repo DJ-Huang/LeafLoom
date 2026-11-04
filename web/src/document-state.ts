@@ -5,6 +5,11 @@ const sessions=new Map<string,DocumentState>();
 const histories=new WeakMap<DocumentState,EditHistory>();
 export function documentHistory(session:DocumentState){let history=histories.get(session);if(!history){history=createEditHistory();histories.set(session,history);}return history;}
 export const draftKey=(root:string,path:string)=>'draft:'+root+'\n'+path;
+export function hasDocumentDraft(root:string,path:string){
+ const key=draftKey(root,path),session=sessions.get(key);
+ if(session)return session.dirty||!!session.pending;
+ try{return typeof JSON.parse(localStorage.getItem(key)||'null')?.text==='string';}catch{return false;}
+}
 function emit(session:DocumentState){session.version++;session.touched=Date.now();for(const listener of session.listeners)listener();}
 function persist(session:DocumentState){try{if(session.dirty)localStorage.setItem(session.key,JSON.stringify({text:session.text,etag:session.etag,manualSave:session.manualSave}));else localStorage.removeItem(session.key);}catch{if(session.dirty)session.error='本地草稿存储不可用；当前内容仍在页面中，请保存或下载草稿';}}
 function trim(retain?:DocumentState){

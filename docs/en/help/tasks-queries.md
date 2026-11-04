@@ -15,6 +15,10 @@ Try the demo’s sample views with fictional tasks first.
 3. Edit writable table properties or task status; changes save to the original note.
 4. `file.*` and formula fields are read-only. Property queries use the limited TABLE/LIST grammar, without arbitrary execution.
 
+### Note databases
+
+Use **New database** in the directory heading/menu to create a `.base` configuration and choose its record folder. Table, list, board, gallery and draggable timeline views share the same Markdown notes. Configure typed fields, filters, sort, grouping and layout in the toolbar; click a record to edit its properties and body. Use **Insert database** in the editor to embed a stable view. Removing a field/view keeps note data; recycling a record moves the original note to recoverable trash. [Complete database instructions](../GUIDE.md#note-databases).
+
 ## What to expect
 
 Views present existing notes. Moving tasks or editing properties changes their source files.

@@ -12,11 +12,11 @@
 .rich-prose li > p { margin: 0; }
 .rich-prose li > ul,.rich-prose li > ol { margin: 3px 0; }
 .rich-prose ul[data-type=taskList] { list-style: none; padding-left: 0; }
-.rich-prose li[data-type=taskItem] { display: flex; align-items: flex-start; gap: 8px; list-style: none; }
-.rich-prose li[data-type=taskItem] > label { display: flex; align-items: center; height: 28px; user-select: none; flex-shrink: 0; }
-.rich-prose li[data-type=taskItem] > div { flex: 1; min-width: 0; }
-.rich-prose li[data-type=taskItem] input { width: 15px; height: 15px; margin: 0; accent-color: var(--link); cursor: pointer; }
-.rich-prose li[data-type=taskItem][data-checked=true] > div > p { text-decoration: line-through; color: var(--muted); }
+.rich-prose li:is([data-type=taskItem],[data-checked]) { display: flex; align-items: flex-start; gap: 8px; list-style: none; }
+.rich-prose li:is([data-type=taskItem],[data-checked]) > label { display: flex; align-items: center; height: 28px; user-select: none; flex-shrink: 0; }
+.rich-prose li:is([data-type=taskItem],[data-checked]) > div { flex: 1; min-width: 0; }
+.rich-prose li:is([data-type=taskItem],[data-checked]) input { width: 15px; height: 15px; margin: 0; accent-color: var(--link); cursor: pointer; }
+.rich-prose li:is([data-type=taskItem],[data-checked])[data-checked=true] > div > p { text-decoration: line-through; color: var(--muted); }
 .rich-prose ul[data-type=taskList] li ul { padding-left: 0; }
 .rich-prose pre { white-space: pre-wrap; overflow-wrap: normal; tab-size: 2; }
 .rich-prose pre code { font-size: 13px; }
@@ -52,7 +52,7 @@
 .rich-block-handle button:hover { background: var(--hover); color: var(--accent); }
 .rich-block-handle .rich-drag-grip { cursor: grab; }
 .rich-block-handle .rich-drag-grip:active { cursor: grabbing; }
-.rich-popup { position: fixed; z-index: 160; max-width: calc(100vw - 24px); background: var(--paper); color: var(--accent); border: 1px solid rgb(55 53 47 / 10%); border-radius: 9px; box-shadow: 0 6px 24px rgb(15 15 15 / 12%),0 1px 4px rgb(15 15 15 / 8%); overflow: hidden; font-family: inherit; line-height: 1.4; }
+.rich-popup { position: fixed; z-index: 160; max-width: calc(100vw - 24px); background: var(--paper); color: var(--accent); border: 1px solid var(--line); border-radius: 9px; box-shadow: var(--shadow-popover); overflow: hidden; font-family: inherit; line-height: 1.4; }
 .rich-popup button { border: 0; background: transparent; cursor: pointer; border-radius: 4px; }
 .rich-popup button:hover,.rich-popup button:focus-visible { background: var(--hover); }
 .rich-command-popup { width: 360px; }
@@ -100,3 +100,5 @@
  .rich-format-bar button { width: 28px; }
 }
 @media(prefers-reduced-motion:reduce) { .rich-special-tools { transition: none; } }
+
+.rich-prose li[data-checked] > div > p { margin: 0; }

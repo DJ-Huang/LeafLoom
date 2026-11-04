@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vault-rag"
-version = "0.1.5"
+version = "0.1.7"
 description = "LeafLoom: local-first knowledge base and personal wiki for Markdown and HTML, with MCP, Skills, AI Chat and ChatGPT integration"
 keywords = ["knowledge-management", "personal-wiki", "local-first", "markdown", "html", "mcp", "agent-skills", "ai-chat", "chatgpt", "rag", "knowledge-graph"]
 license = "MIT"
@@ -63,3 +63,14 @@ torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'win32'" }]
 "vault_rag/static" = "vault_rag/static"
 "assets/brand" = "vault_rag/brand"
 "wiki-search/SKILL.md" = "vault_rag/skills/wiki-search/SKILL.md"
+"work-hub/SKILL.md" = "vault_rag/skills/work-hub/SKILL.md"
+"work-hub/references/workspace.md" = "vault_rag/skills/work-hub/references/workspace.md"
+"work-hub/references/imports.md" = "vault_rag/skills/work-hub/references/imports.md"
+"work-hub/references/tasks-reports.md" = "vault_rag/skills/work-hub/references/tasks-reports.md"
+"work-hub/assets/workspace.base" = "vault_rag/skills/work-hub/assets/workspace.base"
+"work-hub/scripts/task_sync.py" = "vault_rag/skills/work-hub/scripts/task_sync.py"
+"work-hub/scripts/feishu_sync.py" = "vault_rag/skills/work-hub/scripts/feishu_sync.py"
+"work-hub/references/feishu-sync.md" = "vault_rag/skills/work-hub/references/feishu-sync.md"
+"work-hub/references/feishu.md" = "vault_rag/skills/work-hub/references/feishu.md"
+"work-hub/references/gitlab.md" = "vault_rag/skills/work-hub/references/gitlab.md"
+"work-hub/references/settings.md" = "vault_rag/skills/work-hub/references/settings.md"

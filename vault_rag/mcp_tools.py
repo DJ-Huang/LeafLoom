@@ -17,6 +17,7 @@ from vault_rag.note_operations import NoteError
 from vault_rag.mcp_access import TUNNEL_AUTH_HEADER, McpAccessError
 from vault_rag.file_commands import ChatFile, ReadCommand, WriteCommand
 from vault_rag.design_inspection import DesignSection
+from vault_rag.database_commands import DatabaseCommand, capabilities as database_capabilities
 
 
 def _tool_result(value, failed=False):
@@ -31,7 +32,7 @@ def _tool_result(value, failed=False):
                           structuredContent=json.loads(text), isError=failed)
 
 
-def build_workspace_mcp(config, runtime, operations, access, legacy_token, design=None, feishu=None, annotations=None, files=None):
+def build_workspace_mcp(config, runtime, operations, access, legacy_token, design=None, feishu=None, annotations=None, files=None, databases=None):
     mcp = FastMCP('vault-rag', host='127.0.0.1', port=config.data.get('port', 18080),
                   stateless_http=True, json_response=True)
 
@@ -137,7 +138,8 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         def status():
             result = {**runtime.status(), 'workspace_revision': operations.workspace_revision,
                     'capabilities': access.capabilities(principal(ctx)),
-                    'supported_formats': ['markdown', 'txt', 'html'],
+                    'supported_formats': ['markdown', 'txt', 'html', 'base'],
+                    'database_tools': ['vault_database', 'vault_database_update'],
                     'workspace_access': 'all connected notes; retrieval uses selected directories only'}
             if files is not None and result['capabilities']['read_workspace'] and config.data.get('root'):
                 result['attachments'] = {'index':files.index_jobs.status(),
@@ -151,6 +153,65 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
                         'client_hint': 'If either file tool is missing in the client, refresh/rescan its plugin tool directory after restarting the updated backend; Design Studio and Feishu transfers are separate.'}}
             return result
         return await call(ctx, status, legacy=True)
+
+    if databases is None:
+        from vault_rag.databases import Databases
+        databases = Databases(config, runtime, operations)
+
+    @tool()
+    async def vault_database(ctx: Context, action: Literal['list', 'config', 'query', 'record', 'capabilities'] = 'list',
+                             path: str = '', view_id: str = '', search: str = '', folder: str = '',
+                             limit: int = 100, cursor: str = '', group_key: str = '', anchor_path: str = '',
+                             recent_paths: list[str] | None = None, record_path: str = '',
+                             offset: int = 0, text_limit: int = 12000) -> CallToolResult:
+        """Discover local .base databases, read config (fields, stable view IDs, revisions), or query records.
+        Board queries return column summaries; pass a returned group_key to page that column.
+        anchor_path restores a column scroll anchor. Query uses path/view_id/search; list uses folder. Both paginate with limit<=200 and cursor.
+        Retain config revision, each record revision and workspace_revision for writes. No RAG scope change.
+        capabilities lists all database workflows and related body/file/attachment tools.
+        record reads a paged Markdown body by exact record_path within the database folder; offset/text_limit are character based (max 24000).
+        recent_paths (<=20) reconciles saved records outside the current page without bypassing filters.
+        """
+        def run():
+            if action == 'list': return databases.discover(folder, limit, cursor)
+            if action == 'config': return databases.config_read(path)
+            if action == 'capabilities': return database_capabilities()
+            if action == 'record': return databases.read_record(path, record_path, offset, text_limit)
+            return databases.query(path, view_id, search, cursor, limit, group_key, anchor_path, recent_paths)
+        return await call(ctx, run)
+
+    @tool(write=True)
+    async def vault_database_update(path: str, command: DatabaseCommand, workspace_revision: str,
+                                    ctx: Context, expected_revision: str = '', operation_id: str = '') -> CallToolResult:
+        """Modify a file-backed database with read-time expected_revision (config revision).
+        command.type: create {folder}; field.set {key,field:{type,options?},displayName}; field.remove {key};
+        view.add {view:{name,type,order?,leafloom?}}; view.update {view_id,patch}; view.remove {view_id};
+        view.move {view_id,before_view_id? or after_view_id?} reorders tabs, preserving stable IDs and settings.
+        field.set accepts detail_view_id + detail_fields to create and show a property atomically. view.leafloom.detailFields configures visible record properties; removed definitions keep original Markdown values.
+        field.set displayName renames a shared property label. view.update leafloom.detailExtraOrder sorts collapsed properties; field.remove protects built-in/read-only fields and keeps note bodies/values.
+        field.set options/optionMeta edit select/multiselect labels and colors; omitted displayName is preserved. Optional task_setup saves replacement status roles atomically. Removed choices remain historical note values; updates can retain but not newly assign them.
+        record.create {title,values}; record.update {path,record_revision,values};
+        record.create view_id prefills unambiguous writable equality conditions (e.g. record_type).
+        Precedence: task defaults, view equality values, board group_key, explicit values. Search/ranges/expressions are not inferred.
+        record.duplicate {path,record_revision,title?,view_id?,search?} copies the full note into its source folder;
+        preserves body/unknown properties, renews an existing note id, and requires operation_id for retry safety.
+        record.trash {path,dry_run:true}, then same command with dry_run:false,operation_token from preview.
+        Types: text,number,select,multiselect,date(YYYY-MM-DD),checkbox,url,attachment(list of wiki references).
+        Views: table,list,cards,leafloomTimeline,leafloomBoard. create accepts preset:'tasks'.
+        Board view.add accepts preset:'tasks' or task_setup:{statusField,priorityField,dueField,initialStatus,completedStatuses}.
+        record.move {view_id,path,record_revision,group_key,catalog_version,before_path? or after_path?,search?};
+        board.undo {move_id}. Both require operation_id for safe retries and return undo_id.
+        board.group.set {view_id,value,label?,color?} adds or edits a shared option without rewriting note values.
+        board.group.remove {view_id,group_key,dry_run:true} previews all affected database records, ignoring view filters.
+        Commit with records and catalog_version from the preview, target_value:null or another option,
+        read-time expected_revision and operation_id. Notes/bodies are preserved; task roles require a replacement status.
+        Select fields accept optionMeta:{value:{label?,color?}}. Board leafloom.board stores column settings and manualOrder. View leafloom options: coverField,cardSize,fit,startField,endField,
+        conditions:[{field,operator: eq|neq|contains|empty|not_empty|gt|lt|gte|lte,value}].
+        Creates require unique operation_id; identical retries reuse it. Other writes reject stale revisions.
+        Removing fields/views keeps note data. Records go to recoverable trash. No arbitrary code executes.
+        """
+        return await call(ctx, databases.command, path, command.model_dump(mode='json', exclude_unset=True), workspace_revision,
+                          expected_revision, operation_id, write=True)
 
     @tool()
     async def vault_list_directory(ctx: Context, path: str = '', limit: int = 50, cursor: str = '') -> CallToolResult:
@@ -307,7 +368,7 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
     @tool(write=True)
     async def vault_move(path: str, destination: str, workspace_revision: str, ctx: Context,
                          dry_run: bool = True, operation_token: str | None = None, limit: int = 50, cursor: str = '') -> CallToolResult:
-        """Move/rename a note or folder, repairing Markdown references. First call dry_run=true for affected paths and token.
+        """Move/rename a note, .base database or folder, repairing Markdown references. First call dry_run=true for affected paths and token.
         Commit the SAME arguments with dry_run=false and operation_token within 5 minutes. Changed files invalidate the preview.
         Folders include attachments; protected/hidden/link entries are rejected. Target must not exist.
         """
@@ -316,7 +377,8 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
     @tool(write=True)
     async def vault_delete(path: str, workspace_revision: str, ctx: Context,
                            dry_run: bool = True, operation_token: str | None = None, limit: int = 50, cursor: str = '') -> CallToolResult:
-        """Move a note or complete folder to recoverable trash. Preview first; commit dry_run=false with its operation_token.
+        """Move a note, .base definition or complete folder to recoverable trash. Deleting a .base keeps its record folder.
+        Preview first; commit dry_run=false with its operation_token.
         Protected/hidden/link entries are rejected. No permanent deletion tool is exposed.
         """
         return await call(ctx, operations.operation, 'delete', path, workspace_revision, '', dry_run, operation_token, limit, cursor, write=True)
@@ -654,11 +716,12 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         return await call(ctx, run, write=True)
 
     @tool(write=True, additive=True)
-    async def design_export(directory: str, workspace_revision: str, ctx: Context) -> CallToolResult:
-        """Export an independent ZIP containing HTML, assets, scripts, dependencies and the preview runtime."""
+    async def design_export(directory: str, workspace_revision: str, ctx: Context,
+                            page_ids: list[str] | None = None, expected_revision: str | None = None) -> CallToolResult:
+        """Export an independent HTML ZIP. Optional page_ids select pages; omitted exports the whole project."""
         def run():
             design._check_workspace(workspace_revision)
-            return design.workspace.export(directory)
+            return design.workspace.export(directory, page_ids, expected_revision)
         return await call(ctx, run, write=True)
 
     if feishu is not None:

@@ -9,17 +9,8 @@ IGNORE_HEADER='# leafloom-ignore v1'
 MAX_IGNORE_BYTES=64*1024
 MAX_TOTAL_IGNORE_BYTES=1024*1024
 MAX_IGNORE_LINES=2048
-DEFAULT_EXCLUDED_EXTENSIONS=frozenset({
-    '.md','.markdown','.mdx','.base','.html','.htm',
-    '.py','.pyw','.pyi','.ipynb','.js','.mjs','.cjs','.ts','.tsx','.jsx',
-    '.sh','.bash','.zsh','.fish','.command','.bat','.cmd','.ps1','.psm1','.psd1','.vbs','.vb','.vba','.wsf',
-    '.awk','.sed','.tcl','.applescript','.scpt',
-    '.lua','.rb','.pl','.pm','.php','.phtml','.r','.rmd','.jl','.go','.rs',
-    '.c','.h','.cc','.cpp','.cxx','.hpp','.hxx','.cs','.fs','.fsx','.fsi',
-    '.java','.kt','.kts','.scala','.swift','.m','.mm','.dart','.vue','.svelte',
-    '.css','.scss','.sass','.less','.sql','.ex','.exs','.erl','.hrl','.clj','.cljs','.cljc',
-    '.shader','.hlsl','.glsl','.cg','.cginc','.compute','.usf','.ush','.wgsl',
-})
+from vault_rag.attachment_policy import DEFAULT_EXTENSIONS, allows
+
 
 
 class IgnoreRuleError(ValueError):
@@ -32,7 +23,8 @@ class RemoteIgnore:
     Gitignore pattern syntax is used, but traversal deliberately does not prune
     excluded directories, so a child's own rules can re-include its files.
     """
-    def __init__(self,reserved=()):
+    def __init__(self,reserved=(), *, allowed_extensions=None):
+        self.allowed_extensions=tuple(DEFAULT_EXTENSIONS if allowed_extensions is None else allowed_extensions)
         self.specs={};self.total_bytes=0;self.reserved=tuple(reserved)
 
     def add(self,directory,data):
@@ -61,8 +53,8 @@ class RemoteIgnore:
     def excluded(self,path):
         if any(path==prefix or path.startswith(prefix+'/') for prefix in self.reserved):return True
         name=PurePosixPath(path).name
-        if name==IGNORE_NAME:return True
-        excluded=PurePosixPath(path).suffix.lower() in DEFAULT_EXCLUDED_EXTENSIONS
+        if name==IGNORE_NAME or not allows(path,self.allowed_extensions):return True
+        excluded=False
         parts=path.split('/')
         for depth in range(len(parts)):
             directory='/'.join(parts[:depth]);spec=self.specs.get(directory)

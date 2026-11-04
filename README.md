@@ -10,7 +10,7 @@
 
 **[Help center](https://dj-huang.github.io/LeafLoom/docs/en/)** · Searchable guides for notes, attachments, Design Studio, AI connections and recovery.
 
-**[New in 0.1.5: attachment servers, resumable sync and presenter mode](docs/en/RELEASE_NOTES_0.1.5.md)**
+**[New in 0.1.7: work hub, multiple office platforms and reliable asset collection](docs/en/RELEASE_NOTES_0.1.7.md)**
 
 Turn scattered notes, project docs and saved webpages into a connected knowledge base. **LeafLoom is an open-source, local-first knowledge management workspace and personal wiki** for Markdown and HTML, with source-linked search, a knowledge graph, MCP, Skills, AI Chat and ChatGPT integration.
 
@@ -81,7 +81,7 @@ Use your knowledge where you already work, with source references you can check.
 | --- | --- |
 | **MCP** | Connect clients such as Codex, Cursor or Claude Code to the local HTTP MCP endpoint at `http://127.0.0.1:18080/mcp` (default port). Enable full access to find, create, edit, organize and recover connected notes. RAG keeps your selected scope; writing starts disabled. |
 | **Feishu / Lark** | Connect an externally configured lark-cli to verify your account and let MCP clients work with documents and Base records. Local and Tunnel permissions are separate and start disabled. [Setup](docs/en/GUIDE.md#optional-feishu--lark-connection). |
-| **Skills** | Install the included [`wiki-search` Skill](wiki-search/SKILL.md) from **Settings → Skill → Install skill**. It guides compatible assistants through retrieval, Wiki navigation and source checking. Configure MCP separately. |
+| **Skills** | Install [`wiki-search`](wiki-search/SKILL.md) for sourced retrieval or [`work-hub`](work-hub/SKILL.md) for work capture, local tasks and reports, with multi-select office preferences and optional Feishu imports and sync from **Settings → AI integration**. Configure MCP separately. [Work hub guide](docs/WORK_HUB.md). |
 | **AI Chat** | Requires a separately installed, signed-in Codex or Codely CLI. Discuss a note or selection and open cited sources. Preview suggested changes, accept them into a draft, then save when ready. |
 
 [Set up AI Chat, MCP and Skills](docs/en/AI.md)
@@ -113,6 +113,24 @@ Keep the current note beside a conversation and follow references back to the so
 Open a local `.html` or `.htm` file, confirm its project folder once, and run the website with its companion styles, scripts and resources. Use project navigation, downloads, optional SPA routing, or open an existing HTTP/HTTPS site or development server from **Preview**. [HTML project guide](docs/en/GUIDE.md#open-html-projects-websites-and-design-studio). The HTML reading room below is included in the demo.
 
 ![Local HTML reading room previewed inside LeafLoom](assets/screenshots/en/showcase-html.png)
+
+### Work hub Skill
+
+Keep work records, local tasks and reports across projects. Configure office-platform preferences and connect Feishu when needed; platforms marked as not integrated are not available for collection or sync. [Work hub guide](docs/WORK_HUB.md). The image shows the actual settings panel.
+
+![Work hub source and office-platform settings, with unintegrated platforms labeled](assets/screenshots/en/showcase-workhub.jpg)
+
+### Design Studio
+
+Start from a blank board or a built-in template, organize pages and layers, and export an independent HTML project. The screenshot shows the actual new-project template picker. [Design Studio guide](docs/en/help/design-studio.md).
+
+![Design Studio new-project dialog with blank project and built-in templates](assets/screenshots/en/showcase-studio.jpg)
+
+### Attachment management
+
+Browse and search local files and configured servers, organize files into groups, and preview or download originals. Select the groups available for AI asset search. This demo library uses built-in template assets. [Attachment guide](docs/en/help/attachments.md).
+
+![Demo images and assets in attachment management](assets/screenshots/en/showcase-attachments.jpg)
 
 ## Get started
 
@@ -182,3 +200,5 @@ The desktop installer supports the platforms above. This is not cloud sync, univ
 MIT © 2026 DJ. Dependencies and models keep their own licenses. [License](LICENSE)
 
 Technical compatibility: `vault-rag`, `VAULT_RAG_HOME`, `.vault-rag/`, HTTP MCP `/mcp`.
+
+Organize Markdown notes as local databases with table, list, board, gallery and draggable timeline views. [Database guide](docs/en/GUIDE.md#note-databases).

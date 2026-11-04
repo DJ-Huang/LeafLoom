@@ -270,6 +270,7 @@ module.exports = async function motionWorkflows({page, request, info, checks}) {
   const exportResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/design/export' && response.request().method() === 'POST');
   const downloadEvent = page.waitForEvent('download');
   await toolbar().getByRole('button', {name: '导出', exact: true}).click();
+  await page.getByTestId('export-selected').click();
   const download = await downloadEvent;
   assert.equal(await download.failure(), null);
   const bundle = path.join(evidence, 'motion-workflow.zip');

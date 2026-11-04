@@ -71,7 +71,7 @@ class AttachmentIndexTests(unittest.TestCase):
         self.put('website/style.css')
         with patch.object(Path, 'read_bytes', side_effect=AssertionError('binary read')):
             page = self.index.listing()
-        self.assertEqual(page['total'], 3)
+        self.assertEqual(page['total'], 1)
         self.assertEqual(page['items'][0]['size'], 3 * 1024**3)
         self.assertEqual((self.root / 'website/index.html').read_bytes(), b'<html>Hello</html>')
         self.assertEqual(self.files.resolve('secret.png'), [])
@@ -118,7 +118,7 @@ class AttachmentIndexTests(unittest.TestCase):
         with patch.object(Files, 'walk', interrupted):
             with self.assertRaises(PermissionError):
                 self.index.refresh()
-        with sqlite3.connect(self.root / '.vault-rag/attachments.sqlite') as db:
+        with sqlite3.connect(self.files.state_path('attachments.sqlite')) as db:
             self.assertEqual(db.execute('SELECT path FROM assets').fetchall(), [('before.png',)])
         self.index.refresh()
         self.assertEqual(self.files.resolve('after.png'), ['after.png'])
@@ -148,7 +148,7 @@ class AttachmentIndexTests(unittest.TestCase):
         self.assertEqual(self.files.resolve('a.png'), [])
         self.index.apply(['safe/a.png'])
         self.assertEqual(self.index.listing()['total'], 0)
-        dbpath = self.root / '.vault-rag/attachments.sqlite'
+        dbpath = self.files.state_path('attachments.sqlite')
         dbpath.unlink()
         dbpath.symlink_to(outside)
         with self.assertRaises(ValueError):
@@ -206,7 +206,7 @@ class AttachmentIndexTests(unittest.TestCase):
     def test_listing_revalidates_cached_paths_and_reports_scan_time(self):
         self.put('visible.png')
         self.index.refresh()
-        with sqlite3.connect(self.root / '.vault-rag/attachments.sqlite') as db:
+        with sqlite3.connect(self.files.state_path('attachments.sqlite')) as db:
             db.execute("INSERT INTO assets VALUES(?,?,?,?,?,?,?,?)",
                        ('../outside.png', '../outside.png', 'outside.png', 'outside.png', 1, 0, 'image/png', 1))
         result = self.index.listing()
@@ -219,7 +219,7 @@ class AttachmentIndexTests(unittest.TestCase):
         catalog = Catalog(self.files)
         catalog.scan()
         self.index.refresh()
-        with sqlite3.connect(self.root / '.vault-rag/attachments.sqlite') as db:
+        with sqlite3.connect(self.files.state_path('attachments.sqlite')) as db:
             db.execute('PRAGMA user_version=99')
         self.put('notes/a.md', b'# After')
         with self.assertLogs('vault_rag.catalog', level='WARNING'):
@@ -227,12 +227,12 @@ class AttachmentIndexTests(unittest.TestCase):
         self.assertEqual(catalog.entries['notes/a.md']['text'], '# After')
         with self.assertLogs('vault_rag.local_state', level='WARNING'):
             self.assertEqual(self.files.resolve('image.png'), ['assets/image.png'])
-        with sqlite3.connect(self.root / '.vault-rag/attachments.sqlite') as db:
+        with sqlite3.connect(self.files.state_path('attachments.sqlite')) as db:
             self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 99)
 
     def test_future_schema_is_preserved(self):
         self.index.refresh()
-        path = self.root / '.vault-rag/attachments.sqlite'
+        path = self.files.state_path('attachments.sqlite')
         with sqlite3.connect(path) as db:
             db.execute('PRAGMA user_version=99')
         with self.assertRaises(ValueError):

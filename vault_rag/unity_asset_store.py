@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import http.client
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from html import unescape
 from html.parser import HTMLParser
 import ipaddress
@@ -18,6 +19,7 @@ import re
 import ssl
 import sys
 import threading
+from threading import Thread as CollectionThread
 import tempfile
 import time
 import unicodedata
@@ -35,6 +37,10 @@ class OfficialSourceError(ValueError):
     def __init__(self, code):
         self.code=code
         super().__init__(code)
+
+
+class _CollectionCancelled(Exception):
+    pass
 
 
 def official_url(value):
@@ -79,6 +85,10 @@ class ProductPage(HTMLParser):
             if key:self.meta.setdefault(key,attrs.get('content',''))
         if tag=='article' and attrs.get('data-test','').startswith('search-results-product-card-'):self._result_article=True
         if attrs.get('data-test')=='search-page-title':self.is_search=True
+        # The official empty search page omits search-page-title, but exposes
+        # a dedicated, labelled empty state. It is a valid search with no hits.
+        if (tag=='section' and attrs.get('data-test')=='empty-state' and
+                normalized(attrs.get('aria-label',''))=='noresultsfound'):self.is_search=True
         if tag=='a' and attrs.get('href'):
             self.links.append(attrs['href'])
             if self._result_article and attrs.get('data-test')=='product-card-name':
@@ -234,6 +244,10 @@ def _check_access_page(html):
 def _refresh_official(metadata,previous):
     """A public fact refresh cannot erase separately supplied translations."""
     metadata=dict(metadata)
+    # Missing public facts are unknown, not instructions to delete facts from
+    # a previous successful collection.
+    for key in ('description','source_excerpt','categories','keywords','latest_version','compatibility'):
+        if not metadata.get(key) and previous.get(key):metadata.pop(key,None)
     changed=any(key in metadata and metadata[key]!=previous.get(key)
                 for key in ('title','publisher','source_excerpt','categories','keywords','latest_version','compatibility'))
     for key in ('summary_zh','categories_zh','keywords_zh'):
@@ -266,12 +280,30 @@ def _system_https_proxy():
 
 
 class UnityOfficialSource:
-    def __init__(self,fetch=None):self.fetch=fetch or self._fetch
+    def __init__(self,fetch=None):
+        self.fetch=fetch or self._fetch;self.native_fetch=fetch is None
+
+    def _read(self,url,*,image=False,cancelled=None):
+        # Public GETs are safe to retry. Back off only for transient transport
+        # errors or an unavailable server, never for rate limits or challenges.
+        for attempt in range(3):
+            if cancelled is not None and cancelled.is_set():raise _CollectionCancelled()
+            try:
+                if self.native_fetch:return self.fetch(url,image=image,cancelled=cancelled)
+                return self.fetch(url,image=True) if image else self.fetch(url)
+            except OfficialSourceError as error:
+                if error.code!='official_source_unavailable' or attempt==2:raise
+            except OSError:
+                if attempt==2:raise
+            if cancelled is not None:
+                if cancelled.wait(2**attempt):raise _CollectionCancelled()
+            else:time.sleep(2**attempt)
 
     @staticmethod
-    def _fetch(url,*,image=False):
+    def _fetch(url,*,image=False,cancelled=None):
         limit=10*1024**2 if image else 5*1024**2
         for redirect in range(4):
+            if cancelled is not None and cancelled.is_set():raise _CollectionCancelled()
             try:parsed=urlsplit(url)
             except ValueError:raise OfficialSourceError('official_source_host_rejected') from None
             allowed=parsed.hostname in _COVER_HOSTS if image else parsed.hostname=='assetstore.unity.com'
@@ -314,15 +346,15 @@ class UnityOfficialSource:
             finally:connection.close()
         raise OfficialSourceError('official_source_unavailable')
 
-    def product(self,url):
+    def product(self,url,*,cancelled=None):
         _,url=official_url(url)
-        html=self.fetch(url).decode('utf-8','replace');_check_access_page(html)
+        html=self._read(url,cancelled=cancelled).decode('utf-8','replace');_check_access_page(html)
         return parse_product(html,url)
 
-    def search(self,title,publisher):
+    def search(self,title,publisher,*,cancelled=None):
         # Only public official links are candidates. Product pages are separately
         # fetched and their structured identity must exactly match both hints.
-        html=self.fetch('https://assetstore.unity.com/en-US/search?q='+quote(_text(title,500))).decode('utf-8','replace')
+        html=self._read('https://assetstore.unity.com/en-US/search?q='+quote(_text(title,500)),cancelled=cancelled).decode('utf-8','replace')
         _check_access_page(html)
         page=ProductPage();page.feed(html)
         result={}
@@ -335,8 +367,8 @@ class UnityOfficialSource:
             result[product_id]=url
         return list(result.values())[:12]
 
-    def cover(self,url):
-        raw=self.fetch(url,image=True)
+    def cover(self,url,*,cancelled=None):
+        raw=self._read(url,image=True,cancelled=cancelled)
         try:
             with Image.open(io.BytesIO(raw)) as picture:
                 if picture.width*picture.height>25_000_000:raise ValueError('Image dimensions are too large')
@@ -351,7 +383,7 @@ class UnityOfficialSource:
 
 
 class AssetEnrichment:
-    """Resumable, serial metadata-only enrichment. Never downloads package bodies."""
+    """Resumable metadata-only enrichment. Never downloads package bodies."""
     def __init__(self,library,source=None):
         self.library=library;self.remote=library.remote
         self.source=source or UnityOfficialSource()
@@ -391,7 +423,7 @@ class AssetEnrichment:
                                    owner=owner,operation_id=operation_id)
 
     def official_url(self,root,url,*,item_id='',asset_id='',owner='local',operation_id='',expected_revision='',guard=None,
-                     _verified_data=None):
+                     _verified_data=None,_cover_request=None):
         if guard:guard()
         candidate=self.library.detail(root,item_id) if item_id else None
         if candidate and expected_revision and candidate['revision']!=expected_revision:
@@ -431,20 +463,71 @@ class AssetEnrichment:
                              proposed_url=url,evidence={'method':'user_supplied_official_url'})
                 pending_match={'candidate_id':item_id,'asset_id':asset_id,'product_id':product_id,'url':url}
                 pending_match['candidate_revision']=self.library.detail(root,item_id)['revision']
+        warnings=[]
         if value.get('cover_source_url'):
             try:
-                content=self.source.cover(value['cover_source_url'])
+                content=_cover_request(value['cover_source_url']) if _cover_request else self.source.cover(value['cover_source_url'])
                 store=getattr(self.library,'store_cover',None)
                 if store:
                     with tempfile.TemporaryDirectory(prefix='asset-cover-',dir=self.remote.config.directory) as directory:
                         file=Path(directory)/'official.webp';file.write_bytes(content)
                         store(root,product_id,file,value['cover_source_url'],owner=owner)
-            except (OfficialSourceError,OSError,ValueError):
+            except (OfficialSourceError,OSError,ValueError) as error:
                 # A bad refresh cannot replace an existing valid official cover.
-                pass
+                warnings.append(error.code if isinstance(error,OfficialSourceError) else 'official_cover_unavailable')
         result=self.library.detail(root,product_id)
         if pending_match:result['pending_match']=pending_match
+        if warnings:result['collection_warnings']=warnings
         return result
+
+    @staticmethod
+    def missing_fields(item):
+        official=item.get('official',{})
+        missing=[]
+        if not official.get('cover'):missing.append('cover')
+        if not (official.get('keywords') or official.get('keywords_zh')):missing.append('tags')
+        if not (official.get('summary_zh') or official.get('description') or official.get('source_excerpt')):missing.append('description')
+        return missing
+
+    @staticmethod
+    def _scope(item_ids,limit,refresh,delay,asset_ids=None):
+        if item_ids is not None:
+            if (not isinstance(item_ids,list) or len(item_ids)>100000 or any(not isinstance(identity,str) or
+                    not re.fullmatch(r'(?:candidate:[0-9a-f]{32}|unity\.assetstore:[1-9][0-9]{0,17})',identity) for identity in item_ids)):
+                raise ValueError('Invalid collection item IDs')
+            item_ids=sorted(set(item_ids))
+        if asset_ids is not None:
+            if (not isinstance(asset_ids,list) or len(asset_ids)>100000 or any(not isinstance(identity,str) or
+                    not re.fullmatch(r'[A-Za-z0-9:_-]{1,200}',identity) for identity in asset_ids)):
+                raise ValueError('Invalid collection asset IDs')
+            asset_ids=sorted(set(asset_ids))
+        if type(limit)is not int or not 0<=limit<=100000:raise ValueError('Use a collection limit from 0 through 100000')
+        if type(refresh)is not bool:raise ValueError('Invalid collection refresh flag')
+        if type(delay) not in (int,float) or not .5<=delay<=60:raise ValueError('Use a collection delay from 0.5 through 60 seconds')
+        return {'item_ids':item_ids,'asset_ids':asset_ids,'limit':limit,'refresh':refresh,'delay_seconds':delay}
+
+    def _inventory(self,root):
+        # Listing pages rebuild the full projection and cursor fingerprint on
+        # every call. The collector already lives beside the library: take one
+        # committed inventory instead of repeatedly reading thousands of rows.
+        return self.library._items(root)
+
+    def _select(self,items,scope):
+        allowed=set(scope['item_ids']) if scope['item_ids'] is not None else None
+        assets=set(scope['asset_ids']) if scope.get('asset_ids') is not None else None
+        selected=[item for item in items if (allowed is None or item['id'] in allowed) and not item.get('conflicts')
+                  and (assets is None or any(file.get('asset_id') in assets for file in item.get('files',[])))
+                  and item.get('files') and (not item.get('product_id') or scope['refresh'] or self.missing_fields(item))]
+        return selected[:scope['limit']] if scope['limit'] else selected
+
+    def plan(self,root,*,item_ids=None,limit=0,refresh=False,delay=1,asset_ids=None):
+        """Local inventory only: no store requests, events or collection checkpoint."""
+        scope=self._scope(item_ids,limit,refresh,delay,asset_ids)
+        items=self._select(self._inventory(root),scope)
+        return {'state':'preview','total':len(items),
+                'candidates':sum(not item.get('product_id') for item in items),
+                'products':sum(bool(item.get('product_id')) for item in items),
+                'items':[{'id':item['id'],'missing_fields':self.missing_fields(item)} for item in items]}
 
     @staticmethod
     def _input(item):
@@ -469,104 +552,191 @@ class AssetEnrichment:
                       and official_url(evidence.get('url',''))==official_url(active['url'])
                       and official_url(official.get('url',''))==official_url(active['url']))
         except (KeyError,TypeError,ValueError):matching=False
-        if matching:return {'id':item['id'],'state':'succeeded','product_id':'unity.assetstore:'+product_id,'reason':'checkpoint_recovered'}
+        if matching:
+            product_id='unity.assetstore:'+product_id
+            missing=self.missing_fields(self.library.detail(root,product_id))
+            if missing:return {'id':item['id'],'state':'needs_review','product_id':product_id,
+                               'reason':'official_metadata_incomplete','missing_fields':missing}
+            return {'id':item['id'],'state':'succeeded','product_id':product_id,'reason':'checkpoint_recovered'}
         return result
 
-    def start(self,root,*,owner='local',guard=None):
+    def start(self,root,*,owner='local',guard=None,item_ids=None,limit=0,refresh=False,delay=1,asset_ids=None):
         if guard:guard()
+        scope=self._scope(item_ids,limit,refresh,delay,asset_ids)
         with self.lock:
             old=self.status(root)
-            if root in self.threads and self.threads[root].is_alive():return old
-            recovering=old.get('state') in {'running','interrupted'}
+            if root in self.threads and self.threads[root].is_alive():
+                if old.get('scope',self._scope(None,0,False,1))!=scope:
+                    raise ConflictError('A collection with a different scope is already running')
+                return old
+            previous_scope=old.get('scope',self._scope(None,0,False,1))
+            # Pacing is not part of the item selection. After an interruption,
+            # allow a different delay without discarding completed results.
+            if (not isinstance(previous_scope,dict) or
+                    {k:v for k,v in previous_scope.items() if k!='delay_seconds'}!=
+                    {k:v for k,v in scope.items() if k!='delay_seconds'}):old={}
+            recovering=(old.get('state') in {'running','interrupted'} or
+                        (old.get('state')=='paused' and old.get('error') in
+                         {'official_source_access_required','official_source_rate_limited'}))
+            items=self._inventory(root)
+            candidates={item['id']:item for item in self._select(items,scope)}
+            if recovering and 'inputs' not in old and old.get('total'):
+                # Older jobs only collected unbound packages. A bound product
+                # cannot be identified as one of their lost historical inputs;
+                # leave that baseline unresolved and refresh on the next run.
+                candidates={identity:item for identity,item in candidates.items() if not item.get('product_id')}
             def completed(result):
-                if result.get('state')=='succeeded':return True
+                if result.get('state')=='succeeded':
+                    # A previous success does not conceal a still-incomplete
+                    # product, or prevent an explicit new refresh.
+                    return not (result['id'].startswith('unity.assetstore:') and result['id'] in candidates)
                 reason=result.get('reason','')
                 return (recovering and result.get('state')=='needs_review' and isinstance(reason,str) and bool(reason)
                         and reason not in {'browser_origin_permission','authorization_changed','workspace_changed'}
                         and not reason.startswith('official_source_'))
             previous={r['id']:r for r in old.get('results',[]) if completed(r)}
-            items=[];cursor=''
-            while True:
-                page=self.library.listing(root,limit=200,cursor=cursor)
-                items.extend(page['items']);cursor=page.get('next_cursor','')
-                if not cursor:break
-            candidates={item['id']:item for item in items if not item.get('product_id')}
             if recovering and isinstance(old.get('inputs'),list):
                 inputs={item['id']:item for item in old['inputs'] if isinstance(item,dict) and isinstance(item.get('id'),str)}
+                candidates={item['id']:item for item in self._select(items,{**scope,'limit':0})}
             else:
                 inputs={identity:self._input({'id':identity}) for identity in previous}
                 inputs.update({identity:self._input(item) for identity,item in candidates.items()})
             if isinstance(old.get('active'),dict) and isinstance(old['active'].get('id'),str):
                 inputs.setdefault(old['active']['id'],self._input(old['active']))
             pending=[]
+            current={item['id']:item for item in items}
             for identity,item in inputs.items():
                 if identity in previous:continue
                 if identity in candidates:pending.append(candidates[identity])
+                elif identity.startswith('unity.assetstore:') and identity in current and not current[identity].get('conflicts'):
+                    # Recheck a product interrupted after a partial metadata
+                    # write; never infer success solely from an active marker.
+                    pending.append(current[identity])
                 else:previous[identity]=self._recover_input(root,item,old.get('active'))
             # A pre-checkpoint legacy journal cannot reveal a lost input ID.
             # Preserve its numeric baseline, never invent a successful result.
             baseline=old.get('total',0)
             total=max(len(inputs),baseline if recovering and type(baseline)is int and baseline>=0 else 0)
-            job={'job_id':old.get('job_id') or uuid.uuid4().hex,'state':'running','total':total,'inputs':list(inputs.values()),
+            job={'job_id':old.get('job_id') or uuid.uuid4().hex,'state':'running','scope':scope,'delay_seconds':delay,'total':total,'inputs':list(inputs.values()),
                  'succeeded':sum(r.get('state')=='succeeded' for r in previous.values()),
                  'needs_review':sum(r.get('state')=='needs_review' for r in previous.values()),'failed':0,'results':list(previous.values())}
             if total>len(inputs):job['legacy_unresolved']=total-len(inputs)
             if isinstance(old.get('active'),dict) and old['active'].get('id') in {item['id'] for item in pending}:job['active']=old['active']
             self._save(root,job)
-            thread=threading.Thread(target=self._run,args=(root,pending,job,owner,guard),daemon=True,name='unity-catalog-enrichment')
+            thread=CollectionThread(target=self._run,args=(root,pending,job,owner,guard),daemon=True,name='unity-catalog-enrichment')
             self.threads[root]=thread;thread.start()
             return job
 
     def _run(self,root,items,job,owner,guard):
-        verified={};failures={}
+        # Only official reads run concurrently. One coordinator performs every
+        # metadata write and persists the active checkpoint before mutation.
+        workers=3;cancelled=threading.Event();slots=threading.BoundedSemaphore(workers)
+        fault_lock=threading.Lock();fault={};cache={};pending=[];iterator=iter(items);exhausted=False
+        pool=ThreadPoolExecutor(max_workers=workers,thread_name_prefix='unity-official-read')
+        def check():
+            if self.stopped.is_set() or cancelled.is_set():raise _CollectionCancelled()
+            if guard:guard()
+        def request(method,*args):
+            check()
+            while not slots.acquire(timeout=.2):check()
+            try:
+                check();function=getattr(self.source,method)
+                try:
+                    if isinstance(self.source,UnityOfficialSource):return function(*args,cancelled=cancelled)
+                    return function(*args)
+                except OfficialSourceError as error:
+                    if error.code in {'official_source_access_required','official_source_rate_limited'}:
+                        with fault_lock:
+                            if not fault:fault['error']=error.code
+                            cancelled.set()
+                    raise
+            finally:slots.release()
+        def lookup(spec):
+            kind,title,publisher=spec
+            if kind=='product':return request('product','https://assetstore.unity.com/packages/package/'+title)
+            matches=[]
+            for url in request('search',title,publisher):
+                product=request('product',url)
+                if normalized(product['title'])==normalized(title) and (not publisher or normalized(product['publisher'])==normalized(publisher)):
+                    matches.append(product)
+            if len(matches)!=1:raise OfficialSourceError('ambiguous_or_unavailable_product')
+            return matches[0]
+        def fill():
+            nonlocal exhausted
+            while len(pending)<workers and not exhausted:
+                check()
+                try:item=next(iterator)
+                except StopIteration:exhausted=True;break
+                files=[];publisher='';key=None
+                try:
+                    if item.get('product_id'):
+                        product_id,_=official_url('https://assetstore.unity.com/packages/package/'+str(item['product_id']).removeprefix('unity.assetstore:'))
+                        spec=('product',product_id.removeprefix('unity.assetstore:'),'');key=spec
+                    else:
+                        files=item.get('files') or self.library.detail(root,item['id']).get('files',[])
+                        title,publisher=package_hint(files[0]) if files else ('','')
+                        if not title:raise OfficialSourceError('publisher_or_title_unknown')
+                        spec=('candidate',title,publisher);key=('candidate',normalized(title),normalized(publisher))
+                    if key not in cache:cache[key]=pool.submit(lookup,spec)
+                    future=cache[key]
+                except (OfficialSourceError,OSError,ValueError,ConflictError) as error:
+                    future=Future();future.set_exception(error)
+                pending.append((item,files,publisher,future,key))
         try:
-            for item in items:
-                if self.stopped.is_set():job['state']='interrupted';break
-                if guard:guard()
+            fill()
+            while pending:
+                check()
+                done,_=wait({entry[3] for entry in pending},timeout=.2,return_when=FIRST_COMPLETED)
+                check()
+                if not done:continue
+                index=next(index for index,entry in enumerate(pending) if entry[3] in done)
+                item,files,publisher,future,key=pending.pop(index)
                 result={'id':item['id'],'state':'needs_review'}
                 try:
-                    files=item.get('files') or self.library.detail(root,item['id']).get('files',[])
-                    title,publisher=package_hint(files[0]) if files else ('','')
-                    if not title or not publisher:raise OfficialSourceError('publisher_or_title_unknown')
-                    key=(normalized(title),normalized(publisher))
-                    if key in failures:
-                        if failures[key]=='official_collection_failed':raise ValueError('Official collection previously failed')
-                        raise OfficialSourceError(failures[key])
-                    if key not in verified:
-                        try:
-                            matches=[]
-                            for url in self.source.search(title,publisher):
-                                product=self.source.product(url)
-                                if normalized(product['title'])==normalized(title) and normalized(product['publisher'])==normalized(publisher):
-                                    matches.append(product)
-                            if len(matches)!=1:raise OfficialSourceError('ambiguous_or_unavailable_product')
-                            verified[key]=matches[0]
-                        except OfficialSourceError as error:failures[key]=error.code;raise
-                        except (OSError,ValueError,ConflictError):failures[key]='official_collection_failed';raise
-                    product=verified[key]
+                    product=future.result();check()
+                    if files and not publisher:
+                        result.update(proposed_product_id=product['product_id'].removeprefix('unity.assetstore:'),proposed_url=product['url'])
+                        raise OfficialSourceError('publisher_requires_confirmation')
                     job['active']={**self._input(item),'product_id':product['product_id'],'url':product['url'],
                                    'title':product['title'],'publisher':product['publisher']}
-                    self._save(root,job)  # Durable before any product metadata or binding mutation.
-                    self.official_url(root,product['url'],item_id=item['id'],asset_id=files[0]['asset_id'],owner=owner,guard=guard,
-                                      _verified_data=product)
-                    result.update(state='succeeded',product_id=product['product_id'])
+                    self._save(root,job)
+                    updated=self.official_url(root,product['url'],item_id=item['id'],asset_id=files[0]['asset_id'] if files else '',owner=owner,guard=check,
+                                              _verified_data=product,expected_revision=item.get('revision',''),
+                                              _cover_request=lambda url:request('cover',url))
+                    result['product_id']=product['product_id']
+                    for warning in updated.get('collection_warnings',[]):
+                        if warning in {'official_source_access_required','official_source_rate_limited'}:raise OfficialSourceError(warning)
+                    missing=self.missing_fields(updated)
+                    if missing:result.update(reason='official_metadata_incomplete',missing_fields=missing)
+                    else:result['state']='succeeded'
                 except OfficialSourceError as error:
-                    result['reason']=error.code
-                    self._review(root,item['id'],error.code,owner,uuid.uuid4().hex)
+                    if key is not None and future.exception() is not None:
+                        cached=Future();cached.set_exception(OfficialSourceError(error.code));cache[key]=cached
+                    result['reason']=error.code;check()
+                    proposal={key:result[key] for key in ('proposed_product_id','proposed_url') if key in result}
+                    if proposal:proposal['evidence']={'method':'official_title_only'}
+                    self._review(root,item['id'],error.code,owner,uuid.uuid4().hex,**proposal)
                     if error.code in {'official_source_access_required','official_source_rate_limited'}:
                         job['state']='paused';job['error']=error.code
                 except (OSError,ValueError,ConflictError):
+                    if key is not None and future.exception() is not None:
+                        cached=Future();cached.set_exception(ValueError('Official collection previously failed'));cache[key]=cached
                     result.update(state='failed',reason='official_collection_failed')
                 job['results'].append(result)
                 job[{'succeeded':'succeeded','needs_review':'needs_review','failed':'failed'}[result['state']]]+=1
-                job.pop('active',None)
-                self._save(root,job)
+                job.pop('active',None);self._save(root,job)
                 if job['state']=='paused':break
-                if self.stopped.wait(.5):job['state']='interrupted';break
-            else:job['state']='completed'
+                if self.stopped.wait(job.get('delay_seconds',.5)):raise _CollectionCancelled()
+                fill()
+            else:
+                check();job['state']='completed'
+        except _CollectionCancelled:
+            if fault:job.update(state='paused',error=fault['error'])
+            else:job['state']='interrupted'
         except PermissionError:job.update(state='paused',error='authorization_changed')
         except ConflictError:job.update(state='paused',error='workspace_changed')
         finally:
+            cancelled.set();pool.shutdown(wait=False,cancel_futures=True)
             try:self._save(root,job)
             except (OSError,ValueError,ConflictError):pass
 

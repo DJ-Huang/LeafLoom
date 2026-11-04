@@ -4,7 +4,7 @@
 
 **Help center · 帮助中心 · ヘルプセンター:** [English](https://dj-huang.github.io/LeafLoom/docs/en/) · [中文](https://dj-huang.github.io/LeafLoom/docs/zh-CN/) · [日本語](https://dj-huang.github.io/LeafLoom/docs/ja/)
 
-The public help center has 39 task guides and four full guide/release references per language, with topic navigation, local full-text search, article contents, previous/next navigation, image zoom and copyable examples. Sources live in `docs/{en,zh-CN,ja}/help/`; [navigation.json](help/navigation.json) lists every article. The website build validates and publishes them with the existing guides. See [website maintenance](WEBSITE.md#help-center).
+The public help center has 39 task guides and five full guide/release references per language, with topic navigation, local full-text search, article contents, previous/next navigation, image zoom and copyable examples. Sources live in `docs/{en,zh-CN,ja}/help/`; [navigation.json](help/navigation.json) lists every article. The website build validates and publishes them with the existing guides. See [website maintenance](WEBSITE.md#help-center).
 
 ## Start here · 从这里开始 · はじめに
 
@@ -15,6 +15,8 @@ The public help center has 39 task guides and four full guide/release references
 | AI Chat, MCP and Skills | [AI connections](en/AI.md) | [AI 接入](zh-CN/AI.md) | [AI 連携](ja/AI.md) |
 | Attachment workspace, remote storage, previews, organization and recovery | [Attachments](en/GUIDE.md#attachment-manager) | [附件管理](zh-CN/GUIDE.md#附件管理) | [添付ファイル](ja/GUIDE.md#添付ファイルの管理) |
 | Change history | [Changelog](../CHANGELOG.md) | [更新记录](zh-CN/CHANGELOG.md) | [変更履歴](ja/CHANGELOG.md) |
+| LeafLoom 0.1.7 release notes | [Release notes](en/RELEASE_NOTES_0.1.7.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.7.md) | [リリースノート](ja/RELEASE_NOTES_0.1.7.md) |
+| LeafLoom 0.1.6 release notes | [Release notes](en/RELEASE_NOTES_0.1.6.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.6.md) | [リリースノート](ja/RELEASE_NOTES_0.1.6.md) |
 | LeafLoom 0.1.5 release notes | [Release notes](en/RELEASE_NOTES_0.1.5.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.5.md) | [リリースノート](ja/RELEASE_NOTES_0.1.5.md) |
 | LeafLoom 0.1.4 release notes | [Release notes](en/RELEASE_NOTES_0.1.4.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.4.md) | [リリースノート](ja/RELEASE_NOTES_0.1.4.md) |
 | LeafLoom 0.1.3 release notes | [Release notes](en/RELEASE_NOTES_0.1.3.md) | [版本说明](zh-CN/RELEASE_NOTES_0.1.3.md) | [リリースノート](ja/RELEASE_NOTES_0.1.3.md) |
@@ -35,11 +37,13 @@ The public help center has 39 task guides and four full guide/release references
 - [Folder organization and indexing scope](VAULT_ORGANIZATION.md)
 - [Remote attachment storage, metadata, local cache, offline uploads and credential ownership](ARCHITECTURE.md#通用远程附件存储)
 - [Official Zspace attachment bridge: static investigation and recovery boundaries](ATTACHMENT_OFFICIAL_BRIDGE.md)
+- Single-container DUFS accounts, strict symlink patch and DJ migration: [English](en/DUFS_MULTIUSER.md) · [中文](zh-CN/DUFS_MULTIUSER.md) · [日本語](ja/DUFS_MULTIUSER.md)
 - [AI asset search, real previews and stable local delivery](ASSET_WORKFLOWS.md)
-- [Unity product collection script and partial Chinese metadata updates](MCP.md#batch-script)
+- [Unity product collection script: group previews, missing metadata and partial Chinese updates](MCP.md#batch-script)
 - [AI assistant implementation](AI_ASSISTANT.md)
 - [Complete MCP tools, credentials, note workflows and the two general file tools](MCP.md)
 - [Feishu / Lark connection, CLI ownership and MCP tools](FEISHU.md)
+- [Work hub Skill: platform-independent work records, office preferences, local tasks, reports and optional source integrations](WORK_HUB.md)
 - [Local access and privacy boundaries](SECURITY.md)
 - [Architecture and workflow](ARCHITECTURE.md)
 - [Screenshots and public media](MEDIA.md)
@@ -63,3 +67,9 @@ These records describe particular builds and environments. Use the current user 
 - [Earlier UI, settings and graph changes](NOTION_UI.md)
 
 Editor regression commands and the disposable browser harness are documented in [Contributing](../CONTRIBUTING.md). The current formatted Markdown editor is described in the three user guides above.
+
+### Note databases · 笔记数据库 · ノートデータベース
+
+[English guide](en/GUIDE.md#note-databases) · [中文指南](zh-CN/GUIDE.md#笔记数据库) · [日本語ガイド](ja/GUIDE.md#ノートデータベース) · [MCP contracts](MCP.md#note-databases)
+
+[Board and basic tasks](en/GUIDE.md#database-boards-and-basic-tasks) · [数据库看板与基础任务](zh-CN/GUIDE.md#数据库看板与基础任务) · [ボードと基本タスク](ja/GUIDE.md#データベースのボードと基本タスク)

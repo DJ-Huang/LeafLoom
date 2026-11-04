@@ -17,6 +17,7 @@ from urllib.parse import quote, urlsplit
 from fastapi import APIRouter, Request
 from starlette.responses import Response, StreamingResponse
 
+from vault_rag.attachment_policy import DEFAULT_EXTENSIONS
 from vault_rag.local_state import ConflictError
 from vault_rag.remote_webdav import RemoteStorageError, validate_source, is_private_http_host
 from vault_rag.http_cache import conditional_file
@@ -40,26 +41,28 @@ def public_settings(remote, root=None):
             'metadata_directory':source.get('metadata_directory','Incoming/LeafLoomCatalog/v1'),
             'username':source.get('username',''), 'enabled':source.get('enabled',True),
             'connection_hint':source.get('connection_hint','direct'),
+            'scan_roots':source.get('scan_roots',['']), 'scan_paused':source.get('scan_paused',False),
             'password_saved':source.get('password_saved',False),
             'connection':source.get('connection',{'state':'unconfigured'}),
         })
     pending = sum(count for state,count in result.get('jobs',{}).items()
                   if state not in {'completed','cancelled','planned'})
     return dict(root=result['root'], revision=result['revision'], storages=profiles,
+                allowed_extensions=result['allowed_extensions'], default_extensions=list(DEFAULT_EXTENSIONS),
                 default_storage_id=result['default_source'], cache_limit_bytes=result['cache_max_bytes'],
                 outbox_limit_bytes=result['outbox_max_bytes'], cache=result['cache'],
                 outbox={**result['outbox'],'pending':pending})
 
 
 def save_settings(remote, body):
-    if not isinstance(body,dict) or set(body)-{'root','revision','storages','default_storage_id','cache_limit_bytes','outbox_limit_bytes'}:
+    if not isinstance(body,dict) or set(body)-{'root','revision','storages','default_storage_id','cache_limit_bytes','outbox_limit_bytes','allowed_extensions'}:
         raise ValueError('Unsupported attachment storage setting')
     root = body.get('root')
     if not isinstance(root,str) or not root:raise ValueError('Select a connected folder')
     profiles = body.get('storages')
     if not isinstance(profiles,list) or len(profiles)>32:raise ValueError('Invalid attachment sources')
     sources = []
-    allowed = {'type','storage_id','name','base_url','remote_root','upload_directory','metadata_directory','username','connection_hint','enabled'}
+    allowed = {'type','storage_id','name','base_url','remote_root','upload_directory','metadata_directory','username','connection_hint','enabled','scan_roots','scan_paused'}
     existing={source['id']:source for source in remote._settings(root)['sources']}
     for source in profiles:
         if not isinstance(source,dict) or set(source)-allowed:raise ValueError('Unsupported attachment source setting')
@@ -68,7 +71,7 @@ def save_settings(remote, body):
         if 'metadata_directory' not in value and key in existing:
             value['metadata_directory']=validate_source(existing[key])['metadata_directory']
         old=existing.get(key,{})
-        for field in ('remote_root','upload_directory','connection_hint'):
+        for field in ('remote_root','upload_directory','connection_hint','scan_roots','scan_paused'):
             if field not in value and field in old:value[field]=old[field]
         address=value.get('base_url','')
         protocol='smb' if address.startswith(('smb://','\\\\')) else 'webdav'
@@ -81,7 +84,8 @@ def save_settings(remote, body):
         sources.append(value)
     default = body.get('default_storage_id','local')
     if default!='local':default=storage_id(default)
-    remote.save(root,dict(sources=sources,default_source=default,
+    policy = {'allowed_extensions': body['allowed_extensions']} if 'allowed_extensions' in body else {}
+    remote.save(root,dict(sources=sources,default_source=default,**policy,
         cache_max_bytes=body.get('cache_limit_bytes',2*1024**3),
         outbox_max_bytes=body.get('outbox_limit_bytes',10*1024**3)),body.get('revision'))
     return public_settings(remote,root)
@@ -220,7 +224,9 @@ def attachment_storage_router(remote, runtime, workspace):
 
     @router.put('/api/attachments/storage')
     async def save(request:Request):
-        return await asyncio.to_thread(save_settings,remote,await request.json())
+        value=await asyncio.to_thread(save_settings,remote,await request.json())
+        runtime.publish('attachment-policy',[])
+        return value
 
     @router.post('/api/attachments/storage/credentials')
     async def credentials(request:Request):
@@ -231,6 +237,12 @@ def attachment_storage_router(remote, runtime, workspace):
     async def test(request:Request):
         body=await request.json()
         return await asyncio.to_thread(remote.test,body['root'],storage_id(body['storage_id']))
+
+    @router.post('/api/attachments/storage/scan-pause')
+    async def pause_scan(request:Request):
+        body=await request.json()
+        if type(body.get('paused'))is not bool:raise ValueError('Invalid automatic scan setting')
+        return await asyncio.to_thread(remote.pause_scan,body['root'],storage_id(body['storage_id']),body['paused'])
 
     @router.post('/api/attachments/storage/scan')
     async def scan(request:Request):
