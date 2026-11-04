@@ -322,3 +322,7 @@ container. The canonical UI uses a stable local `.localhost` hostname; the origi
 loopback entrance preserves owned drafts and reading state before opening it.
 MCP addresses, service ownership and quit/tray behavior are unchanged.
 See [HTML project setup, origins and validation](HTML_PROJECTS.md).
+
+### Image clipboard
+
+Design Studio source-image copying writes PNG through `leafloom:clipboard-write-image` in the same trusted management main-frame boundary as text copying. Preload exposes only `writeClipboardImage(Uint8Array)`; no clipboard reading or project-frame access is added. The main process checks PNG signature/header, a 32 MiB byte limit, 64-megapixel bounds and native decoding before writing. Older running preload sessions require Restart LeafLoom. Browser sessions use a promised PNG ClipboardItem during the copy gesture; permission failures are reported without copying text instead.

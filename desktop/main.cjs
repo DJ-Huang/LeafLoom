@@ -416,7 +416,7 @@ else {
     ipcMain.handle('leafloom:presentation-output-ready', event => presenter.outputReady(event));
     ipcMain.on('leafloom:presentation-output-report', (event, value) => {try {presenter.outputReport(event, value);} catch (error) {log(error);}});
     registerAttachmentCredentialIpc(ipcMain, event => isMain(event), attachmentSecrets);
-    registerClipboardIpc(ipcMain, event => isMain(event), clipboard);
+    registerClipboardIpc(ipcMain, event => isMain(event), clipboard, nativeImage);
     // Also support legacy Stop scripts without depending on a Python install.
     fs.mkdirSync(control, {recursive: true});
     try {fs.unlinkSync(path.join(control, 'quit'));} catch {}

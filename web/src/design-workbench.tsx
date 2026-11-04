@@ -1,11 +1,14 @@
 import React,{useCallback,useEffect,useId,useMemo,useRef,useState} from 'react';
 import {ArrowDown,ArrowLeft,ArrowUp,Check,ChevronDown,ChevronRight,ClipboardCopy,Code,Component,Copy,Download,Eye,EyeOff,Folder,FolderPlus,FolderOpen,Frame,Hand,Image,Layers,Lock,Maximize,Minus,History,MousePointer2,MessageSquare,Monitor,Columns2,PanelLeftClose,PanelLeftOpen,PanelRightClose,PanelRightOpen,Play,Plus,Redo2,RefreshCw,Scan,Search,Square,Trash2,Type,Undo2,Unlock,Upload,X} from 'lucide-react';
-import {api,csrf,OpenNote} from './api';
+import {api,csrf,media,OpenNote} from './api';
 import {t,useLocale} from './i18n';
 import {addAiReference} from './ai-context';
 import {ActionMenu,Modal,MenuPoint} from './ui';
 import {elementContext} from './design-element-context';
 import {writeClipboardText} from './clipboard';
+import {designImageSource} from './design-image-source';
+import {DesignImageCard} from './design-image-card';
+import {useDesignImageCopy} from './use-design-image-copy';
 import './design-workbench.css';
 import {StudioThumbnail,useStudioThumbnails} from './studio-thumbnails';
 import {Field,TextField,Panel} from './design-controls';
@@ -213,6 +216,9 @@ function DesignWorkbenchContent({directory,root,displayName,notify,onBack,onOpen
  const rawText=!!node?.props.textNode,hasRawText=selection.some(item=>item.node.props.textNode);
  useEffect(()=>{if((rawText||selection.length>1)&&!['design','data'].includes(inspector))setInspector('design');},[rawText,selection.length,inspector]);
  const nodeIndex=useMemo(()=>new Map(flat.map(item=>[item.node.id,item])),[flat]);
+ const sourceImage=useMemo(()=>doc&&selection.length===1?designImageSource(doc,selection[0].node,directory,variantId):null,[doc,selection,directory,variantId]);
+ const imageCopy=useDesignImageCopy(root,directory,notify);
+ const imageSourceFor=(ids:string[])=>doc&&ids.length===1&&nodeIndex.has(ids[0])?designImageSource(doc,nodeIndex.get(ids[0])!.node,directory,variantId):null;
  const ancestry=useMemo(()=>{const path:FlatNode[]=[];let item:FlatNode|undefined=selection[0];while(item){path.unshift(item);item=item.parentId?nodeIndex.get(item.parentId):undefined;}return path;},[selection,nodeIndex]);
  useEffect(()=>setElementMenu(null),[page?.id,editingComponent,preview,model.snapshot?.revision,tab,variantId]);
  const openElementMenu=(nodeId:string,anchor:HTMLElement,point?:MenuPoint,contextIds=selected)=>{
@@ -235,18 +241,21 @@ function DesignWorkbenchContent({directory,root,displayName,notify,onBack,onOpen
  };
  runtimeCopyContext.current=data=>{
   if(preview||speaker||data.pageId!==page?.id||!Array.isArray(data.ids)||data.ids.some((id:unknown)=>typeof id!=='string'))return;
-  void copyElementContext(data.ids);
+  const image=imageSourceFor(data.ids);
+  if(image)imageCopy.copy(image);else void copyElementContext(data.ids);
  };
  useEffect(()=>{
   // Handle the native Copy command as well as Cmd/Ctrl+C, without overriding text editing.
   const copy=(event:ClipboardEvent)=>{
    const target=event.target instanceof HTMLElement?event.target:document.activeElement instanceof HTMLElement?document.activeElement:null;
    if(event.defaultPrevented||preview||speaker||!target||!presentationHost.current?.contains(target)||target.isContentEditable||target.closest('input,textarea,select,[role="textbox"],[role="menu"],dialog,.cm-editor')||window.getSelection()?.isCollapsed===false)return;
+   // Image copying applies only to the canvas/layers, never inspector text.
+   if(sourceImage&&target.closest('.dw-sidebar,.dw-canvas')){event.preventDefault();imageCopy.copy(sourceImage);return;}
    const context=selectionContext();if(!context||!event.clipboardData)return;
    event.clipboardData.setData('text/plain',JSON.stringify(context,null,2));event.preventDefault();notify(t('design.elementContextCopied'));
   };
   document.addEventListener('copy',copy);return()=>document.removeEventListener('copy',copy);
- },[selectionContext,preview,speaker,notify]);
+ },[selectionContext,preview,speaker,notify,sourceImage,imageCopy.copy]);
  const ancestorIds=useMemo(()=>{const ids=new Set<string>();for(const item of selection){let parent=item.parentId;while(parent){ids.add(parent);parent=nodeIndex.get(parent)?.parentId;}}return ids;},[selection,nodeIndex]);
  const layerRows=useMemo(()=>visibleLayers(page?.nodes||[],collapsed,page?.id||''),[page,collapsed]);
  useEffect(()=>{setCollapsed(previous=>{const next=new Set(previous);ancestorIds.forEach(id=>next.delete((page?.id||'')+':'+id));return next.size===previous.size?previous:next;});},[selected.join('\0'),page?.id]);
@@ -409,7 +418,7 @@ function DesignWorkbenchContent({directory,root,displayName,notify,onBack,onOpen
     {inspector==='data'&&doc&&page&&!master&&<DesignDataInspector document={doc} node={selection.length===1?node:undefined} pageId={page.id} variantId={variantId} onVariant={setVariantId} commit={model.commit} disabled={preview||!model.ready||!!model.error||page.loaded===false||!!model.pending.length}/>}
     {inspector==='data'&&master&&<p className="dw-hint">{t('请返回页面编辑数据绑定')}</p>}
     {inspector==='design'&&node&&selection.length===1&&rawText&&<fieldset disabled={disabled}><section className="dw-inspector-section"><Field label={t('名称')} value={node.name} onCommit={name=>{if(name!==node.name)updateNode({name});}}/><TextField label={t('文字内容')} value={node.props.text||''} onCommit={value=>updateProps('text',value)}/><p className="dw-hint">{t(selection[0].parentId?'原始文本没有独立边界。请选择父级图层调整布局和文字样式。':'原始文本的布局和文字样式由源页面控制。')}</p>{selection[0].parentId&&<button onClick={()=>setSelected([selection[0].parentId!])}>{t('选择父级图层')}</button>}</section></fieldset>}
-    {inspector==='design'&&node&&!hasRawText&&doc&&<DesignInspector key={selection.map(item=>item.node.id).join(':')} nodes={selection.map(item=>item.node)} document={doc} pageId={page!.id} disabled={disabled} isMaster={!!master} onPatch={updateSelected} onCommand={commit} onResourceCommand={model.commit} onChooseImage={id=>{setAssetTarget(id);setTab('assets');}} onEditComponent={id=>{setEditingComponent(id);setSelected([]);}} onCreateComponent={()=>commit([{type:'component.from_node',page_id:page!.id,node_id:node.id,component_id:uid('component'),name:node.name}],t('创建主组件'))} onSource={openSource} structure={<><label className="dw-field"><span>{t('移动到容器')}</span><select aria-label={t('移动到容器')} value={selection[0].parentId||''} onChange={event=>commit([{type:'node.move',page_id:page!.id,node_id:node.id,parent_id:event.target.value||null}],t('移动元素'))}><option value="">{t('页面根部')}</option>{flat.filter(item=>item.node.type==='container'&&item.node.id!==node.id&&!flatten(node.children||[]).some(child=>child.node.id===item.node.id)).map(item=><option key={item.node.id} value={item.node.id}>{item.node.name}</option>)}</select></label>{node.type==='page'&&<button onClick={()=>changePage(node.props.pageId)}>{t('进入源页面')}</button>}<button onClick={()=>setInsertOpen(true)}><Plus size={13}/>{t('在此插入')}</button></>}/>}
+    {inspector==='design'&&node&&!hasRawText&&doc&&<DesignInspector key={selection.map(item=>item.node.id).join(':')} nodes={selection.map(item=>item.node)} document={doc} imageSource={sourceImage&&<DesignImageCard source={sourceImage} url={sourceImage.path?media(sourceImage.path,false,root):undefined} state={imageCopy.state.path===sourceImage.path?imageCopy.state:{status:'idle'}} onCopy={()=>imageCopy.copy(sourceImage)}/>} pageId={page!.id} disabled={disabled} isMaster={!!master} onPatch={updateSelected} onCommand={commit} onResourceCommand={model.commit} onChooseImage={id=>{setAssetTarget(id);setTab('assets');}} onEditComponent={id=>{setEditingComponent(id);setSelected([]);}} onCreateComponent={()=>commit([{type:'component.from_node',page_id:page!.id,node_id:node.id,component_id:uid('component'),name:node.name}],t('创建主组件'))} onSource={openSource} structure={<><label className="dw-field"><span>{t('移动到容器')}</span><select aria-label={t('移动到容器')} value={selection[0].parentId||''} onChange={event=>commit([{type:'node.move',page_id:page!.id,node_id:node.id,parent_id:event.target.value||null}],t('移动元素'))}><option value="">{t('页面根部')}</option>{flat.filter(item=>item.node.type==='container'&&item.node.id!==node.id&&!flatten(node.children||[]).some(child=>child.node.id===item.node.id)).map(item=><option key={item.node.id} value={item.node.id}>{item.node.name}</option>)}</select></label>{node.type==='page'&&<button onClick={()=>changePage(node.props.pageId)}>{t('进入源页面')}</button>}<button onClick={()=>setInsertOpen(true)}><Plus size={13}/>{t('在此插入')}</button></>}/>}
     {inspector==='design'&&selection.length>1&&hasRawText&&<p className="dw-hint">{t('原始文本没有独立边界。请选择父级图层调整布局和文字样式。')}</p>}
     {inspector==='animation'&&node&&!rawText&&selection.length===1&&<fieldset disabled={disabled}><h4>{t('动画预设')}</h4><label className="dw-field"><span>{t('效果')}</span><select aria-label={t('效果')} value={node.animation?.preset||''} onChange={event=>updateNode({animation:{...node.animation,preset:event.target.value}},t('修改动画'))}>{[['','无'],['fade','淡入'],['slide','位移'],['scale','缩放'],['bounce','弹跳'],['breathe','呼吸'],['spin','旋转']].map(([value,label])=><option key={value} value={value}>{t(label)}</option>)}</select></label><label className="dw-field"><span>{t('触发')}</span><select aria-label={t('触发')} value={node.animation?.trigger||'appear'} onChange={event=>updateNode({animation:{...node.animation,trigger:event.target.value}},t('修改动画'))}>{[['appear','出现时'],['click','点击'],['hover','悬停']].map(([value,label])=><option key={value} value={value}>{t(label)}</option>)}</select></label>{[['duration','时长（毫秒）',1000],['delay','延迟（毫秒）',0],['iterations','循环次数',1]].map(([key,label,initial])=><Field key={key} label={t(String(label))} type="number" min={0} value={node.animation?.[key]??initial} onCommit={value=>updateNode({animation:{...node.animation,[key]:value}},t('修改动画'))}/>)}<label className="dw-check"><input type="checkbox" checked={node.animation?.iterations==='Infinity'} onChange={event=>updateNode({animation:{...node.animation,iterations:event.target.checked?'Infinity':1}},t('修改动画'))}/>{t('无限循环')}</label><Field label={t('缓动')} value={node.animation?.easing||'ease-in-out'} onCommit={value=>updateNode({animation:{...node.animation,easing:value}},t('修改动画'))}/><button disabled={!frameReady} onClick={()=>startPreview(node.id)}><Play size={14}/>{t('试播选中组件')}</button><p className="dw-hint">{t('编辑时动画暂停；停止试播会恢复设计状态')}</p></fieldset>}
     {inspector==='script'&&!rawText&&selection.length<=1&&<><h4>{node?t('元素脚本'):t('页面脚本')}</h4><p className="dw-hint">{t('用 mount(ctx) 添加交互和动画，返回清理函数。代码与参数都可以撤销。')}</p><button disabled={disabled||!page} onClick={openSource}><Code size={14}/>{t('编辑脚本和源码')}</button>{node?.script?.parameters&&Object.entries(node.script.parameters).map(([key,descriptor])=>{const spec=descriptor&&typeof descriptor==='object'?descriptor:{label:key,default:descriptor};return <Field key={key} label={spec.label||key} type={spec.type==='number'?'number':'text'} value={node.script?.props?.[key]??spec.default??''} onCommit={value=>updateNode({script:{...node.script!,props:{...node.script?.props,[key]:value}}},t('修改脚本参数'))}/>;})}<button disabled={!frameReady||!node} onClick={()=>startPreview(node?.id)}><Play size={14}/>{t('试播选中组件')}</button><button onClick={sendAi}><MessageSquare size={14}/>{t('添加到 AI 对话')}</button></>}

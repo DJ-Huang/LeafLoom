@@ -3000,3 +3000,22 @@ document.hideOutline|收起目录|Collapse outline|目次を閉じる
 document.emptyOutline|暂无标题，添加标题后会显示在这里。|No headings yet. Add headings to see them here.|見出しはまだありません。追加するとここに表示されます。
 document.expandSection|展开“{title}”的子目录|Expand subsections of “{title}”|「{title}」の下位見出しを開く
 document.collapseSection|折叠“{title}”的子目录|Collapse subsections of “{title}”|「{title}」の下位見出しを閉じる
+design.imageSourceTitle|图片来源|Image source|画像の元ファイル
+design.copySourceImage|复制图片|Copy image|画像をコピー
+design.imageCopying|正在复制…|Copying…|コピー中…
+design.imageCopyRetry|重试复制图片|Retry copying image|画像のコピーを再試行
+design.imageCopied|图片已复制，可粘贴到其他软件或笔记|Image copied. Paste into another app or note.|画像をコピーしました。他のアプリやメモに貼り付けられます。
+design.imageOriginalHelp|复制源图片的原始尺寸与透明背景，不包含画布裁剪和样式。|Copies the source image at its original size with transparency, without canvas cropping or styling.|元画像のサイズと透明背景を保持し、キャンバスの切り抜きやスタイルは含めません。
+design.imageStaticCopy|复制为静态 PNG：SVG 转为图片，动图仅复制首帧。|Copies as a static PNG: SVG is rasterized; animated images use the first frame.|静止 PNG としてコピーします。SVG は画像化し、アニメーションは最初のフレームのみを使用します。
+design.imageSourceMissing|此元素尚未指定源图片，请先选择图片素材。|No source image is assigned. Choose an image asset first.|元画像が未設定です。画像素材を選択してください。
+design.imageAssetMissing|源图片素材不存在，请重新选择图片。|The source asset is missing. Choose the image again.|元画像の素材がありません。画像を選び直してください。
+design.imageBindingMissing|图片绑定不可用，请先修复数据绑定。|The image binding is unavailable. Repair the data binding first.|画像のバインディングを利用できません。先に修復してください。
+design.imageSourceInvalid|图片来源不在当前项目内，请先导入图片素材。|The image source is outside this project. Import it as an asset first.|画像の元ファイルがプロジェクト内にありません。先に素材として取り込んでください。
+design.imageExternalSource|此图片尚未导入项目，请先导入源图片后再复制。|This image is not imported into the project. Import the source image before copying.|この画像はプロジェクトに未取り込みです。元画像を取り込んでからコピーしてください。
+design.imageFileMissing|找不到源图片文件，请检查素材是否已移动或删除。|The source image file was not found. Check whether it was moved or deleted.|元画像が見つかりません。移動または削除されていないか確認してください。
+design.imageReadFailed|无法读取源图片，请检查当前项目后重试。|Could not read the source image. Check the current project and retry.|元画像を読み込めません。現在のプロジェクトを確認して再試行してください。
+design.imageDecodeFailed|无法解码源图片，请检查图片格式或文件是否损坏。|Could not decode the source image. Check its format and whether the file is damaged.|元画像を読み取れません。形式やファイルの破損を確認してください。
+design.imageCopyTooLarge|图片过大，无法复制：文件需不超过 32 MiB，像素数需不超过 6400 万。|Image is too large to copy: the file must be at most 32 MiB and the image at most 64 megapixels.|画像が大きすぎます。ファイルは32 MiB以下、画素数は6400万以下にしてください。
+design.imageCopyRestart|请重启 LeafLoom 后再复制图片，以加载新版剪贴板支持。|Restart LeafLoom to load image clipboard support, then copy again.|LeafLoom を再起動して画像コピー機能を読み込み、再試行してください。
+design.imageClipboardUnavailable|无法写入图片剪贴板，请检查浏览器权限或使用桌面端重试。|Could not write the image to the clipboard. Check browser permissions or retry in the desktop app.|画像をクリップボードに書き込めません。ブラウザーの権限を確認するかデスクトップ版で再試行してください。
+design.imageCopyFailed|图片复制失败，请重试。|Could not copy the image. Try again.|画像をコピーできませんでした。再試行してください。

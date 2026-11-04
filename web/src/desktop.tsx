@@ -15,6 +15,7 @@ declare global {
    presenter:PresenterDesktop;
    appInfo:()=>Promise<DesktopInfo>;
    writeClipboardText?:(text:string)=>Promise<void>;
+   writeClipboardImage?:(png:Uint8Array)=>Promise<void>;
    publishDesign:(jobId:string)=>Promise<unknown>;
    updateStatus:()=>Promise<UpdateInfo>;
    checkUpdate:()=>Promise<UpdateInfo>;

@@ -7,7 +7,7 @@ export type InspectorNode={id:string,type:string,name:string,children?:Inspector
 type SharedStyle={id:string,name:string,kind?:string,style:Record<string,any>};
 type InspectorDocument={assets:Record<string,{id:string,name:string,path:string,kind?:string}>,components:Record<string,{id:string,name:string,node:InspectorNode,version:number}>,styles:Record<string,any>,pages:{id:string,name:string}[]};
 type Patch=Partial<InspectorNode>;
-type Props={nodes:InspectorNode[],document:InspectorDocument,pageId:string,disabled:boolean,isMaster:boolean,onPatch:(patch:Patch|((node:InspectorNode)=>Patch),label?:string)=>void,onCommand:(commands:any[],label:string)=>unknown,onResourceCommand:(commands:any[],label:string)=>unknown,onChooseImage:(id:string)=>void,onEditComponent:(id:string)=>void,onCreateComponent:()=>void,onSource:()=>void,structure?:React.ReactNode};
+type Props={nodes:InspectorNode[],document:InspectorDocument,pageId:string,disabled:boolean,isMaster:boolean,onPatch:(patch:Patch|((node:InspectorNode)=>Patch),label?:string)=>void,onCommand:(commands:any[],label:string)=>unknown,onResourceCommand:(commands:any[],label:string)=>unknown,onChooseImage:(id:string)=>void,onEditComponent:(id:string)=>void,onCreateComponent:()=>void,onSource:()=>void,structure?:React.ReactNode,imageSource?:React.ReactNode};
 const STYLE_KEYS:Record<string,string[]>={color:['background','backgroundColor','color','borderColor'],typography:['fontFamily','fontSize','fontWeight','fontStyle','lineHeight','letterSpacing','textAlign','textDecoration','textTransform'],spacing:['padding','paddingTop','paddingRight','paddingBottom','paddingLeft','gap','rowGap','columnGap','borderRadius']};
 const walk=(nodes:InspectorNode[]):InspectorNode[]=>nodes.flatMap(node=>[node,...walk(node.children||[])]);
 const refs=(node:InspectorNode):string[]=>[...(node.props.styleId?[node.props.styleId]:[]),...(Array.isArray(node.props.styleIds)?node.props.styleIds:[])];
@@ -25,7 +25,7 @@ function shadowParts(value:any){const match=typeof value==='string'?value.match(
 function strokePart(style:Record<string,any>,key:string){if(style[key]!=null)return style[key];const border=String(style.border||'');if(key==='borderWidth')return numberOr(border.match(/(?:^|\s)([\d.]+)(?:px)?(?:\s|$)/)?.[1],0);if(key==='borderStyle')return border.match(/\b(solid|dashed|dotted|double|none)\b/)?.[1]||'solid';return border.match(/#[\da-f]{3,8}|rgba?\([^)]*\)/i)?.[0]||'#d4d7de';}
 function cropPosition(value:any):[number,number]{const positions=String(value||'50% 50%').trim().split(/\s+/);const val=(part:string,fallback:number)=>part==='left'||part==='top'?0:part==='right'||part==='bottom'?100:part==='center'?50:/^[-\d.]+%$/.test(part)?parseFloat(part):fallback;return [val(positions[0],50),val(positions[1]||'50%',50)];}
 
-export function DesignInspector({nodes,document,pageId,disabled,isMaster,onPatch,onCommand,onResourceCommand,onChooseImage,onEditComponent,onCreateComponent,onSource,structure}:Props){
+export function DesignInspector({nodes,document,pageId,disabled,isMaster,onPatch,onCommand,onResourceCommand,onChooseImage,onEditComponent,onCreateComponent,onSource,structure,imageSource}:Props){
   const styles=useMemo(()=>new Map(nodes.map(node=>[node.id,resolveInspectorStyle(node,document)])),[nodes,document.styles]);
   const first=nodes[0],single=nodes.length===1,allText=nodes.every(node=>['text','button'].includes(node.type)||typeof node.props.text==='string'),allImages=nodes.every(node=>node.type==='image'),allContainers=nodes.every(node=>node.type==='container'||node.type==='button'||!!node.children?.length),hasLocked=nodes.some(node=>node.locked);
   const value=(key:string,fallback?:any)=>commonValue(nodes,node=>styles.get(node.id)?.[key]??fallback);
@@ -38,7 +38,7 @@ export function DesignInspector({nodes,document,pageId,disabled,isMaster,onPatch
   const [individualPadding,setIndividualPadding]=useState(true);
   const dimensions=(axis:'width'|'height',label:string)=>{const mode=value(axis+'Mode','fixed');return <div className="dw-dimension"><SelectField label={t(label+'模式')} value={mode} onCommit={next=>set(axis+'Mode',next)} testId={'inspector-'+axis+'-mode'} options={options([['fixed','固定'],['hug','适应内容'],['fill','填满容器']])}/><Field label={t(label)} type="number" min={1} value={value(axis)} disabled={mode==='hug'||mode==='fill'} onCommit={next=>set(axis,next)} testId={'inspector-'+axis}/></div>;};
   if(!first)return null;
-  return <fieldset disabled={disabled||nodes.every(node=>node.locked)} className="dw-visual-inspector">
+  return <>{imageSource}<fieldset disabled={disabled||nodes.every(node=>node.locked)} className="dw-visual-inspector">
     {hasLocked&&<p className="dw-hint dw-selection-note">{t('已锁定的图层不会被修改')}</p>}
     {single&&<section className="dw-inspector-section dw-node-identity"><Field label={t('名称')} value={first.name} onCommit={name=>onPatch({name})}/><span className="dw-object-kind">{t(({container:'容器',text:'文字',button:'按钮',image:'图片',instance:'组件实例',shape:'形状',html:'自定义 HTML',element:'导入图层',svg:'SVG'} as Record<string,string>)[first.type]||first.type)}</span></section>}
     {!single&&<p className="dw-hint dw-selection-note">{t('共同属性可批量编辑，混合值表示当前值不同')}</p>}
@@ -92,7 +92,7 @@ export function DesignInspector({nodes,document,pageId,disabled,isMaster,onPatch
       {first.type==='instance'?<><button onClick={()=>onCommand([{type:'component.detach',page_id:pageId,node_id:first.id}],t('解除组件关联'))}>{t('解除组件关联')}</button></>:!isMaster&&<button onClick={onCreateComponent}><Component size={13}/>{t('创建主组件')}</button>}{structure}
     </Panel>}
     {single&&<Panel title={t('高级样式与源码')} open={false} advanced><button onClick={onSource}>{t('编辑脚本和源码')}</button>{first.type==='svg'&&<TextField label={t('SVG 源码')} value={first.props.svg||''} rows={5} onCommit={next=>setProp('svg',next)}/>}<TextField label={t('样式 JSON')} value={JSON.stringify(first.style,null,2)} rows={8} onCommit={next=>{try{const style=JSON.parse(next);if(!style||Array.isArray(style)||typeof style!=='object')throw new Error();onPatch({style},t('修改样式'));}catch{window.alert(t('请输入有效的 JSON'));}}}/></Panel>}
-  </fieldset>;
+  </fieldset></>;
 }
 
 function SharedStyles({nodes,document,pageId,onCommand,onResourceCommand}:{nodes:InspectorNode[],document:InspectorDocument,pageId:string,onCommand:Props['onCommand'],onResourceCommand:Props['onResourceCommand']}){

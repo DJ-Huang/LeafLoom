@@ -425,3 +425,11 @@
 @container studio-workbench (max-width:700px){.dw-canvas-controls>.dw-panel-toggle{display:none}}
 .dw-miaoda-associate{display:flex;gap:8px;margin:10px 0}.dw-miaoda-associate input{flex:1;min-width:0;border:1px solid var(--line);border-radius:6px;padding:7px;background:var(--paper);color:var(--accent)}.dw-export-body details summary{cursor:pointer;font-weight:600}.dw-export-warning a{color:var(--dw-focus);text-decoration:underline}
 .dw-platform-icon{width:20px;height:20px;flex-shrink:0;object-fit:contain}
+
+.dw-image-source-file{display:flex;align-items:center;gap:9px;min-width:0;margin:7px 0 12px}
+.dw-image-source-file>img{width:52px;height:52px;object-fit:contain;flex-shrink:0;border:1px solid var(--line);border-radius:5px;background:repeating-conic-gradient(#e9e9e9 0% 25%,#fff 0% 50%) 0 0/12px 12px}
+.dw-image-source-file>div{min-width:0;display:flex;flex-direction:column;gap:5px}
+.dw-image-source-file strong,.dw-image-source-file small{overflow-wrap:anywhere}
+.dw-image-source-file strong{font-size:12px;font-weight:500}.dw-image-source-file small{color:var(--muted);font-size:10px}
+.dw-image-source .dw-copy-source-image{display:flex;justify-content:center;width:100%;padding:8px;color:var(--primary);border:1px solid var(--line);border-radius:5px;background:var(--paper)}
+.dw-copy-source-image[aria-busy=true]{opacity:.7}

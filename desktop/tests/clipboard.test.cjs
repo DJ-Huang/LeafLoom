@@ -8,7 +8,7 @@ const {registerClipboardIpc} = require('../clipboard.cjs');
 
 test('clipboard writes require authorization and reject invalid or oversized text', async () => {
   let handler; const writes = [], trusted = {};
-  registerClipboardIpc({handle(name, fn) {assert.equal(name, 'leafloom:clipboard-write-text'); handler = fn;}},
+  registerClipboardIpc({handle(name, fn) {if(name==='leafloom:clipboard-write-text')handler = fn;}},
     event => {if (event !== trusted) throw new Error('Untrusted desktop caller');},
     {writeText: text => writes.push(text)});
   await assert.rejects(handler({}, 'private'), /Untrusted/);
@@ -21,12 +21,12 @@ test('clipboard writes require authorization and reject invalid or oversized tex
 
 test('native write completion and errors propagate to the renderer', async () => {
   let handler, finish;
-  registerClipboardIpc({handle(_name, fn) {handler = fn;}}, () => {},
+  registerClipboardIpc({handle(name, fn) {if(name==='leafloom:clipboard-write-text')handler = fn;}}, () => {},
     {writeText: () => new Promise(resolve => {finish = resolve;})});
   let done = false; const pending = handler({}, 'context').then(() => {done = true;});
   await Promise.resolve(); assert.equal(done, false);
   finish(); await pending; assert.equal(done, true);
-  registerClipboardIpc({handle(_name, fn) {handler = fn;}}, () => {},
+  registerClipboardIpc({handle(name, fn) {if(name==='leafloom:clipboard-write-text')handler = fn;}}, () => {},
     {writeText: async () => {throw new Error('Native write failed');}});
   await assert.rejects(handler({}, 'context'), /Native write failed/);
 });
@@ -42,6 +42,40 @@ test('preload exposes text copying only in the main frame and provides no clipbo
     if (!isMainFrame) {assert.equal(api, undefined); continue;}
     await api.writeClipboardText('location');
     assert.deepEqual(calls, [['leafloom:clipboard-write-text', 'location']]);
+    await api.writeClipboardImage(new Uint8Array([1,2,3]));
+    assert.equal(calls[1][0], 'leafloom:clipboard-write-image');
+    assert.deepEqual(Array.from(calls[1][1]), [1,2,3]);
+    assert.equal(api.readClipboardImage, undefined);
     assert.equal(api.readClipboardText, undefined);
   }
+});
+
+test('image writes authorize first and validate PNG bounds before native decoding', async () => {
+  const handlers = {}, writes = []; let decodes = 0;
+  const image = {isEmpty: () => false, getSize: () => ({width:1,height:1})};
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6HgAAAAAASUVORK5CYII=', 'base64');
+  registerClipboardIpc({handle(name, handler) {handlers[name]=handler;}}, event => {if (!event.trusted) throw Error('Untrusted');},
+    {writeImage: value => {assert.equal(value,image);writes.push(value);}}, {createFromBuffer: bytes => {decodes++;assert.deepEqual(bytes,png);return image;}});
+  const write = handlers['leafloom:clipboard-write-image'];
+  await assert.rejects(write({},png), /Untrusted/);
+  for (const invalid of [null, {}, png.buffer, new Uint8Array(32*1024*1024+1), new Uint8Array(34)]) await assert.rejects(write({trusted:true},invalid), /Invalid/);
+  const huge=Buffer.from(png);huge.writeUInt32BE(100000,16);huge.writeUInt32BE(100000,20);
+  await assert.rejects(write({trusted:true},huge), /Invalid.*size/);
+  assert.equal(decodes,0);assert.deepEqual(writes,[]);
+  // Bytes outside a supplied typed-array slice must never be decoded/copied.
+  const padded=Buffer.concat([Buffer.alloc(9),png,Buffer.alloc(7)]);
+  await write({trusted:true},padded.subarray(9,9+png.length));
+  assert.equal(decodes,1);assert.equal(writes.length,1);
+});
+
+test('invalid decoded images and native clipboard failures do not report success', async () => {
+  let write;const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6HgAAAAAASUVORK5CYII=','base64');
+  for(const image of [{isEmpty:()=>true},{isEmpty:()=>false,getSize:()=>({width:2,height:1})}]){
+    registerClipboardIpc({handle(name,handler){if(name.endsWith('write-image'))write=handler;}},()=>{},
+      {writeImage:()=>assert.fail('invalid image must not reach the clipboard')},{createFromBuffer:()=>image});
+    await assert.rejects(write({},png),/Invalid/);
+  }
+  registerClipboardIpc({handle(name,handler){if(name.endsWith('write-image'))write=handler;}},()=>{},
+    {writeImage:()=>{throw Error('Native failure');}},{createFromBuffer:()=>({isEmpty:()=>false,getSize:()=>({width:1,height:1})})});
+  await assert.rejects(write({},png),/Native failure/);
 });

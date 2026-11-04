@@ -5,6 +5,7 @@ if (process.isMainFrame) {
   contextBridge.exposeInMainWorld('leafloomDesktop', Object.freeze({
     appInfo: () => invoke('info'),
     writeClipboardText: text => invoke('clipboard-write-text', text),
+    writeClipboardImage: png => invoke('clipboard-write-image', png),
     publishDesign: jobId => invoke('design-publish', jobId),
     presenter: Object.freeze({
       displays: () => invoke('presenter-displays'),

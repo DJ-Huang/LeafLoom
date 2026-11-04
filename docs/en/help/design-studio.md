@@ -31,6 +31,8 @@ The design project **Recycle bin** supports restore, **Delete project permanentl
 
 If project home reports that the service has not loaded project management, quit the app from the tray/menu bar and reopen it. Refreshing the page does not reload backend interfaces. Delete, move and related actions remain disabled until management loads; use **Retry** to reconnect.
 
+**Copy a source image.** Select one image in Design Studio, open the right-hand **Design** tab and use **Image source → Copy image**. The card shows the thumbnail, filename and vault-relative source path. It resolves the image currently used by bindings, variants and image-root component overrides. Copying preserves the source size and transparency, without canvas cropping, rounded corners or rotation. Locked images and read-only variant views can also be copied; saving is not required and project history is unchanged. With the canvas or layer list focused, **⌘C / Ctrl+C** copies a single selected image; other elements and multiple selections retain location copying, and **Copy element location** remains available in its menu. Text fields keep normal text copying. Paste the PNG into another application or note; a note uses its normal attachment-upload flow. SVG is rasterized and animated images use the first frame. Only project-local images are supported; import external sources first. Missing or unreadable originals report an error and allow retry, without substituting text or a link. Source and PNG data are limited to 32 MiB and decoded images to 64 megapixels. Restart the desktop app after updating native clipboard support.
+
 ## What to expect
 
 Text, layers, assets and edits are saved in each independent project.

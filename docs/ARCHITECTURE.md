@@ -381,3 +381,9 @@ DUFS 的账号和路径权限在附件服务器端管理；LeafLoom 继续使用
 原版 DUFS 0.47.0 的 `allow-symlink: false` 只约束全局根目录，不能阻止根内账号间符号链接。`templates/dufs/no-symlinks.patch` 基于固定源码构建 `0.47.0-leafloom.1`，在该开关关闭时拒绝所有符号链接与路径中的链接父目录，检查读写及 COPY/MOVE 目标，并从目录列表、搜索和 ZIP 中排除链接。配置仍需关闭匿名访问，账号不获得全局 `/` 权限；本机 NAS 管理员及文件系统写入者属于可信边界，补丁不提供对恶意本机路径竞争替换的内核级隔离。
 
 `scripts/check_dufs_isolation.py` 支持本机二进制或实际 Docker 镜像，使用临时双账号、随机回环端口和虚构哈希验证访问边界；失败阻止部署。构建镜像、上游源码校验值和 Cargo 锁文件固定，实际部署保留旧配置、只读挂载状态和停止自动启动的旧容器作为恢复副本。操作见[英文](en/DUFS_MULTIUSER.md)、[中文](zh-CN/DUFS_MULTIUSER.md)和[日文](ja/DUFS_MULTIUSER.md)指南。
+
+### Design Studio image source clipboard
+
+`design-image-source` resolves a single image (including imported img nodes and image-root component instances) against canonical bindings, selected variant values and component overrides in runtime order. It only constructs project-local paths; bytes use the existing root-bound media endpoint. The source card sits outside the inspector’s disabled fieldset so locked/read-only images remain copyable. No document operation, save or undo record is created.
+
+`image-clipboard` decodes the original, rasterizes to an intrinsic-size transparent PNG, and supplies a promised ClipboardItem during the user gesture. Desktop sessions use the trusted main-frame image clipboard bridge instead. Source/PNG bytes are bounded to 32 MiB and decoded pixels to 64 million. Repeated requests abort predecessors; project/root changes and unmount cancel pending work. Main-process PNG validation precedes native decoding and clipboard writing. Location copying remains explicit in the element menu and retains its shortcut for other/multiple selections. Focused text controls retain text copying.
