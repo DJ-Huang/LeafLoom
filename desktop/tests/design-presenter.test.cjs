@@ -6,7 +6,7 @@ const source = () => ({schemaVersion:1,id:'deck',pages:[{id:'one',nodes:[],prese
 const origin = 'http://app.'+'a'.repeat(32)+'.localhost:18080';
 const runtime = {id:'session',origin:'http://p-'+'b'.repeat(32)+'.'+'a'.repeat(32)+'.localhost:18080'};
 function fixture(){
- const events=[],screen=new EventEmitter();let focus=0,captures=0,muted=false,commands=[],windows=[];
+ const events=[],opened=[],screen=new EventEmitter();let focus=0,captures=0,muted=false,commands=[],windows=[];
  const displays=[1,2].map((id,index)=>({id,label:'Screen '+id,scaleFactor:id,bounds:{x:index*1920,y:0,width:1920,height:1080},workArea:{x:index*1920,y:24,width:1920,height:1056}}));
  screen.getAllDisplays=()=>displays;screen.getDisplayMatching=b=>displays.find(d=>b.x>=d.bounds.x&&b.x<d.bounds.x+d.bounds.width)||displays[0];
  let ownerBounds={x:0,y:24,width:1200,height:800},controllerMuted=false;const owner={webContents:{isAudioMuted:()=>controllerMuted,setAudioMuted:v=>{controllerMuted=v;},setBackgroundThrottling(){}},getBounds:()=>({...ownerBounds}),setBounds:b=>{ownerBounds=b;},focus:()=>focus++,isMinimized:()=>false,isDestroyed:()=>false};
@@ -14,10 +14,10 @@ function fixture(){
   constructor(options){super();this.options=options;this.bounds=options;windows.push(this);let attached=false;this.webContents=Object.assign(new EventEmitter(),{setZoomFactor(){},setWindowOpenHandler(){},setAudioMuted:value=>{muted=value;},send:(name,value)=>commands.push({name,value}),mainFrame:{url:origin+'/?view=presenter-output'},debugger:Object.assign(new EventEmitter(),{isAttached:()=>attached,attach:()=>{attached=true;},detach:()=>{attached=false;},sendCommand:async(method,params)=>commands.push({method,params})}),capturePage:async()=>{captures++;return {getSize:()=>({width:3840,height:2160}),resize:({width,height})=>({getSize:()=>({width,height}),toJPEG:()=>Buffer.from('JPEG')})};}});}
   async loadURL(url){this.url=url;}isDestroyed(){return !!this.dead;}getContentBounds(){return {width:1920,height:1080};}setBounds(b){this.bounds=b;}setFullScreen(v){this.fullscreen=v;}showInactive(){this.visible=true;}hide(){this.visible=false;}destroy(){this.dead=true;this.emit('closed');}setMenu(){}
  }
- const presenter=new DesignPresenter({BrowserWindow:Window,screen,owner:()=>owner,origin:()=>origin,emit:e=>events.push(e)});
+ const presenter=new DesignPresenter({BrowserWindow:Window,screen,owner:()=>owner,origin:()=>origin,emit:e=>events.push(e),openExternal:async url=>opened.push(url)});
  const input=()=>({document:source(),pageId:'one',pageIds:['one','two'],session:runtime,displayId:2,fullscreen:true});
  const event=()=>({sender:windows[0].webContents,senderFrame:windows[0].webContents.mainFrame});
- return {presenter,input,event,events,screen,displays,windows,commands,get focus(){return focus;},get captures(){return captures;},get muted(){return muted;}};
+ return {presenter,input,event,events,opened,screen,displays,windows,commands,get focus(){return focus;},get captures(){return captures;},get muted(){return muted;}};
 }
 test('notes never reach the audience snapshot and input is an allowlisted normalized channel',()=>{
  const s=source();assert.equal(audienceDocument(s).pages[0].presenterNotes,undefined);assert.equal(s.pages[0].presenterNotes.overview,'PRIVATE');
@@ -61,4 +61,22 @@ test('drag events wait for mouse-down completion and stay in order without activ
  const move=f.presenter.input(id,{kind:'move',x:.8,y:.2,button:0,buttons:1});
  const up=f.presenter.input(id,{kind:'up',x:.8,y:.2,button:0,buttons:0});
  await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(received,['mousePressed']);release();await Promise.all([down,move,up]);assert.deepEqual(received,['mousePressed','mouseMoved','mouseReleased']);assert.equal(f.focus,0);
+});
+test('only an active trusted audience can request a public web link',async t=>{
+ const f=fixture();t.after(()=>f.presenter.dispose());const {id}=await f.presenter.start(f.input()),message={id,type:'open-external',url:'https://github.com/DJ-Huang'};
+ f.presenter.outputReport(f.event(),message);await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(f.opened,[]);
+ f.presenter.outputReport(f.event(),{id,type:'ready'});
+ assert.throws(()=>f.presenter.outputReport({sender:{}},message),/Untrusted/);
+ assert.throws(()=>f.presenter.outputReport(f.event(),{...message,id:'old'}),/Untrusted/);
+ for(const url of ['file:///tmp/test','javascript:alert(1)','http://localhost:18080','http://192.168.1.1','mailto:test@example.org'])assert.throws(()=>f.presenter.outputReport(f.event(),{...message,url}));
+ f.presenter.outputReport(f.event(),message);await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(f.opened,[message.url]);
+ f.presenter.command(id,{action:'black',enabled:true});f.presenter.outputReport(f.event(),message);
+ f.presenter.command(id,{action:'black',enabled:false});f.presenter.outputReport(f.event(),message);
+ f.presenter.command(id,{action:'resume'});f.presenter.suspend('controller-disconnected');f.presenter.outputReport(f.event(),message);
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(f.opened.length,1);
+});
+test('browser launch failure is reported to the presenter console',async t=>{
+ const f=fixture();t.after(()=>f.presenter.dispose());const {id}=await f.presenter.start(f.input());f.presenter.outputReport(f.event(),{id,type:'ready'});
+ f.presenter.openExternal=async()=>{throw Error('browser unavailable');};f.presenter.outputReport(f.event(),{id,type:'open-external',url:'https://github.com/DJ-Huang'});
+ await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(f.events.find(e=>e.type==='link-error'),{type:'link-error',id,error:'browser unavailable'});
 });

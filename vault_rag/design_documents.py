@@ -308,7 +308,10 @@ class DesignDocuments:
         after_stat = path.stat()
         if signature != (after_stat.st_mtime_ns, after_stat.st_size, after_stat.st_ino):
             raise ConflictError('Design document changed while being read; retry with a stable version')
-        document = json.loads(raw)
+        try:
+            document = json.loads(raw)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError('Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved') from exc
         self.validate(document, project or path.parents[2])
         return self._remember(path, document, raw, signature)
 
@@ -385,10 +388,66 @@ class DesignDocuments:
             cached = self._cached_document(path, project)
             meta = db.execute('SELECT * FROM meta WHERE id=1').fetchone()
             if cached['hash'] != meta['content_hash']:
-                raise ConflictError('Design document changed outside the studio; history and external file are preserved; reload and reconcile before writing')
+                self._adopt_external(db, path, cached, meta)
+                meta = db.execute('SELECT * FROM meta WHERE id=1').fetchone()
+                self._changed(directory, path)
             return directory, project, path, cached['document'], db, meta
         except BaseException:
             db.close()
+            raise
+
+    def _history_document(self, db, cursor):
+        """Rebuild the applied branch, never a checkpoint from an abandoned redo."""
+        changes, seen = [], set()
+        while cursor not in seen:
+            seen.add(cursor)
+            checkpoint = db.execute('SELECT document FROM checkpoints WHERE seq=?', (cursor,)).fetchone()
+            if checkpoint is not None:
+                document = json.loads(checkpoint['document'])
+                for forward in reversed(changes):
+                    document = _patch(document, forward)
+                return document
+            row = db.execute('SELECT parent,forward FROM operations WHERE seq=? AND active=1', (cursor,)).fetchone()
+            if row is None:
+                break
+            changes.append(json.loads(row['forward']))
+            cursor = row['parent']
+        raise ConflictError('Design history is incomplete; the external file and history were preserved')
+
+    def _adopt_external(self, db, path, cached, meta):
+        """Record validated external content without replacing any external bytes.
+
+        Only SQLite changes, so its transaction also covers crash recovery. A
+        new revision still rejects stale editor saves and preserves their drafts.
+        Interrupted studio saves are resolved by _recover before reaching here.
+        """
+        if any('loaded' in page for page in cached['document']['pages']):
+            raise ValueError('External design changes require the complete document, not a page projection')
+        db.execute('BEGIN IMMEDIATE')
+        try:
+            current = db.execute('SELECT revision FROM meta WHERE id=1').fetchone()
+            if current['revision'] != meta['revision'] or db.execute('SELECT id FROM pending WHERE id=1').fetchone():
+                raise ConflictError('Another design save is in progress or has completed; refresh before retrying')
+            before = self._history_document(db, meta['cursor'])
+            forward, inverse = _diff(before, cached['document'])
+            # Recheck after rebuilding history; an editor may still be writing.
+            raw = path.read_bytes()
+            if _hash(raw) != cached['hash']:
+                raise ConflictError('Design document changed while being read; retry with a stable version')
+            if not forward:
+                # Formatting-only edits keep undo/redo and the logical revision.
+                db.execute('UPDATE meta SET content_hash=? WHERE id=1', (cached['hash'],))
+                db.commit()
+                return
+            self._finish(db, {
+                'action': 'apply', 'cursor': meta['cursor'], 'revision': _id(),
+                'after_hash': cached['hash'], 'after': raw.decode('utf-8'),
+                'forward': forward, 'inverse': inverse, 'label': 'External file changes',
+                'created': time.time(), 'operation_id': 'external-' + _id(),
+                'fingerprint': cached['hash'],
+            })
+        except BaseException:
+            db.rollback()
             raise
 
     def _recover(self, db, path):

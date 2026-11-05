@@ -36,8 +36,8 @@ function inputCommand(input, size) {
 }
 
 class DesignPresenter {
-  constructor({BrowserWindow, screen, owner, origin, emit, log = () => {}}) {
-    Object.assign(this, {BrowserWindow, screen, owner, origin, emit, log});
+  constructor({BrowserWindow, screen, owner, origin, emit, openExternal, log = () => {}}) {
+    Object.assign(this, {BrowserWindow, screen, owner, origin, emit, openExternal, log});
     this.active = null; this.markers = [];
     this.onDisplays = () => {
       this.emit({type: 'displays', displays: this.displays()});
@@ -114,6 +114,15 @@ class DesignPresenter {
   outputReport(event, message) {
     if (!this.isOutput(event) || !message || message.id !== this.active.id) throw new Error('Untrusted presentation state');
     const a = this.active;
+    if (message.type === 'open-external') {
+      if (!a.ready || a.suspended || a.state.paused || a.state.black) return;
+      const url = policy.externalUrl(message.url);
+      if (!/^https?:/.test(url)) throw new Error('Unsupported presentation link');
+      void Promise.resolve().then(() => this.openExternal(url)).catch(error => {
+        this.log(error); this.emit({type: 'link-error', id: a.id, error: String(error.message || error)});
+      });
+      return;
+    }
     if (message.type === 'ready') {
       clearTimeout(a.startup);
       a.ready = true;

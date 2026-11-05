@@ -2977,5 +2977,9 @@
   "design.imageCopyTooLarge": "画像が大きすぎます。ファイルは32 MiB以下、画素数は6400万以下にしてください。",
   "design.imageCopyRestart": "LeafLoom を再起動して画像コピー機能を読み込み、再試行してください。",
   "design.imageClipboardUnavailable": "画像をクリップボードに書き込めません。ブラウザーの権限を確認するかデスクトップ版で再試行してください。",
-  "design.imageCopyFailed": "画像をコピーできませんでした。再試行してください。"
+  "design.imageCopyFailed": "画像をコピーできませんでした。再試行してください。",
+  "External file changes": "外部ファイルの変更",
+  "Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved": "デザインファイルが未完成か JSON が不正です。外部編集を完了して再試行してください。履歴は保持しています。",
+  "Design history is incomplete; the external file and history were preserved": "デザイン履歴が不完全です。外部ファイルと既存の履歴は保持しています。",
+  "External design changes require the complete document, not a page projection": "外部変更には完全な設計文書が必要です。ページ投影でプロジェクトを置き換えることはできません。"
 }

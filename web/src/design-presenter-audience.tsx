@@ -1,5 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {audienceDocument,PresenterDocument,PresenterSession,PresenterState} from './design-presenter-types';
+import {openDesignExternalLink} from './design-external-link';
 
 declare global {interface Window {leafloomAudience?:{ready:()=>Promise<void>,report:(value:any)=>void,subscribe:(fn:(value:any)=>void)=>()=>void};}}
 
@@ -21,6 +22,7 @@ export function PresenterAudience(){
   const message=(event:MessageEvent)=>{
    const c=current.current;if(!c||event.source!==frame.current?.contentWindow||event.origin!==c.session.origin||event.data?.session!==c.session.id)return;
    const data=event.data;
+   if(data.type==='studio-open-external')openDesignExternalLink(event,frame.current?.contentWindow,c.session,true,()=>{},url=>api.report({id:c.id,type:'open-external',url}));
    if(data.type==='studio-ready')send({type:'studio-init',document:c.document,pageId:c.pageId,presenterPageIds:c.pageIds,mode:'preview',assetBase:c.session.origin+'/',selectedIds:[]});
    if(data.type==='studio-rendered'&&!started.current){started.current=true;send({type:'studio-presentation',enabled:true});if(c.initialState?.paused)send({type:'studio-presenter-command',command:{action:'pause'}});if(c.initialState?.black)send({type:'studio-presenter-command',command:{action:'black',enabled:true}});send({type:'studio-presenter-command',command:{action:'state'}});setBlack(!!c.initialState?.black);api.report({id:c.id,type:'ready'});}
    if(data.type==='studio-presenter-state')api.report({id:c.id,type:'state',state:data.state as PresenterState});

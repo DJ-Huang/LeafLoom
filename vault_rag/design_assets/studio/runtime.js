@@ -1739,6 +1739,21 @@
     };
     const keyUp = event => { if (event.key === ' ') { spaceDown = false; syncTool(); } };
     const blur = () => { spaceDown = false; cancelGesture(); syncTool(); };
+    const externalLink = event => {
+      if (!settings.hostExternalLinks || event.defaultPrevented || !(event.target instanceof win.Element)) return;
+      const link = event.target.closest('a[href]');
+      if (!link || !stage.contains(link) || link.hasAttribute('download')) return;
+      let url;
+      try { url = new URL(link.getAttribute('href'), base); } catch (_) { return; }
+      if (!['http:', 'https:'].includes(url.protocol) || url.origin === new URL(base).origin) return;
+      // An isolated frame cannot open a popup. Delegate a real click (including
+      // keyboard activation and SVG children) to its authenticated host instead.
+      event.preventDefault();
+      if (mode !== 'preview' || presenterPaused || presenterBlack || !event.isTrusted || !win.navigator.userActivation?.isActive || ![0, 1].includes(event.button)) return;
+      emit('studio-open-external', { url: url.href });
+    };
+    viewport.addEventListener('click', externalLink);
+    viewport.addEventListener('auxclick', externalLink);
     const disabledActivation = event => {
       if (mode === 'preview' && event.target instanceof win.Element && event.target.closest('[data-studio-disabled=\"true\"]') && (event.type !== 'keydown' || event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); event.stopImmediatePropagation(); }
     };
@@ -1804,7 +1819,7 @@
       try {
         if (data.type === 'studio-init') {
           if (instance) instance.update(data.document, { pageId: data.pageId, mode: data.mode || 'edit', selectedIds: data.selectedIds, previewNodeId: data.previewNodeId, variantId: data.variantId, readOnly: data.readOnly });
-          else instance = mount(root, data.document, { pageId: data.pageId, mode: data.mode || 'edit', assetBase: data.assetBase || global.location.origin + '/', selectedIds: data.selectedIds, previewNodeId: data.previewNodeId, variantId: data.variantId, readOnly: data.readOnly, presenterPageIds: data.presenterPageIds, onMessage: send });
+          else instance = mount(root, data.document, { pageId: data.pageId, mode: data.mode || 'edit', assetBase: data.assetBase || global.location.origin + '/', selectedIds: data.selectedIds, previewNodeId: data.previewNodeId, variantId: data.variantId, readOnly: data.readOnly, presenterPageIds: data.presenterPageIds, hostExternalLinks: true, onMessage: send });
           send({ type: 'studio-rendered', pageId: data.pageId });
         } else if (instance && data.type === 'studio-prepare-preview') { instance.preparePreview(); send({ type: 'studio-preview-prepared', requestId: data.requestId }); }
         else if (instance && data.type === 'studio-preflight') {

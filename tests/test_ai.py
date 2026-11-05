@@ -232,10 +232,10 @@ class AiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_real_app_auth_csrf_and_root_checks(self):
         from vault_rag.web_server import create_app
-        runtime = SimpleNamespace(files=self.files, knowledge=self.runtime.knowledge,
-            catalog=SimpleNamespace(root=str(self.config.root), version=1),
-            events=SimpleNamespace(instance='test-ai'), start=lambda: None, stop=lambda: None,
-            foreground_begin=lambda: None, foreground_end=lambda: None)
+        from vault_rag.knowledge import Runtime
+        # Exercise the full authenticated application with its actual runtime contract.
+        # No background model/index process is started by this test.
+        runtime = Runtime(self.config)
         app = create_app(self.config, runtime, start_background=False)
         def exchange():
             with TestClient(app, base_url='http://127.0.0.1:18080') as client:

@@ -59,6 +59,7 @@ export function DesignPresenterConsole(props:Props){
    if(event.type==='displays'){setDisplays(event.displays||[]);return;}
    if(id.current&&event.id!==id.current)return;if(!id.current&&event.id&&started.current&&event.type!=='ended')id.current=event.id;
    if(event.type==='state'){setState(event.state||{});setSuspended(!!event.suspended);if(event.suspended)setError(t('观众输出已暂停，请重新选择屏幕后恢复。'));}
+   if(event.type==='link-error'&&event.error)setError(event.error);
    if(event.type==='ended'&&!closing.current){setRunning(false);started.current=false;id.current='';setError(t('演示已结束'));}
    listeners.current.forEach(fn=>fn(event));
   });

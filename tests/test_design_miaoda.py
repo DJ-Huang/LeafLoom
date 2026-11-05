@@ -117,15 +117,54 @@ class MiaodaTests(unittest.TestCase):
         publisher = self.publisher(); jobid = 'a'*32
         job = {'job_id':jobid,'root':str(self.config.root),'directory':self.directory,'status':'interrupted','stage':'failed','last_stage':'upload_assets','app_id':'app_course','pending_asset':'abc.png'}
         publisher._save_job(job)
-        with patch.object(publisher, '_cli', return_value={'items':[], 'has_more':False}):
-            with self.assertRaisesRegex(ValueError, 'uniquely confirmed'):
-                publisher.retry(jobid)
+        for listing in ({'items':[], 'has_more':True}, {}, {'items':[]}, {'items':[{}, {}], 'has_more':False}):
+            with self.subTest(listing=listing), patch.object(publisher, '_cli', return_value=listing):
+                with self.assertRaisesRegex(ValueError, 'uniquely confirmed'):
+                    publisher.retry(jobid)
         self.assertEqual(publisher.get(jobid)['status'], 'interrupted')
         with patch.object(publisher, '_cli', return_value={'items':[{'file_name':'abc.png','download_url':'/spark/app/app_course/object'}], 'has_more':False}):
             result=publisher.retry(jobid)
         self.assertEqual(result['status'], 'queued')
         self.assertTrue(result['resume'])
         self.assertEqual(publisher._load('assets-app_course.json', {})['abc.png'], '/spark/app/app_course/object')
+
+    def test_explicit_retry_resumes_when_complete_listing_confirms_upload_absent(self):
+        publisher = self.publisher(); jobid = '8'*32
+        job = {'job_id':jobid,'root':str(self.config.root),'directory':self.directory,'status':'interrupted','stage':'failed','last_stage':'upload_assets','app_id':'app_course','pending_asset':'missing.mp4','completed':73,'total':87}
+        publisher._save_job(job)
+        _write(publisher._state('assets-app_course.json'), {'other.png':'/spark/app/app_course/keep','missing.mp4':'stale'})
+        with patch.object(publisher, '_cli', return_value={'items':[], 'has_more':False}) as cli:
+            result = publisher.retry(jobid)
+        self.assertIn('--name=missing.mp4', cli.call_args.args[0])
+        self.assertEqual(result['status'], 'queued')
+        self.assertEqual(result['pending_asset'], '')
+        self.assertEqual(result['completed'], 73)
+        self.assertEqual(publisher._load('assets-app_course.json', {}), {'other.png':'/spark/app/app_course/keep'})
+        self.assertEqual(len(publisher.pool.calls), 1)
+
+    def test_stale_release_refresh_returns_current_journal_without_remote_writes(self):
+        publisher = self.publisher(); jobid = '7'*32
+        for status, stage, active in [('running','upload_assets',True),('queued','queued',True),('release_pending','release_pending',True),('awaiting_approval','awaiting_approval',True),('interrupted','failed',False),('completed','completed',False),('failed','failed',False)]:
+            with self.subTest(status=status, active=active):
+                publisher.active.clear()
+                if active: publisher.active.add(jobid)
+                job = {'job_id':jobid,'root':str(self.config.root),'directory':self.directory,'status':status,'stage':stage,'release_id':''}
+                publisher._save_job(job)
+                with patch.object(publisher, '_cli') as cli:
+                    result = publisher.refresh(jobid)
+                self.assertEqual(result['status'], status)
+                self.assertEqual(result['stage'], stage)
+                cli.assert_not_called()
+        self.assertEqual(publisher.pool.calls, [])
+
+    def test_incomplete_pending_journal_is_recoverable_instead_of_waiting_forever(self):
+        publisher = self.publisher(); jobid = '6'*32
+        publisher._save_job({'job_id':jobid,'root':str(self.config.root),'directory':self.directory,'status':'release_pending','stage':'release_pending','release_id':''})
+        with patch.object(publisher, '_cli') as cli:
+            result = publisher.refresh(jobid)
+        self.assertEqual(result['status'], 'interrupted')
+        self.assertEqual(result['last_stage'], 'release_pending')
+        cli.assert_not_called()
 
     def test_release_stops_for_approval_and_only_finished_has_url(self):
         publisher = self.publisher(); jobid='b'*32
