@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+## 0.1.8 — 2026-11-05
+
 - Fix Design Studio image copying on Electron 44 by using the asynchronous PNG ClipboardItem API; verify the actual preload/IPC/system clipboard path with transparent image readback.
 
 - Add an Image source card and native source-image copying in Design Studio. Single-image Copy shortcuts preserve original dimensions/transparency, respect bindings and variants, and paste as PNG into apps and notes without changing the project.
