@@ -3019,3 +3019,8 @@ design.imageCopyTooLarge|图片过大，无法复制：文件需不超过 32 MiB
 design.imageCopyRestart|请重启 LeafLoom 后再复制图片，以加载新版剪贴板支持。|Restart LeafLoom to load image clipboard support, then copy again.|LeafLoom を再起動して画像コピー機能を読み込み、再試行してください。
 design.imageClipboardUnavailable|无法写入图片剪贴板，请检查浏览器权限或使用桌面端重试。|Could not write the image to the clipboard. Check browser permissions or retry in the desktop app.|画像をクリップボードに書き込めません。ブラウザーの権限を確認するかデスクトップ版で再試行してください。
 design.imageCopyFailed|图片复制失败，请重试。|Could not copy the image. Try again.|画像をコピーできませんでした。再試行してください。
+
+External file changes|外部文件修改|External file changes|外部ファイルの変更
+Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved|设计文件尚未写完或 JSON 格式有误，请完成外部编辑后重试，历史已保留。|Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved|デザインファイルが未完成か JSON が不正です。外部編集を完了して再試行してください。履歴は保持しています。
+Design history is incomplete; the external file and history were preserved|设计历史不完整，已保留外部文件和现有历史。|Design history is incomplete; the external file and history were preserved|デザイン履歴が不完全です。外部ファイルと既存の履歴は保持しています。
+External design changes require the complete document, not a page projection|外部修改必须使用完整设计文档，不能用单页投影替换项目。|External design changes require the complete document, not a page projection|外部変更には完全な設計文書が必要です。ページ投影でプロジェクトを置き換えることはできません。

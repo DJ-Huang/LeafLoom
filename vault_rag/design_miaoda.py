@@ -347,10 +347,15 @@ class MiaodaPublisher:
         with self.release_lock:
             with self.lock:
                 job = self._job(job_id)
-                if job_id in self.active and job['status'] == 'release_pending':
+                # The worker may already have advanced beyond the release shown
+                # by an older dialog. A refresh returns that current state; it
+                # must not query an obsolete release or race the active worker.
+                if job_id in self.active or job['status'] not in ('awaiting_approval', 'release_pending', 'release_unknown'):
                     return self.get(job_id)
-            if not job.get('release_id') or job['status'] not in ('awaiting_approval', 'release_pending', 'release_unknown'):
-                raise ValueError('No pending release to check')
+            if not job.get('release_id'):
+                self._step(job, 'failed', status='interrupted', last_stage=job['stage'],
+                           error='Publishing was interrupted. Inspect the remote app before starting another publication.')
+                return self.get(job_id)
             self._release_status(job)
             if job.get('stage') == 'bootstrap_ready':
                 with self.lock:
@@ -374,11 +379,16 @@ class MiaodaPublisher:
             pending = job.get('pending_asset', '')
             if pending:
                 listing = self._cli(['apps', '+file-list', '--app-id=' + job['app_id'], '--name=' + pending, '--page-size=200'])
-                matches = listing.get('items', [])
-                if listing.get('has_more') or len(matches) != 1 or matches[0].get('file_name') != pending or not matches[0].get('download_url'):
+                matches = listing.get('items')
+                if not isinstance(matches, list) or listing.get('has_more') is not False or len(matches) > 1 or (matches and (not isinstance(matches[0], dict) or matches[0].get('file_name') != pending or not matches[0].get('download_url'))):
                     raise ValueError('The last upload could not be uniquely confirmed; inspect app storage before retrying')
                 cache = self._load('assets-' + job['app_id'] + '.json', {})
-                cache[pending] = matches[0]['download_url']
+                if matches:
+                    cache[pending] = matches[0]['download_url']
+                else:
+                    # An explicit retry can upload again after an exact-name,
+                    # complete listing confirms that the previous write is absent.
+                    cache.pop(pending, None)
                 _write(self._state('assets-' + job['app_id'] + '.json'), cache)
                 job['pending_asset'] = ''
             job.update(status='queued', stage='queued', error='', resume=True)
@@ -593,6 +603,7 @@ class MiaodaPublisher:
         for name in ('app.tsx', 'course.css'):
             shutil.copyfile(TEMPLATE / name, _destination(repo, 'src/' + name))
         shutil.copyfile(TEMPLATE / 'course.html', _destination(repo, 'public/course.html'))
+        shutil.copyfile(TEMPLATE / 'course.html', _destination(repo, 'src/course-frame.html'))
         shutil.copyfile(RUNTIME / 'runtime.js', _destination(repo, 'public/course-runtime.js'))
         shutil.copyfile(RUNTIME / 'runtime.css', _destination(repo, 'public/course-runtime.css'))
         pages = [{'id': page['id'], 'name': page.get('name', page['id'])} for page in document['pages']]
@@ -602,7 +613,7 @@ class MiaodaPublisher:
         remote = _git(repo, 'ls-remote', 'origin', 'refs/heads/sprint/default').split()[0]
         if remote != head:
             raise ConflictError('The remote app changed during publication; no content was pushed')
-        _git(repo, 'add', '--', 'src/app.tsx', 'src/course.css', 'src/course-pages.ts', 'public')
+        _git(repo, 'add', '--', 'src/app.tsx', 'src/course.css', 'src/course-pages.ts', 'src/course-frame.html', 'public')
         _write(_destination(repo, 'public/leafloom-course.json'), {'version': 2, 'project_id': document['id'], 'page_ids': job['page_ids'], 'generated_assets': generated_assets, 'tracked_files': _tracked_files(repo)})
         _git(repo, 'add', '--', 'public/leafloom-course.json')
         changed = bool(_git(repo, 'status', '--porcelain'))

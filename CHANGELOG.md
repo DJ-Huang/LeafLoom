@@ -4,6 +4,13 @@
 
 ## Unreleased
 
+- Support standard public website hyperlinks on text and SVG icons in Design Studio preview, comparison and presentation. Relay trusted clicks to the desktop browser opener without enabling sandbox popups; keep edit and exported HTML behavior.
+
+- Fix stale Miaoda publication refreshes after the initial release advances to uploads or a terminal state; retry temporary status-read failures and allow interrupted uploads to resume after a complete exact-name check confirms the file is absent.
+- Use Miaoda's canonical published content route, wait for course readiness and offer loading recovery; document how to sync a stale editor preview without losing cloud changes.
+
+- Accept valid external Design Studio source edits as one undoable history step without rewriting the file. Keep stale-save protection, ignore formatting-only changes, and show a failed-load status with retry instead of indefinite loading.
+
 ## 0.1.8 — 2026-11-05
 
 - Fix Design Studio image copying on Electron 44 by using the asynchronous PNG ClipboardItem API; verify the actual preload/IPC/system clipboard path with transparent image readback.

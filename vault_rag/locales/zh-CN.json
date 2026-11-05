@@ -2977,5 +2977,9 @@
   "design.imageCopyTooLarge": "图片过大，无法复制：文件需不超过 32 MiB，像素数需不超过 6400 万。",
   "design.imageCopyRestart": "请重启 LeafLoom 后再复制图片，以加载新版剪贴板支持。",
   "design.imageClipboardUnavailable": "无法写入图片剪贴板，请检查浏览器权限或使用桌面端重试。",
-  "design.imageCopyFailed": "图片复制失败，请重试。"
+  "design.imageCopyFailed": "图片复制失败，请重试。",
+  "External file changes": "外部文件修改",
+  "Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved": "设计文件尚未写完或 JSON 格式有误，请完成外部编辑后重试，历史已保留。",
+  "Design history is incomplete; the external file and history were preserved": "设计历史不完整，已保留外部文件和现有历史。",
+  "External design changes require the complete document, not a page projection": "外部修改必须使用完整设计文档，不能用单页投影替换项目。"
 }

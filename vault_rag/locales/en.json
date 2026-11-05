@@ -2977,5 +2977,9 @@
   "design.imageCopyTooLarge": "Image is too large to copy: the file must be at most 32 MiB and the image at most 64 megapixels.",
   "design.imageCopyRestart": "Restart LeafLoom to load image clipboard support, then copy again.",
   "design.imageClipboardUnavailable": "Could not write the image to the clipboard. Check browser permissions or retry in the desktop app.",
-  "design.imageCopyFailed": "Could not copy the image. Try again."
+  "design.imageCopyFailed": "Could not copy the image. Try again.",
+  "External file changes": "External file changes",
+  "Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved": "Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved",
+  "Design history is incomplete; the external file and history were preserved": "Design history is incomplete; the external file and history were preserved",
+  "External design changes require the complete document, not a page projection": "External design changes require the complete document, not a page projection"
 }

@@ -363,7 +363,7 @@ else {
     });
     createWindow();
     presenter = new DesignPresenter({BrowserWindow, screen, owner: () => window, origin: () => origin,
-      emit: value => {if (window && !window.isDestroyed()) window.webContents.send('leafloom:presentation-event', value);}, log});
+      emit: value => {if (window && !window.isDestroyed()) window.webContents.send('leafloom:presentation-event', value);}, openExternal: url => shell.openExternal(policy.externalUrl(url)), log});
     const trayImage = nativeImage.createFromPath(image(process.platform === 'darwin' ? 'icon-32.png' : 'icon-64.png')).resize({width: process.platform === 'darwin' ? 18 : 32});
     tray = new Tray(trayImage); tray.setToolTip('LeafLoom'); tray.on('click', showWindow); tray.on('right-click', updateMenu); updateMenu();
     const t = text();

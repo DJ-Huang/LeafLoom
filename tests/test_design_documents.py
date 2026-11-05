@@ -71,8 +71,9 @@ class DesignDocumentTests(unittest.TestCase):
         document = self.current['document']
         document['name'] = 'Changed on disk'
         self.path.write_text(json.dumps(document))
-        with self.assertRaises(ConflictError):
-            self.service.read(self.directory)
+        current = self.service.read(self.directory)
+        self.assertEqual(current['document']['name'], 'Changed on disk')
+        self.assertEqual(current['history']['undo_label'], 'External file changes')
 
     def test_synced_vault_keeps_history_across_machine_roots(self):
         self.apply({'type': 'project.update', 'patch': {'name': 'Synced design'}})
@@ -110,18 +111,19 @@ class DesignDocumentTests(unittest.TestCase):
         self.assertEqual((self.root / 'Projects/Copy' / DOCUMENT_PATH).read_bytes(), original)
         self.assertEqual(self.service.read(self.directory)['revision'], self.current['revision'])
 
-    def test_synced_root_does_not_bypass_external_content_conflicts(self):
+    def test_synced_root_adopts_external_content_without_changing_owner(self):
         with self.service._database(self.current['document']['id']) as db:
             db.execute('UPDATE meta SET owner=? WHERE id=1', ('/another/computer/vault\n' + self.directory,))
         document = copy.deepcopy(self.current['document'])
         document['name'] = 'External edit'
         self.path.write_text(json.dumps(document))
         original = self.path.read_bytes()
-        with self.assertRaisesRegex(ConflictError, 'changed outside the studio'):
-            self.service.read(self.directory)
+        current = self.service.read(self.directory)
+        self.assertEqual(current['document'], document)
+        self.assertNotEqual(current['revision'], self.current['revision'])
         self.assertEqual(self.path.read_bytes(), original)
         with self.service._database(document['id']) as db:
-            self.assertEqual(db.execute('SELECT revision FROM meta WHERE id=1').fetchone()[0], self.current['revision'])
+            self.assertEqual(db.execute('SELECT owner FROM meta WHERE id=1').fetchone()[0], '/another/computer/vault\n' + self.directory)
 
     def test_synced_history_recovers_a_pending_save_without_changing_owner(self):
         with patch('vault_rag.design_documents.atomic_write', side_effect=OSError('interruption')):
@@ -702,6 +704,117 @@ class DesignDocumentTests(unittest.TestCase):
         with self.assertRaises(ConflictError):
             self.apply({'type': 'project.update', 'patch': {'name': 'Lost external edit'}})
         self.assertEqual(self.path.read_bytes(), raw)
+
+    def test_external_read_is_one_undoable_step_and_does_not_rewrite_file(self):
+        self.apply({'type': 'node.create', 'page_id': self.page, 'node': self.node()}, label='Add cat')
+        before = copy.deepcopy(self.current['document'])
+        external = copy.deepcopy(before)
+        external['pages'][0]['nodes'][0]['props']['text'] = 'External cat'
+        raw = json.dumps(external, indent=2).encode()
+        self.path.write_bytes(raw)
+        self.current = self.service.read(self.directory)
+        self.assertEqual(self.path.read_bytes(), raw)
+        self.assertEqual(self.current['history']['undo_label'], 'External file changes')
+        revision = self.current['revision']
+        self.service = DesignDocuments(self.studio)
+        self.assertEqual(self.service.read(self.directory)['revision'], revision)
+        self.assertEqual(self.service.history(self.directory)['total'], 2)
+        self.history('undo')
+        self.assertEqual(self.current['document'], before)
+        self.history('redo')
+        self.assertEqual(self.current['document'], external)
+        self.apply({'type': 'project.update', 'patch': {'name': 'Continued editing'}})
+        self.assertEqual(self.current['document']['pages'][0]['nodes'][0]['props']['text'], 'External cat')
+
+    def test_external_formatting_keeps_revision_and_redo(self):
+        self.apply({'type': 'project.update', 'patch': {'name': 'Studio change'}})
+        self.history('undo')
+        revision = self.current['revision']
+        raw = json.dumps(self.current['document'], indent=4).encode()
+        self.path.write_bytes(raw)
+        self.current = self.service.read(self.directory)
+        self.assertEqual(self.current['revision'], revision)
+        self.assertTrue(self.current['history']['can_redo'])
+        self.assertEqual(self.path.read_bytes(), raw)
+        self.assertEqual(self.service.history(self.directory)['total'], 1)
+        self.history('redo')
+        self.assertEqual(self.current['document']['name'], 'Studio change')
+
+    def test_external_change_follows_applied_branch_not_abandoned_checkpoint(self):
+        for index in range(51):
+            self.apply({'type': 'project.update', 'patch': {'name': f'Edit {index}'}})
+        self.history('undo')
+        self.history('undo')
+        self.apply({'type': 'project.update', 'patch': {'description': 'New branch'}})
+        before = copy.deepcopy(self.current['document'])
+        external = copy.deepcopy(before)
+        external['name'] = 'External branch'
+        self.path.write_text(json.dumps(external))
+        self.current = DesignDocuments(self.studio).read(self.directory)
+        self.history('undo')
+        self.assertEqual(self.current['document'], before)
+        self.history('redo')
+        self.assertEqual(self.current['document'], external)
+
+    def test_invalid_external_file_can_be_fixed_and_retried(self):
+        original = copy.deepcopy(self.current['document'])
+        for raw in (b'{"schemaVersion":', b'\xff', json.dumps({**original, 'pages': []}).encode(),
+                    json.dumps({**original, 'name': float('nan')}).encode()):
+            with self.subTest(raw=raw):
+                self.path.write_bytes(raw)
+                with self.assertRaises(ValueError):
+                    self.service.read(self.directory)
+                self.assertEqual(self.path.read_bytes(), raw)
+                with self.service._database(original['id']) as db:
+                    self.assertEqual(db.execute('SELECT revision FROM meta WHERE id=1').fetchone()[0], self.current['revision'])
+                    self.assertEqual(db.execute('SELECT COUNT(*) FROM operations').fetchone()[0], 0)
+        original['name'] = 'Finished edit'
+        self.path.write_text(json.dumps(original))
+        self.current = self.service.read(self.directory)
+        self.assertEqual(self.current['document']['name'], 'Finished edit')
+
+    def test_external_page_projection_is_rejected_without_losing_history(self):
+        external = copy.deepcopy(self.current['document'])
+        external['pages'][0]['loaded'] = False
+        raw = json.dumps(external).encode()
+        self.path.write_bytes(raw)
+        with self.assertRaisesRegex(ValueError, 'complete document'):
+            self.service.read(self.directory)
+        self.assertEqual(self.path.read_bytes(), raw)
+
+    def test_external_file_changing_during_adoption_is_preserved_and_retryable(self):
+        external = copy.deepcopy(self.current['document'])
+        external['name'] = 'First external edit'
+        self.path.write_text(json.dumps(external))
+        later = copy.deepcopy(external)
+        later['name'] = 'Later external edit'
+        raw = json.dumps(later).encode()
+        rebuild = self.service._history_document
+        def concurrent_edit(db, cursor):
+            before = rebuild(db, cursor)
+            self.path.write_bytes(raw)
+            return before
+        with patch.object(self.service, '_history_document', side_effect=concurrent_edit):
+            with self.assertRaisesRegex(ConflictError, 'changed while being read'):
+                self.service.read(self.directory)
+        self.assertEqual(self.path.read_bytes(), raw)
+        with self.service._database(external['id']) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM operations').fetchone()[0], 0)
+        self.current = self.service.read(self.directory)
+        self.assertEqual(self.current['document'], later)
+
+    def test_external_adoption_rolls_back_interrupted_history_transaction(self):
+        external = copy.deepcopy(self.current['document'])
+        external['name'] = 'External edit'
+        raw = json.dumps(external).encode()
+        self.path.write_bytes(raw)
+        with patch.object(self.service, '_finish', side_effect=OSError('interruption')):
+            with self.assertRaises(OSError):
+                self.service.read(self.directory)
+        self.assertEqual(self.path.read_bytes(), raw)
+        self.current = DesignDocuments(self.studio).read(self.directory)
+        self.assertEqual(self.current['document'], external)
+        self.assertEqual(self.service.history(self.directory)['total'], 1)
 
     def test_pending_commit_recovers_before_and_after_file_replace(self):
         for phase in ('before', 'after'):

@@ -16,6 +16,8 @@ Choose **Preview** at the top of the workbench to play the current page’s anim
 
 In **Preview**, choose **Present full screen** to hide the application chrome and fit the entire artboard to the screen without stretching. The current interaction continues without restarting. Move the pointer to the bottom to show page controls and **Exit full screen**, or press **Esc** to return to ordinary preview. You can then return to editing as usual. If native full screen is unavailable, presentation still fills the application window.
 
+Standard text and icon hyperlinks to public HTTP(S) websites work in Preview, Compare, full-screen presentation and presenter mode. In the desktop app, a click opens the system browser; in the web app it opens a new browser tab. Editing selects the element without opening its link. Downloaded HTML keeps normal browser link behavior.
+
 ### Present with a second display
 
 In the desktop app, open **Preview → Presenter mode**. Select the audience display, use **Identify displays** if needed, then start. A single display offers a separate rehearsal window. Projects with page groups start with the current group; choose **Present all pages** to include the rest. **Swap displays** exchanges the audience and controller during playback.
