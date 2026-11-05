@@ -151,4 +151,36 @@ class DatabaseTests(unittest.TestCase):
             args['expected_revision'] = 'stale'; self.assertTrue(call('vault_database_update', args)['isError'])
             args['expected_revision'] = self.c['revision']; self.assertFalse(call('vault_database_update', args).get('isError'))
 
+    def test_local_skill_task_writes_require_permission_and_current_versions(self):
+        app = create_app(self.config, self.runtime, start_background=False)
+        token = (self.config.directory / 'leafloom-skill-token').read_text().strip()
+        admin = (self.config.directory / 'auth-token').read_text().strip()
+        base = 'http://127.0.0.1:18080'
+        headers = {'Authorization': 'Bearer ' + token}
+        task = {'path': 'Media.base'}
+        with TestClient(app, base_url=base, client=('127.0.0.1', 12345)) as client:
+            def call(operation, args):
+                return client.post('/api/leafloom/' + operation, headers=headers, json=args)
+
+            self.assertEqual(client.post('/api/leafloom/task-config', json=task).status_code, 401)
+            self.assertEqual(client.post('/api/leafloom/task-config', json=task,
+                                         headers={'Authorization': 'Bearer ' + admin}).status_code, 401)
+            self.assertEqual(client.get('/api/status', headers=headers).status_code, 401)
+            self.assertEqual(client.post('/mcp', json={}, headers=headers).status_code, 401)
+            self.assertEqual(call('task-config', task).status_code, 403)
+            self.assertEqual(call('feishu-read', {'argv': ['docs', '+fetch']}).status_code, 403)
+            app.state.mcp_access.configure('local', enabled=True, write=False)
+            config = call('task-config', task).json()
+            args = {**task, 'command': {'type': 'record.create', 'title': 'Skill task'},
+                    'workspace_revision': config['workspace_revision'], 'expected_revision': config['revision'],
+                    'operation_id': 'skill-task'}
+            self.assertEqual(call('task-command', args).status_code, 403)
+            app.state.mcp_access.configure('local', enabled=True, write=True)
+            self.assertEqual(call('task-command', {**args, 'expected_revision': 'stale'}).status_code, 409)
+            result = call('task-command', args)
+            self.assertEqual(result.status_code, 200, result.text)
+            record = result.json()['path']
+            self.assertEqual(call('task-command', args).json()['path'], record)
+            self.assertEqual(call('task-record', {**task, 'record_path': record}).json()['path'], record)
+
 if __name__ == '__main__': unittest.main()

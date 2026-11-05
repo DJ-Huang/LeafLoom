@@ -68,11 +68,11 @@ update.error.check|请先检查更新，再下载安装。|Check for updates bef
 update.error.install|无法打开安装程序，请重新下载后重试。|Cannot open the installer. Download it again and retry.|インストーラーを開けません。再ダウンロードしてお試しください。
 mcp.connectionTitle|AI 连接|AI connections|AI 連携
 mcp.connectionDescription|管理本机 AI 与 ChatGPT 的知识库内容（含附件）、飞书和连接权限。|Manage workspace content (including attachments), Feishu and connection permissions for local AI clients and ChatGPT.|ローカル AI と ChatGPT の保管庫コンテンツ（添付を含む）、Feishu、接続の権限を管理します。
-mcp.title|MCP 访问权限|MCP access permissions|MCP アクセス権限
+mcp.title|本机 AI 与 MCP 权限|Local AI and MCP permissions|ローカル AI と MCP の権限
 mcp.scope|知识库权限覆盖关联目录内的笔记、设计和附件；附件可读取原始文件并进行管理。飞书权限单独控制，RAG 仍只使用已选目录。|Workspace access covers connected notes, designs and attachments, including original file reads and attachment management. Feishu access is separate; RAG uses selected folders only.|保管庫権限は接続フォルダー内のノート、デザイン、添付を対象とし、元ファイルの読み取りと添付管理を含みます。Feishu 権限は別で、RAG は選択範囲のみを使います。
 mcp.loading|正在读取连接权限…|Loading connection permissions…|接続権限を読み込み中…
 mcp.localRead|允许本机 AI 读取知识库内容（含附件）|Allow local AI to read workspace content (including attachments)|ローカル AI に保管庫コンテンツ（添付を含む）の閲覧を許可
-mcp.localReadHelp|启用后生成专用连接配置；旧配置继续保持原有读取范围。|Enabling generates a dedicated connection configuration. Older configurations retain their original reading scope.|有効にすると専用の接続設定を生成します。以前の設定の閲覧範囲は変わりません。
+mcp.localReadHelp|允许 LeafLoom Skill 读取知识库，也可为本机 MCP 生成专用连接配置。|Allow the LeafLoom skill to read the workspace. A separate connection configuration is available for local MCP.|LeafLoom スキルによる保管庫の閲覧を許可します。ローカル MCP には専用の接続設定を使用できます。
 mcp.localWrite|允许本机 AI 修改知识库内容（含附件）|Allow local AI to modify workspace content (including attachments)|ローカル AI に保管庫コンテンツ（添付を含む）の変更を許可
 mcp.writeHelp|笔记修改保留历史；附件上传保留同名文件，移动和回收先检查方案并保留恢复记录。默认关闭。|Note edits retain history. Attachment uploads preserve duplicate names; moves and trash require a preview and retain recovery records. Off by default.|ノート編集は履歴を保持します。添付アップロードは同名ファイルを保持し、移動と回収は計画確認後に復元記録を残します。初期状態は無効です。
 mcp.rotate|重新生成连接凭据|Regenerate connection credential|接続用認証情報を再生成
@@ -398,9 +398,7 @@ Wiki 导航目录|Wiki navigation folders|Wiki ナビゲーションのフォル
 垃圾箱、恢复已删除文件、永久清空|Trash, restore deleted files, empty permanently|ゴミ箱、削除したファイルの復元、完全削除
 处理中…|Working…|処理中…
 安装位置：|Installed at: |インストール先：
-安装或更新 wiki-search|Install or update wiki-search|wiki-search をインストール・更新
 安装技能|Install skill|スキルをインストール
-安装查询技能|Install search skill|検索スキルをインストール
 完成|Complete|完了
 实时编辑|Live editing|ライブ編集
 宽版阅读|Wide reading|幅広表示
@@ -578,7 +576,6 @@ model.firstDownload|首次准备需要联网下载较大的模型文件，耗时
 查看查询|View query|クエリを表示
 查看目录操作和文档版本，恢复需要的内容。|View file operations and note versions, and restore content.|ファイル操作とメモのバージョンを確認し、必要な内容を復元します。
 查看磁盘版本并合并|View saved version and merge|保存済みの内容を表示して統合
-查询技能已就绪。MCP 连接沿用现有配置。|Search skill is ready. Your MCP configuration is unchanged.|検索スキルの準備ができました。MCP は既存の設定を使います。
 标准宽度|Standard width|標準の幅
 核对磁盘版本后，使用当前编辑内容保存？|Save your current edits after reviewing the saved version?|保存済みの内容を確認し、現在の編集内容を保存しますか？
 根目录|Root folder|ルートフォルダー
@@ -668,7 +665,6 @@ model.firstDownload|首次准备需要联网下载较大的模型文件，耗时
 知识内容请使用侧栏的「知识检索」|Use Knowledge search in the sidebar to search note content.|本文の検索にはサイドバーの「知識検索」を使ってください。
 知识库|Knowledge space|知識庫
 知识库导航|Knowledge navigation|知識庫のナビゲーション
-知识库查询技能|Knowledge search skill|知識庫の検索スキル
 知识库根目录|Knowledge root folder|知識庫のルートフォルダー
 知识库目录|Knowledge folder|知識庫のフォルダー
 知识库设置|Settings|知識庫の設定
@@ -724,7 +720,6 @@ model.firstDownload|首次准备需要联网下载较大的模型文件，耗时
 规则目录|Rule folders|ルールのフォルダー
 规则目录、Wiki 导航目录、工时资料目录|Rule, Wiki and estimation folders|ルール、Wiki、工数資料のフォルダー
 让 AI 从你的本地知识库中查找依据。|Let AI find evidence in your knowledge space.|AI が知識庫から根拠を探せるようにします。
-让 AI 优先查询你的知识库，返回简短结论与原文链接。|Help AI search your notes first, with concise answers and source links.|AI がまず知識庫を検索し、簡潔な回答と原文へのリンクを返します。
 让资料之间产生连接|Connect the dots in your notes|資料のつながりを見つける
 设置|Settings|設定
 设置分类|Settings categories|設定の分類
@@ -2919,11 +2914,6 @@ Resume automatic directory checks before scanning|请先恢复目录检查，再
 Attachment directory scan paused|附件目录扫描已暂停|Attachment directory scan paused|添付ディレクトリの走査を一時停止しました
 Attachment scan directories changed|服务器扫描目录已变化，请重新检查|Server scan directories changed; check again|サーバーの走査対象が変更されました。再確認してください
 
-工作中枢技能|Work hub skill|ワークハブスキル
-通过 AI 记录多项目工作、管理本地任务并生成汇报；可选接入飞书采集与同步。|Capture multi-project work with AI, manage local tasks and create reports; optionally connect Feishu for imports and sync.|AI で複数プロジェクトの作業記録、ローカルタスク管理、レポート作成を行います。飛書の取り込み・同期は任意で接続できます。
-安装工作中枢技能|Install work hub skill|ワークハブスキルをインストール
-工作中枢技能已就绪。在新的 AI 聊天中使用 $work-hub；首次使用时创建工作中枢。|Work hub skill is ready. Use $work-hub in a new AI chat; the workspace is created on first use.|ワークハブスキルを利用できます。新しい AI チャットで $work-hub を呼び出すと、初回に作業用フォルダーを作成します。
-记录工作、管理本地任务与生成汇报，可选办公工具接入|Record work, manage local tasks and create reports, with optional office integrations|作業記録、ローカルタスク管理、レポート作成と任意のオフィス連携
 Unknown bundled skill|Unknown bundled skill|不明な同梱スキル
 
 wh.title|工作中枢配置|Work hub settings|ワークハブ設定
@@ -3024,3 +3014,6 @@ External file changes|外部文件修改|External file changes|外部ファイ�
 Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved|设计文件尚未写完或 JSON 格式有误，请完成外部编辑后重试，历史已保留。|Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved|デザインファイルが未完成か JSON が不正です。外部編集を完了して再試行してください。履歴は保持しています。
 Design history is incomplete; the external file and history were preserved|设计历史不完整，已保留外部文件和现有历史。|Design history is incomplete; the external file and history were preserved|デザイン履歴が不完全です。外部ファイルと既存の履歴は保持しています。
 External design changes require the complete document, not a page projection|外部修改必须使用完整设计文档，不能用单页投影替换项目。|External design changes require the complete document, not a page projection|外部変更には完全な設計文書が必要です。ページ投影でプロジェクトを置き換えることはできません。
+skill.leafloom.title|LeafLoom 技能|LeafLoom skill|LeafLoom スキル
+skill.leafloom.description|从本机检索知识库、管理任务，并了解如何使用设计工作台。|Search your local knowledge, manage tasks, and find Design Studio.|ローカルの知識を検索し、タスクを管理し、Design Studio の使い方を確認できます。
+skill.leafloom.ready|在新的 AI 对话中使用 $leafloom。读写权限可在本机 AI 设置中调整。|Use $leafloom in a new AI chat. Manage read and write access in local AI settings.|新しい AI チャットで $leafloom を使います。読み取りと書き込みの権限はローカル AI 設定で変更できます。

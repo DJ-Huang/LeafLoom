@@ -16,7 +16,7 @@ from vault_rag.local_state import ConflictError, LocalConfig
 from vault_rag.skill_install import skill_source
 
 
-SKILL = skill_source('work-hub').parent
+SKILL = skill_source('leafloom').parent
 spec = importlib.util.spec_from_file_location('work_hub_task_sync', SKILL / 'scripts/task_sync.py')
 merge = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(merge)

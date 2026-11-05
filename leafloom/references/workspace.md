@@ -1,6 +1,6 @@
 # 工作区结构与初始化
 
-未确认中枢位置时，采用 `vault_index_status` 的 `write_targets.work_hub`（缺少时为 `工作中枢`），相对当前 LeafLoom 根：
+未确认中枢位置时，采用 `status` 的 `write_targets.work_hub`（缺少时为 `工作中枢`），相对当前 LeafLoom 根：
 
 ```text
 工作中枢/
@@ -14,10 +14,10 @@
 
 ## 初始化
 
-1. `vault_index_status` 定位当前根和权限；`vault_list_directory` 检查中枢是否存在。相同管理结构直接复用；同名目录含无关内容时先说明并确定位置，不能覆盖。Skill 安装本身不会创建用户资料。
-2. 用 `vault_create_folder` 在已存在父目录中逐级创建缺失目录。用 `vault_database_update` 创建 `工作中枢/工作台.base`，`command: {type: create, folder: 工作中枢/数据}`，保留当前 `workspace_revision` 与创建 `operation_id`。
+1. `status` 定位当前根和权限；`directory-list` 检查中枢是否存在。相同管理结构直接复用；同名目录含无关内容时先说明并确定位置，不能覆盖。Skill 安装本身不会创建用户资料。
+2. 用 `directory-create` 在已存在父目录中逐级创建缺失目录。用 `task-command` 创建 `工作中枢/工作台.base`，`command: {type: create, folder: 工作中枢/数据}`，保留当前 `workspace_revision` 与创建 `operation_id`。
 3. 读取随 Skill 安装的 [数据库模板](../assets/workspace.base)。该文件的字段、显示名、视图、过滤条件和任务角色是初始结构。通过 `field.set`、`view.update/add/remove` 建立相同结构；每次使用最新配置版本及服务返回的视图 ID，不假设生成 ID 等于模板 ID。模板无项目预设；不要复制其他用户的项目或来源配置。
-4. 数据库工具不支持模板导入且本地根确实可访问时，也可在首次创建、目标不存在的前提下使用模板创建数据库文件；应先创建数据目录，将 `leafloom.folder` 改为实际相对位置，并通过 `vault_database(config/query)` 验证。不能根据远端服务返回的路径假定本客户端可直接访问该主机。
+4. 数据库工具不支持模板导入且本地根确实可访问时，也可在首次创建、目标不存在的前提下使用模板创建数据库文件；应先创建数据目录，将 `leafloom.folder` 改为实际相对位置，并通过 `task-config` 和 `task-query` 验证。不能根据远端服务返回的路径假定本客户端可直接访问该主机。
 5. 保持现有检索勾选。工作中枢需要直接文件/数据库查询，无需放入通用 RAG。在已有 Git 知识库且用户沿用工作资料不上传约定时，先添加精确目录忽略规则；不要自动提交或推送。新用户的同步约定不明确时，只说明当前情况，不能替其改变同步策略。
 
 办公软件偏好独立保存在中枢的 `配置.md`，见 [办公软件配置](settings.md)。读取设置不初始化数据库；用户保存软件选择只创建所需目录和配置笔记，不生成工作事项。
@@ -58,6 +58,6 @@
 
 ## 写入和查询
 
-`record.create` 根据视图的明确等值条件预填 `record_type`；传入 `view_id` 与显式值，创建返回路径后用 `vault_read_note` / `vault_update_note` 保存正文。保留返回的记录版本、配置版本、工作区版本；正文更新后旧 `record_revision` 已失效。
+`record.create` 根据视图的明确等值条件预填 `record_type`；传入 `view_id` 与显式值，创建返回路径后用 `note-read` / `note-update` 保存正文。保留返回的记录版本、配置版本、工作区版本；正文更新后旧 `record_revision` 已失效。
 
-先按类型、项目和日期用数据库视图/`vault_query` 缩小范围，再分页读取相关正文。多选项目用 `contains` 条件过滤；搜索框只查标题和元数据，不能冒充全文搜索，正文需读取或在已确认本地目录定向查找。待确认事项单独列出。报告总工时按稳定事项 ID 汇总，任务、采集批次与原文快照不重复算工作量。
+先按类型、项目和日期用数据库视图/`note-query` 缩小范围，再分页读取相关正文。多选项目用 `contains` 条件过滤；搜索框只查标题和元数据，不能冒充全文搜索，正文需读取或在已确认本地目录定向查找。待确认事项单独列出。报告总工时按稳定事项 ID 汇总，任务、采集批次与原文快照不重复算工作量。

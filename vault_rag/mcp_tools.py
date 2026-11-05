@@ -727,20 +727,7 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
     if feishu is not None:
         async def feishu_call(ctx, operation, *, write=False):
             def secured():
-                # Scope files and execution to the live authenticated credential, not chat arguments.
-                with access.lock, feishu.lock:
-                    who = principal(ctx)
-                    access.require(who, resource='feishu', write=write)
-                    owner = access.file_owner(who)
-                    def source_check(source):
-                        access.require(who, resource='workspace')
-                        if str(config.root) != source['root']:
-                            raise PermissionError('Connected directory changed; import the file again')
-                        if not config.path_for(source['path']).is_file():
-                            raise FileNotFoundError('Connected source file is no longer available')
-                    def require_high_risk():
-                        access.require(who, resource='feishu', write=True, high_risk=True)
-                    return operation(owner, source_check, require_high_risk, who)
+                return feishu.authorized_call(config, access, lambda: principal(ctx), operation, write=write)
             return await call(ctx, secured, resource='feishu', write=write)
 
         @tool(external=True)

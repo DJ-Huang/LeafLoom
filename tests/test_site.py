@@ -55,7 +55,7 @@ class WebsiteTests(unittest.TestCase):
                     self.assertIn(f'/LeafLoom/assets/{lang}/showcase-{shot}.jpg', content)
                 self.assertIn(f'/LeafLoom/docs/{lang}/design-studio/', content)
                 self.assertIn(f'/LeafLoom/docs/{lang}/attachments/', content)
-                self.assertIn('LeafLoom/blob/main/work-hub/SKILL.md', content)
+                self.assertIn('LeafLoom/blob/main/leafloom/SKILL.md', content)
                 self.assertIn(f"/LeafLoom/assets/{lang}/showcase-markdown.png", content)
                 self.assertIn("LeafLoom-1.2.3-windows-x64-setup.exe", content)
                 self.assertIn("LeafLoom-1.2.3-macos-arm64.dmg", content)

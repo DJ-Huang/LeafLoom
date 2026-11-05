@@ -44,7 +44,7 @@ The public help center has 39 task guides and five full guide/release references
 - [AI assistant implementation](AI_ASSISTANT.md)
 - [Complete MCP tools, credentials, note workflows and the two general file tools](MCP.md)
 - [Feishu / Lark connection, CLI ownership and MCP tools](FEISHU.md)
-- [Work hub Skill: platform-independent work records, office preferences, local tasks, reports and optional source integrations](WORK_HUB.md)
+- [LeafLoom skill work hub: work records, local tasks, reports and optional source integrations](WORK_HUB.md)
 - [Local access and privacy boundaries](SECURITY.md)
 - [Architecture and workflow](ARCHITECTURE.md)
 - [Screenshots and public media](MEDIA.md)

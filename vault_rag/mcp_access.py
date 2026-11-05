@@ -1,4 +1,4 @@
-"""Revocable, MCP-only credentials. Browser/API credentials never grant workspace access."""
+"""Revocable MCP credentials and shared local AI access policy."""
 from __future__ import annotations
 
 import hashlib

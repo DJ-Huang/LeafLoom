@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Unify local knowledge search, task management, work capture and Design Studio guidance in the installable `leafloom` skill. Its helper calls the running app directly with local AI permissions and version checks.
+
 - Support standard public website hyperlinks on text and SVG icons in Design Studio preview, comparison and presentation. Relay trusted clicks to the desktop browser opener without enabling sandbox popups; keep edit and exported HTML behavior.
 
 - Fix stale Miaoda publication refreshes after the initial release advances to uploads or a terminal state; retry temporary status-read failures and allow interrupted uploads to resume after a complete exact-name check confirms the file is absent.

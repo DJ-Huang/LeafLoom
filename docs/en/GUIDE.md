@@ -2,15 +2,15 @@
 
 [What changed in 0.1.8 and how to upgrade](RELEASE_NOTES_0.1.8.md)
 
-Use **Settings → Skill** to install or update the bundled `wiki-search` skill.
+Install or update the bundled **LeafLoom skill** from **Settings → Skill**. In a new local Codex chat, use `$leafloom` to search your knowledge, manage project tasks or capture work. For design, it guides you to **Design Studio**. The skill calls the running app directly. Enable local AI reading in **Settings → AI integration**, and enable writing when you want it to save changes.
 
-The same AI integration page also installs **work-hub** to `~/.agents/skills/work-hub/`. Start a new Codex chat with `$work-hub` to capture multi-project work, manage local tasks and create reports without connecting an office platform. Data stays in the connected vault's `工作中枢/` folder. Feishu imports, page mirroring and remote task sync are optional; GitLab activity imports remain available for selected repositories. Other office platforms are not yet integrated, but supplied text and exports can be archived. Existing Feishu records are reused and missing generic fields are added only as needed, preserving notes and sync history. Remote writes require an explicit request; hours use recorded values. See [Work hub](../WORK_HUB.md).
+Work records and reports use the connected vault's `工作中枢/` by default. Optional Feishu/Lark and GitLab workflows load when requested. See [Work hub](../WORK_HUB.md).
 
 **Choose your office platforms:** Open **Settings → Skill → Work hub settings** and check all the platforms you use, such as Feishu/Lark and Notion together. Each change saves immediately. Automatic source selection and local-only mode are separate, exclusive choices; clearing every platform restores automatic selection. DingTalk, WeCom and Notion currently save preferences only and are marked not integrated. Sign-in and permissions are separate. In chat, say “use Feishu and Notion” or “add Notion.” Both edit `工作中枢/配置.md`; old single selections are read compatibly. Multiple platforms do not expand collection scope or broadcast task writes. Reload settings after chat edits. Change the hub directory under **Templates and writing → Default write locations** without moving existing notes.
 
 Weekly and biweekly reports use `工作中枢/模板/周报模板.md` when present.
 
-To read the original journal, ask work-hub to mirror a Feishu page and its children into `工作中枢/工作目录/`. This on-demand, one-way sync uploads images/videos to the attachment server and rewrites references only after verification, including videos over 500 MB. It preserves local edits and copies of removed source pages, with checkpoints for recovery. Requires local LeafLoom, Python 3.11+ and an authenticated `lark-cli`; see [Work hub](../WORK_HUB.md).
+To read the original journal, ask `$leafloom` to mirror a Feishu page and its children into `工作中枢/工作目录/`. This on-demand, one-way sync uploads images/videos to the attachment server and rewrites references only after verification, including videos over 500 MB. It preserves local edits and copies of removed source pages, with checkpoints for recovery. Requires local LeafLoom, Python 3.11+ and an authenticated `lark-cli`; see [Work hub](../WORK_HUB.md).
 
 [English](GUIDE.md) · [中文](../zh-CN/GUIDE.md) · [日本語](../ja/GUIDE.md)
 

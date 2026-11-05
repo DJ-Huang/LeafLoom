@@ -41,7 +41,7 @@ Keep the root limited to product entry points, dependency manifests and project 
 | `docs/` | User guides, architecture and validation instructions |
 | `assets/` | Brand assets, public screenshots and reusable promotional media |
 | `site/` | Independent public website templates and styles; see [website maintenance](docs/WEBSITE.md) |
-| `templates/`, `wiki-search/` | Ignore template and installable search skill |
+| `templates/`, `leafloom/` | Ignore template and installable LeafLoom skill |
 
 `uv.lock` locks Python dependencies for both supported platforms; `web/package-lock.json` locks the frontend. Generated catalogs and public media are intentionally tracked so a checkout includes documentation and product resources.
 

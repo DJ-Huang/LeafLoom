@@ -7,23 +7,26 @@ from vault_rag.local_state import atomic_write
 
 _lock = threading.Lock()
 _SKILLS = {
-    # Keep the original search skill's location and no-argument API compatible.
-    'wiki-search': ('.agent', ('SKILL.md',)),
-    'work-hub': ('.agents', ('SKILL.md', 'references/workspace.md',
+    'leafloom': ('.agents', ('SKILL.md', 'references/knowledge.md', 'references/tasks.md',
+                           'references/work-hub.md', 'references/workspace.md',
                            'references/imports.md', 'references/tasks-reports.md',
                            'references/feishu.md', 'references/gitlab.md', 'references/settings.md',
                            'references/feishu-sync.md', 'assets/workspace.base',
-                           'scripts/task_sync.py', 'scripts/feishu_sync.py')),
+                           'scripts/leafloom.py', 'scripts/task_sync.py', 'scripts/feishu_sync.py')),
 }
 
 
+def is_bundled_skill(name: str) -> bool:
+    return name in _SKILLS
+
+
 def skill_spec(name):
-    if name not in _SKILLS:
+    if not is_bundled_skill(name):
         raise ValueError('Unknown bundled skill')
     return _SKILLS[name]
 
 
-def skill_source(name: str = 'wiki-search') -> Path:
+def skill_source(name: str = 'leafloom') -> Path:
     skill_spec(name)
     repository = Path(__file__).resolve().parents[1] / name / 'SKILL.md'
     if repository.is_file():
@@ -49,7 +52,7 @@ def checked_target(name, relative='SKILL.md') -> Path:
     return target
 
 
-def skill_target(name: str = 'wiki-search') -> Path:
+def skill_target(name: str = 'leafloom') -> Path:
     return checked_target(name)
 
 
@@ -69,7 +72,7 @@ def resources(name):
     return result
 
 
-def skill_status(name: str = 'wiki-search') -> dict:
+def skill_status(name: str = 'leafloom') -> dict:
     target = skill_target(name)
     files = resources(name)
     installed = target.is_file()
@@ -77,7 +80,7 @@ def skill_status(name: str = 'wiki-search') -> dict:
             'up_to_date': installed and all(p.is_file() and p.read_bytes() == data for p, data in files)}
 
 
-def install_skill(name: str = 'wiki-search') -> dict:
+def install_skill(name: str = 'leafloom') -> dict:
     with _lock:
         files = resources(name)  # Preflight every source and destination before writing.
         backups = []
