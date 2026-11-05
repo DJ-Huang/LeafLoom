@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+- Fix Design Studio image copying on Electron 44 by using the asynchronous PNG ClipboardItem API; verify the actual preload/IPC/system clipboard path with transparent image readback.
+
+- Add an Image source card and native source-image copying in Design Studio. Single-image Copy shortcuts preserve original dimensions/transparency, respect bindings and variants, and paste as PNG into apps and notes without changing the project.
+
 - Add a borderless left-hand outline for Markdown notes: collapse/expand in place, fold individual heading subtrees by clicking the title or arrow, follow the current section in blue, jump near the top in page/source modes, update headings while editing and use an overlay in narrow panes.
 
 - Group the Design Studio page list into collapsible folders with page counts. Add or move multiple pages, rename/merge folders and ungroup pages using existing page groups and undo history.
