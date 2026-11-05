@@ -20,7 +20,7 @@ Full access covers all connected Markdown, TXT and HTML/HTM notes, including arc
 
 Every mutation checks the workspace revision; existing notes also require their read-time version. Moves and deletes first return an impact preview; history and Trash can be previewed and restored. MCP reads saved files, preserves conflicting editor drafts and reports pending indexing separately from successful saves. The browser assistant keeps its proposal workflow for notes. Managed designs use `design_document`, `design_operations` and the design history, asset, library and export tools with the connection's read/write permissions.
 
-**Settings → Skill → Install skill** installs `wiki-search` instructions and does not configure MCP. See the [complete tool contract](../../MCP.md).
+Install **LeafLoom skill** from **Settings → Skill**, then use `$leafloom` in a local Codex chat. It connects directly to the running app for knowledge search and task operations. For MCP clients, see the [tool contract](../../MCP.md).
 
 ### AI asset search and delivery
 

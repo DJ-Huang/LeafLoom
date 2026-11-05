@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from vault_rag.skill_install import skill_source
 
-spec = importlib.util.spec_from_file_location('feishu_sync', skill_source('work-hub').parent / 'scripts/feishu_sync.py')
+spec = importlib.util.spec_from_file_location('feishu_sync', skill_source('leafloom').parent / 'scripts/feishu_sync.py')
 sync = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sync)
 

@@ -122,6 +122,25 @@ class Feishu:
             self.options.update({k: saved.get('config', {}).get(k, v) for k, v in self.options.items()})
             self.verification = saved.get('verification', self.verification)
 
+    def authorized_call(self, config, access, principal, operation, *, write=False, owner=None):
+        with access.lock, self.lock:
+            who = principal()
+            access.require(who, resource='feishu', write=write)
+            if owner is None:
+                owner = access.file_owner(who)
+
+            def source_check(source):
+                access.require(who, resource='workspace')
+                if str(config.root) != source['root']:
+                    raise PermissionError('Connected directory changed; import the file again')
+                if not config.path_for(source['path']).is_file():
+                    raise FileNotFoundError('Connected source file is no longer available')
+
+            def require_high_risk():
+                access.require(who, resource='feishu', write=True, high_risk=True)
+
+            return operation(owner, source_check, require_high_risk, who)
+
     def _save(self):
         atomic_write(self.path, json.dumps(self.status(), ensure_ascii=False).encode('utf-8'))
         private_file_mode(self.path)

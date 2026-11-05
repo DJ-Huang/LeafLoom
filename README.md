@@ -33,7 +33,7 @@ Check [supported systems and signing status](#get-started) before installing.
 | **Markdown + HTML** | Write Markdown with tables and tasks, and open local HTML pages with their styles, images and supported scripts inside the same workspace. |
 | **Game screens you can edit** | Use [Design Studio](docs/DESIGN_STUDIO.md) to organize projects and assets, combine reusable pages/components, add scripts and animation, undo human or AI edits, and export portable HTML. |
 | **Answers you can trace** | Use keyword search, Wiki navigation and optional local BGE-M3 semantic retrieval. Follow results back to the original notes. |
-| **AI in your workflow** | Connect MCP clients, install the bundled `wiki-search` Skill, or use AI Chat beside your notes. The built-in chat previews edits; authorized MCP clients can save directly with history. |
+| **AI in your workflow** | Connect MCP clients, install the bundled `$leafloom` Skill, or use AI Chat beside your notes. The built-in chat previews edits; authorized MCP clients can save directly with history. |
 | **AI-ready assets** | Search existing local/NAS asset metadata, inspect real previews and deliver originals to a stable local path for your AI to use. Optional local semantic ranking stays separate from note search. [Workflow](docs/ASSET_WORKFLOWS.md). |
 | **Your knowledge in ChatGPT** | Connect the desktop app through its built-in Tunnel client to search and read local notes from a ChatGPT conversation. |
 
@@ -81,7 +81,7 @@ Use your knowledge where you already work, with source references you can check.
 | --- | --- |
 | **MCP** | Connect clients such as Codex, Cursor or Claude Code to the local HTTP MCP endpoint at `http://127.0.0.1:18080/mcp` (default port). Enable full access to find, create, edit, organize and recover connected notes. RAG keeps your selected scope; writing starts disabled. |
 | **Feishu / Lark** | Connect an externally configured lark-cli to verify your account and let MCP clients work with documents and Base records. Local and Tunnel permissions are separate and start disabled. [Setup](docs/en/GUIDE.md#optional-feishu--lark-connection). |
-| **Skills** | Install [`wiki-search`](wiki-search/SKILL.md) for sourced retrieval or [`work-hub`](work-hub/SKILL.md) for work capture, local tasks and reports, with multi-select office preferences and optional Feishu imports and sync from **Settings → AI integration**. Configure MCP separately. [Work hub guide](docs/WORK_HUB.md). |
+| **Skill** | Install [`$leafloom`](leafloom/SKILL.md) from **Settings → Skill**. Search local knowledge, manage tasks and work records, or find Design Studio. The skill calls the running app directly. |
 | **AI Chat** | Requires a separately installed, signed-in Codex or Codely CLI. Discuss a note or selection and open cited sources. Preview suggested changes, accept them into a draft, then save when ready. |
 
 [Set up AI Chat, MCP and Skills](docs/en/AI.md)

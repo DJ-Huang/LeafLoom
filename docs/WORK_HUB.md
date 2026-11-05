@@ -1,6 +1,6 @@
 # Work hub Skill · 工作中枢 · ワークハブ
 
-`work-hub` is a bundled conversation workflow, installed from **Settings → AI integration → Work hub skill**. Its instructions, references, database template and offline task comparison helper are copied to `~/.agents/skills/work-hub/`. Installation reports the actual destination, checks every shipped resource, backs up modified files before updates, and preserves unrelated personal files. `wiki-search` retains its existing destination and API.
+Install **LeafLoom skill** from **Settings → Skill**. Its work hub workflow, database template and optional helpers are bundled under `~/.agents/skills/leafloom/`.
 
 ## 能力边界 / Capabilities / 機能の境界
 
@@ -11,7 +11,7 @@
 | 页面树与图片视频镜像 / Page-tree and media mirror / ページツリー・メディア同期 | 飞书、本机 LeafLoom、Python 3.11+、lark-cli 与附件服务器 / Feishu, local LeafLoom, Python, lark-cli, attachment server |
 | 指定提交与 MR 采集 / Selected commits and MRs / 指定コミット・MR の取得 | 可选 GitLab 读取能力 / optional GitLab read access / 任意の GitLab 読み取り接続 |
 
-The core is independent of office platforms and continues to use LeafLoom for storage. Platform details live in on-demand [Feishu](../work-hub/references/feishu.md) and [GitLab](../work-hub/references/gitlab.md) references. Other office platforms are not implemented yet; supplied text or exports can still be archived without pretending to access their original source. There is no connector runtime, automatic collection or new permission grant.
+The core is independent of office platforms and continues to use LeafLoom for storage. Platform details live in on-demand [Feishu](../leafloom/references/feishu.md) and [GitLab](../leafloom/references/gitlab.md) references. Other office platforms are not implemented yet; supplied text or exports can still be archived without pretending to access their original source. There is no connector runtime, automatic collection or new permission grant.
 
 核心继续使用 LeafLoom 存储；平台由用户点名、链接或已确认来源配置确定。其他办公平台暂未接入，可整理提供的文字或导出文件，不默认切换到飞书。本地流程不探测办公连接。
 
@@ -25,11 +25,11 @@ Check multiple office platforms under **Settings → Skill → Work hub settings
 
 設定画面で利用するオフィス製品を複数チェックでき、チャットでも追加・変更できます。自動選択・ローカルのみは製品選択と排他です。旧単一選択、個人メモ、未知の設定を保持し、未連携製品の表示も維持します。
 
-The configuration path is `<hub>/配置.md`, with `work_hub: {schema_version: 1, office_providers: [feishu, notion]}` in YAML frontmatter. The hub comes from the current vault's `write_targets.work_hub`, defaulting to `工作中枢`; adjust it under **Templates and writing → Default write locations** without moving existing data. Existing unrelated fields, comments, body text and future options are preserved. See the [configuration workflow](../work-hub/references/settings.md).
+The configuration path is `<hub>/配置.md`, with `work_hub: {schema_version: 1, office_providers: [feishu, notion]}` in YAML frontmatter. The hub comes from the current vault's `write_targets.work_hub`, defaulting to `工作中枢`; adjust it under **Templates and writing → Default write locations** without moving existing data. Existing unrelated fields, comments, body text and future options are preserved. See the [configuration workflow](../leafloom/references/settings.md).
 
 ## 使用方式
 
-在新的 Codex 聊天中输入 `$work-hub`，启用专用工作记录聊天。工作记录、本地任务与汇报无需飞书连接。以后可以直接说“今天定位了某项目的性能问题，花了两小时”“导入这篇飞书文档”“整理今天指定群的聊天和我参加的会议”“同步飞书任务”或“生成本周周报”。普通问答和其他聊天不会自动归档；只有实际写入成功后才报告已记录。
+在新的 Codex 聊天中输入 `$leafloom`，启用专用工作记录聊天。工作记录、本地任务与汇报无需飞书连接。以后可以直接说“今天定位了某项目的性能问题，花了两小时”“导入这篇飞书文档”“整理今天指定群的聊天和我参加的会议”“同步飞书任务”或“生成本周周报”。普通问答和其他聊天不会自动归档；只有实际写入成功后才报告已记录。
 
 中枢默认位于当前知识库根下的 `工作中枢/`，包含 `工作台.base`、`数据/`、`来源归档/`、`汇报/`。工作事项、项目档案、任务、采集批次使用独立视图，共享 Markdown 记录。项目列为受维护的多选字段，保存稳定项目 ID；关联多个项目仍是一条事项，工时按事项 ID 去重。Skill 按项目档案和具体来源判断关联，候选项目留待补证据。工时只采用明确记录，默认周报周期为周一至周日。
 
@@ -41,7 +41,7 @@ The configuration path is `<hub>/配置.md`, with `work_hub: {schema_version: 1,
 
 ## English quick start
 
-After installation, start a new Codex chat with `$work-hub` and designate it as your work-recording chat. Describe work naturally, manage local tasks or ask for a weekly report without an office connection. Optionally provide a Feishu link, import selected chats/meetings, pull remote tasks or collect specified GitLab activity. The hub is created on first authorized use under the connected vault; installation alone does not create user notes or configure MCP.
+After installation, start a new Codex chat with `$leafloom` and designate it as your work-recording chat. Describe work naturally, manage local tasks or ask for a weekly report without an office connection. Optionally provide a Feishu link, import selected chats/meetings, pull remote tasks or collect specified GitLab activity. The hub is created on first authorized use under the connected vault; installation alone does not create user notes or configure MCP.
 
 One activity can select several projects without duplicating its hours. Project profiles and source evidence guide automatic classification; uncertain associations remain candidates. Imports retain available original text and structured outcomes with coverage limits. Weeks run Monday–Sunday, hours are actual recorded values, and historical material is referenced on demand. Task synchronization preserves local notes and detects concurrent edits; remote writes require an explicit request.
 
@@ -49,7 +49,7 @@ Weekly and biweekly reports use the hub's `模板/周报模板.md` when present;
 
 ## 日本語の使い方
 
-インストール後、新しい Codex チャットで `$work-hub` を呼び出し、作業記録用のチャットとして使います。オフィス製品に接続せず、作業を自然に説明し、ローカルタスクや週報を管理できます。飛書文書・チャット・会議の取り込み、リモートタスク同期、指定 GitLab 活動の取得は必要時に接続します。インストール自体はメモや MCP 設定を作成しません。初回利用時に接続中の知識庫の `工作中枢/` を作成します。
+インストール後、新しい Codex チャットで `$leafloom` を呼び出し、作業記録用のチャットとして使います。オフィス製品に接続せず、作業を自然に説明し、ローカルタスクや週報を管理できます。飛書文書・チャット・会議の取り込み、リモートタスク同期、指定 GitLab 活動の取得は必要時に接続します。インストール自体はメモや MCP 設定を作成しません。初回利用時に接続中の知識庫の `工作中枢/` を作成します。
 
 一つの作業に複数プロジェクトを選択でき、工数は重複集計しません。プロジェクト情報と出典に基づいて分類し、不明な関連付けは候補として残します。原文の文字情報と整理結果、取得範囲を保存します。週報は月曜〜日曜、工数は実績のみです。飛書への書き戻しは明示的な依頼に基づき、個人メモと競合する変更を保護します。
 
@@ -75,10 +75,10 @@ Checkpoints live under `.vault-rag/work-hub-sync/`. Repeated runs reuse media re
 ## API and package contract
 
 - `GET /api/work-hub/settings?root=<vault>` reads the shared preference without creating notes; `PUT /api/work-hub/settings` saves the nonempty `office_providers` list with `root`, `workspace_revision` and the last `revision` (empty for a missing note). Writes require the normal session/CSRF checks and reject stale file/workspace versions. Legacy `office_provider` notes and single-value requests remain readable; scalar writes are rejected once multiple platforms are configured, preventing silent loss. Multi-selection responses expose `office_provider: null` for legacy clients. No new MCP tool is needed: the Skill uses existing note tools on the same file.
-- `GET /api/skills/work-hub` returns `name`, actual `path`, `installed`, and `up_to_date` across all shipped resources.
-- `POST /api/skills/work-hub/install` uses the normal authenticated, CSRF-protected local installation flow; the response also includes `backup` and `backups` paths.
+- `GET /api/skills/leafloom` returns `name`, actual `path`, `installed`, and `up_to_date` across all shipped resources.
+- `POST /api/skills/leafloom/install` uses the normal authenticated, CSRF-protected local installation flow; the response also includes `backup` and `backups` paths.
 - Unknown skill names are rejected. Destination symlinks and non-directory parents are rejected before writes. A partial installation cannot report up to date; a later retry repairs missing resources without deleting personal files.
-- The wheel includes the complete `work-hub/` bundle. The core calls existing workspace/database tools; optional adapters use their connected source tools. It adds no background collector and grants no MCP or Feishu permissions.
+- The wheel includes the complete `leafloom/` bundle. The core calls the local LeafLoom API with the app's local AI permissions and uses the same version checks as other clients.
 - Database records are readable independently of RAG selection. The Skill preserves the existing retrieval and sharing choices; it does not make a new directory private merely by creating it.
 
 The offline `scripts/task_sync.py` accepts normalized `baseline`, `local`, and `remote` task objects on stdin and emits the unchanged `ok`, `pull`, `push`, `conflicts`, `agreed` and `incomplete` result fields. Omitted `schema_version` (or `1`) retains the original `{timestamp, is_all_day}` due validation. Explicit `schema_version: 2` accepts a provider-validated JSON object or null for due, compares JSON structure without platform-specific interpretation, and preserves timezone/all-day metadata. Unknown protocol versions are rejected. Snapshot fields remain `summary`, `description`, `assignees`, `due`, `status` (`todo`/`done`); absent fields are incomplete, and null due is an explicit clear. Adapters must validate and consistently project all three snapshots before comparison. No script output applies a local or remote update.
