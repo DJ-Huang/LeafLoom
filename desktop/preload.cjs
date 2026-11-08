@@ -4,6 +4,7 @@ if (process.isMainFrame) {
   const invoke = (name, ...args) => ipcRenderer.invoke('leafloom:' + name, ...args);
   contextBridge.exposeInMainWorld('leafloomDesktop', Object.freeze({
     appInfo: () => invoke('info'),
+    onCalendarOpen: callback => {const listener=(_event,value)=>callback(value);ipcRenderer.on('leafloom:calendar-open',listener);return ()=>ipcRenderer.removeListener('leafloom:calendar-open',listener);},
     writeClipboardText: text => invoke('clipboard-write-text', text),
     writeClipboardImage: png => invoke('clipboard-write-image', png),
     publishDesign: jobId => invoke('design-publish', jobId),

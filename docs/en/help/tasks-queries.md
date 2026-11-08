@@ -19,6 +19,12 @@ Try the demo’s sample views with fictional tasks first.
 
 Use **New database** in the directory heading/menu to create a `.base` configuration and choose its record folder. Table, list, board, gallery and draggable timeline views share the same Markdown notes. Configure typed fields, filters, sort, grouping and layout in the toolbar; click a record to edit its properties and body. Use **Insert database** in the editor to embed a stable view. Removing a field/view keeps note data; recycling a record moves the original note to recoverable trash. [Complete database instructions](../GUIDE.md#note-databases).
 
+### Calendar notebook
+
+Use **Calendar notebook** in the sidebar to schedule linked tasks separately from deadlines, write daily notes and enable reminders. [Calendar guide](../GUIDE.md#calendar-notebook).
+
+For two computers, sync `Calendar/LeafLoom/` inside the vault and keep `.vault-rag` excluded. Use **Sync and conflicts** to review competing versions, and enable reminders separately on each computer. See the calendar guide above for upgrade and sync steps.
+
 ## What to expect
 
 Views present existing notes. Moving tasks or editing properties changes their source files.

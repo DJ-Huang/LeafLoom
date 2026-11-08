@@ -351,6 +351,7 @@ class Runtime:
         self.publish('status',status=self.status())
 
     def publish(self,kind,paths=None,**extra):
+        if kind in ('files','config') and getattr(self,'calendar',None):self.calendar.wake.set()
         return self.events.publish(kind,root=self.config.data.get('root'),config_revision=self.config.data.get('revision'),
                                    catalog_version=self.catalog.version,paths=paths or [],**extra)
 
@@ -369,6 +370,7 @@ class Runtime:
         with self.activity_lock:return self.foreground==0 and time.monotonic()-self.last_activity>=self.idle_seconds
 
     def files_changed(self,*paths):
+        if getattr(self,'calendar',None):self.calendar.wake.set()
         with self.pending_lock:self.pending.update(paths)
         self.event.set()
 
@@ -378,6 +380,7 @@ class Runtime:
         with self.pending_lock:return bool(self.pending or self.catalog_updating is self.catalog)
 
     def configuration_changed(self):
+        if getattr(self,'calendar',None):self.calendar.wake.set()
         self.rag.cancel();self.metadata_stop.set()
         if self.catalog.root!=self.config.data.get('root'):
             if self.watcher_stop:self.watcher_stop.set()

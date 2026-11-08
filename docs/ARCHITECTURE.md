@@ -389,3 +389,21 @@ DUFS 的账号和路径权限在附件服务器端管理；LeafLoom 继续使用
 `design-image-source` resolves a single image (including imported img nodes and image-root component instances) against canonical bindings, selected variant values and component overrides in runtime order. It only constructs project-local paths; bytes use the existing root-bound media endpoint. The source card sits outside the inspector’s disabled fieldset so locked/read-only images remain copyable. No document operation, save or undo record is created.
 
 `image-clipboard` decodes the original, rasterizes to an intrinsic-size transparent PNG, and supplies a promised ClipboardItem during the user gesture. Desktop sessions use the trusted main-frame image clipboard bridge instead. Source/PNG bytes are bounded to 32 MiB and decoded pixels to 64 million. Repeated requests abort predecessors; project/root changes and unmount cancel pending work. Main-process PNG validation precedes native decoding and clipboard writing. Location copying remains explicit in the element menu and retains its shortcut for other/multiple selections. Focused text controls retain text copying.
+
+## 日历备忘录与提醒
+
+`calendar.py` 提供日历安排与本机提醒服务，`calendar_routes.py` 提供 `/api/calendar/*` 的日期范围／分页查询、命令、设置、每日笔记定位、删除恢复及提醒接口。`calendar_sync.py` 将知识库 `Calendar/LeafLoom/changes/<sha256>.json` 作为日历内容真源：安排、重复例外、完成、软删除、共享时区和截止日来源均由不可变变更文件表达。每个变更带父版本哈希、设备 ID 和实体快照；临时文件写入并 fsync 后以不覆盖方式发布。每次编辑独立文件，文件到达顺序和设备时钟不决定覆盖顺序。Resilio 只传输这些普通文件，`.vault-rag` 继续排除；不共享活动 SQLite，不增加外部日历服务或 MCP 工具。
+
+本地 `.vault-rag/calendar-local.sqlite3` 保存可重建的内容投影、版本图、操作回执，以及不可丢弃的本机提醒偏好、游标和投递历史。设备 ID 保存在应用配置目录的 `calendar-device.json`，不跟随知识库同步。提醒开关、汇总开关／时间、已读和投递记录不进入共享文件，新设备默认关闭提醒；时区和截止日来源则按知识库共享。对象 revision 是当前父版本集合的哈希；工作区 revision、对象 revision 和操作 ID 继续保护写入。发布的变更可携带不含笔记正文的操作回执，原设备可在发布后本地事务失败时恢复幂等重试。
+
+导入先校验文件名哈希、格式、相对路径与父依赖，依赖齐全后事务性更新投影。不同事项自然合并；同一事项有多个不同快照时保存所有分支，生成确定性的只读预览，并暂停该事项编辑和提醒。重复系列及“本次及以后”产生的分段属于同一实体，整组提交和选择，避免残留后续分段。`GET /api/calendar/sync` 返回本机读取状态与冲突版本，`POST /api/calendar/sync/resolve` 要求工作区及实体版本并以全部当前分支为父保存所选快照；不删除旧版本。相同内容的并发版本可自动合并，后来到达的不同分支再次提示。共享设置冲突暂停提醒。缺失依赖、已读文件丢失或校验失败时保留上一投影，暂停写入与提醒，恢复文件后可继续；当前不做变更文件清理。界面不将本机读取成功解释为其他设备已同步。
+
+旧 `.vault-rag/calendar.sqlite3` 首次使用时在写锁下通过 SQLite backup 导出到 `.vault-rag/calendar-backups/`，校验完整性与逐表内容后，确定性发布迁移记录，转移本机设置、回执和通知历史。失败可重复执行。成功后旧数据库保留并提高版本标记，让旧版应用拒绝写入；迁移前备份保留原 schema。原库和新本地库的更高 schema 版本均拒绝打开。恢复时共享内容必须保留整个 `Calendar/LeafLoom/`；若要保留本机提醒历史也须备份本地 SQLite。两端应先升级再迁移／同步；既有 Markdown、数据库和检索范围不批量修改。
+
+每日笔记只读定位与创建分开；`POST /api/daily` 新增可选 `date` 和 `workspace_revision`，空请求保持今天的行为。日历直接挂载共享 DocumentPane 与 document-state，保留正文草稿和撤销。任务关联以 `.base` 任务映射和原记录为完成状态真源，通过 Databases.command 写入；重复安排仅保存每次完成的例外。Files 的移动及回滚通知维护日历路径引用；外部移动只使用已有且唯一的记录 ID，不按标题猜测。
+
+后台调度随 ASGI lifespan 启停，文件／配置修改唤醒，最长 30 秒核对一次，临近触发时缩短等待。按日历时区计算日期与重复，全天日期保持原值，重复 DST 小时取第一次、不存在的时间向后顺延。仅处理当前知识库，持久游标避免重启重复生成；补查至多最近 30 天单项提醒。领取前重新核对事项及触发时间，取消远端完成、删除、改期或冲突后的旧待发送提醒，同时保留其他重复次数的提醒。每台设备独立去重，两台都开启时两台都发送。数据库元数据未就绪时保留游标，后续重试。
+
+Electron `calendar.cjs` 在主进程通过私有 bearer 领取提醒并回报 sent/failed，普通网页会话不能领取或确认桌面投递。先持久领取再调用 OS，防止多窗口／重启重复发送；进程在领取后异常退出时保留 claimed 状态和应用内记录，不承诺操作系统级恰好一次送达。休眠后的错过提醒合并通知，点击前重新核对知识库和配置版本；前端只接收日期／事项标识。SSE calendar 事件刷新界面，浏览器不发送原生通知。
+
+针对性检查：`python -m unittest tests.test_calendar tests.test_calendar_sync`、`node --test desktop/tests/calendar.test.cjs`、前端构建，以及 `node tests/frontend_calendar.cjs`。同步测试使用独立配置和知识库的设备实例，只交换不可变文件，覆盖分支合并、冲突选择、删除、分段、乱序到达、文件损坏、迁移重试和设备提醒隔离。浏览器夹具使用随机回环端口和临时虚构库，覆盖冲突选择及窄屏，不启动检索模型。真实 Resilio 双机传输及各目标平台的原生通知仍需单独实测。

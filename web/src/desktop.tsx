@@ -13,6 +13,7 @@ declare global {
   leafloomPrepareQuit?:()=>Promise<void>;
   leafloomDesktop?:{
    presenter:PresenterDesktop;
+   onCalendarOpen?:(callback:(value:{root:string,date:string,item_id?:string})=>void)=>()=>void;
    appInfo:()=>Promise<DesktopInfo>;
    writeClipboardText?:(text:string)=>Promise<void>;
    writeClipboardImage?:(png:Uint8Array)=>Promise<void>;

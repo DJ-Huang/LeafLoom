@@ -39,7 +39,9 @@ const FileSearch=lazy(()=>import('./search').then(module=>({default:module.FileS
 const KnowledgeSearch=lazy(()=>import('./search').then(module=>({default:module.KnowledgeSearch})));
 const GraphPage=lazy(()=>import('./graph').then(module=>({default:module.GraphPage})));
 const AiPanel=lazy(()=>import('./ai-panel').then(module=>({default:module.AiPanel})));
-type View='home'|'document'|'knowledge'|'folder'|'graph'|'web'|'design'|'attachments'|'downloads';
+const CalendarPage=lazy(()=>import('./calendar').then(m=>({default:m.CalendarPage})));
+const CalendarBadge=lazy(()=>import('./calendar').then(m=>({default:m.CalendarBadge})));
+type View='calendar'|'home'|'document'|'knowledge'|'folder'|'graph'|'web'|'design'|'attachments'|'downloads';
 type FileOperation={kind:'file'|'rename'|'move'|'delete',path?:string};
 const folderOf=(path:string)=>path.includes('/')?path.slice(0,path.lastIndexOf('/')):'';
 const within=(path:string,parent:string)=>path===parent||path.startsWith(parent+'/');
@@ -77,14 +79,14 @@ function App(){
  const loadSession=useCallback(async()=>{
   const request=++sessionRequest.current;
   try{const next=await api<Session>('session');if(request!==sessionRequest.current)return;const previous=session.current,scopeChanged=applySession(next);session.current=next;setConfig(value=>JSON.stringify(value)===JSON.stringify(next.config)?value:next.config);setSuggestion(next.suggested_root);setConnectionError('');
-   if(!previous){const params=new URLSearchParams(location.search),target=params.get('note'),folder=params.get('folder');if(target&&next.config.root){setTabs([target]);setActive(target);setView('document');}else if(folder!==null&&next.config.root){setCurrentFolder(folder);setView('folder');}else if(params.get('view')==='knowledge'){setView('knowledge');setKnowledgeVisited(true);}else if(params.get('view')==='downloads'){setView('downloads');setDownloadsVisited(true);}else if(params.get('view')==='attachments'){setView('attachments');setAttachmentsVisited(true);}else if(params.get('view')==='web'){setView('web');}else if(params.get('view')==='design'){setView('design');}else if(params.get('view')==='graph'){setView('graph');setGraphVisited(true);}}
+   if(!previous){const params=new URLSearchParams(location.search),target=params.get('note'),folder=params.get('folder');if(target&&next.config.root){setTabs([target]);setActive(target);setView('document');}else if(folder!==null&&next.config.root){setCurrentFolder(folder);setView('folder');}else if(params.get('view')==='calendar'){setView('calendar');}else if(params.get('view')==='knowledge'){setView('knowledge');setKnowledgeVisited(true);}else if(params.get('view')==='downloads'){setView('downloads');setDownloadsVisited(true);}else if(params.get('view')==='attachments'){setView('attachments');setAttachmentsVisited(true);}else if(params.get('view')==='web'){setView('web');}else if(params.get('view')==='design'){setView('design');}else if(params.get('view')==='graph'){setView('graph');setGraphVisited(true);}}
    else if(previous.config.root!==next.config.root)resetWorkspace();
    if(scopeChanged&&previous)invalidate({reset:true});
    const [status,userPreferences]=await Promise.all([api('status'),api<UserPreferences>('preferences')]);if(request===sessionRequest.current){updateStatus(status);setLocale(userPreferences.locale);setGuide(userPreferences.guide);setDemoMode(!!next.demo);}
   }catch(error){if(request===sessionRequest.current)setConnectionError((error as Error).message);}
  },[resetWorkspace]);
  useEffect(()=>{void loadSession();let alive=true;const events=new EventSource('/api/events');let connected=false;
-  events.onmessage=event=>{if(!alive)return;try{const change=JSON.parse(event.data);if(change.type==='status'){updateStatus(change.status);return;}if(change.type==='reset'){if(connected)invalidate({reset:true});connected=true;void loadSession();return;}if(change.type==='config'||change.service_instance_id!==session.current?.service_instance_id||change.config_revision!==session.current?.config.revision){void loadSession();return;}if(change.type==='files')invalidate(change);}catch{setConnectionError(t("服务通知暂不可用，请刷新数据"));}};
+  events.onmessage=event=>{if(!alive)return;try{const change=JSON.parse(event.data);if(change.type==='status'){updateStatus(change.status);return;}if(change.type==='reset'){if(connected)invalidate({reset:true});connected=true;void loadSession();return;}if(change.type==='config'||change.service_instance_id!==session.current?.service_instance_id||change.config_revision!==session.current?.config.revision){void loadSession();return;}if(change.type==='files'||change.type==='calendar')invalidate(change);}catch{setConnectionError(t("服务通知暂不可用，请刷新数据"));}};
   events.onopen=()=>{if(alive)setConnectionError('');};events.onerror=()=>{if(alive)setConnectionError(t("与本地服务的连接中断，正在重试；你的草稿仍保留"));};
   const close=()=>events.close();window.addEventListener('pagehide',close);const resume=()=>{if(events.readyState===EventSource.CLOSED)window.location.reload();};window.addEventListener('pageshow',resume);
   return()=>{alive=false;events.close();window.removeEventListener('pagehide',close);window.removeEventListener('pageshow',resume);};
@@ -92,6 +94,7 @@ function App(){
  useEffect(()=>{if(active&&config?.root)setPreferences(value=>({recent:[active,...value.recent.filter(path=>path!==active)].slice(0,12)}));},[active,config?.root,setPreferences]);
  const mounted=[active,...preferences.recent.filter(path=>path!==active&&tabs.includes(path))].filter(Boolean).slice(0,3);
  const refreshData=useCallback(()=>{invalidate({reset:true});void loadSession();},[loadSession]);
+ useEffect(()=>{const off=window.leafloomDesktop?.onCalendarOpen?.(value=>{if(value.root!==session.current?.config.root)return;setView('calendar');setMobileOpen(false);history.replaceState(null,'','/?view=calendar&date='+encodeURIComponent(value.date)+(value.item_id?'&item='+encodeURIComponent(value.item_id):''));window.dispatchEvent(new CustomEvent('leafloom-calendar-open',{detail:value}));});return off;},[]);
  const showHome=()=>{setBackToGraph(false);setView('home');setMobileOpen(false);setBackToKnowledge(false);history.replaceState(null,'','/');};
  const showGraph=()=>{setView('graph');setGraphVisited(true);setMobileOpen(false);setBackToKnowledge(false);history.replaceState(null,'','/?view=graph');};
  const showKnowledge=()=>{setBackToGraph(false);setView('knowledge');setKnowledgeVisited(true);setMobileOpen(false);history.replaceState(null,'','/?view=knowledge');};
@@ -149,6 +152,7 @@ function App(){
    <nav className="sidebar-shortcuts" aria-label={t("快捷入口")}>
     <button className="sidebar-search" onClick={()=>setQuickSearch(true)}><Search size={16}/><span>{t("搜索文件")}</span><kbd>{navigator.platform.includes('Mac')?'⌘':'Ctrl'} K</kbd></button>
     <div className="sidebar-nav-group"><button className={view==='home'?'active':''} aria-current={view==='home'?'page':undefined} onClick={showHome}><Home size={16}/><span>{t('首页')}</span></button><button className={view==='knowledge'?'active':''} aria-current={view==='knowledge'?'page':undefined} onClick={showKnowledge}><Search size={16}/><span>{t('知识检索')}</span></button><button onClick={()=>void daily()}><Calendar size={16}/><span>{t('今日笔记')}</span></button></div>
+    <button className={view==='calendar'?'active':''} aria-current={view==='calendar'?'page':undefined} onClick={()=>{setView('calendar');setMobileOpen(false);history.replaceState(null,'','/?view=calendar');}}><Calendar size={16}/><span>{t('calendar.title')}</span><Suspense fallback={null}><CalendarBadge key={config.root}/></Suspense></button>
     <p className="sidebar-nav-label">{t('ui.workspaceTools')}</p>
     <div className="sidebar-nav-group">
      <button className={view==='graph'?'active':''} aria-current={view==='graph'?'page':undefined} onClick={showGraph}><Network size={16}/><span>{t('关系图谱')}</span></button>
@@ -165,6 +169,7 @@ function App(){
   <main className="main" inert={narrow&&mobileOpen}><StorageMigrationNotice/>
    {connectionError&&<div role="status" className="connection-banner">{<Diagnostic message={connectionError}/>}<button onClick={refreshData}>{t("刷新数据")}</button></div>}
    <div className="workspace-topbar"><button className="icon-button sidebar-toggle" aria-label={t("切换导航")} aria-controls="workspace-sidebar" aria-expanded={narrow?mobileOpen:!preferences.sidebarCollapsed} onClick={toggleSidebar}><PanelLeft size={17}/></button><PathNavigation root={config.root} view={view} path={view==='document'?active:currentFolder} onFolder={showFolder} notify={notify}/><button className="ai-open-button" aria-expanded={aiOpen} onClick={()=>setAiOpen(value=>!value)}><MessageSquare size={15}/>{t("AI 对话")}</button></div>
+   {view==='calendar'&&<LazyBoundary><Suspense fallback={<p className="pad subtle">{t('calendar.loading')}</p>}><CalendarPage key={config.root} config={config} onOpen={openFile} notify={notify} onRecord={record}/></Suspense></LazyBoundary>}
    {view==='home'&&<Dashboard config={config} recent={preferences.recent} onOpen={openFile} onCreate={()=>newFile('file')} onKnowledge={showKnowledge} onDaily={()=>void daily()} onDesign={()=>showDesign()} guideContent={<GettingStarted guide={guide} onGuide={saveGuide} onAction={action=>{if(action==='create')newFile('file');else if(action==='search'||action==='source')showKnowledge();else if(action==='graph')showGraph();else if(action==='ai'){setAiOpen(true);setAiVisited(true);}else if(config.homepage)openFile(config.homepage);else showFolder('');}}/>}/>}
    {attachmentsVisited&&<LazyBoundary><Suspense fallback={view==='attachments'?<p className="pad subtle">{t('aw.loading')}</p>:null}><Attachments key={config.root} root={config.root!} active={view==='attachments'} onDownloads={showDownloads} onOpen={path=>openFile(path)} onChanged={changed}/></Suspense></LazyBoundary>}
    {downloadsVisited&&<LazyBoundary><Suspense fallback={view==='downloads'?<p className="pad subtle">{t('aw.loading')}</p>:null}><AttachmentDownloads key={config.root} root={config.root!} active={view==='downloads'}/></Suspense></LazyBoundary>}

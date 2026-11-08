@@ -79,6 +79,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     work_hub_settings=WorkHubSettings(notes)
     from vault_rag.databases import Databases
     databases=Databases(config,runtime,notes)
+    from vault_rag.calendar import Calendar
+    from vault_rag.calendar_routes import calendar_router
+    calendar=Calendar(config,runtime,notes,databases)
+    runtime.files.calendar_moved=calendar.moved
+    runtime.calendar=calendar
     from vault_rag.remote_attachments import RemoteAttachments
     from vault_rag.attachment_catalog import AttachmentCatalog
     from vault_rag.attachment_storage_routes import attachment_storage_router, public_job
@@ -146,9 +151,12 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     async def lifespan(app):
         async with mcp.session_manager.run(),ai_mcp.session_manager.run():
             ai.loop=asyncio.get_running_loop()
-            if start_background:runtime.start()
+            if start_background:
+                runtime.start()
+                calendar.start()
             try:yield
             finally:
+                await asyncio.to_thread(calendar.stop)
                 await ai.close()
                 await asyncio.to_thread(file_operations.stop)
                 await asyncio.to_thread(attachment_groups.stop)
@@ -161,6 +169,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
                 await asyncio.to_thread(index_jobs.stop)
                 runtime.stop()
     app=FastAPI(lifespan=lifespan,docs_url=None,redoc_url=None)
+    app.state.calendar=calendar
+    app.include_router(calendar_router(calendar,token))
     app.add_middleware(StaticCompression)
     app.state.runtime=runtime;app.state.csrf=csrf
     app.state.annotations=annotations
@@ -228,7 +238,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
             if not hmac.compare_digest(request.headers.get('x-vault-csrf',''),csrf):return json_response({'error':'写入请求校验失败'},403)
         if path in ('/api/search-files','/api/graph','/api/related','/api/query','/api/base','/api/templates') and runtime.catalog.root!=config.data.get('root'):
             return json_response({'error':'目录信息正在更新，请稍后重试'},503)
-        foreground=path.startswith('/api/') and path not in ('/api/events','/api/status','/api/activity')
+        foreground=path.startswith('/api/') and path not in ('/api/events','/api/status','/api/activity','/api/calendar/reminders/claim','/api/calendar/reminders/ack','/api/calendar/reminders/state')
         if foreground:runtime.foreground_begin()
         try:
             if dev and request.url.hostname==websites.ui_host and request.method in ('GET','HEAD') and dev.asset(path):
@@ -749,8 +759,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         body=await request.json()
         return json_response(await asyncio.to_thread(notes.create,body['path'],notes.workspace_revision,template=body['template']))
     @app.post('/api/daily')
-    async def daily():
-        return json_response(await asyncio.to_thread(notes.daily,notes.workspace_revision))
+    async def daily(request:Request):
+        raw=await request.body()
+        body=json.loads(raw) if raw else {}
+        if not isinstance(body,dict):raise ValueError('Invalid daily note request')
+        return json_response(await asyncio.to_thread(notes.daily,body.get('workspace_revision',notes.workspace_revision),body.get('date')))
     @app.post('/api/knowledge-search')
     async def knowledge_search(request:Request):
         body=await request.json();return json_response(await asyncio.to_thread(runtime.knowledge.search,body.get('query',''),top_k=body.get('top_k',3),type_=body.get('note_type'),mode=body.get('mode','hybrid'),domain=body.get('domain')))

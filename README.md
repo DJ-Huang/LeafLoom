@@ -24,6 +24,8 @@ Check [supported systems and signing status](#get-started) before installing.
 
 ![LeafLoom welcome screen: choose a language, open a folder or try the demo](assets/screenshots/en/01-welcome.png)
 
+**Calendar notebook:** plan your days, share daily notes, link database tasks, sync plans across computers and receive reminders. [Guide](docs/en/GUIDE.md#calendar-notebook).
+
 ## One home for your knowledge
 
 | What you need | What LeafLoom brings |
