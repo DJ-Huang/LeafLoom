@@ -32,7 +32,7 @@
 | work_date / work_end_date / captured_at | 工作日期和结束日期 YYYY-MM-DD / 采集时间带时区 ISO 8601；单日事项起止同日，未知日期不填 |
 | activity_type | progress、decision、issue、risk、plan |
 | projects / candidate_projects | 确认关联项目 ID / 待补证据的额外项目 ID |
-| actual_hours | 明确的实际小时数；未知不写，不能填 0 代表未知 |
+| actual_hours | 明确的实际小时数；记录工作时未给出则先询问；用户确认跳过才留空，不能填 0 代表未知 |
 | review_state | ready 或 needs_review；具体缺口写正文 |
 | source_provider / source_kind / source_id / source_version / source_url | 平台或来源（如 manual、feishu、gitlab）、通用类型、带必要实例作用域的标识、版本和真实链接 |
 | coverage / source_snapshot | complete、partial、unavailable、not_generated / 原文快照相对路径 |

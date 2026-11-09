@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+- LeafLoom skill: ask for actual hours before saving a work record when none were given; write weekly reports as Markdown only and do not create Word copies.
+
+- Installing the LeafLoom skill retires superseded `wiki-search` and `work-hub` skill folders beside it, keeping their contents as local backups.
+
 - Fix top path-bar copy failing when the browser clipboard API is unavailable; reuse the shared clipboard helper and keep the menu open until the write finishes.
 
 - Add Calendar notebook with month/day/agenda views, shared daily notes, database-task completion, recurring items, recoverable deletion, per-vault reminders and desktop tray notifications.

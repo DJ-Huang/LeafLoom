@@ -14,6 +14,8 @@ _SKILLS = {
                            'references/feishu-sync.md', 'assets/workspace.base',
                            'scripts/leafloom.py', 'scripts/task_sync.py', 'scripts/feishu_sync.py')),
 }
+# Prior installable skills replaced by the unified leafloom bundle.
+_SUPERSEDED = {'leafloom': ('wiki-search', 'work-hub')}
 
 
 def is_bundled_skill(name: str) -> bool:
@@ -80,6 +82,38 @@ def skill_status(name: str = 'leafloom') -> dict:
             'up_to_date': installed and all(p.is_file() and p.read_bytes() == data for p, data in files)}
 
 
+def _skills_root(name: str) -> Path:
+    directory, _ = skill_spec(name)
+    home = Path.home().resolve()
+    root = home / directory / 'skills'
+    component = home
+    for part in root.relative_to(home).parts:
+        component = component / part
+        if component.is_symlink():
+            raise ValueError(f'安装位置包含符号链接，请先检查 {directory}/skills')
+        if component.exists() and component != root and not component.is_dir():
+            raise ValueError('安装位置的父路径不是目录')
+    return root
+
+
+def _retire_superseded(name: str) -> list[str]:
+    """Move replaced skill directories aside after a successful leafloom install."""
+    retired = []
+    root = _skills_root(name)
+    for old in _SUPERSEDED.get(name, ()):
+        target = root / old
+        if not target.exists():
+            continue
+        if target.is_symlink() or not target.is_dir():
+            raise ValueError(f'旧技能位置不可用，请先检查 skills/{old}')
+        if not (target / 'SKILL.md').is_file():
+            continue
+        backup = target.with_name(target.name + '.' + uuid.uuid4().hex + '.bak')
+        target.rename(backup)
+        retired.append(str(backup))
+    return retired
+
+
 def install_skill(name: str = 'leafloom') -> dict:
     with _lock:
         files = resources(name)  # Preflight every source and destination before writing.
@@ -94,4 +128,6 @@ def install_skill(name: str = 'leafloom') -> dict:
                 atomic_write(target, source)
         if any(target.read_bytes() != source for target, source in files):
             raise OSError('安装文件校验失败')
-        return {**skill_status(name), 'backup': backups[0] if backups else None, 'backups': backups}
+        retired = _retire_superseded(name)
+        return {**skill_status(name), 'backup': backups[0] if backups else None, 'backups': backups,
+                'retired': retired}
