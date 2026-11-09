@@ -28,11 +28,37 @@ class SkillInstallTests(unittest.TestCase):
         result = install_skill()
         self.assertEqual(Path(result['path']), self.target)
         self.assertEqual(self.target.read_bytes(), skill_source().read_bytes())
+        self.assertEqual(result['retired'], [])
         extra = self.target.parent / 'personal.txt'
         extra.write_text('keep')
         self.assertIsNone(install_skill()['backup'])
         self.assertEqual(extra.read_text(), 'keep')
         self.assertTrue(skill_status()['up_to_date'])
+
+    def test_install_retires_superseded_skills(self):
+        skills = self.home / '.agents/skills'
+        for name, body in (('wiki-search', 'old wiki'), ('work-hub', 'old hub')):
+            folder = skills / name
+            folder.mkdir(parents=True)
+            (folder / 'SKILL.md').write_text(body)
+            (folder / 'notes.md').write_text('keep in backup')
+        unrelated = skills / 'other-skill'
+        unrelated.mkdir(parents=True)
+        (unrelated / 'SKILL.md').write_text('keep')
+        decoy = skills / 'work-hub-notes'
+        decoy.mkdir(parents=True)
+        (decoy / 'readme.txt').write_text('not a skill')
+        result = install_skill('leafloom')
+        self.assertTrue(self.target.is_file())
+        self.assertFalse((skills / 'wiki-search').exists())
+        self.assertFalse((skills / 'work-hub').exists())
+        self.assertEqual((unrelated / 'SKILL.md').read_text(), 'keep')
+        self.assertEqual((decoy / 'readme.txt').read_text(), 'not a skill')
+        self.assertEqual(len(result['retired']), 2)
+        restored = {Path(path).name.split('.', 1)[0]: Path(path) for path in result['retired']}
+        self.assertEqual((restored['wiki-search'] / 'SKILL.md').read_text(), 'old wiki')
+        self.assertEqual((restored['work-hub'] / 'notes.md').read_text(), 'keep in backup')
+        self.assertEqual(install_skill('leafloom')['retired'], [])
 
     def test_update_backs_up_modified_content(self):
         install_skill()
@@ -49,6 +75,19 @@ class SkillInstallTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             install_skill()
         self.assertEqual(list(outside.iterdir()), [])
+
+    def test_symlink_superseded_skill_is_rejected_after_install(self):
+        skills = self.home / '.agents/skills'
+        skills.mkdir(parents=True)
+        outside = self.home / 'outside-work-hub'
+        outside.mkdir()
+        (outside / 'SKILL.md').write_text('linked')
+        (skills / 'work-hub').symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            install_skill('leafloom')
+        self.assertTrue(self.target.is_file())
+        self.assertTrue((skills / 'work-hub').is_symlink())
+        self.assertEqual((outside / 'SKILL.md').read_text(), 'linked')
 
     def test_install_endpoint_requires_session_and_csrf(self):
         config = LocalConfig(self.home / 'state')
