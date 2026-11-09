@@ -11,13 +11,17 @@
 work_hub:
   schema_version: 1
   office_providers: [feishu, notion]
+  human_work_log: 工作中枢/工作目录/20261010~202611xx-STsldN52.md
+  daily_hours: 8
 ---
 
 # 工作中枢配置
 ```
 
 - 配置不存在时使用 `[auto]`，读取不创建文件。权限失败、无法读取或格式损坏不能解释为不存在；保留文件并说明问题，不自行重置。
-- 修改前读取当前笔记与版本，只更新 `work_hub.office_providers`，保留其他 frontmatter、work_hub 内未知选项、注释和正文；已有 schema_version 必须为整数 1，否则停止修改。缺失的 schema_version 可按 1 解释，保存时补齐。
+- 修改前读取当前笔记与版本，只更新用户明确要求的 `work_hub` 字段（如 `office_providers`、`human_work_log`、`daily_hours`），保留其他 frontmatter、work_hub 内未知选项、注释和正文；已有 schema_version 必须为整数 1，否则停止修改。缺失的 schema_version 可按 1 解释，保存时补齐。
+- `human_work_log` 是给人看的当前周期工作记录笔记路径（相对知识库根）。记录工作双写时使用；缺失时按 [工作中枢](work-hub.md#定位当前工作记录文档) 从 `工作目录/README.md` 推断并回写。
+- `daily_hours` 为标准工作日小时数（正数，缺省 8）。用户说「全天」时写入 `actual_hours = daily_hours`；「半天」为一半。
 - 首次保存逐级创建缺失父目录，只创建配置笔记，不初始化整个数据库。配置文件同名且无有效 work_hub frontmatter 时先说明冲突，不覆盖用户文件。
 - 使用当前 workspace_revision 与笔记版本；版本冲突后重读并保留并发修改，不盲目覆盖。写入后读回配置才报告成功；保存配置不等于登录、连接或取得外部写入授权。
 - 不存凭据、令牌、具体群/空间/任务清单或工作事项。这些范围沿用已确认的项目来源映射，凭据留给对应连接管理。
