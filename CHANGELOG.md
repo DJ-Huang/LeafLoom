@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+- LeafLoom skill: treat「全天／半天」as `daily_hours` when recording; hours reports must not say “no data” if activities exist but only lack numeric hours.
+
+- LeafLoom skill: when recording work, dual-write the structured activity and the human-readable period log under `工作目录/` (configured via `work_hub.human_work_log`).
+
+- LeafLoom skill: weekly reports default to a manager audience—summarize outcomes, risks, and support needs; ban diary-style date logs and screenshots in the report body. Ship a default weekly-report template asset and prefer the hub template when present.
+
 - LeafLoom skill: ask for actual hours before saving a work record when none were given; write weekly reports as Markdown only and do not create Word copies.
 
 - Installing the LeafLoom skill retires superseded `wiki-search` and `work-hub` skill folders beside it, keeping their contents as local backups.

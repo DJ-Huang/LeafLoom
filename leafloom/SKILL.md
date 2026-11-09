@@ -6,7 +6,7 @@ description: 在本机 LeafLoom 查询个人笔记、经验与已知规则，管
 # LeafLoom
 
 - **查知识库、经验或规则**时，读 [检索指引](references/knowledge.md)。规则查询仅用于已知相关且当前缺失的规则。
-- **读写项目任务**时，读 [任务数据库](references/tasks.md)，使用用户指定的库与视图。用户明确要求工作记录、汇报或工作中枢时，另读 [工作中枢](references/work-hub.md)。
+- **读写项目任务**时，读 [任务数据库](references/tasks.md)，使用用户指定的库与视图。用户明确要求工作记录、汇报或工作中枢时，另读 [工作中枢](references/work-hub.md)；生成周报时再读其中的 [任务与汇报](references/tasks-reports.md)（管理者口径，禁止日记体）。
 - **做设计**时，引导用户从 LeafLoom 左侧打开 **设计工作台**，选择已有项目或点击 **新建设计项目**。需要在 LeafLoom 的 AI 对话中继续时，可以选中设计内容并点击 **添加到 AI 对话**。
 
 查询和写入使用本 Skill 下的脚本。将命令中的 `<skill>` 换成 Skill 目录的实际路径。
