@@ -2,15 +2,15 @@
 
 [What changed in 0.1.8 and how to upgrade](RELEASE_NOTES_0.1.8.md)
 
-Use **Settings → Skill** to install or update the bundled `wiki-search` skill.
+Install or update the bundled **LeafLoom skill** from **Settings → Skill**. In a new local Codex chat, use `$leafloom` to search your knowledge, manage project tasks or capture work. For design, it guides you to **Design Studio**. The skill calls the running app directly. Enable local AI reading in **Settings → AI integration**, and enable writing when you want it to save changes.
 
-The same AI integration page also installs **work-hub** to `~/.agents/skills/work-hub/`. Start a new Codex chat with `$work-hub` to capture multi-project work, manage local tasks and create reports without connecting an office platform. Data stays in the connected vault's `工作中枢/` folder. Feishu imports, page mirroring and remote task sync are optional; GitLab activity imports remain available for selected repositories. Other office platforms are not yet integrated, but supplied text and exports can be archived. Existing Feishu records are reused and missing generic fields are added only as needed, preserving notes and sync history. Remote writes require an explicit request; hours use recorded values. See [Work hub](../WORK_HUB.md).
+Work records and reports use the connected vault's `工作中枢/` by default. Optional Feishu/Lark and GitLab workflows load when requested. See [Work hub](../WORK_HUB.md).
 
 **Choose your office platforms:** Open **Settings → Skill → Work hub settings** and check all the platforms you use, such as Feishu/Lark and Notion together. Each change saves immediately. Automatic source selection and local-only mode are separate, exclusive choices; clearing every platform restores automatic selection. DingTalk, WeCom and Notion currently save preferences only and are marked not integrated. Sign-in and permissions are separate. In chat, say “use Feishu and Notion” or “add Notion.” Both edit `工作中枢/配置.md`; old single selections are read compatibly. Multiple platforms do not expand collection scope or broadcast task writes. Reload settings after chat edits. Change the hub directory under **Templates and writing → Default write locations** without moving existing notes.
 
 Weekly and biweekly reports use `工作中枢/模板/周报模板.md` when present.
 
-To read the original journal, ask work-hub to mirror a Feishu page and its children into `工作中枢/工作目录/`. This on-demand, one-way sync uploads images/videos to the attachment server and rewrites references only after verification, including videos over 500 MB. It preserves local edits and copies of removed source pages, with checkpoints for recovery. Requires local LeafLoom, Python 3.11+ and an authenticated `lark-cli`; see [Work hub](../WORK_HUB.md).
+To read the original journal, ask `$leafloom` to mirror a Feishu page and its children into `工作中枢/工作目录/`. This on-demand, one-way sync uploads images/videos to the attachment server and rewrites references only after verification, including videos over 500 MB. It preserves local edits and copies of removed source pages, with checkpoints for recovery. Requires local LeafLoom, Python 3.11+ and an authenticated `lark-cli`; see [Work hub](../WORK_HUB.md).
 
 [English](GUIDE.md) · [中文](../zh-CN/GUIDE.md) · [日本語](../ja/GUIDE.md)
 
@@ -460,3 +460,40 @@ Choose **⋯ → Delete group** in a column header to preview the number of affe
 Group menus edit shared display names/colors without rewriting option values, move or hide columns, and collapse groups. Layout configures card fields, size and an optional cover; covers are off by default. Group settings can hide empty columns and configure task field bindings. Unassigned records and historical option values remain visible. Removing or hiding a column/view preserves notes. Internal note renames retain saved order references; an unrecognized external rename places the new path at the end.
 
 Successful moves offer Undo. A stale version, pending note draft or save failure does not overwrite other content; the card returns to its saved position. A recoverable transaction keeps cross-column property and order updates together. If recovery finds external edits, files and recovery material are retained for inspection in file history. Full-page and stable `![[path.base#view=<id>]]` embeds share updates. Board interaction and undo stay inside the embed; browsing tasks does not change retrieval scope. Subtasks, recurring tasks, reminders, accounts, swimlanes and dependencies are outside this first version.
+
+## Calendar notebook
+
+Open **Calendar notebook** in the sidebar. Browse the month and select a date to see its agenda and daily note. **Agenda** shows the following 30 days from the selected date and overdue unfinished to-dos. Enable **Show completed** to see finished items.
+
+The daily note shares its Markdown file, drafts and undo history with **Today's note**. Browsing dates creates no notes. **Write a daily note** creates one using the existing daily-note template; existing content is preserved.
+
+Choose **New item**, enter a title, description and date, and select a to-do or event. Items can be all-day or have start/end times on the same day. Timed items default to a reminder 10 minutes before; choose at start, 30 minutes, 1 hour or 1 day before, or turn it off. All-day items appear only in the daily summary. Deleted items can be restored from **Deleted items**.
+
+Repeat daily, weekly, monthly or Monday–Friday, optionally ending on a date. Missing monthly dates are skipped; weekdays do not incorporate holiday adjustments. Edit or delete **This occurrence** or **This and future occurrences** while retaining earlier records.
+
+### Link database tasks
+
+Select a database, then search and select a task. Configure its task-status mapping first. A one-time to-do shares completion with the original task: checking uses the first configured completed status; unchecking uses the initial status. Resolve unsaved task drafts before changing status. Repeating to-dos complete independently per occurrence, with the database task used only as a reference.
+
+Scheduling never changes the task deadline. In Calendar settings, optionally select task databases whose deadlines should appear. None are selected by default. Deadline markers participate in summaries but create neither to-dos nor individual reminders. In-app moves and renames maintain links. External moves resolve only through an existing unique stable ID; otherwise relink the item explicitly.
+
+### Enable reminders
+
+Open **Calendar settings** and enable reminders. The daily summary defaults to 09:00; change its time or disable it. Empty summaries are not sent. First opening the calendar records the device's IANA time zone; change it in settings if needed, for example `Europe/London`.
+
+Desktop notifications work while the app runs, including in the tray. Click to open the relevant date. Browser users view the in-app **Reminders** list. No notifications are delivered after quitting or during sleep. On resuming, missed notices are grouped; catch-up checks the last 30 days of item reminders, while previously generated notices remain in the inbox. Delivery failures keep the in-app record. OS notification permissions and focus settings can affect display.
+
+Only the current vault is scheduled; switching vaults stops the previous schedule. All-day dates never shift with time zones. Recurrence uses the configured zone, moving nonexistent DST times forward and notifying only once in a repeated hour. Plans, recurring exceptions and completion records live in the vault's `Calendar/LeafLoom/changes/`. Daily notes remain ordinary Markdown files.
+
+### Syncing two computers with Resilio
+
+1. Upgrade both computers to a version with calendar sync. Start the new version on the computer holding your existing calendar, then open **Sync and conflicts**.
+2. Sync the whole `Calendar/LeafLoom/` folder inside the vault. Check that neither device ignores it and both download its files. Keep `.vault-rag` excluded; there is no need to enable hidden-directory sync or sync a live SQLite database.
+3. Wait for Resilio to finish, then open the calendar on the second computer. The app reports changes loaded locally; check Resilio to confirm delivery to other devices.
+4. Reminder switches, summary time, read state and delivery history belong to each device. Reminders start disabled on new devices. Enable them on each computer where you want notifications; enabling both means both notify. Time zone and deadline sources are shared.
+
+Each edit creates a separate immutable change file. Different items merge automatically. Concurrent offline edits to the same item retain both versions in **Sync and conflicts**; choose one before editing or receiving reminders for that item. The choice covers the entire recurring series and its split segments. Unselected versions remain in the files. Deletions also remain as changes. Do not delete, rename or edit files under `changes/`: missing or damaged files pause calendar writes and reminders. Finish syncing or restore files from another device or backup, then refresh. Concurrent changes to shared settings also require a choice.
+
+On the first upgrade, the app backs up `.vault-rag/calendar.sqlite3` into `.vault-rag/calendar-backups/`, verifies the backup and exports plans, exceptions, completions and deleted records. Interrupted migrations can retry. The old database remains after success, but older builds refuse to write it to prevent divergent data. **Sync and conflicts** shows the backup location. Local reminder preferences and delivery history move to `.vault-rag/calendar-local.sqlite3`.
+
+Back up the whole `Calendar/LeafLoom/` folder for calendar content. Also back up the local `.vault-rag/calendar-local.sqlite3` and migration backup to retain device preferences and reminder history. Linked database definitions, task Markdown and daily notes still use their existing sync mechanism; calendar sync does not resolve concurrent edits to those notes or expand retrieval scope.

@@ -68,11 +68,11 @@ update.error.check|请先检查更新，再下载安装。|Check for updates bef
 update.error.install|无法打开安装程序，请重新下载后重试。|Cannot open the installer. Download it again and retry.|インストーラーを開けません。再ダウンロードしてお試しください。
 mcp.connectionTitle|AI 连接|AI connections|AI 連携
 mcp.connectionDescription|管理本机 AI 与 ChatGPT 的知识库内容（含附件）、飞书和连接权限。|Manage workspace content (including attachments), Feishu and connection permissions for local AI clients and ChatGPT.|ローカル AI と ChatGPT の保管庫コンテンツ（添付を含む）、Feishu、接続の権限を管理します。
-mcp.title|MCP 访问权限|MCP access permissions|MCP アクセス権限
+mcp.title|本机 AI 与 MCP 权限|Local AI and MCP permissions|ローカル AI と MCP の権限
 mcp.scope|知识库权限覆盖关联目录内的笔记、设计和附件；附件可读取原始文件并进行管理。飞书权限单独控制，RAG 仍只使用已选目录。|Workspace access covers connected notes, designs and attachments, including original file reads and attachment management. Feishu access is separate; RAG uses selected folders only.|保管庫権限は接続フォルダー内のノート、デザイン、添付を対象とし、元ファイルの読み取りと添付管理を含みます。Feishu 権限は別で、RAG は選択範囲のみを使います。
 mcp.loading|正在读取连接权限…|Loading connection permissions…|接続権限を読み込み中…
 mcp.localRead|允许本机 AI 读取知识库内容（含附件）|Allow local AI to read workspace content (including attachments)|ローカル AI に保管庫コンテンツ（添付を含む）の閲覧を許可
-mcp.localReadHelp|启用后生成专用连接配置；旧配置继续保持原有读取范围。|Enabling generates a dedicated connection configuration. Older configurations retain their original reading scope.|有効にすると専用の接続設定を生成します。以前の設定の閲覧範囲は変わりません。
+mcp.localReadHelp|允许 LeafLoom Skill 读取知识库，也可为本机 MCP 生成专用连接配置。|Allow the LeafLoom skill to read the workspace. A separate connection configuration is available for local MCP.|LeafLoom スキルによる保管庫の閲覧を許可します。ローカル MCP には専用の接続設定を使用できます。
 mcp.localWrite|允许本机 AI 修改知识库内容（含附件）|Allow local AI to modify workspace content (including attachments)|ローカル AI に保管庫コンテンツ（添付を含む）の変更を許可
 mcp.writeHelp|笔记修改保留历史；附件上传保留同名文件，移动和回收先检查方案并保留恢复记录。默认关闭。|Note edits retain history. Attachment uploads preserve duplicate names; moves and trash require a preview and retain recovery records. Off by default.|ノート編集は履歴を保持します。添付アップロードは同名ファイルを保持し、移動と回収は計画確認後に復元記録を残します。初期状態は無効です。
 mcp.rotate|重新生成连接凭据|Regenerate connection credential|接続用認証情報を再生成
@@ -398,9 +398,7 @@ Wiki 导航目录|Wiki navigation folders|Wiki ナビゲーションのフォル
 垃圾箱、恢复已删除文件、永久清空|Trash, restore deleted files, empty permanently|ゴミ箱、削除したファイルの復元、完全削除
 处理中…|Working…|処理中…
 安装位置：|Installed at: |インストール先：
-安装或更新 wiki-search|Install or update wiki-search|wiki-search をインストール・更新
 安装技能|Install skill|スキルをインストール
-安装查询技能|Install search skill|検索スキルをインストール
 完成|Complete|完了
 实时编辑|Live editing|ライブ編集
 宽版阅读|Wide reading|幅広表示
@@ -578,7 +576,6 @@ model.firstDownload|首次准备需要联网下载较大的模型文件，耗时
 查看查询|View query|クエリを表示
 查看目录操作和文档版本，恢复需要的内容。|View file operations and note versions, and restore content.|ファイル操作とメモのバージョンを確認し、必要な内容を復元します。
 查看磁盘版本并合并|View saved version and merge|保存済みの内容を表示して統合
-查询技能已就绪。MCP 连接沿用现有配置。|Search skill is ready. Your MCP configuration is unchanged.|検索スキルの準備ができました。MCP は既存の設定を使います。
 标准宽度|Standard width|標準の幅
 核对磁盘版本后，使用当前编辑内容保存？|Save your current edits after reviewing the saved version?|保存済みの内容を確認し、現在の編集内容を保存しますか？
 根目录|Root folder|ルートフォルダー
@@ -668,7 +665,6 @@ model.firstDownload|首次准备需要联网下载较大的模型文件，耗时
 知识内容请使用侧栏的「知识检索」|Use Knowledge search in the sidebar to search note content.|本文の検索にはサイドバーの「知識検索」を使ってください。
 知识库|Knowledge space|知識庫
 知识库导航|Knowledge navigation|知識庫のナビゲーション
-知识库查询技能|Knowledge search skill|知識庫の検索スキル
 知识库根目录|Knowledge root folder|知識庫のルートフォルダー
 知识库目录|Knowledge folder|知識庫のフォルダー
 知识库设置|Settings|知識庫の設定
@@ -724,7 +720,6 @@ model.firstDownload|首次准备需要联网下载较大的模型文件，耗时
 规则目录|Rule folders|ルールのフォルダー
 规则目录、Wiki 导航目录、工时资料目录|Rule, Wiki and estimation folders|ルール、Wiki、工数資料のフォルダー
 让 AI 从你的本地知识库中查找依据。|Let AI find evidence in your knowledge space.|AI が知識庫から根拠を探せるようにします。
-让 AI 优先查询你的知识库，返回简短结论与原文链接。|Help AI search your notes first, with concise answers and source links.|AI がまず知識庫を検索し、簡潔な回答と原文へのリンクを返します。
 让资料之间产生连接|Connect the dots in your notes|資料のつながりを見つける
 设置|Settings|設定
 设置分类|Settings categories|設定の分類
@@ -2919,11 +2914,6 @@ Resume automatic directory checks before scanning|请先恢复目录检查，再
 Attachment directory scan paused|附件目录扫描已暂停|Attachment directory scan paused|添付ディレクトリの走査を一時停止しました
 Attachment scan directories changed|服务器扫描目录已变化，请重新检查|Server scan directories changed; check again|サーバーの走査対象が変更されました。再確認してください
 
-工作中枢技能|Work hub skill|ワークハブスキル
-通过 AI 记录多项目工作、管理本地任务并生成汇报；可选接入飞书采集与同步。|Capture multi-project work with AI, manage local tasks and create reports; optionally connect Feishu for imports and sync.|AI で複数プロジェクトの作業記録、ローカルタスク管理、レポート作成を行います。飛書の取り込み・同期は任意で接続できます。
-安装工作中枢技能|Install work hub skill|ワークハブスキルをインストール
-工作中枢技能已就绪。在新的 AI 聊天中使用 $work-hub；首次使用时创建工作中枢。|Work hub skill is ready. Use $work-hub in a new AI chat; the workspace is created on first use.|ワークハブスキルを利用できます。新しい AI チャットで $work-hub を呼び出すと、初回に作業用フォルダーを作成します。
-记录工作、管理本地任务与生成汇报，可选办公工具接入|Record work, manage local tasks and create reports, with optional office integrations|作業記録、ローカルタスク管理、レポート作成と任意のオフィス連携
 Unknown bundled skill|Unknown bundled skill|不明な同梱スキル
 
 wh.title|工作中枢配置|Work hub settings|ワークハブ設定
@@ -3024,3 +3014,129 @@ External file changes|外部文件修改|External file changes|外部ファイ�
 Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved|设计文件尚未写完或 JSON 格式有误，请完成外部编辑后重试，历史已保留。|Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved|デザインファイルが未完成か JSON が不正です。外部編集を完了して再試行してください。履歴は保持しています。
 Design history is incomplete; the external file and history were preserved|设计历史不完整，已保留外部文件和现有历史。|Design history is incomplete; the external file and history were preserved|デザイン履歴が不完全です。外部ファイルと既存の履歴は保持しています。
 External design changes require the complete document, not a page projection|外部修改必须使用完整设计文档，不能用单页投影替换项目。|External design changes require the complete document, not a page projection|外部変更には完全な設計文書が必要です。ページ投影でプロジェクトを置き換えることはできません。
+skill.leafloom.title|LeafLoom 技能|LeafLoom skill|LeafLoom スキル
+skill.leafloom.description|从本机检索知识库、管理任务，并了解如何使用设计工作台。|Search your local knowledge, manage tasks, and find Design Studio.|ローカルの知識を検索し、タスクを管理し、Design Studio の使い方を確認できます。
+skill.leafloom.ready|在新的 AI 对话中使用 $leafloom。读写权限可在本机 AI 设置中调整。|Use $leafloom in a new AI chat. Manage read and write access in local AI settings.|新しい AI チャットで $leafloom を使います。読み取りと書き込みの権限はローカル AI 設定で変更できます。
+calendar.title|日历备忘录|Calendar notebook|カレンダーノート
+calendar.subtitle|按日期记录、安排和跟进|Notes, plans and follow-ups by date|日付ごとのメモ・予定・フォロー
+calendar.new|新建安排|New item|予定を追加
+calendar.edit|编辑安排|Edit item|予定を編集
+calendar.itemTitle|标题|Title|タイトル
+calendar.description|说明|Description|説明
+calendar.kind|类型|Type|種類
+calendar.todo|待办|To-do|タスク
+calendar.event|日程|Event|予定
+calendar.date|日期|Date|日付
+calendar.allDay|全天|All day|終日
+calendar.start|开始时间|Start time|開始時刻
+calendar.end|结束时间（可选）|End time (optional)|終了時刻（任意）
+calendar.reminder|单项提醒|Item reminder|個別リマインダー
+calendar.remind.off|不提醒|No reminder|通知なし
+calendar.remind.0|到点提醒|At start time|開始時刻
+calendar.remind.10|提前 10 分钟|10 minutes before|10 分前
+calendar.remind.30|提前 30 分钟|30 minutes before|30 分前
+calendar.remind.60|提前 1 小时|1 hour before|1 時間前
+calendar.remind.1440|提前 1 天|1 day before|1 日前
+calendar.repeat|重复|Repeat|繰り返し
+calendar.repeat.none|不重复|Does not repeat|繰り返しなし
+calendar.repeat.daily|每天|Daily|毎日
+calendar.repeat.weekly|每周|Weekly|毎週
+calendar.repeat.monthly|每月|Monthly|毎月
+calendar.repeat.weekdays|周一至周五|Monday–Friday|月曜〜金曜
+calendar.until|重复结束日期（可选）|Repeat until (optional)|繰り返し終了日（任意）
+calendar.repeatHelp|每月不存在的日期跳过；周一至周五不包含节假日调休。|Missing monthly dates are skipped. Weekdays do not account for holiday adjustments.|存在しない日付の月はスキップします。平日に祝日・振替休日は考慮しません。
+calendar.scope|影响范围|Apply to|適用範囲
+calendar.one|仅本次|This occurrence|今回のみ
+calendar.future|本次及以后|This and future occurrences|今回以降
+calendar.database|关联数据库|Linked database|関連データベース
+calendar.findTask|搜索任务|Search tasks|タスクを検索
+calendar.task|关联任务|Linked task|関連タスク
+calendar.none|不关联|None|なし
+calendar.referenceOnly|仅作关联，每次独立完成|Reference only; each occurrence completes independently|参照のみ・各回を個別に完了
+calendar.syncHelp|完成状态与原任务同步；安排日期不会改动任务截止日期。|Completion syncs with the task. Scheduling does not change its deadline.|完了状態はタスクと同期します。予定日は期限を変更しません。
+calendar.complete|完成|Complete|完了
+calendar.delete|删除安排|Delete item|予定を削除
+calendar.restoreHelp|删除后可在“已删除安排”中恢复。|Deleted items can be restored from Deleted items.|削除した予定は「削除済み」から復元できます。
+calendar.trash|已删除安排|Deleted items|削除済み
+calendar.restore|恢复|Restore|復元
+calendar.cancel|取消|Cancel|キャンセル
+calendar.save|保存|Save|保存
+calendar.open|查看|Open|開く
+calendar.more|加载更多|Load more|さらに表示
+calendar.refresh|刷新|Refresh|更新
+calendar.previous|上一期|Previous period|前の期間
+calendar.next|下一期|Next period|次の期間
+calendar.today|今天|Today|今日
+calendar.month|月历|Month|月
+calendar.agenda|议程列表|Agenda|予定一覧
+calendar.showCompleted|显示已完成|Show completed|完了済みを表示
+calendar.upcoming|未来 30 天|Next 30 days|今後 30 日
+calendar.overdue|逾期待办|Overdue to-dos|期限を過ぎたタスク
+calendar.empty|暂无安排|No items|予定はありません
+calendar.back|返回月历|Back to calendar|カレンダーに戻る
+calendar.dayItems|当天安排|Daily agenda|当日の予定
+calendar.dailyNote|当天笔记|Daily note|当日のノート
+calendar.createNote|开始写当天笔记|Write a daily note|当日のノートを書く
+calendar.loading|正在加载日历…|Loading calendar…|カレンダーを読み込み中…
+calendar.deadline|任务截止日|Task deadline|タスクの期限
+calendar.settings|日历设置|Calendar settings|カレンダー設定
+calendar.reminders|提醒列表|Reminders|リマインダー
+calendar.enableReminders|启用日程提醒|Enable reminders|リマインダーを有効にする
+calendar.reminderHelp|桌面端运行或驻留托盘时发送系统通知；浏览器版在应用内查看。完全退出后不发送。|Desktop notifications work while the app runs, including in the tray. Browser reminders appear in the app. No delivery after quitting.|デスクトップ版は起動中・トレイ常駐中に通知します。ブラウザー版はアプリ内で確認できます。完全終了後は通知しません。
+calendar.summary|每日汇总|Daily summary|毎日のまとめ
+calendar.summaryTime|汇总时间|Summary time|まとめの通知時刻
+calendar.timezone|时区|Time zone|タイムゾーン
+calendar.deadlineSources|显示这些数据库的任务截止日|Show deadlines from these databases|期限を表示するデータベース
+calendar.deadlineHelp|请选择已配置任务状态的数据库。截止日仅显示及参与汇总，不生成待办或单项通知。|Choose databases with task status configured. Deadlines appear in the calendar and summary, without creating to-dos or individual reminders.|タスク状態を設定したデータベースを選択してください。期限は表示とまとめにのみ使用し、タスクや個別通知を作成しません。
+calendar.state.pending|待通知|Pending|通知待ち
+calendar.state.claimed|已交给系统通知，结果未确认|Handed to desktop; delivery unconfirmed|デスクトップに送信済み・結果未確認
+calendar.state.sent|已发送系统通知|Desktop notification sent|システム通知を送信済み
+calendar.state.failed|系统通知未成功，请在此查看|Desktop notification failed; view it here|システム通知に失敗しました。ここで確認できます
+calendar.brokenLink|关联任务不可用，请重新关联|Linked task unavailable; link it again|関連タスクが見つかりません。再設定してください
+calendar.invalidDate|请输入有效日期|Enter a valid date|有効な日付を入力してください
+calendar.invalidTime|请输入有效时间，结束时间须晚于开始时间|Enter valid times; end must be after start|終了が開始より後になる有効な時刻を入力してください
+calendar.invalidTimezone|请输入有效的 IANA 时区，如 Asia/Shanghai|Enter a valid IANA time zone, such as Asia/Shanghai|Asia/Tokyo など有効な IANA タイムゾーンを入力してください
+calendar.titleRequired|请填写标题（最多 500 字符）|Enter a title (up to 500 characters)|タイトルを入力してください（最大 500 文字）
+calendar.invalidItem|安排内容无效，请检查输入|Invalid item; check your input|予定の内容を確認してください
+calendar.invalidReminder|提醒时间无效，请先设置开始时间|Invalid reminder; set a start time first|開始時刻を設定して通知時間を確認してください
+calendar.invalidSettings|日历设置无效|Invalid calendar settings|カレンダー設定が無効です
+calendar.taskSetup|请先为数据库配置任务状态映射|Configure task status mapping for this database first|先にデータベースのタスク状態を設定してください
+calendar.conflict|内容或知识库已变化，请刷新后重试；当前输入仍保留|Content or workspace changed. Refresh and retry; your input is retained.|内容または保管庫が変更されました。入力を保持しています。更新して再試行してください
+calendar.operationRequired|缺少操作标识，请重新打开安排|Missing operation identity; reopen the item|操作 ID がありません。予定を開き直してください
+calendar.operationConflict|该操作标识已用于其他修改|This operation identity was used for a different change|この操作 ID は別の変更で使用されています
+calendar.notFound|安排不存在或已删除|Item not found or deleted|予定が存在しないか削除されています
+calendar.seriesScope|修改重复规则请选择“本次及以后”|Choose this and future occurrences to change repetition|繰り返しの変更には「今回以降」を選択してください
+calendar.invalidCommand|不支持的日历操作|Unsupported calendar operation|対応していないカレンダー操作です
+calendar.range|单次查询日期范围不能超过一年|Query up to one year at a time|一度に照会できる期間は 1 年以内です
+calendar.storageError|日历存储路径不可用|Calendar storage path is unavailable|カレンダー保存先を利用できません
+calendar.storageVersion|日历数据来自更高版本，请升级应用|Calendar data requires a newer app version|カレンダーデータには新しいアプリが必要です
+desktop.calendarTitle|日历备忘录|Calendar notebook|カレンダーノート
+desktop.calendarMissed|有 {count} 条错过的日程提醒，点击查看|{count} missed reminders. Click to review.|未確認の通知が {count} 件あります。クリックして確認
+desktop.calendarSummary|今天有 {count} 项安排，另有 {overdue} 项逾期待办|{count} items today; {overdue} overdue to-dos|今日の予定 {count} 件・期限超過タスク {overdue} 件
+calendar.syncTitle|同步与冲突|Sync and conflicts|同期と競合
+calendar.syncReview|查看并处理|Review|確認する
+calendar.syncConflictCount|有 {count} 项日历内容存在跨设备冲突|{count} calendar conflicts across devices|端末間のカレンダー競合が {count} 件あります
+calendar.syncConflict|此事项存在跨设备冲突，请先选择保留的版本|This item has conflicting versions. Choose a version first.|この予定には競合があります。先に使用する版を選んでください
+calendar.syncFilesHelp|让 Resilio 同步知识库中的 Calendar/LeafLoom 文件夹，继续排除 .vault-rag。两台电脑都须升级到支持日历同步的版本。|Sync the vault's Calendar/LeafLoom folder with Resilio and keep .vault-rag excluded. Upgrade both computers to a version with calendar sync.|保管庫の Calendar/LeafLoom を Resilio で同期し、.vault-rag は除外したままにします。両端末をカレンダー同期対応版に更新してください。
+calendar.syncLocalHelp|安排、重复规则和完成记录会同步。提醒开关、每日汇总时间及已发送记录仅保存在本机；新设备默认关闭提醒。|Plans, recurrence and completion records sync. Reminder switches, summary time and delivery history stay on this computer. New devices start with reminders off.|予定・繰り返し・完了記録は同期します。通知の有効化・まとめの時刻・通知履歴は端末ごとに保存し、新端末では通知をオフにします。
+calendar.syncSettingsHelp|时区和截止日来源为共享设置；上面的提醒开关及汇总时间仅影响此设备。|Time zone and deadline sources are shared. Reminder switches and summary time above affect only this device.|タイムゾーンと期限の参照元は共有設定です。上の通知スイッチとまとめの時刻はこの端末のみの設定です。
+calendar.syncRecords|本机已读取 {count} 条变更；其他设备的传输进度请在 Resilio 中确认。|Loaded {count} changes locally. Check Resilio for transfer progress on other devices.|この端末で {count} 件の変更を読み込みました。他端末への転送状況は Resilio で確認してください。
+calendar.syncBackup|迁移前的数据库备份：|Database backup before migration:|移行前のデータベースバックアップ：
+calendar.syncFiles|相关文件|Affected files|対象ファイル
+calendar.syncNoConflicts|当前没有待处理的日历冲突。|No calendar conflicts need attention.|現在、処理が必要なカレンダー競合はありません。
+calendar.syncSharedSettings|共享日历设置冲突|Shared calendar settings conflict|共有カレンダー設定の競合
+calendar.syncChoose|选择此事项的版本|Choose a version of this item|この予定の版を選択
+calendar.syncChooseHelp|选择将应用于整个重复系列及其后续分段；未选版本仍保留在变更文件中。两台电脑后来又有不同修改时，会再次提示。|The choice applies to the whole recurring series and its split segments. Unselected versions remain in the change files. Later conflicting edits will be shown again.|選択は繰り返し系列と分割後の予定全体に適用されます。選ばなかった版も変更ファイルに残ります。後から競合する変更が届くと再び表示します。
+calendar.syncDevice|设备 {id}|Device {id}|端末 {id}
+calendar.syncImported|旧数据导入|Imported legacy data|旧データの取り込み
+calendar.syncDeleted|此版本已删除|Deleted in this version|この版では削除済み
+calendar.syncOccurrence|{date} 这一次的修改|Changes to the {date} occurrence|{date} の回への変更
+calendar.syncUseVersion|使用此版本|Use this version|この版を使用
+calendar.syncYes|是|Yes|はい
+calendar.syncNo|否|No|いいえ
+calendar.syncMinutes|提前 {count} 分钟|{count} minutes before|{count} 分前
+calendar.syncPending|部分变更依赖的文件尚未到齐，请等待 Resilio 同步完成后刷新；暂时停止日历修改和提醒。|Some changes are waiting for earlier files. Wait for Resilio to finish, then refresh. Calendar writes and reminders are paused.|一部の変更に必要なファイルが未着です。Resilio の同期完了後に更新してください。カレンダーの変更と通知は一時停止します。
+calendar.syncMissing|已读取的变更文件缺失。请从另一台电脑或备份恢复，暂不继续修改或提醒。|Previously loaded change files are missing. Restore them from another computer or backup; writes and reminders are paused.|読み込み済みの変更ファイルがありません。他端末かバックアップから復元してください。変更と通知は停止しています。
+calendar.syncInvalid|日历变更文件不完整、被修改或格式不受支持；原有数据保留，请检查同步文件。|Calendar change files are incomplete, modified or unsupported. Existing data is preserved; check the synced files.|変更ファイルが未完成・変更済み・未対応形式です。既存データを保持しています。同期ファイルを確認してください。
+calendar.syncTooLarge|单次日历变更过大，请拆分操作|The calendar change is too large; split the operation|変更が大きすぎます。操作を分けてください
+calendar.migrationFailed|旧日历数据核对未通过，已保留原数据，请检查备份后重试|Legacy calendar verification failed. Original data is preserved; check the backup and retry.|旧カレンダーの検証に失敗しました。元データは保持しています。バックアップを確認して再試行してください。

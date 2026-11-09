@@ -131,7 +131,7 @@ class LocalConfig:
 
 class Files:
     def __init__(self,config:LocalConfig):
-        self.config=config; self.lock=threading.RLock();self.changed=lambda *paths:None;self.annotation_changed=lambda action,**kwargs:None;self.migration_active=False
+        self.config=config; self.lock=threading.RLock();self.changed=lambda *paths:None;self.annotation_changed=lambda action,**kwargs:None;self.calendar_moved=lambda source,destination:None;self.migration_active=False
         from vault_rag.attachment_index import AttachmentIndex
         self.attachments=AttachmentIndex(self)
     def ensure_mutable(self):
@@ -505,6 +505,7 @@ class Files:
                     raise ConflictError('移动未完成，已保留外部修改；操作记录：'+key) from None
                 shutil.rmtree(d);raise
             self.annotation_changed('move',source=source,destination=destination)
+            self.calendar_moved(source,destination)
             self.changed(source,destination,*edits);return {'path':destination,'updated_links':len(edits),'operation_id':key}
     def undo_move(self,d,record):
         if record.get('state','completed')!='completed':raise ConflictError('操作未完整完成，请检查操作记录并手动恢复')
@@ -546,4 +547,5 @@ class Files:
             raise ConflictError('恢复未完成，操作记录：'+record['id']) from None
         shutil.rmtree(d)
         self.annotation_changed('move',source=record['destination'],destination=record['path'])
+        self.calendar_moved(record['destination'],record['path'])
         self.changed(record['path'],record['destination'],*[item['path'] for item in record['edits']]);return {'path':record['path']}

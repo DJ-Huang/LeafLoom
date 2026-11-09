@@ -13,7 +13,7 @@ from vault_rag.browser_storage import BrowserStorageMigration, migration_script
 from vault_rag.local_dns import LocalDns
 from vault_rag.platform_support import choose_directory, open_directory, private_file_mode, is_windows
 from vault_rag.http_cache import conditional_file
-from vault_rag.skill_install import install_skill, skill_status
+from vault_rag.skill_install import install_skill, is_bundled_skill, skill_status
 from vault_rag.ai_service import AiService
 from vault_rag.ai_routes import ai_router, ai_mcp_server
 from vault_rag.preferences import Preferences
@@ -79,6 +79,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     work_hub_settings=WorkHubSettings(notes)
     from vault_rag.databases import Databases
     databases=Databases(config,runtime,notes)
+    from vault_rag.calendar import Calendar
+    from vault_rag.calendar_routes import calendar_router
+    calendar=Calendar(config,runtime,notes,databases)
+    runtime.files.calendar_moved=calendar.moved
+    runtime.calendar=calendar
     from vault_rag.remote_attachments import RemoteAttachments
     from vault_rag.attachment_catalog import AttachmentCatalog
     from vault_rag.attachment_storage_routes import attachment_storage_router, public_job
@@ -146,9 +151,12 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     async def lifespan(app):
         async with mcp.session_manager.run(),ai_mcp.session_manager.run():
             ai.loop=asyncio.get_running_loop()
-            if start_background:runtime.start()
+            if start_background:
+                runtime.start()
+                calendar.start()
             try:yield
             finally:
+                await asyncio.to_thread(calendar.stop)
                 await ai.close()
                 await asyncio.to_thread(file_operations.stop)
                 await asyncio.to_thread(attachment_groups.stop)
@@ -161,6 +169,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
                 await asyncio.to_thread(index_jobs.stop)
                 runtime.stop()
     app=FastAPI(lifespan=lifespan,docs_url=None,redoc_url=None)
+    app.state.calendar=calendar
+    app.include_router(calendar_router(calendar,token))
     app.add_middleware(StaticCompression)
     app.state.runtime=runtime;app.state.csrf=csrf
     app.state.annotations=annotations
@@ -192,6 +202,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
                              503 if error.state=='unreachable' else 409)
     from vault_rag.design_routes import design_router
     app.include_router(design_router(design, feishu))
+    from vault_rag.local_skill_api import local_skill_router
+    app.include_router(local_skill_router(config, runtime, notes, databases, mcp_access, feishu))
     @app.middleware('http')
     async def local_security(request,call_next):
         host=request.headers.get('host','')
@@ -207,6 +219,7 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         origin=request.headers.get('origin')
         if origin and origin not in {f'http://{h}' for h in allowed} and not (preview_read and origin=='null'):return json_response({'error':'来源不允许'},403)
         is_mcp=path.rstrip('/')=='/mcp'
+        is_skill=path.startswith('/api/leafloom/')  # The skill router checks its own loopback credential.
         is_api=path.startswith('/api/') or is_mcp
         # Only the transport peer is authoritative; never trust forwarded IPs.
         try:local_mcp=is_mcp and request.client is not None and ipaddress.ip_address(request.client.host).is_loopback
@@ -220,12 +233,12 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
                 logging.getLogger(__name__).debug('MCP connection=%s runtime_proof=%s bearer=%s', who,
                     bool(request.headers.get(TUNNEL_AUTH_HEADER,'')),bool(request.headers.get('authorization','')))
             except PermissionError:return json_response({'error':'MCP credential is missing, invalid or revoked','error_code':'permission_denied'},401)
-        elif is_api and not (bearer or session):return json_response({'error':'请从本机网页入口打开，或配置 MCP 本机令牌'},401)
-        if path.startswith('/api/') and request.method not in ('GET','HEAD') and not bearer:
+        elif is_api and not (bearer or session or is_skill):return json_response({'error':'请从本机网页入口打开，或配置 MCP 本机令牌'},401)
+        if path.startswith('/api/') and request.method not in ('GET','HEAD') and not (bearer or is_skill):
             if not hmac.compare_digest(request.headers.get('x-vault-csrf',''),csrf):return json_response({'error':'写入请求校验失败'},403)
         if path in ('/api/search-files','/api/graph','/api/related','/api/query','/api/base','/api/templates') and runtime.catalog.root!=config.data.get('root'):
             return json_response({'error':'目录信息正在更新，请稍后重试'},503)
-        foreground=path.startswith('/api/') and path not in ('/api/events','/api/status','/api/activity')
+        foreground=path.startswith('/api/') and path not in ('/api/events','/api/status','/api/activity','/api/calendar/reminders/claim','/api/calendar/reminders/ack','/api/calendar/reminders/state')
         if foreground:runtime.foreground_begin()
         try:
             if dev and request.url.hostname==websites.ui_host and request.method in ('GET','HEAD') and dev.asset(path):
@@ -335,12 +348,12 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         return json_response(await asyncio.to_thread(choose_directory))
     @app.get('/api/skills/{name}')
     async def installed_bundled_skill(name:str):
-        if name not in {'wiki-search','work-hub'}:return json_response({'error':'Unknown bundled skill'},404)
+        if not is_bundled_skill(name):return json_response({'error':'Unknown bundled skill'},404)
         try:return json_response(await asyncio.to_thread(skill_status,name))
         except (OSError,ValueError) as e:return json_response({'error':f'无法读取技能安装状态：{e}'},400)
     @app.post('/api/skills/{name}/install')
     async def install_bundled_skill(name:str):
-        if name not in {'wiki-search','work-hub'}:return json_response({'error':'Unknown bundled skill'},404)
+        if not is_bundled_skill(name):return json_response({'error':'Unknown bundled skill'},404)
         try:return json_response(await asyncio.to_thread(install_skill,name))
         except (OSError,ValueError) as e:return json_response({'error':f'无法安装 {name}：{e}'},400)
     @app.get('/api/work-hub/settings')
@@ -746,8 +759,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         body=await request.json()
         return json_response(await asyncio.to_thread(notes.create,body['path'],notes.workspace_revision,template=body['template']))
     @app.post('/api/daily')
-    async def daily():
-        return json_response(await asyncio.to_thread(notes.daily,notes.workspace_revision))
+    async def daily(request:Request):
+        raw=await request.body()
+        body=json.loads(raw) if raw else {}
+        if not isinstance(body,dict):raise ValueError('Invalid daily note request')
+        return json_response(await asyncio.to_thread(notes.daily,body.get('workspace_revision',notes.workspace_revision),body.get('date')))
     @app.post('/api/knowledge-search')
     async def knowledge_search(request:Request):
         body=await request.json();return json_response(await asyncio.to_thread(runtime.knowledge.search,body.get('query',''),top_k=body.get('top_k',3),type_=body.get('note_type'),mode=body.get('mode','hybrid'),domain=body.get('domain')))

@@ -3,16 +3,25 @@ module.exports = {
   "zh-CN": {
     "restart": "重启 LeafLoom",
     "restartDetail": "返回保存，或保留本地笔记草稿后重启；未保存的设置将被丢弃。",
-    "restartFailed": "未能自动重启，请重新打开 LeafLoom；开发模式下请重新运行 Dev。"
+    "restartFailed": "未能自动重启，请重新打开 LeafLoom；开发模式下请重新运行 Dev。",
+    "calendarTitle": "日历备忘录",
+    "calendarMissed": "有 {count} 条错过的日程提醒，点击查看",
+    "calendarSummary": "今天有 {count} 项安排，另有 {overdue} 项逾期待办"
   },
   "en": {
     "restart": "Restart LeafLoom",
     "restartDetail": "Return to save your changes, or restart keeping local note drafts for next launch. Unsaved settings will be discarded.",
-    "restartFailed": "Unable to restart automatically. Open LeafLoom again; in development, run Dev again."
+    "restartFailed": "Unable to restart automatically. Open LeafLoom again; in development, run Dev again.",
+    "calendarTitle": "Calendar notebook",
+    "calendarMissed": "{count} missed reminders. Click to review.",
+    "calendarSummary": "{count} items today; {overdue} overdue to-dos"
   },
   "ja": {
     "restart": "LeafLoom を再起動",
     "restartDetail": "戻って保存するか、ローカルのメモの下書きを残して再起動します。未保存の設定は破棄されます。",
-    "restartFailed": "自動で再起動できませんでした。LeafLoom を開き直してください。開発モードでは Dev を再実行してください。"
+    "restartFailed": "自動で再起動できませんでした。LeafLoom を開き直してください。開発モードでは Dev を再実行してください。",
+    "calendarTitle": "カレンダーノート",
+    "calendarMissed": "未確認の通知が {count} 件あります。クリックして確認",
+    "calendarSummary": "今日の予定 {count} 件・期限超過タスク {overdue} 件"
   }
 };

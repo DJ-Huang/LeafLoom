@@ -44,7 +44,7 @@ The public help center has 39 task guides and five full guide/release references
 - [AI assistant implementation](AI_ASSISTANT.md)
 - [Complete MCP tools, credentials, note workflows and the two general file tools](MCP.md)
 - [Feishu / Lark connection, CLI ownership and MCP tools](FEISHU.md)
-- [Work hub Skill: platform-independent work records, office preferences, local tasks, reports and optional source integrations](WORK_HUB.md)
+- [LeafLoom skill work hub: work records, local tasks, reports and optional source integrations](WORK_HUB.md)
 - [Local access and privacy boundaries](SECURITY.md)
 - [Architecture and workflow](ARCHITECTURE.md)
 - [Screenshots and public media](MEDIA.md)
@@ -74,3 +74,5 @@ Editor regression commands and the disposable browser harness are documented in 
 [English guide](en/GUIDE.md#note-databases) · [中文指南](zh-CN/GUIDE.md#笔记数据库) · [日本語ガイド](ja/GUIDE.md#ノートデータベース) · [MCP contracts](MCP.md#note-databases)
 
 [Board and basic tasks](en/GUIDE.md#database-boards-and-basic-tasks) · [数据库看板与基础任务](zh-CN/GUIDE.md#数据库看板与基础任务) · [ボードと基本タスク](ja/GUIDE.md#データベースのボードと基本タスク)
+
+Calendar notebook / 日历备忘录 / カレンダーノート: [English](en/GUIDE.md#calendar-notebook) · [中文](zh-CN/GUIDE.md#日历备忘录) · [日本語](ja/GUIDE.md#カレンダーノート).

@@ -603,6 +603,6 @@ All five views use the same public commands. Use `record.update.values` for titl
 
 ## Work hub workflow
 
-The installable work-hub Skill composes existing workspace/database and Feishu tools for conversation capture, source snapshots, explicit task writes and reports. It does not extend RAG selection or add implicit external permissions. See [Work hub API and workflow](WORK_HUB.md).
+Local Codex can also use [the LeafLoom skill](../leafloom/SKILL.md) for workspace/database and work hub workflows through the app's local API.
 
 For an explicitly requested local Feishu page mirror, the bundled helper can use the same user's local `lark-cli` and authenticated local file/upload APIs. Large media streams directly to the configured attachment server instead of passing through MCP's bounded temporary-file transfer. This requires access to the service host and does not add a new MCP command or permit Feishu writes.

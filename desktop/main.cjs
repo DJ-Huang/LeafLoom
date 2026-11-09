@@ -1,9 +1,10 @@
 'use strict';
-const {app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, nativeImage, screen, session, safeStorage, powerMonitor, clipboard, ClipboardItem} = require('electron');
+const {app, BrowserWindow, Tray, Menu, dialog, ipcMain, shell, nativeImage, screen, session, safeStorage, powerMonitor, clipboard, ClipboardItem, Notification} = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
 const {Backend} = require('./backend.cjs');
+const {CalendarNotifications} = require('./calendar.cjs');
 const {publishJob} = require('./design-publisher.cjs');
 const {DesignPresenter} = require('./design-presenter.cjs');
 const {TunnelSettings, tunnelBinary} = require('./tunnel.cjs');
@@ -26,7 +27,7 @@ const control = path.join(home, 'desktop-control');
 let window, tray, backend, origin = '', lastOrigin = '', workspaceLoaded = false, quitting = false, quitPending = false, failure = '', retrying = false;
 const websiteContents = new Set();
 let startupTimer, closeTimer;
-let presenter;
+let presenter, calendarNotifications;
 let backendGeneration = 0;
 const tunnel = new TunnelSettings(home, safeStorage);
 const attachmentSecrets = new AttachmentSecrets(home, safeStorage, {onState: state => log('Attachment credential restore: ' + JSON.stringify(state))});
@@ -181,6 +182,7 @@ async function requestRestart() {
 async function finishQuit() {
   if (quitting) return; quitting = true;
   backendGeneration++;
+  calendarNotifications?.stop();
   clearTimeout(startupTimer); clearInterval(closeTimer);
   attachmentSecrets.disconnectBackend();
   await backend?.stop();
@@ -208,6 +210,7 @@ function fail(error) {
 async function startBackend() {
   if (retrying || quitting) return; retrying = true;
   const generation = ++backendGeneration;
+  calendarNotifications?.stop();
   clearTimeout(startupTimer);
   try {
     tunnelBackendReady = false;
@@ -273,6 +276,17 @@ async function startBackend() {
         if (!current()) return;
         if (!interfaceReady) throw new Error('Workspace interface did not become ready');
         workspaceLoaded = true;
+        calendarNotifications = new CalendarNotifications({Notification,current,
+          text, request:async (route,body)=>{
+            if(!current())throw new Error('Backend changed');
+            const response=await fetch(ready.url+route,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(10000)});
+            if(!response.ok)throw new Error('Calendar delivery unavailable');
+            return response.json();
+          },open:async value=>{
+            if(!current()||!window||window.isDestroyed()||!policy.trustedPage(window.webContents.getURL(),origin))return;
+            showWindow();window.webContents.send('leafloom:calendar-open',value);
+          }});
+        calendarNotifications.start();
         if (!previousPreferences && app.isPackaged) {loginChanged = true; setLogin(Boolean(ready.autostart));}
         if (app.isPackaged) {
           metadataChanged = true;

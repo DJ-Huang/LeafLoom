@@ -4,9 +4,11 @@
 
 ## 工具与权限
 
-使用已连接的 `feishu_cli_inspect` 查看实际帮助及匹配的内置 Skill，再用 `feishu_cli_read`；参数随当前版本发现，不复制过时命令。默认沿用用户身份，不换机器人身份绕过权限；不要求客户端另装全部 lark-* Skill，可通过 inspect 读取它们。工具缺失或无权限时说明能力缺口，可整理用户提供的文字/导出材料，不自动安装或改配置。
+这些操作调用本机 LeafLoom 的飞书服务，沿用其配置的 CLI 身份和独立的飞书权限。
 
-通用归档、批次与事项去重遵循 [来源采集与入库](imports.md)。新记录写 source_provider=feishu 和通用 source_kind。文档正文及同响应引用/评论 sidecar 一并归档；临时资源经 `feishu_files` 读取并转存，句柄不能作为永久附件。
+用本 Skill 脚本的 `feishu-inspect` 查看实际帮助及匹配的内置 Skill，再用 `feishu-read`；参数随当前版本发现，不复制过时命令。默认沿用用户身份，不换机器人身份绕过权限；不要求客户端另装全部 lark-* Skill，可通过 inspect 读取它们。工具缺失或无权限时说明能力缺口，可整理用户提供的文字/导出材料，不自动安装或改配置。
+
+通用归档、批次与事项去重遵循 [来源采集与入库](imports.md)。新记录写 source_provider=feishu 和通用 source_kind。文档正文及同响应引用/评论 sidecar 一并归档；临时资源经 `feishu-files` 读取并转存，句柄不能作为永久附件。
 
 ## 飞书文档
 
@@ -43,7 +45,7 @@
 - 飞书 todo 映射本地 open、done 映射 done；本地 in-progress 是个人进展。远端任务完成时间与本人会签完成时间按语义区分，特殊完成模式、重复规则、提醒、自定义字段仍在飞书管理。
 - `external_due` 保存原始 `{timestamp, is_all_day}` JSON 或 JSON null；timestamp 为数字字符串，is_all_day 为布尔值，非 null 对象必须同时具备两项。先校验再送入版本 2 比较；日期视图按已确认用户时区计算，不采用执行主机时区。不能从仅有日期的旧 due 猜测丢失的时刻。
 - 远端 description 存 `external_description`，更新时间存 `external_updated_at`；正文仅作个人笔记。负责人使用稳定人员 ID，姓名不唯一先消歧。
-- 用户明确要求写回时使用 `feishu_cli_write` 和当前 CLI 中真实的创建、属性修改、负责人、完成/重开操作。成功必须由飞书确认；只推送已授权的变化字段。
+- 用户明确要求写回时使用 `feishu-write` 和当前 CLI 中真实的创建、属性修改、负责人、完成/重开操作。成功必须由飞书确认；只推送已授权的变化字段。
 
 ## 旧飞书任务兼容
 
