@@ -11,6 +11,8 @@ import json
 import posixpath
 import re
 import sqlite3
+import threading
+import time
 import uuid
 from contextlib import closing
 from pathlib import PurePosixPath
@@ -31,18 +33,84 @@ _STALE = 'Attachment results changed; start from the first page'
 
 
 class AttachmentCatalog:
+    _PRESENCE_TTL = 1.5
+
     def __init__(self, local_index, remote):
         object.__setattr__(self, '_local_index', local_index)
         object.__setattr__(self, '_remote', remote)
+        object.__setattr__(self, '_presence_cache', {})
+        object.__setattr__(self, '_presence_lock', threading.Lock())
+        object.__setattr__(self, '_presence_inflight', {})
 
     def __getattr__(self, name):
         return getattr(self._local_index, name)
 
     def __setattr__(self, name, value):
-        if name in {'_local_index', '_remote', 'presentation'}:
+        if name in {'_local_index', '_remote', 'presentation', '_presence_cache', '_presence_lock', '_presence_inflight'}:
             object.__setattr__(self, name, value)
         else:
             setattr(self._local_index, name, value)
+
+    def _presence_digest(self, db, *, root, generation, local_generation, force=False):
+        """Hash which attachment paths currently exist on disk for cursor scopes.
+
+        Cursor validation must see fresh presence (`force=True`). Quiet first-page
+        refreshes may reuse a short-lived digest so scans do not serialize behind
+        a full filesystem walk under remote.lock.
+        """
+        key = (str(root), generation, local_generation)
+        now = time.monotonic()
+        if not force:
+            with self._presence_lock:
+                hit = self._presence_cache.get(key)
+                if hit and now - hit[0] < self._PRESENCE_TTL:
+                    return hit[1]
+                waiter = self._presence_inflight.get(key)
+            if waiter is not None:
+                waiter.wait(timeout=30)
+                with self._presence_lock:
+                    hit = self._presence_cache.get(key)
+                    if hit:
+                        return hit[1]
+        event = threading.Event()
+        with self._presence_lock:
+            if not force:
+                hit = self._presence_cache.get(key)
+                if hit and time.monotonic() - hit[0] < self._PRESENCE_TTL:
+                    return hit[1]
+                if key in self._presence_inflight:
+                    waiter = self._presence_inflight[key]
+                else:
+                    self._presence_inflight[key] = event
+                    waiter = None
+            else:
+                waiter = None
+                self._presence_inflight[key] = event
+        if waiter is not None:
+            waiter.wait(timeout=30)
+            with self._presence_lock:
+                hit = self._presence_cache.get(key)
+                if hit:
+                    return hit[1]
+        try:
+            presence = [row[0] for row in db.execute(
+                'SELECT path FROM main.assets WHERE attachment_allowed(path)=1 AND catalog_local_exists(path) '
+                'UNION SELECT path FROM manifest.aliases WHERE catalog_local_exists(path) ORDER BY path')]
+            digest = hashlib.sha256('\0'.join(presence).encode()).hexdigest()
+            with self._presence_lock:
+                self._presence_cache[key] = (time.monotonic(), digest)
+                # Drop stale vault/generation entries so a long-lived catalog
+                # does not retain an unbounded map of digests.
+                stale = [item for item, (stamp, _) in self._presence_cache.items()
+                         if item[0] != str(root) or time.monotonic() - stamp > 30]
+                for item in stale:
+                    self._presence_cache.pop(item, None)
+            return digest
+        finally:
+            with self._presence_lock:
+                if self._presence_inflight.get(key) is event:
+                    self._presence_inflight.pop(key, None)
+            event.set()
 
     def _manifest(self, files):
         if self._remote is None:
@@ -122,9 +190,16 @@ class AttachmentCatalog:
     def _cte():
         # Aliases are authoritative once a verified migration has released its
         # local source. A pending migration keeps the existing local entry.
+        # Vault-path caches and pending promotes keep their logical aliases even
+        # while the bytes still exist under `_attachments`. Those paths must not
+        # also appear as independent local originals.
         return '''WITH alias_choice AS (
-            SELECT asset_id,MIN(path) AS logical_path FROM manifest.aliases
-            WHERE NOT catalog_local_exists(path) GROUP BY asset_id
+            SELECT al.asset_id,MIN(al.path) AS logical_path FROM manifest.aliases al
+            JOIN manifest.assets owner ON owner.id=al.asset_id
+            WHERE NOT catalog_local_exists(al.path)
+               OR EXISTS (SELECT 1 FROM manifest.cache c WHERE c.asset_id=al.asset_id AND c.file='vault:'||al.path)
+               OR owner.state IN ('pending','migration_pending')
+            GROUP BY al.asset_id
         ), catalog AS (
             SELECT l.path,l.name,l.name_key,l.size,l.mtime_ns,l.mime,
                 COALESCE(m.id,'') AS asset_id,'local' AS storage_id,
@@ -135,14 +210,18 @@ class AttachmentCatalog:
             FROM main.assets l LEFT JOIN manifest.assets m
                 ON m.source_id='local' AND m.path=l.path
             WHERE attachment_allowed(l.path)=1 AND catalog_local_exists(l.path)
+              AND NOT EXISTS (
+                SELECT 1 FROM manifest.aliases al JOIN manifest.assets a ON a.id=al.asset_id
+                WHERE al.path=l.path AND a.source_id!='local' AND a.state NOT IN ('missing','excluded','redirected')
+              )
             UNION ALL
             SELECT COALESCE(x.logical_path,? || a.source_id || '/' || a.path) AS path,
                 catalog_basename(COALESCE(x.logical_path,a.path)) AS name,
                 catalog_path_key(catalog_basename(COALESCE(x.logical_path,a.path))) AS name_key,
                 a.size,a.mtime_ns,a.mime,a.id AS asset_id,a.source_id AS storage_id,
                 a.path AS remote_path,a.state,a.description,a.tags,a.category,a.metadata_revision,
-                CASE WHEN c.asset_id IS NOT NULL AND c.size=a.size AND c.etag=a.etag
-                    AND c.mtime=a.mtime THEN 'complete' WHEN EXISTS (
+                CASE WHEN c.asset_id IS NOT NULL AND c.size=a.size
+                    AND (a.state='pending' OR (c.etag=a.etag AND c.mtime=a.mtime)) THEN 'complete' WHEN EXISTS (
                         SELECT 1 FROM manifest.ranges r WHERE r.asset_id=a.id
                             AND r.object_size=a.size AND r.etag=a.etag AND r.mtime=a.mtime
                     ) THEN 'partial' ELSE 'none' END AS cache_state
@@ -227,13 +306,20 @@ class AttachmentCatalog:
             if presentation and path is None:
                 with self._remote._db(str(root)): pass
                 path = self._manifest(files)
-            if path is None:
-                if cursor.startswith(_CURSOR_PREFIX):
+            local_only = (source == 'local' and storage_id in {'', 'local'} and not tags and not category
+                          and not (presentation and group_id))
+            if path is None or local_only:
+                if path is None and cursor.startswith(_CURSOR_PREFIX):
+                    raise ConflictError(_STALE)
+                # Local filter skips the unified manifest CTE and remote.lock so a
+                # background NAS scan cannot stall "本地附件" browsing. Catalog
+                # cursors from an "all/remote" page are not valid here.
+                if local_only and path is not None and cursor.startswith(_CURSOR_PREFIX):
                     raise ConflictError(_STALE)
                 result = local.listing(query, after, limit, kind=kind, sort=sort, order=order, cursor=cursor)
-                if source == 'remote' or storage_id not in {'', 'local'} or tags or category:
+                if path is None and (source == 'remote' or storage_id not in {'', 'local'} or tags or category):
                     result.update(items=[], total=0, cursor=None, next_cursor=None)
-                if source == 'remote' or storage_id not in {'', 'local'}:
+                if path is None and (source == 'remote' or storage_id not in {'', 'local'}):
                     result['summary'] = {'files': 0, 'bytes': 0, 'kinds': {}}
                 result['summary']['by_source'] = {
                     'local': {'files': result['summary']['files'], 'bytes': result['summary']['bytes']},
@@ -242,105 +328,118 @@ class AttachmentCatalog:
                 settings = self._remote._settings(str(root)) if self._remote else {'sources': []}
                 result['storages'] = self._storage_options(settings)
                 return result
-            # One lock covers the read snapshot and source settings. The facade
-            # never invokes network or content methods while holding it.
+            # Snapshot settings under remote.lock only. Catalog SQL and the
+            # filesystem presence walk run afterward so scan writers can commit.
             with self._remote.lock:
-                local._check_root(root)
                 local._check_root(root)
                 files = local._snapshot()
                 settings = self._remote._settings(str(root))
                 stamp = self._settings_stamp(files, settings)
                 prefix = files.config.data.get('attachment_folder', '_attachments') + '/_remote/'
-                with closing(self._catalog_connection(local, files)) as db:
-                    self._attach(db, path, files)
-                    register_scan_scope(db,settings['sources'])
-                    view_stamp = presentation.prepare(db,str(root),group_id) if presentation else ''
-                    db.execute('BEGIN')
-                    scanned = db.execute('SELECT scanned_at FROM main.state WHERE root=?', (str(root),)).fetchone()
-                    generation = db.execute('SELECT generation FROM manifest.catalog_state WHERE id=1').fetchone()[0]
-                    presence = [row[0] for row in db.execute('SELECT path FROM main.assets WHERE attachment_allowed(path)=1 AND catalog_local_exists(path) '
-                        'UNION SELECT path FROM manifest.aliases WHERE catalog_local_exists(path) ORDER BY path')]
-                    scope = self._scope([str(root), stamp, scanned[0] if scanned else None, local.generation,
-                                         generation, presence, query, kind, sort, order, source, storage_id, sorted(set(tags)), category, group_id, view_stamp])
-                    origins, origin_args = ['1=1'], [prefix]
-                    if source == 'local':
-                        origins.append("storage_id='local'")
-                    elif source == 'remote':
-                        origins.append("storage_id!='local'")
-                    if storage_id:
-                        origins.append('storage_id=?')
-                        origin_args.append(storage_id)
-                    if presentation and group_id:
-                        origins.append('attachment_group_matches(storage_id,path,remote_path,name,tags,category,asset_id)=1')
-                    where, args = list(origins), list(origin_args)
-                    if query:
-                        pattern = '%' + query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
-                        where.append("(path LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR tags LIKE ? ESCAPE '\\' OR category LIKE ? ESCAPE '\\')")
-                        args.extend([pattern] * 4)
-                    if kind != 'all':
-                        where.append('(' + _KIND_SQL + ')=?')
-                        args.append(kind)
-                    if category:
-                        where.append('category=?')
-                        args.append(category)
-                    for tag in sorted(set(tags)):
-                        where.append('EXISTS (SELECT 1 FROM json_each(catalog.tags) WHERE value=?)')
-                        args.append(tag)
-                    cte = presentation.cte(self._cte()) if presentation else self._cte()
-                    predicate = ' AND '.join(where)
-                    total = db.execute(cte + 'SELECT COUNT(*) FROM catalog WHERE ' + predicate, args).fetchone()[0]
-                    # Keep type facets independent of the selected kind/search,
-                    # while scoping all counts and bytes to the selected origin.
-                    stats = db.execute(cte + "SELECT CASE WHEN storage_id='local' THEN 'local' ELSE 'remote' END," +
-                                       _KIND_SQL + ',COUNT(*),COALESCE(SUM(size),0) FROM catalog WHERE ' +
-                                       ' AND '.join(origins) + ' GROUP BY 1,2', origin_args).fetchall()
-                    summary = {'files': sum(r[2] for r in stats), 'bytes': sum(r[3] for r in stats), 'kinds': {},
-                               'by_source': {'local': {'files': 0, 'bytes': 0}, 'remote': {'files': 0, 'bytes': 0}}}
-                    for origin, file_kind, count, size in stats:
-                        summary['kinds'][file_kind] = summary['kinds'].get(file_kind, 0) + count
-                        summary['by_source'][origin]['files'] += count
-                        summary['by_source'][origin]['bytes'] += size
-                    result_summary = None
-                    if presentation:
-                        matched = db.execute(cte + "SELECT CASE WHEN storage_id='local' THEN 'local' ELSE 'remote' END," +
-                            _KIND_SQL + ',COUNT(*),COALESCE(SUM(size),0) FROM catalog WHERE ' + predicate + ' GROUP BY 1,2',args).fetchall()
-                        result_summary={'files':sum(r[2] for r in matched),'bytes':sum(r[3] for r in matched),'kinds':{},
-                            'by_source':{'local':{'files':0,'bytes':0},'remote':{'files':0,'bytes':0}}}
-                        for origin,file_kind,count,size in matched:
-                            result_summary['kinds'][file_kind]=result_summary['kinds'].get(file_kind,0)+count
-                            result_summary['by_source'][origin]['files']+=count
-                            result_summary['by_source'][origin]['bytes']+=size
-                    field = _SORTS[sort]
-                    direction, sign = ('ASC', '>') if order == 'asc' else ('DESC', '<')
-                    if cursor:
-                        token = self._decode(cursor, scope, sort)
-                        # The final source/asset keys disambiguate matching paths
-                        # without dropping or repeating rows across page edges.
-                        predicate += f' AND ({field},path,storage_id,asset_id) {sign} (?,?,?,?)'
-                        args.extend(token)
-                    elif after:
-                        predicate += ' AND path>?'
-                        args.append(after)
-                    rows = db.execute(cte + 'SELECT * FROM catalog WHERE ' + predicate +
-                        f' ORDER BY {field} {direction},path {direction},storage_id {direction},asset_id {direction} LIMIT ?',
-                        (*args, limit + 1)).fetchall()
-                sources = {s['id']: s for s in settings['sources']}
-                items = []
-                for row in rows[:limit]:
-                    try:
-                        # Apply the same rooted/hidden/link boundary to logical
-                        # remote names; this does not read remote content.
-                        files.config.path_for(row['path'])
-                    except (ValueError, OSError):
-                        continue
-                    items.append(self._public(row, sources))
-                local._check_root(root)
+            with closing(self._catalog_connection(local, files)) as db:
+                self._attach(db, path, files)
+                register_scan_scope(db, settings['sources'])
+                view_stamp = presentation.prepare(db, str(root), group_id) if presentation else ''
+                db.execute('BEGIN')
+                scanned = db.execute('SELECT scanned_at FROM main.state WHERE root=?', (str(root),)).fetchone()
+                generation = db.execute('SELECT generation FROM manifest.catalog_state WHERE id=1').fetchone()[0]
+                presence = self._presence_digest(
+                    db, root=root, generation=generation, local_generation=local.generation, force=bool(cursor))
+                scope = self._scope([str(root), stamp, scanned[0] if scanned else None, local.generation,
+                                     generation, presence, query, kind, sort, order, source, storage_id,
+                                     sorted(set(tags)), category, group_id, view_stamp])
+                origins, origin_args = ['1=1'], [prefix]
+                if source == 'local':
+                    origins.append("storage_id='local'")
+                elif source == 'remote':
+                    origins.append("storage_id!='local'")
+                if storage_id:
+                    origins.append('storage_id=?')
+                    origin_args.append(storage_id)
+                cte = presentation.cte(self._cte()) if presentation else self._cte()
+                # Materialize group membership once. Unity Asset groups previously
+                # re-ran the Python matcher for COUNT, facets, and the page query.
+                if presentation and group_id:
+                    db.execute('DROP TABLE IF EXISTS attachment_group_hit')
+                    db.execute('CREATE TEMP TABLE attachment_group_hit(storage_id TEXT NOT NULL, path TEXT NOT NULL, '
+                               'PRIMARY KEY(storage_id, path)) WITHOUT ROWID')
+                    # CTE binds the logical remote prefix once (`? || source_id || '/' || path`).
+                    db.execute(cte + 'INSERT OR IGNORE INTO attachment_group_hit(storage_id, path) '
+                               'SELECT storage_id, path FROM catalog WHERE '
+                               'attachment_group_matches(storage_id,path,remote_path,name,tags,category,asset_id)=1',
+                               [prefix])
+                    origins.append('EXISTS (SELECT 1 FROM attachment_group_hit g '
+                                   'WHERE g.storage_id=catalog.storage_id AND g.path=catalog.path)')
+                where, args = list(origins), list(origin_args)
+                if query:
+                    pattern = '%' + query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+                    where.append("(path LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR tags LIKE ? ESCAPE '\\' OR category LIKE ? ESCAPE '\\')")
+                    args.extend([pattern] * 4)
+                if kind != 'all':
+                    where.append('(' + _KIND_SQL + ')=?')
+                    args.append(kind)
+                if category:
+                    where.append('category=?')
+                    args.append(category)
+                for tag in sorted(set(tags)):
+                    where.append('EXISTS (SELECT 1 FROM json_each(catalog.tags) WHERE value=?)')
+                    args.append(tag)
+                predicate = ' AND '.join(where)
+                total = db.execute(cte + 'SELECT COUNT(*) FROM catalog WHERE ' + predicate, args).fetchone()[0]
+                # Keep type facets independent of the selected kind/search,
+                # while scoping all counts and bytes to the selected origin.
+                stats = db.execute(cte + "SELECT CASE WHEN storage_id='local' THEN 'local' ELSE 'remote' END," +
+                                   _KIND_SQL + ',COUNT(*),COALESCE(SUM(size),0) FROM catalog WHERE ' +
+                                   ' AND '.join(origins) + ' GROUP BY 1,2', origin_args).fetchall()
+                summary = {'files': sum(r[2] for r in stats), 'bytes': sum(r[3] for r in stats), 'kinds': {},
+                           'by_source': {'local': {'files': 0, 'bytes': 0}, 'remote': {'files': 0, 'bytes': 0}}}
+                for origin, file_kind, count, size in stats:
+                    summary['kinds'][file_kind] = summary['kinds'].get(file_kind, 0) + count
+                    summary['by_source'][origin]['files'] += count
+                    summary['by_source'][origin]['bytes'] += size
+                result_summary = None
+                if presentation:
+                    matched = db.execute(cte + "SELECT CASE WHEN storage_id='local' THEN 'local' ELSE 'remote' END," +
+                        _KIND_SQL + ',COUNT(*),COALESCE(SUM(size),0) FROM catalog WHERE ' + predicate + ' GROUP BY 1,2', args).fetchall()
+                    result_summary = {'files': sum(r[2] for r in matched), 'bytes': sum(r[3] for r in matched), 'kinds': {},
+                        'by_source': {'local': {'files': 0, 'bytes': 0}, 'remote': {'files': 0, 'bytes': 0}}}
+                    for origin, file_kind, count, size in matched:
+                        result_summary['kinds'][file_kind] = result_summary['kinds'].get(file_kind, 0) + count
+                        result_summary['by_source'][origin]['files'] += count
+                        result_summary['by_source'][origin]['bytes'] += size
+                field = _SORTS[sort]
+                direction, sign = ('ASC', '>') if order == 'asc' else ('DESC', '<')
+                if cursor:
+                    token = self._decode(cursor, scope, sort)
+                    # The final source/asset keys disambiguate matching paths
+                    # without dropping or repeating rows across page edges.
+                    predicate += f' AND ({field},path,storage_id,asset_id) {sign} (?,?,?,?)'
+                    args.extend(token)
+                elif after:
+                    predicate += ' AND path>?'
+                    args.append(after)
+                rows = db.execute(cte + 'SELECT * FROM catalog WHERE ' + predicate +
+                    f' ORDER BY {field} {direction},path {direction},storage_id {direction},asset_id {direction} LIMIT ?',
+                    (*args, limit + 1)).fetchall()
+            sources = {s['id']: s for s in settings['sources']}
+            items = []
+            for row in rows[:limit]:
+                try:
+                    # Apply the same rooted/hidden/link boundary to logical
+                    # remote names; this does not read remote content.
+                    files.config.path_for(row['path'])
+                except (ValueError, OSError):
+                    continue
+                items.append(self._public(row, sources))
+            local._check_root(root)
+            with self._remote.lock:
                 if stamp != self._settings_stamp(local._snapshot(), self._remote._settings(str(root))):
                     raise ConflictError(_STALE)
-                next_cursor = self._encode(scope, rows[limit - 1], field) if len(rows) > limit else None
-                return dict(items=items, next_cursor=next_cursor, cursor=next_cursor, total=total,
-                            summary=summary, **({'result_summary':result_summary} if presentation else {}), storages=self._storage_options(settings),
-                            last_scanned_at=scanned[0] if scanned else None)
+            next_cursor = self._encode(scope, rows[limit - 1], field) if len(rows) > limit else None
+            return dict(items=items, next_cursor=next_cursor, cursor=next_cursor, total=total,
+                        summary=summary, **({'result_summary': result_summary} if presentation else {}),
+                        storages=self._storage_options(settings),
+                        last_scanned_at=scanned[0] if scanned else None)
 
     @staticmethod
     def _storage_options(settings):

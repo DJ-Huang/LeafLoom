@@ -171,12 +171,13 @@ class SMBSource(WebDAVSource):
             if len(data)!=length or self.stat(path)['etag']!=meta['etag']:raise RemoteStorageError('remote_version_changed')
             return data,meta
 
-    def _copy(self, path, output=None, *, expected_size=None, expected_etag=None, max_bytes=None):
+    def _copy(self, path, output=None, *, expected_size=None, expected_etag=None, max_bytes=None, progress=None):
         with self.session():
             meta=self.stat(path)
             if expected_size is not None and meta['size']!=expected_size or expected_etag and meta['etag']!=expected_etag:raise RemoteStorageError('remote_version_changed')
             if max_bytes is not None and meta['size']>max_bytes:raise RemoteStorageError('cache_object_too_large')
             digest=hashlib.sha256();total=0
+            if progress is not None:progress(0,meta['size'])
             with self._open(path,'rb') as stream:
                 while True:
                     self.guard();chunk=stream.read(min(1024*1024,meta['size']-total+1))
@@ -185,6 +186,7 @@ class SMBSource(WebDAVSource):
                     if total>meta['size']:raise RemoteStorageError('remote_version_changed')
                     digest.update(chunk)
                     if output is not None:output.write(chunk)
+                    if progress is not None:progress(total,meta['size'])
             if total!=meta['size'] or self.stat(path)['etag']!=meta['etag']:raise RemoteStorageError('remote_version_changed')
             return {**meta,'sha256':digest.hexdigest()}
 
@@ -198,8 +200,8 @@ class SMBSource(WebDAVSource):
             if created:target.unlink(missing_ok=True)
             raise
 
-    def checksum(self, path, *, expected_size=None, expected_sha256=''):
-        result=self._copy(path,expected_size=expected_size)
+    def checksum(self, path, *, expected_size=None, expected_sha256='', progress=None):
+        result=self._copy(path,expected_size=expected_size,progress=progress)
         if expected_sha256 and result['sha256']!=expected_sha256:raise RemoteStorageError('checksum_mismatch')
         return result
 
@@ -230,16 +232,20 @@ class SMBSource(WebDAVSource):
             if actual!=data:raise RemoteStorageError('immutable_object_conflict')
             return hashlib.sha256(actual).hexdigest()
 
-    def upload(self, path, local_path, *, expected_sha256):
+    def upload(self, path, local_path, *, expected_sha256, progress=None, on_phase=None, verify_progress=None):
         writable=self.source['upload_directory']
         if writable and not path.startswith(writable+'/'):raise ValueError('File is outside the writable attachment area')
         descriptor=os.open(local_path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_BINARY',0))
         with os.fdopen(descriptor,'rb') as source, self.session():
-            info=os.fstat(source.fileno())
+            info=os.fstat(source.fileno());size=info.st_size;sent=0;first=True
             if not stat.S_ISREG(info.st_mode):raise ValueError('Upload source must be a regular file')
+            if on_phase is not None:on_phase('uploading')
+            if progress is not None:progress(0,size)
             with self._open(path,'xb') as output:
                 while True:
-                    self.guard();chunk=source.read(1024*1024)
+                    self.guard();chunk=source.read(64*1024 if first else 256*1024);first=False
                     if not chunk:break
-                    output.write(chunk)
-            return self.checksum(path,expected_size=info.st_size,expected_sha256=expected_sha256)
+                    output.write(chunk);sent+=len(chunk)
+                    if progress is not None:progress(sent,size)
+            if on_phase is not None:on_phase('verifying')
+            return self.checksum(path,expected_size=size,expected_sha256=expected_sha256,progress=verify_progress)

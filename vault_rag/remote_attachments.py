@@ -23,7 +23,7 @@ import time
 import uuid
 
 from vault_rag.local_state import ConflictError, Files, atomic_write, relative, under
-from vault_rag.platform_support import is_link, private_file_mode, move_exclusive
+from vault_rag.platform_support import is_link, path_key, private_file_mode, move_exclusive
 from vault_rag.remote_webdav import RemoteStorageError, WebDAVSource, remote_path, validate_source
 from vault_rag.attachment_scan_policy import SCAN_INTERVAL, STARTUP_GRACE, retry_interval, in_scan_scope, register_scan_scope
 from vault_rag.remote_ignore import RemoteIgnore
@@ -262,7 +262,7 @@ class RemoteAttachments:
     def _source_revision(source):
         # Metadata namespace is guarded separately by AssetLibrary. Adding its
         # default must not invalidate existing attachment transfer journals.
-        return hashlib.sha256(_json({k:v for k,v in source.items() if k not in {'metadata_directory','scan_roots','scan_paused'}}).encode()).hexdigest()
+        return hashlib.sha256(_json({k:v for k,v in source.items() if k not in {'metadata_directory','scan_roots','scan_paused','membership_mode'}}).encode()).hexdigest()
 
     def save(self,root,payload,revision=None):
         self._root(root)
@@ -454,14 +454,17 @@ class RemoteAttachments:
             break  # One bounded probe per worker pass; other sources rotate fairly.
 
     def poll_scans(self):
-        """One automatic directory walk at a time; never hold up byte transfers."""
+        """One automatic catalog pull or directory walk at a time; never hold up byte transfers."""
         root=self._root()
         with self.lock:
             if any(thread.is_alive() for thread in self.scan_threads.values()):return
         now=time.time()
         for source in self._settings(root)['sources']:
             source_id=source['id'];credentials=self.credentials.get(source_id)
-            if not source.get('enabled',True) or source.get('scan_paused',False) or not credentials or credentials[3]!='local':continue
+            mode=validate_source(source).get('membership_mode','discover')
+            # app_only never runs discovery walks; catalog pull still refreshes membership.
+            if not source.get('enabled',True) or not credentials or credentials[3]!='local':continue
+            if mode=='discover' and source.get('scan_paused',False):continue
             context=self._connection_context(root,source_id)
             key=(root,source_id);previous=self.auto_scans.get(key,{})
             if previous.get('context')!=context:
@@ -486,14 +489,18 @@ class RemoteAttachments:
                     callback=self.on_scan_completed
                     if callable(callback):callback(root,source_id)
             if previous.get('next_scan_at',0)>now:continue
-            self.start_scan(root,source_id)
+            if mode=='app_only':self.start_catalog_sync(root,source_id)
+            else:self.start_scan(root,source_id)
             return
 
     def status(self,root=None):
         root=self._root(root);result=self._settings(root)
         for source in result['sources']:
-            source['metadata_directory']=validate_source(source)['metadata_directory']
-            source_revision=self._source_revision(source)
+            validated=validate_source(source)
+            source['metadata_directory']=validated['metadata_directory']
+            mode=validated.get('membership_mode','discover')
+            source['membership_mode']=mode
+            source_revision=self._source_revision(validated)
             source['password_saved']=source['id'] in self.credentials
             if source['password_saved'] and source.get('enabled',True):self._connection_state(root,source['id'])
             source['connection']=(self.connections.get(source['id'],{'state':'unchecked'}) if source['password_saved'] else
@@ -503,7 +510,9 @@ class RemoteAttachments:
             if not schedule:
                 with self._db(root) as db:checkpoint=db.execute('SELECT last_success FROM sync_checkpoints WHERE source_id=? AND source_revision=?',(source['id'],source_revision)).fetchone()
                 schedule={'last_success_at':checkpoint[0] if checkpoint else None}
-            source['connection'].update(auto_sync=not source.get('scan_paused',False),scan_paused=source.get('scan_paused',False),last_success_at=schedule.get('last_success_at'),next_scan_at=schedule.get('next_scan_at'))
+            source['connection'].update(auto_sync=mode=='app_only' or not source.get('scan_paused',False),
+                                        scan_paused=source.get('scan_paused',False),membership_mode=mode,
+                                        last_success_at=schedule.get('last_success_at'),next_scan_at=schedule.get('next_scan_at'))
             lifecycle=self.scan_statuses.get((str(root),source['id']),{})
             if lifecycle.get('source_revision')==source_revision:
                 source['connection'].update({key:value for key,value in lifecycle.items() if key!='source_revision'})
@@ -522,10 +531,15 @@ class RemoteAttachments:
     def test(self,root,source_id):
         self._root(root)
         self._reset_connection(root,source_id)
+        started=time.perf_counter()
         try:
             provider=self._provider(source_id,root);result=provider.test()
         except RemoteStorageError as error:result={'state':error.state,'code':error.code,'read_verified':False,'upload_verified':False}
         else:self._connection_ready(root,source_id,context=provider.connection_context,**{key:value for key,value in result.items() if key!='state'})
+        result['latency_ms']=max(0,int((time.perf_counter()-started)*1000))
+        # Rough guidance for Tailscale/DERP vs LAN; not a hard protocol probe.
+        result['latency_hint']=('high' if result['latency_ms']>=800 else
+                                'elevated' if result['latency_ms']>=250 else 'ok')
         result['checked_at']=time.time()
         self.connections[source_id]={**self.connections.get(source_id,{}),**result}
         return result
@@ -678,10 +692,8 @@ class RemoteAttachments:
             check()
             seen.update(item['path'] for item in items)
             items=[item for item in items if not (item.get('_directory_cached') and cached_states.get(item['path'])==('excluded' if item.get('excluded') else 'ready',True))]
-            changed=False
             if items:
                 with self.lock,self._db(root) as db:
-                    before=db.total_changes
                     # A PUT can already be visible on WebDAV before its independent
                     # readback succeeds. Jobs reserve those keys before uploading;
                     # discovery must not publish their partial bytes as new assets.
@@ -696,12 +708,13 @@ class RemoteAttachments:
                             continue
                         save_item(db,item)
                     check()
-                    changed=db.total_changes!=before
             if counts is not None:progress.update(counts)
             self.scan_statuses[(str(root),source_id)]['scan_scanned']=progress['scanned']
             self.scan_statuses[(str(root),source_id)]['scan_excluded']=progress.get('excluded',0)
+            # Progress stays on connections/scan_statuses for status polling.
+            # Do not publish('files') per batch — that re-lists the attachment
+            # grid under remote.lock while discovery is still writing.
             self.connections[source_id]={'state':'scanning',**progress,'checked_at':time.time()}
-            if changed:self._publish_scan(root,source_id)
         if source_id=='local':
             files=self._files();items=[]
             for path in files.walk(strict=True):
@@ -816,11 +829,128 @@ class RemoteAttachments:
         self.wake.set()
         return {'ok':True,'paused':paused}
 
+    def start_catalog_sync(self,root,source_id,*,guard=None,publish_local=True):
+        """Pull (and optionally publish) the server membership catalog without directory discovery."""
+        self._root(root)
+        if self.stopped.is_set():raise InterruptedError('Attachment storage stopped')
+        key=(str(root),source_id)
+        with self.lock:
+            previous=self.scan_threads.get(key)
+            if (previous is not None and previous.is_alive()) or (key in self.scan_locks and self.scan_locks[key].locked()):
+                return {'ok':True,'state':'scanning','storage_id':source_id,'scan_id':self.scan_statuses.get(key,{}).get('scan_id',''),
+                        'membership_mode':'app_only'}
+            scan_id=uuid.uuid4().hex
+            self.scan_statuses[key]={'scan_id':scan_id,'scan_state':'scanning','scan_started_at':time.time(),'scan_finished_at':None,
+                                     'scan_scanned':0,'scan_missing':0,'scan_excluded':0,'phase':'catalog',
+                                     'source_revision':self._source_revision(self._source(source_id,root))}
+            def run():
+                lifecycle=self.scan_statuses[key]
+                try:
+                    from vault_rag.attachment_server_catalog import sync_catalog
+                    result=sync_catalog(self,root,source_id,guard=guard,publish_local=publish_local)
+                    lifecycle.update(scan_state='completed',scan_finished_at=time.time(),scan_scanned=result.get('members',0))
+                    with self.lock,self._db(root) as db:
+                        db.execute('INSERT OR REPLACE INTO sync_checkpoints VALUES(?,?,?)',
+                                   (source_id,lifecycle['source_revision'],lifecycle['scan_finished_at']))
+                    self.connections[source_id]={'state':'ready','checked_at':time.time(),'scanned':result.get('members',0),
+                                                'directories':0,'pending_directories':0,'phase':'catalog'}
+                    callback=self.on_scan_completed
+                    if callable(callback):callback(root,source_id)
+                    try:self.runtime.publish('files',[])
+                    except Exception:pass
+                    return {**result,'ok':True,'state':'ready','scan_id':scan_id}
+                except Exception as error:
+                    lifecycle.update(scan_state='failed' if not isinstance(error,(InterruptedError,ConflictError,PermissionError)) else 'cancelled',
+                                     scan_finished_at=time.time())
+                    code=getattr(error,'code','catalog_sync_failed')
+                    if isinstance(error,RemoteStorageError) and error.state in {'unreachable','auth_required'}:
+                        self._connection_failed(root,source_id,error)
+                    self.connections[source_id]={'state':'ready' if self.connections.get(source_id,{}).get('state')=='ready' else 'unreachable',
+                                                'code':code,'checked_at':time.time(),'phase':'catalog'}
+                    raise
+                finally:
+                    with self.lock:self.scan_threads.pop(key,None)
+            thread=threading.Thread(target=run,name=f'attachment-catalog-{source_id[:8]}',daemon=True)
+            self.scan_threads[key]=thread;thread.start()
+        self.wake.set()
+        return {'ok':True,'state':'scanning','storage_id':source_id,'scan_id':scan_id,'membership_mode':'app_only'}
+
+    def start_catalog_import(self,root,source_id,*,guard=None):
+        """One-time filesystem import into the server catalog; then app_only membership."""
+        self._root(root)
+        if self.stopped.is_set():raise InterruptedError('Attachment storage stopped')
+        key=(str(root),source_id)
+        deadline=time.time()+45
+        while True:
+            with self.lock:
+                previous=self.scan_threads.get(key)
+                locked=key in self.scan_locks and self.scan_locks[key].locked()
+                phase=self.scan_statuses.get(key,{}).get('phase')
+                if previous is not None and previous.is_alive() and phase=='import':
+                    return {'ok':True,'state':'scanning','storage_id':source_id,
+                            'scan_id':self.scan_statuses.get(key,{}).get('scan_id',''),'phase':'import'}
+                if (previous is None or not previous.is_alive()) and not locked:
+                    scan_id=uuid.uuid4().hex
+                    self.scan_statuses[key]={'scan_id':scan_id,'scan_state':'scanning','scan_started_at':time.time(),'scan_finished_at':None,
+                                             'scan_scanned':0,'scan_missing':0,'scan_excluded':0,'phase':'import',
+                                             'source_revision':self._source_revision(self._source(source_id,root))}
+                    # Visible immediately even while directory checks remain paused.
+                    self.connections[source_id]={'state':'scanning','phase':'import','scanned':0,'scan_scanned':0,
+                                                 'directories':0,'pending_directories':1,'checked_at':time.time()}
+                    def run():
+                        lifecycle=self.scan_statuses[key]
+                        try:
+                            from vault_rag.attachment_server_catalog import import_filesystem
+                            def progress(info):
+                                imported=info.get('imported',0)
+                                scanned=info.get('scanned',imported)
+                                lifecycle['scan_scanned']=max(imported,scanned)
+                                self.connections[source_id]={'state':'scanning','phase':'import','scanned':imported,
+                                                             'scan_scanned':scanned,'directories':info.get('directories',0),
+                                                             'pending_directories':info.get('pending_directories',0),
+                                                             'checked_at':time.time()}
+                            result=import_filesystem(self,root,source_id,guard=guard,force_app_only=True,progress=progress)
+                            lifecycle.update(scan_state='completed',scan_finished_at=time.time(),scan_scanned=result.get('imported',0))
+                            with self.lock,self._db(root) as db:
+                                db.execute('INSERT OR REPLACE INTO sync_checkpoints VALUES(?,?,?)',
+                                           (source_id,lifecycle['source_revision'],lifecycle['scan_finished_at']))
+                            self.connections[source_id]={'state':'ready','checked_at':time.time(),'scanned':result.get('imported',0),
+                                                        'phase':'import','membership_mode':'app_only',
+                                                        'directories':0,'pending_directories':0}
+                            callback=self.on_scan_completed
+                            if callable(callback):callback(root,source_id)
+                            try:self.runtime.publish('files',[])
+                            except Exception:pass
+                            return {**result,'ok':True,'state':'ready','scan_id':scan_id}
+                        except Exception as error:
+                            lifecycle.update(scan_state='failed' if not isinstance(error,(InterruptedError,ConflictError,PermissionError)) else 'cancelled',
+                                             scan_finished_at=time.time())
+                            if isinstance(error,RemoteStorageError) and error.state in {'unreachable','auth_required'}:
+                                self._connection_failed(root,source_id,error)
+                            else:
+                                self.connections[source_id]={**self.connections.get(source_id,{}),
+                                                             'state':'unreachable' if isinstance(error,RemoteStorageError) else 'ready',
+                                                             'code':getattr(error,'code','catalog_import_failed'),
+                                                             'phase':'import','checked_at':time.time()}
+                            raise
+                        finally:
+                            with self.lock:self.scan_threads.pop(key,None)
+                    thread=threading.Thread(target=run,name=f'attachment-import-{source_id[:8]}',daemon=True)
+                    self.scan_threads[key]=thread;thread.start()
+                    self.wake.set()
+                    return {'ok':True,'state':'scanning','storage_id':source_id,'scan_id':scan_id,'phase':'import'}
+            if time.time()>=deadline:
+                raise ConflictError('Directory check is still stopping; try importing again in a moment')
+            time.sleep(0.2)
+
     def start_scan(self,root,source_id,*,guard=None,force_full=False):
         """Run a bounded metadata scan in the background; one per source/root."""
         if type(force_full)is not bool:raise ValueError('Invalid attachment scan mode')
         self._root(root)
-        if self._source(source_id,root).get('scan_paused',False):raise ValueError('Resume automatic directory checks before scanning')
+        source=self._source(source_id,root)
+        if source.get('membership_mode','discover')=='app_only' and not force_full:
+            return self.start_catalog_sync(root,source_id,guard=guard)
+        if source.get('scan_paused',False):raise ValueError('Resume automatic directory checks before scanning')
         if self.stopped.is_set():raise InterruptedError('Attachment storage stopped')
         key=(str(root),source_id)
         with self.lock:
@@ -923,11 +1053,11 @@ class RemoteAttachments:
                              (path,source_id) if source_id else (path,)).fetchone()
             if alias:
                 rows=db.execute('SELECT * FROM assets WHERE id=?',(alias[0],)).fetchall()
-                # A migration mapping is committed before release. If the
-                # source subsequently changes, the existing local file wins.
+                # During migration, an active local row still owns an edited file.
+                # After release the same path is vault-path cache for the remote asset.
                 if not source_id and rows and rows[0]['source_id']!='local' and self.config.path_for(path).is_file():
-                    rows=db.execute("SELECT * FROM assets WHERE source_id='local' AND path=?",(path,)).fetchall()
-                    if not rows:raise FileNotFoundError('Local attachment metadata is not registered yet')
+                    local_rows=db.execute("SELECT * FROM assets WHERE source_id='local' AND path=? AND state!='redirected'",(path,)).fetchall()
+                    if local_rows:rows=local_rows
             elif source_id:rows=db.execute('SELECT * FROM assets WHERE source_id=? AND path=?',(source_id,path)).fetchall()
             else:rows=db.execute('SELECT * FROM assets WHERE path=?',(path,)).fetchall()
             if not rows:
@@ -948,9 +1078,16 @@ class RemoteAttachments:
 
     def stat(self,root,path='',*,asset_id='',source_id=''):
         self._root(root)
-        if not asset_id and not source_id and path and self.config.path_for(relative(path)).is_file():
-            source_id='local'
         with self.lock,self._db(root) as db:
+            if not asset_id and not source_id and path and self.config.path_for(relative(path)).is_file():
+                logical=relative(path)
+                has_remote=db.execute(
+                    "SELECT 1 FROM aliases al JOIN assets a ON a.id=al.asset_id WHERE al.path=? AND a.source_id!='local'",
+                    (logical,)).fetchone()
+                has_local=db.execute(
+                    "SELECT 1 FROM assets WHERE source_id='local' AND path=? AND state!='redirected'",
+                    (logical,)).fetchone()
+                if has_local or not has_remote:source_id='local'
             try:row=self._resolve(db,path,asset_id,source_id)
             except FileNotFoundError:
                 if asset_id:raise
@@ -990,23 +1127,69 @@ class RemoteAttachments:
                        (row['description'],row['tags'],row['category'],uuid.uuid4().hex,time.time(),row['id']))
         return self.stat(root,asset_id=row['id'])
 
+    @staticmethod
+    def _vault_cache_key(path):
+        return 'vault:'+relative(path)
+
+    def _is_vault_cache(self,file_field):
+        return isinstance(file_field,str) and file_field.startswith('vault:')
+
+    def _cache_file_path(self,root,file_field):
+        if self._is_vault_cache(file_field):
+            return self.config.path_for(file_field[6:])
+        return self._state('cache',file_field)
+
+    def _attachment_folder(self):
+        return self.config.data.get('attachment_folder','_attachments')
+
+    def _vault_alias_for(self,db,row):
+        folder=self._attachment_folder()
+        for alias in db.execute('SELECT path FROM aliases WHERE asset_id=? ORDER BY path',(row['id'],)).fetchall():
+            if under(alias[0],folder):return alias[0]
+        return ''
+
+    def _register_vault_cache(self,db,row,path,*,sha256='',verified=None,alias=''):
+        info=path.stat();digest=sha256 or row['sha256'] or _hash_file(path)[0]
+        key=self._vault_cache_key(alias or self._vault_alias_for(db,row) or relative(path))
+        now=time.time();stamp=now if verified is None else verified
+        db.execute('INSERT OR REPLACE INTO cache(asset_id,file,size,sha256,etag,mtime,accessed,verified,identity) VALUES(?,?,?,?,?,?,?,?,?)',
+                   (row['id'],key,info.st_size,digest,row['etag'],row['mtime'],now,stamp,_json(_version(info))))
+        return key
+
+    def _drop_cache_row(self,db,root,asset_id):
+        item=db.execute('SELECT file FROM cache WHERE asset_id=?',(asset_id,)).fetchone()
+        if not item:return
+        self._cache_file_path(root,item[0]).unlink(missing_ok=True)
+        db.execute('DELETE FROM cache WHERE asset_id=?',(asset_id,))
+
     def _cached(self,root,row):
         with self._db(root) as db:
             self._require_current(self._resolve(db,asset_id=row['id']),row)
             item=db.execute('SELECT * FROM cache WHERE asset_id=?',(row['id'],)).fetchone()
-            if not item:return None
-            path=self._state('cache',item['file'])
-            valid=not is_link(path) and path.is_file() and path.stat().st_size==item['size']
-            valid=valid and (item['size'],item['etag'],item['mtime'])==(row['size'],row['etag'],row['mtime'])
-            if valid:
-                identity=_json(_version(path.stat()))
-                if identity!=item['identity']:
-                    digest,_=_hash_file(path);valid=digest==item['sha256']
-                    if valid:db.execute('UPDATE cache SET identity=? WHERE asset_id=?',(identity,row['id']))
-            if not valid:
-                db.execute('DELETE FROM cache WHERE asset_id=?',(row['id'],));return None
-            db.execute('UPDATE cache SET accessed=? WHERE asset_id=?',(time.time(),row['id']))
-            verified=item['verified']
+            path=None;verified=0
+            if item:
+                path=self._cache_file_path(root,item['file'])
+                valid=not is_link(path) and path.is_file() and path.stat().st_size==item['size']
+                valid=valid and (item['size'],item['etag'],item['mtime'])==(row['size'],row['etag'],row['mtime'])
+                if valid:
+                    identity=_json(_version(path.stat()))
+                    if identity!=item['identity']:
+                        digest,_=_hash_file(path);valid=digest==item['sha256']
+                        if valid:db.execute('UPDATE cache SET identity=? WHERE asset_id=?',(identity,row['id']))
+                if not valid:
+                    self._drop_cache_row(db,root,row['id']);item=None;path=None
+                else:
+                    db.execute('UPDATE cache SET accessed=? WHERE asset_id=?',(time.time(),row['id']))
+                    verified=item['verified']
+            if item is None:
+                alias=self._vault_alias_for(db,row)
+                if not alias:return None
+                candidate=self.config.path_for(alias)
+                if is_link(candidate) or not candidate.is_file() or candidate.stat().st_size!=row['size']:return None
+                digest,_=_hash_file(candidate)
+                if row['sha256'] and digest!=row['sha256']:return None
+                self._register_vault_cache(db,row,candidate,sha256=digest,alias=alias)
+                path=candidate;verified=time.time()
         source=next((s for s in self._settings(root)['sources'] if s['id']==row['source_id']),None)
         if source and source.get('enabled',True) and time.time()-verified>=self.cache_ttl:
             try:
@@ -1022,9 +1205,9 @@ class RemoteAttachments:
                 self._require_current(self._resolve(db,asset_id=row['id']),row)
                 if (remote['size'],remote['etag'],remote['mtime'])!=(row['size'],row['etag'],row['mtime']):
                     self._upsert(db,row['source_id'],remote,state=row['state'])
-                    db.execute('DELETE FROM cache WHERE asset_id=?',(row['id'],))
+                    self._drop_cache_row(db,root,row['id'])
                     row.update(dict(db.execute('SELECT * FROM assets WHERE id=?',(row['id'],)).fetchone()))
-                    path.unlink(missing_ok=True);return None
+                    return None
                 db.execute('UPDATE cache SET verified=? WHERE asset_id=?',(time.time(),row['id']))
         return path
 
@@ -1039,7 +1222,7 @@ class RemoteAttachments:
         # Only identical asset downloads serialize. Metadata queries and other
         # transfers never wait for a network read or a multi-GB SHA calculation.
         with asset_lock:
-            with self.lock,self._db(root) as db:row=self._resolve(db,asset_id=row['id'])
+            with self.lock,self._db(root) as db:row=self._resolve(db,asset_id=row['id']);alias=self._vault_alias_for(db,row)
             self._require_available(row)
             cached=self._cached(root,row)
             if cached:return cached
@@ -1057,8 +1240,14 @@ class RemoteAttachments:
             maximum=self._settings(root)['cache_max_bytes']
             if row['size']>maximum:raise ValueError('Attachment exceeds the disk cache limit; use byte ranges')
             with self.lock:self._evict(root,reserve=row['size'])
-            directory=self._state('cache');directory.mkdir(parents=True,exist_ok=True,mode=0o700)
-            filename=uuid.uuid4().hex+'.cache';temporary=self._state('cache',filename+'.partial')
+            use_vault=bool(alias)
+            if use_vault:
+                destination=self.config.path_for(alias);destination.parent.mkdir(parents=True,exist_ok=True)
+                temporary=destination.with_name(destination.name+'.'+uuid.uuid4().hex+'.partial')
+                cache_key=self._vault_cache_key(alias)
+            else:
+                self._state('cache').mkdir(parents=True,exist_ok=True,mode=0o700)
+                cache_key=uuid.uuid4().hex+'.cache';temporary=self._state('cache',cache_key+'.partial');destination=self._state('cache',cache_key)
             provider=self._provider(row['source_id'],root)
             result=provider.download(row['path'],temporary,expected_size=row['size'],expected_etag=row['etag'],max_bytes=maximum)
             try:
@@ -1068,7 +1257,6 @@ class RemoteAttachments:
                 temporary.unlink(missing_ok=True);raise
             if row['sha256'] and result['sha256']!=row['sha256']:
                 temporary.unlink(missing_ok=True);raise ConflictError('Attachment checksum changed')
-            destination=self._state('cache',filename)
             with self.lock,self._db(root) as db:
                 current=self._resolve(db,asset_id=row['id'])
                 try:self._require_current(current,row)
@@ -1077,7 +1265,7 @@ class RemoteAttachments:
                     temporary.unlink(missing_ok=True);raise ConflictError('Attachment metadata changed')
                 os.replace(temporary,destination);private_file_mode(destination)
                 db.execute('INSERT OR REPLACE INTO cache(asset_id,file,size,sha256,etag,mtime,accessed,verified,identity) VALUES(?,?,?,?,?,?,?,?,?)',
-                           (row['id'],filename,row['size'],result['sha256'],row['etag'],row['mtime'],time.time(),time.time(),_json(_version(destination.stat()))))
+                           (row['id'],cache_key,row['size'],result['sha256'],row['etag'],row['mtime'],time.time(),time.time(),_json(_version(destination.stat()))))
                 db.execute('UPDATE assets SET sha256=?,updated=? WHERE id=?',(result['sha256'],time.time(),row['id']))
             with self.lock:self._evict(root,keep=row['id'])
             self._connection_ready(root,row['source_id'],context=provider.connection_context)
@@ -1189,7 +1377,7 @@ class RemoteAttachments:
             for item in items:
                 if total<=maximum:break
                 if item['asset_id']==keep:continue
-                self._state('cache',item['file']).unlink(missing_ok=True)
+                self._cache_file_path(root,item['file']).unlink(missing_ok=True)
                 if item['kind']=='cache':db.execute('DELETE FROM cache WHERE asset_id=?',(item['asset_id'],))
                 else:db.execute('DELETE FROM ranges WHERE asset_id=? AND start=? AND end=?',(item['asset_id'],item['start'],item['end']))
                 total-=item['size']
@@ -1197,12 +1385,13 @@ class RemoteAttachments:
     def clear_cache(self,root):
         self._root(root)
         with self.lock,self._db(root) as db:
-            items=db.execute('SELECT * FROM cache').fetchall()
-            items+=db.execute('SELECT * FROM ranges').fetchall()
-            for item in items:self._state('cache',item['file']).unlink(missing_ok=True)
+            items=list(db.execute('SELECT * FROM cache').fetchall())
+            ranges=list(db.execute('SELECT * FROM ranges').fetchall())
+            for item in items:self._cache_file_path(root,item['file']).unlink(missing_ok=True)
+            for item in ranges:self._state('cache',item['file']).unlink(missing_ok=True)
             db.execute('DELETE FROM cache')
             db.execute('DELETE FROM ranges')
-        return {'cleared':len(items),'outbox_preserved':True}
+        return {'cleared':len(items)+len(ranges),'outbox_preserved':True,'vault_cache_cleared':True}
 
     def _outbox_usage(self):
         directory=self._state('outbox')
@@ -1210,17 +1399,59 @@ class RemoteAttachments:
         return sum(p.stat().st_size for p in directory.iterdir() if not is_link(p) and p.is_file())
 
     def _job_save(self,db,value):
+        # Explicit cancel removes the durable job; do not recreate it from an
+        # in-flight worker that finishes after DELETE.
+        if value['id'] in self.cancelled or value.get('state')=='cancelled':
+            value['state']='cancelled'
+            db.execute('DELETE FROM jobs WHERE id=?',(value['id'],))
+            return
         value['updated_at']=time.time()
         db.execute('INSERT INTO jobs VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,payload=excluded.payload,updated=excluded.updated',
                    (value['id'],value['kind'],value['state'],_json(value),value['created_at'],value['updated_at']))
 
     @staticmethod
     def _public_job(value):
-        result={k:copy.deepcopy(v) for k,v in value.items() if k not in {'credential_revision','source_revision','workspace_revision','source_version','guards'}}
+        result={k:copy.deepcopy(v) for k,v in value.items() if k not in {'credential_revision','source_revision','workspace_revision','source_version','guards','_speed_marks','_transfer_saved_at','_last_speed_bps','_last_speed_at'}}
         if result.get('state') in {'running','completed'}:result.pop('error',None)
         result.update(job_id='remote:'+value['id'],remote_saved=value['kind']=='upload' and value['state']=='completed')
         if value.get('requested_path'):result['path']=value['requested_path']
         return result
+
+    def _report_transfer(self,value,*,sent=0,total=0,item=None,force=False,phase=None):
+        now=time.time()
+        released=sum(i.get('size',0) for i in value.get('items',[]) if i.get('state')=='released')
+        previous_phase=(value.get('transfer') or {}).get('phase') or ''
+        current_phase=phase if phase is not None else previous_phase
+        phase_changed=phase is not None and current_phase!=previous_phase
+        # During readback, the file is already on the server; keep overall bytes at
+        # released+size while file_bytes track the verify download.
+        if current_phase=='verifying':
+            bytes_done=released+(total or 0);file_done=sent;speed_basis=released+sent
+        else:
+            bytes_done=released+max(0,min(sent,total or sent));file_done=sent;speed_basis=bytes_done
+        bytes_total=value.get('total_bytes') or sum(i.get('size',0) for i in value.get('items',[]))
+        if phase_changed:
+            value['_speed_marks']=[];value.pop('_last_speed_bps',None);value.pop('_last_speed_at',None)
+        marks=value.setdefault('_speed_marks',[])
+        previous=marks[-1][1] if marks else None
+        marks.append([now,speed_basis])
+        while len(marks)>1 and now-marks[0][0]>5:marks.pop(0)
+        if len(marks)>=2 and marks[-1][0]>marks[0][0]:
+            speed=(marks[-1][1]-marks[0][1])/(marks[-1][0]-marks[0][0])
+        else:speed=0.0
+        if speed>0:
+            value['_last_speed_bps']=speed;value['_last_speed_at']=now
+        elif value.get('_last_speed_bps') and now-value.get('_last_speed_at',0)<4:
+            speed=value['_last_speed_bps']
+        else:speed=0.0
+        value['transfer']={'bytes_done':bytes_done,'bytes_total':bytes_total,'file_bytes_done':file_done,'file_bytes_total':total,
+                           'speed_bps':max(0.0,speed),'phase':current_phase,
+                           'path':(item or {}).get('path') or value.get('requested_path'),'updated_at':now}
+        last=value.get('_transfer_saved_at',0)
+        moved=previous is None or speed_basis!=previous
+        if force or (total and sent>=total) or sent==0 or (moved and now-last>=0.25) or phase_changed:
+            value['_transfer_saved_at']=now
+            with self.lock,self._db(value['root']) as db:self._job_save(db,value)
 
     def _new_job(self,root,source_id,owner,kind):
         source=self._source(source_id,root)
@@ -1296,6 +1527,9 @@ class RemoteAttachments:
                     old=db.execute('SELECT asset_id FROM aliases WHERE path=?',(path,)).fetchone()
                     if old:raise ConflictError('Attachment logical path already exists')
                     db.execute('INSERT INTO aliases VALUES(?,?)',(path,value['asset_id']))
+                    # Staging bytes may sit under `_attachments` for the note link
+                    # while the upload is pending; they are removed after promote so
+                    # the grid keeps only lightweight thumbnails, not full originals.
                     self._job_save(db,value)
                     if idempotency_key:db.execute('INSERT INTO upload_receipts VALUES(?,?,?,?)',(owner,idempotency_key,fingerprint,value['id']))
             except Exception:
@@ -1399,25 +1633,35 @@ class RemoteAttachments:
             if owner!=value['owner']:raise PermissionError('Attachment job belongs to another owner')
             if action:
                 if action not in {'execute','resume','cancel'}:raise ValueError('Invalid attachment job action')
-                if action=='cancel':value['state']='cancelled';self.cancelled.add(key)
-                else:
-                    if value['state']=='completed':return self._public_job(value)
-                    if guard is not None:self.guards[key]=guard
-                    self.cancelled.discard(key)
-                    if action=='execute' and value['kind']=='migration':value['confirmed']=True
-                    value['workspace_revision']=self.config.data.get('revision','')
-                    value['source_revision']=self._source_revision(self._source(value['source_id'],root))
-                    current=self.credentials.get(value['source_id']);value['credential_revision']=current[2] if current else ''
-                    self._check_job(value,authorize=False);value['state']='queued';value.pop('error',None)
-                    reset=True
-                    for field in ('retry_attempts','next_retry_at','retry_paused'):value.pop(field,None)
+                if action=='cancel':
+                    value['state']='cancelled';self.cancelled.add(key)
+                    db.execute('DELETE FROM jobs WHERE id=?',(key,))
+                    self.wake.set();return self._public_job(value)
+                if value['state']=='completed':return self._public_job(value)
+                if guard is not None:self.guards[key]=guard
+                self.cancelled.discard(key)
+                if action=='execute' and value['kind']=='migration':value['confirmed']=True
+                value['workspace_revision']=self.config.data.get('revision','')
+                value['source_revision']=self._source_revision(self._source(value['source_id'],root))
+                current=self.credentials.get(value['source_id']);value['credential_revision']=current[2] if current else ''
+                self._check_job(value,authorize=False);value['state']='queued';value.pop('error',None)
+                reset=True
+                for field in ('retry_attempts','next_retry_at','retry_paused'):value.pop(field,None)
                 self._job_save(db,value)
         if reset:self._reset_connection(root,value['source_id'])
         self.wake.set();return self._public_job(value)
 
     def jobs(self,root,owner='local'):
         with self.lock,self._db(root) as db:
-            values=[json.loads(r[0]) for r in db.execute('SELECT payload FROM jobs ORDER BY created DESC')]
+            # Cancel removes jobs; purge any leftover cancelled rows from older builds.
+            db.execute("DELETE FROM jobs WHERE state='cancelled'")
+            values=[]
+            for row in db.execute('SELECT id,payload FROM jobs ORDER BY created DESC').fetchall():
+                value=json.loads(row[1])
+                if value.get('state')=='cancelled':
+                    db.execute('DELETE FROM jobs WHERE id=?',(row[0],))
+                    continue
+                values.append(value)
         return [self._public_job(v) for v in values if v['owner']==owner]
 
     def _run_upload(self,value):
@@ -1455,16 +1699,63 @@ class RemoteAttachments:
                            [(value['source_id'],'/'.join(parts[:depth]),time.time()) for depth in range(len(parts))])
         from vault_rag.attachment_server_references import publish
         publish(self,root,value['source_id'],value['asset_id'],provider)
+        try:
+            from vault_rag.attachment_server_catalog import publish_member
+            publish_member(self,root,value['source_id'],value['asset_id'],provider)
+        except (ConflictError,ValueError,RemoteStorageError):
+            # Membership publish retries with the job; references already landed.
+            raise
         self._check_job(value)
         with self.lock,self._db(root) as db:
             self._check_job(value)
             value['state']='completed';value['verified']=True;value.pop('error',None)
             for field in ('retry_attempts','next_retry_at','retry_paused'):value.pop(field,None)
             self._job_save(db,value)
-        # The durable mapping and completed record are committed before removing
-        # pending bytes. Cache eviction never touches this directory.
+        # Staging under `_attachments` is only for the pending note link. Once the
+        # server object is authoritative, drop those full bytes so the device keeps
+        # membership + small thumbnails, not a second copy of every original.
+        self._drop_upload_staging(root,value)
         staged.unlink(missing_ok=True)
         self._connection_ready(root,value['source_id'],context=provider.connection_context)
+
+    def _drop_local_original(self,root,*,path,asset_id=''):
+        """Drop vault originals after server authority; keep only lightweight previews.
+
+        Full originals return only when the user explicitly caches them. Catalog
+        import/sync never downloads bytes—this only removes leftover staging copies.
+        """
+        if not path or path.startswith(self.config.data.get('attachment_folder','_attachments')+'/_remote/'):
+            return
+        try:
+            vault=self.config.path_for(path)
+        except (ValueError,OSError):
+            return
+        if vault.is_file() and Path(path).suffix.lower() in {'.png','.jpg','.jpeg','.gif','.webp','.bmp','.tif','.tiff','.avif'}:
+            try:
+                workspace=getattr(getattr(self.runtime,'files',None),'workspace',None)
+                if workspace is not None:
+                    workspace.thumbnail(root,path)
+            except Exception:
+                pass
+        if vault.is_file():
+            vault.unlink(missing_ok=True)
+            parent=vault.parent
+            try:
+                if parent.is_dir() and not any(parent.iterdir()):
+                    parent.rmdir()
+            except OSError:
+                pass
+        if asset_id:
+            with self.lock,self._db(root) as db:
+                row=db.execute('SELECT file FROM cache WHERE asset_id=?',(asset_id,)).fetchone()
+                if row and self._is_vault_cache(row[0]):
+                    db.execute('DELETE FROM cache WHERE asset_id=?',(asset_id,))
+        changed=getattr(getattr(self.runtime,'files',None),'changed',None)
+        if callable(changed):changed(path)
+
+    def _drop_upload_staging(self,root,value):
+        """Remove vault staging originals after a successful remote promote."""
+        self._drop_local_original(root,path=value.get('requested_path') or '',asset_id=value.get('asset_id',''))
 
     def _job_retry_due(self,value):
         if value.get('state') not in {'waiting_for_connection','waiting_for_auth'}:return True
@@ -1473,11 +1764,18 @@ class RemoteAttachments:
         return not state.get('retry_paused') and (state['state']!='unreachable' or (state.get('next_retry_at') or 0)<=time.time())
 
     def _defer_job(self,value,error):
-        value['state']='waiting_for_auth' if error.state=='auth_required' else 'waiting_for_connection' if error.state=='unreachable' else 'failed'
-        value['error']=error.code
-        if error.state in {'auth_required','unreachable'}:
-            state=self._connection_state(value['root'],value['source_id'])
-            for field in ('retry_attempts','next_retry_at','retry_paused'):value[field]=state.get(field)
+        # Slow networks and timeouts must not discard work. Only auth failures
+        # pause automatic retries; everything else waits and resumes.
+        if isinstance(error,RemoteStorageError) and error.state=='auth_required':
+            value['state']='waiting_for_auth';value['error']=error.code
+        else:
+            value['state']='waiting_for_connection'
+            value['error']=getattr(error,'code',None) or 'connection_unavailable'
+        state=self._connection_state(value['root'],value['source_id'])
+        attempts=int(value.get('retry_attempts') or state.get('retry_attempts') or 0)+1
+        value['retry_attempts']=attempts
+        value['next_retry_at']=time.time()+min(3600,max(5,2**min(attempts,10)))
+        value['retry_paused']=bool(state.get('retry_paused')) if value['state']=='waiting_for_auth' else False
 
     @staticmethod
     def _verify_partial(provider,path,local,size):
@@ -1509,6 +1807,8 @@ class RemoteAttachments:
                 values=[json.loads(r[0]) for r in db.execute("SELECT payload FROM jobs WHERE kind='upload' AND state IN ('queued','waiting_for_connection','waiting_for_auth','uploading','verifying') ORDER BY created")]
             for value in values:
                 if self.stopped.is_set():break
+                if value.get('next_retry_at') and value['next_retry_at']>time.time() and value.get('state')=='waiting_for_connection':
+                    continue
                 if not self._job_retry_due(value):continue
                 try:self._run_upload(value)
                 except RemoteStorageError as error:
@@ -1522,8 +1822,15 @@ class RemoteAttachments:
                 except InterruptedError:
                     value['state']='cancelled' if value['id'] in self.cancelled else 'waiting_for_connection'
                     value['error']='transfer_cancelled' if value['id'] in self.cancelled else 'service_stopped'
+                    if value['state']=='waiting_for_connection':
+                        value['retry_attempts']=int(value.get('retry_attempts') or 0)+1
+                        value['next_retry_at']=time.time()+min(3600,max(5,2**min(value['retry_attempts'],10)))
+                except (TimeoutError,OSError,ConnectionError) as error:
+                    self._defer_job(value,RemoteStorageError('connection_unavailable','unreachable',reason=type(error).__name__))
                 except Exception:
-                    value['state']='failed';value['error']='attachment_operation_failed'
+                    # Treat unexpected transport faults as retryable; never drop
+                    # slow WAN uploads as terminal failures.
+                    self._defer_job(value,RemoteStorageError('attachment_operation_failed','unreachable'))
                 with self.lock,self._db(root) as db:self._job_save(db,value)
         finally:self.worker_lock.release()
         # Confirmed migrations may resume after reconnection/restart. Planning
@@ -1538,21 +1845,71 @@ class RemoteAttachments:
         from vault_rag.attachment_migrations import ASSETS,SOURCE_MARKERS,SOURCE_RESOURCE_TYPES
         from vault_rag.attachment_references import OPAQUE_RESOURCE_TYPES,discover_project_dependencies
         self._root(root);files=self._files();extensions=extensions_for(files);value=self._new_job(root,source_id,owner,'migration')
-        all_paths={p.relative_to(files.config.root).as_posix() for p in files.walk(strict=True)}
-        project_roots={p.rpartition('/')[0] for p in all_paths if Path(p).suffix.lower() in {'.html','.htm'}|SOURCE_RESOURCE_TYPES or PurePosixPath(p).name in SOURCE_MARKERS}
+        folder=self.config.data.get('attachment_folder','_attachments')
+        folder_key=path_key(folder)
+        def collect_attachment_paths():
+            directory=files.config.path_for(folder)
+            if not directory.is_dir():return set()
+            return {p.relative_to(files.config.root).as_posix() for p in files.walk(folder,strict=True)}
+        # Remote migration previews only the attachment folder (plus nested project
+        # trees inside it). Whole-vault walks made preview slow and over-protected.
+        if paths is None:
+            scoped=collect_attachment_paths()
+            selected=set(scoped)
+        else:
+            selected={relative(p) for p in paths}
+            scoped=set(selected)
+            if any(under(p,folder) for p in selected):scoped|=collect_attachment_paths()
+        if len(selected)>10000:raise ValueError('Select at most 10000 attachments')
+        project_marker={'.html','.htm'}|SOURCE_RESOURCE_TYPES
+        project_roots=set()
+        for entry in scoped:
+            if Path(entry).suffix.lower() in project_marker or PurePosixPath(entry).name in SOURCE_MARKERS:
+                project=entry.rpartition('/')[0]
+                if not project or project in {'.',''}:continue
+                if path_key(project)==folder_key:continue
+                if under(project,folder):project_roots.add(project)
         websites=getattr(self.runtime,'websites',None)
-        if websites:project_roots.update(p['directory'] for p in websites.projects if p['vault']==str(root))
-        reference_sources={p for p in all_paths if Path(p).suffix.lower() not in OPAQUE_RESOURCE_TYPES|{'.md','.markdown'}}
-        protected=discover_project_dependencies(files,all_paths,project_roots,reference_sources=reference_sources)
-        selected=({p for p in all_paths if under(p,self.config.data.get('attachment_folder','_attachments'))}
-                  if paths is None else {relative(p) for p in paths})
-        if selected is not None and len(selected)>10000:raise ValueError('Select at most 10000 attachments')
+        registered_roots=set()
+        if websites:
+            for project in websites.projects:
+                if project.get('vault')!=str(root):continue
+                directory=relative(project.get('directory') or '')
+                if not directory or directory in {'.',''}:continue
+                if path_key(directory)==folder_key:continue
+                # Always retain registered HTML trees and their attachment-folder
+                # dependencies; HTML/Design assets stay project-local, not NAS-bound.
+                registered_roots.add(directory)
+                project_roots.add(directory)
+        # Include project files outside the attachment folder so dependency discovery
+        # can protect shared central copies referenced by those projects.
+        dependency_paths=set(scoped)
+        if registered_roots:
+            for directory in registered_roots:
+                base=files.config.path_for(directory)
+                if not base.is_dir():continue
+                for path in files.walk(directory,strict=True):
+                    dependency_paths.add(path.relative_to(files.config.root).as_posix())
+        reference_sources={p for p in dependency_paths if Path(p).suffix.lower() not in OPAQUE_RESOURCE_TYPES|{'.md','.markdown'}}
+        protected=discover_project_dependencies(files,dependency_paths,project_roots,reference_sources=reference_sources)
+        remote_aliases={}
+        with self.lock,self._db(root) as db:
+            for path in selected:
+                row=db.execute("SELECT a.source_id,a.state FROM aliases al JOIN assets a ON a.id=al.asset_id WHERE al.path=?",(path,)).fetchone()
+                if row:remote_aliases[path]=(row[0],row[1])
         value.update(state='planned',items=[],exclusions=[],blockers=protected['blockers'],completed=0)
-        for path in sorted(all_paths if selected is None else selected):
-            if path not in all_paths or path in protected['protected'] or Path(path).suffix.lower() not in ASSETS or not allows(path,extensions):
-                if selected is not None:value['exclusions'].append({'path':path,'reason':'Note, project dependency, or unsupported attachment type'})
-                continue
-            original=files.config.path_for(path);digest,version=_hash_file(original)
+        for path in sorted(selected):
+            original=files.config.path_for(path)
+            source_state=remote_aliases.get(path)
+            if source_state and (source_state[0]!='local' or source_state[1]=='redirected'):
+                value['exclusions'].append({'path':path,'reason':'Already on the attachment server'});continue
+            if not original.is_file() or is_link(original):
+                value['exclusions'].append({'path':path,'reason':'Attachment path not found'});continue
+            if path in protected['protected']:
+                value['exclusions'].append({'path':path,'reason':'Preserved HTML project resource or shared runtime dependency'});continue
+            if Path(path).suffix.lower() not in ASSETS or not allows(path,extensions):
+                value['exclusions'].append({'path':path,'reason':'File type is not enabled for attachments'});continue
+            digest,version=_hash_file(original)
             value['items'].append({'path':path,'size':version[2],'sha256':digest,'source_version':version,'state':'planned'})
         value['total_bytes']=sum(item['size'] for item in value['items'])
         if guard is not None:self.guards[value['id']]=guard
@@ -1571,7 +1928,6 @@ class RemoteAttachments:
         if guard is not None:self.guards[key]=guard
         if value.get('blockers'):raise ConflictError('Resolve project dependency blockers before migration')
         if value['state']=='completed':return self._public_job(value)
-        if value['state']=='cancelled':raise ConflictError('Resume the cancelled migration explicitly')
         if not self.worker_lock.acquire(blocking=False):raise ConflictError('Another attachment transfer is running')
         try:
             value['confirmed']=True;value['state']='running';value.pop('error',None)
@@ -1580,10 +1936,13 @@ class RemoteAttachments:
             self._check_job(value)
             for item in value['items']:
                 if item['state']=='released':continue
+                item['state']='uploading'
+                self._report_transfer(value,sent=0,total=item.get('size',0),item=item,force=True,phase='hashing')
                 self._check_job(value);self._migrate_one(value,item)
                 value['completed']=sum(i['state']=='released' for i in value['items'])
-                with self.lock,self._db(root) as db:self._job_save(db,value)
-            value['state']='completed';value.pop('error',None)
+                self._report_transfer(value,sent=0,total=0,item=None,force=True,phase='')
+            value['state']='completed';value.pop('error',None);value.pop('transfer',None)
+            for field in ('_speed_marks','_transfer_saved_at','_last_speed_bps','_last_speed_at'):value.pop(field,None)
             self._connection_ready(root,value['source_id'],context=(str(root),value['source_id'],value['source_revision'],value['credential_revision']))
         except RemoteStorageError as error:
             self._defer_job(value,error)
@@ -1610,20 +1969,30 @@ class RemoteAttachments:
                 if actual:
                     old=db.execute("SELECT id FROM assets WHERE source_id='local' AND path=? AND state!='redirected'",(item['path'],)).fetchone()
                     if old:self._record_redirect(db,old[0],actual[0],item['path'],value['id'])
-        # Crash recovery: a claimed file is either safely released or restored.
+        # Crash recovery for older releases that moved bytes into a claim file:
+        # restore them as a vault-path cache instead of deleting.
         if item.get('release_file'):
             claim=self._state('release',item['release_file'])
             if claim.exists():
                 if _hash_file(claim)[0]!=item['sha256']:
                     if not source.exists():move_exclusive(claim,source)
                     raise ConflictError('Source changed during migration release')
-                if source.exists():raise ConflictError('A new local source appeared during migration')
+                if not source.exists():move_exclusive(claim,source)
+                elif _hash_file(source)[0]!=item['sha256']:raise ConflictError('A new local source appeared during migration')
+                else:claim.unlink(missing_ok=True)
                 self._check_job(value)
+                provider=self._provider(value['source_id'],root,guard=lambda:self._check_job(value))
                 from vault_rag.attachment_server_references import publish
-                publish(self,root,value['source_id'],item['asset_id'],self._provider(value['source_id'],root,guard=lambda:self._check_job(value)))
+                from vault_rag.attachment_server_catalog import publish_member
+                publish(self,root,value['source_id'],item['asset_id'],provider)
+                publish_member(self,root,value['source_id'],item['asset_id'],provider)
                 with self.lock,self._db(root) as db:self._activate_redirects(db,item['asset_id'])
-                claim.unlink();self._finish_release(value,item);return
-            if item['state']=='releasing' and not source.exists():self._finish_release(value,item);return
+                self._finish_release(value,item);return
+            if item['state']=='releasing':
+                with self.lock,self._db(root) as db:self._activate_redirects(db,item['asset_id'])
+                self._finish_release(value,item);return
+        size=item.get('size',0)
+        self._report_transfer(value,sent=0,total=size,item=item,force=True,phase='hashing')
         current_hash,current_version=_hash_file(source)
         if current_hash!=item['sha256'] or current_version!=item['source_version']:raise ConflictError('Source changed since migration planning')
         provider=self._provider(value['source_id'],root,guard=lambda:self._check_job(value))
@@ -1634,6 +2003,7 @@ class RemoteAttachments:
                 item['asset_id']=uuid.uuid4().hex
                 with self.lock,self._db(root) as db:self._job_save(db,value)
             check_dir=self._state('migration');check_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+            self._report_transfer(value,sent=0,total=size,item=item,force=True,phase='probing')
             try:remote_meta=provider.stat(item['remote_path']);exists=True
             except RemoteStorageError as error:
                 if error.code!='remote_not_found':raise
@@ -1645,10 +2015,19 @@ class RemoteAttachments:
                 item['remote_path']='/'.join(p for p in (remote['upload_directory'],uuid.uuid4().hex+'-'+source.name) if p)
                 with self.lock,self._db(root) as db:self._job_save(db,value)
                 exists=False
-            if exists:result=provider.checksum(item['remote_path'],expected_size=item['size'],expected_sha256=item['sha256'])
-            else:result=provider.upload(item['remote_path'],source,expected_sha256=item['sha256'])
+            if exists:
+                self._report_transfer(value,sent=0,total=size,item=item,force=True,phase='verifying')
+                result=provider.checksum(item['remote_path'],expected_size=item['size'],expected_sha256=item['sha256'],
+                                         progress=lambda sent,total:self._report_transfer(value,sent=sent,total=total,item=item,phase='verifying'))
+            else:
+                def on_phase(phase):
+                    self._report_transfer(value,sent=0,total=size,item=item,force=True,phase=phase)
+                result=provider.upload(item['remote_path'],source,expected_sha256=item['sha256'],
+                                       progress=lambda sent,total:self._report_transfer(value,sent=sent,total=total,item=item,phase='uploading'),
+                                       on_phase=on_phase,
+                                       verify_progress=lambda sent,total:self._report_transfer(value,sent=sent,total=total,item=item,phase='verifying'))
             self._check_job(value)
-            # Commit identities and old LeafLoom paths before releasing bytes.
+            # Commit identities before dropping local originals (preview-only default).
             with self.lock,self._db(root) as db:
                 asset_id=self._upsert(db,value['source_id'],result,asset_id=item['asset_id'],sha256=item['sha256'],state='migration_pending')
                 item['asset_id']=asset_id
@@ -1663,45 +2042,27 @@ class RemoteAttachments:
                 db.execute('INSERT OR REPLACE INTO aliases VALUES(?,?)',(item['path'],asset_id))
                 item['state']='mapped';self._job_save(db,value)
         self._check_job(value)
+        provider=self._provider(value['source_id'],root,guard=lambda:self._check_job(value))
         from vault_rag.attachment_server_references import publish
-        publish(self,root,value['source_id'],item['asset_id'],self._provider(value['source_id'],root,guard=lambda:self._check_job(value)))
+        from vault_rag.attachment_server_catalog import publish_member
+        publish(self,root,value['source_id'],item['asset_id'],provider)
+        publish_member(self,root,value['source_id'],item['asset_id'],provider)
         self._check_job(value)
-        # Re-hash and version-check after the remote round trip. A temporary
-        # same-filesystem claim prevents deleting a replacement pathname.
         if _hash_file(source)!=(item['sha256'],item['source_version']):raise ConflictError('Local attachment changed before release')
-        directory=self._state('release');directory.mkdir(parents=True,exist_ok=True,mode=0o700)
-        item['release_file']=value['id']+'-'+item['asset_id']+'.release';item['state']='releasing'
-        with self.lock,self._db(root) as db:self._job_save(db,value)
-        claim=self._state('release',item['release_file'])
-        original_lock=getattr(getattr(self.runtime,'files',None),'lock',self.lock)
-        with self.config.lock,original_lock:
-            if claim.exists():raise ConflictError('Migration release recovery is required')
-            os.rename(source,claim)
-            # The immediately preceding full SHA verified these bytes. Compare
-            # the claimed inode/version without hashing a TB file again while
-            # holding the short local file-operation locks.
-            claimed_version=_version(claim.stat())
-            if claimed_version!=item['source_version']:
-                if not source.exists():move_exclusive(claim,source)
-                raise ConflictError('Local attachment changed during release')
-            try:
-                self._check_job(value)
-                with self.lock,self._db(root) as db:self._activate_redirects(db,item['asset_id'])
-            except Exception:
-                if not source.exists():move_exclusive(claim,source)
-                raise
-            claim.unlink()
+        item['state']='releasing'
+        with self.lock,self._db(root) as db:
+            self._job_save(db,value)
+            self._activate_redirects(db,item['asset_id'])
         self._finish_release(value,item)
 
     def _finish_release(self,value,item):
-        """Normal and crash-recovery release paths commit the same visible state."""
-        root=value['root'];self._root(root);item['state']='released'
+        """Authority is on the server; local originals are removed unless the user caches them."""
+        root=value['root'];self._root(root);item['state']='released';item.pop('release_file',None)
         with self.lock,self._db(root) as db:
             db.execute('UPDATE assets SET state=\'ready\',updated=? WHERE id=?',(time.time(),item['asset_id']))
             self._activate_redirects(db,item['asset_id'])
             self._job_save(db,value)
-        changed=getattr(getattr(self.runtime,'files',None),'changed',None)
-        if callable(changed):changed(item['path'])
+        self._drop_local_original(root,path=item['path'],asset_id=item['asset_id'])
 
     def stop(self):
         self.stopped.set();self.wake.set();deadline=time.monotonic()+2

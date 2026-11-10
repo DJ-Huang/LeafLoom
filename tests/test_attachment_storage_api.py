@@ -481,7 +481,8 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.request('POST', endpoint, json={'root': str(self.root), 'confirm': True})
         result = self.wait_job(plan['job_id'])
         self.assertEqual(result['state'], 'completed', result)
-        self.assertFalse(original.exists())
+        self.assertTrue(original.exists())
+        self.assertEqual(original.read_bytes(), b'original-migration-image')
         self.assertTrue(protected.exists())
         self.assertTrue((self.root / 'outside.png').exists())
         self.assertEqual(note.read_text(), text)
@@ -497,8 +498,67 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.assertEqual(self.request('GET', '/api/media', params={
             'root': str(self.root), 'path': path,
         }).content, b'original-migration-image')
+        self.assertTrue(original.exists())
         self.assertFalse(list((self.root / '.vault-rag/attachment-migrations').glob('*/originals/*')))
         self.assertFalse(list((self.root / '.vault-rag/remote-attachments/release').glob('*')))
+
+    def test_migration_paths_batch_keeps_vault_cache_without_redownload(self):
+        self.configure()
+        selected = '_attachments/batch-a.png'
+        skipped = '_attachments/batch-b.png'
+        first = self.put(selected, b'batch-a-bytes')
+        second = self.put(skipped, b'batch-b-bytes')
+        self.initialize()
+        plan = self.request('POST', '/api/attachments/storage/migrations', json={
+            'root': str(self.root), 'storage_id': SOURCE, 'paths': [selected],
+        }).json()
+        self.assertEqual([item['path'] for item in plan['items']], [selected])
+        self.request('POST', '/api/attachments/storage/jobs/' + plan['job_id'] + '/execute',
+                     json={'root': str(self.root), 'confirm': True})
+        result = self.wait_job(plan['job_id'])
+        self.assertEqual(result['state'], 'completed', result)
+        self.assertTrue(first.exists())
+        self.assertEqual(first.read_bytes(), b'batch-a-bytes')
+        self.assertEqual(self.details(selected)['source'], 'remote')
+        self.assertEqual(self.details(skipped)['source'], 'local')
+        self.assertEqual(second.read_bytes(), b'batch-b-bytes')
+        puts_before = sum(1 for method, _ in self.dav.calls if method == 'PUT')
+        self.assertEqual(self.request('GET', '/api/media', params={
+            'root': str(self.root), 'path': selected,
+        }).content, b'batch-a-bytes')
+        self.assertEqual(sum(1 for method, _ in self.dav.calls if method == 'PUT'), puts_before)
+        self.assertTrue(first.exists())
+
+    def test_public_migration_progress_exposes_transfer_speed(self):
+        from vault_rag.attachment_storage_routes import public_job
+        job = public_job({
+            'id': 'abc', 'kind': 'migration', 'state': 'running', 'completed': 1, 'total_bytes': 100,
+            'items': [{'path': 'a', 'size': 40, 'state': 'released'}, {'path': 'b', 'size': 60, 'state': 'uploading'}],
+            'transfer': {'bytes_done': 70, 'bytes_total': 100, 'speed_bps': 1024,
+                         'file_bytes_done': 30, 'file_bytes_total': 60, 'phase': 'uploading'},
+            '_speed_marks': [[1.0, 40], [2.0, 70]], '_transfer_saved_at': 2.0,
+        })
+        self.assertEqual(job['progress'], {
+            'done': 1, 'total': 2, 'bytes_done': 70, 'bytes_total': 100, 'speed_bps': 1024,
+            'file_bytes_done': 30, 'file_bytes_total': 60, 'phase': 'uploading',
+        })
+        self.assertNotIn('transfer', job)
+        self.assertNotIn('_speed_marks', job)
+        idle = public_job({
+            'id': 'def', 'kind': 'migration', 'state': 'running', 'completed': 1, 'total_bytes': 100,
+            'items': [{'path': 'a', 'size': 40, 'state': 'released'}, {'path': 'b', 'size': 60, 'state': 'uploading'}],
+        })
+        self.assertEqual(idle['progress']['file_bytes_total'], 60)
+        self.assertEqual(idle['progress']['speed_bps'], 0)
+        self.assertEqual(idle['progress']['phase'], '')
+        probing = public_job({
+            'id': 'ghi', 'kind': 'migration', 'state': 'running', 'completed': 0, 'total_bytes': 60,
+            'items': [{'path': 'b', 'size': 60, 'state': 'uploading'}],
+            'transfer': {'bytes_done': 0, 'bytes_total': 60, 'speed_bps': 0,
+                         'file_bytes_done': 0, 'file_bytes_total': 60, 'phase': 'probing'},
+        })
+        self.assertEqual(probing['progress']['phase'], 'probing')
+        self.assertEqual(probing['progress']['file_bytes_done'], 0)
 
     def test_failed_readback_hash_never_releases_migration_original(self):
         self.configure()
@@ -516,6 +576,28 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.assertEqual(original.read_bytes(), content)
         self.assertEqual(self.details(path)['source'], 'local')
         self.assertFalse(list((self.root / '.vault-rag/remote-attachments/release').glob('*')))
+
+    def test_remote_thumbnail_prefers_range_over_materialize(self):
+        import io
+        from PIL import Image
+        output=io.BytesIO();Image.new('RGB',(32,24),'#4a7c59').save(output,'PNG');payload=output.getvalue()
+        self.configure();self.dav.files['Incoming/range-thumb.png']=payload;self.scan()
+        item=self.mcp('list',source='remote')['items'][0]
+        params={'root':str(self.root),'path':item['path']}
+        with patch.object(self.remote,'materialize',side_effect=AssertionError('Do not download the whole image')):
+            result=self.request('GET','/api/attachments/thumbnail',params=params)
+        with Image.open(io.BytesIO(result.content)) as image:
+            self.assertLessEqual(max(image.size),256)
+        cached=self.request('POST','/api/attachments/cache',json={'root':str(self.root),'paths':[item['path']]}).json()
+        self.assertEqual(cached['items'][0]['cache_state'],'complete')
+
+    def test_connection_test_reports_latency(self):
+        self.configure()
+        result=self.request('POST','/api/attachments/storage/test',
+                            json={'root':str(self.root),'storage_id':SOURCE}).json()
+        self.assertEqual(result['state'],'ready')
+        self.assertIn('latency_ms',result)
+        self.assertIn(result['latency_hint'],{'ok','elevated','high'})
 
     def test_missing_server_asset_blocks_old_thumbnail_media_and_mcp_cache_then_reappears(self):
         import io
@@ -629,7 +711,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.assertNotIn('allow-scripts', response.headers['content-security-policy'])
         self.assertEqual(response.headers['x-content-type-options'], 'nosniff')
 
-    def test_cancelled_executed_migration_resumes_without_duplicate_remote_object(self):
+    def test_cancelled_executed_migration_is_removed_and_repreview_avoids_duplicate_remote(self):
         self.configure()
         path, content = '_attachments/resumable.png', b'cancel-after-put-keep-original'
         original = self.put(path, content)
@@ -655,22 +737,30 @@ class AttachmentStorageApiTests(unittest.TestCase):
                                  json={'root': str(self.root), 'confirm': True}).json()
         self.assertEqual(cancelled['state'], 'cancelled')
         release.set()
-        # Wait for the interrupted execution to leave its safe boundary before
-        # submitting a new explicit resume request.
         workers[0].join(3)
         self.assertFalse(workers[0].is_alive())
-        self.assertEqual(self.job(plan['job_id'])['state'], 'cancelled')
+        missing = self.request('GET', '/api/attachments/storage/jobs/' + plan['job_id'],
+                               params={'root': str(self.root)}, expected=400).json()
+        self.assertEqual(missing['error_code'], 'not_found')
+        listed = self.request('GET', '/api/attachments/storage/jobs',
+                              params={'root': str(self.root)}).json()['jobs']
+        self.assertFalse(any((job.get('job_id') or job.get('id')) == plan['job_id'] for job in listed))
         self.assertEqual(original.read_bytes(), content)
         self.assertEqual(len(self.dav.files), 1)
 
         self.dav.after_put = None
-        self.request('POST', endpoint + '/resume',
+        plan = self.request('POST', '/api/attachments/storage/migrations', json={
+            'root': str(self.root), 'storage_id': SOURCE, 'paths': [path],
+        }).json()
+        self.assertEqual([item['path'] for item in plan['items']], [path])
+        self.request('POST', '/api/attachments/storage/jobs/' + plan['job_id'] + '/execute',
                      json={'root': str(self.root), 'confirm': True})
         result = self.wait_job(plan['job_id'])
         self.assertEqual(result['state'], 'completed', result)
-        self.assertFalse(original.exists())
-        self.assertEqual(list(self.original_files().values()), [content])
-        self.assertEqual(sum(method == 'PUT' and '/LeafLoomCatalog/' not in url for method, url in self.dav.calls), 1)
+        self.assertTrue(original.exists())
+        self.assertEqual(original.read_bytes(), content)
+        self.assertIn(content, self.original_files().values())
+        self.assertEqual(self.details(path)['source'], 'remote')
         self.assertFalse(any(method == 'DELETE' for method, _ in self.dav.calls))
 
     def test_mcp_remote_upload_retries_durable_queue_after_receipt_failure_once(self):

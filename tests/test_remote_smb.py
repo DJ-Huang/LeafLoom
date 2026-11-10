@@ -74,7 +74,13 @@ class SMBTests(TestCase):
 
     def test_upload_exclusive_and_no_reparse(self):
         local=self.root/'staged.bin';local.write_bytes(b'upload')
-        self.source.upload('Incoming/upload.bin',local,expected_sha256=hashlib.sha256(b'upload').hexdigest())
+        seen=[];phases=[];verified=[]
+        self.source.upload('Incoming/upload.bin',local,expected_sha256=hashlib.sha256(b'upload').hexdigest(),
+                           progress=lambda sent,total:seen.append((sent,total)),on_phase=phases.append,
+                           verify_progress=lambda sent,total:verified.append((sent,total)))
+        self.assertEqual(seen[0],(0,6));self.assertEqual(seen[-1],(6,6))
+        self.assertEqual(phases,['uploading','verifying'])
+        self.assertEqual(verified[0],(0,6));self.assertEqual(verified[-1],(6,6))
         with self.assertRaises(RemoteStorageError):self.source.upload('Incoming/upload.bin',local,expected_sha256='')
         self.peer.reparse.add(r'\\nas\share\Incoming')
         with self.assertRaises(RemoteStorageError):self.source.read_range('Incoming/test.bin')

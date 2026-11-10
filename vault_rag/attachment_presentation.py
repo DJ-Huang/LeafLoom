@@ -53,15 +53,18 @@ class AttachmentPresentation:
         settings = self.library.settings(root)
         sources = {s['id']: s for s in self.groups.remote._settings(root)['sources']}
         # Resolve local identities that have been redirected by verified migration.
+        # One manifest snapshot — N+1 opens made Unity Asset groups time out.
         redirected = {}
-        for value in groups:
-            for member in value['included'] + value['excluded']:
-                if member['scope'] != 'local:' + device: continue
-                try:
-                    with self.groups.remote._db(root) as manifest:
+        local_members = [member for value in groups for member in value['included'] + value['excluded']
+                         if member['scope'] == 'local:' + device]
+        if local_members:
+            with self.groups.remote.lock, self.groups.remote._db(root) as manifest:
+                for member in local_members:
+                    try:
                         current = self.groups.remote._resolve(manifest, asset_id=member['asset_id'])
-                    redirected[current['id']] = member
-                except (FileNotFoundError, ValueError): pass
+                        redirected[current['id']] = member
+                    except (FileNotFoundError, ValueError):
+                        pass
         def identity(storage, path, physical, asset_id):
             if asset_id in redirected: return redirected[asset_id]
             import uuid
@@ -72,13 +75,29 @@ class AttachmentPresentation:
                 locator = sources.get(storage, {}).get('remote_root', '') + '/' + physical
             return {'uid': uuid.uuid5(uuid.NAMESPACE_URL, 'leafloom-attachment:' + scope + ':' + locator).hex,
                     'scope': scope, 'path': physical or path, 'asset_id': asset_id}
+        # Cache uid + match decisions; group listing evaluates COUNT/stats/page.
+        uid_cache, match_cache = {}, {}
+        def identity_cached(storage, path, physical, asset_id):
+            key = (storage, path, physical, asset_id)
+            hit = uid_cache.get(key)
+            if hit is not None:
+                return hit
+            value = identity(storage, path, physical, asset_id)
+            uid_cache[key] = value
+            return value
         def member(storage, path, physical, name, tags, category, asset_id):
             if not group: return 1
-            return int(matches(group, {'storage_id': storage, 'source': 'local' if storage == 'local' else 'remote',
-                'path': path, 'remote_path': physical, 'name': name, 'tags': json.loads(tags), 'category': category},
-                identity(storage, path, physical, asset_id)))
+            key = (storage, path, physical, name, tags, category, asset_id)
+            hit = match_cache.get(key)
+            if hit is not None:
+                return hit
+            value = int(matches(group, {'storage_id': storage, 'source': 'local' if storage == 'local' else 'remote',
+                'path': path, 'remote_path': physical, 'name': name, 'tags': json.loads(tags or '[]'), 'category': category or ''},
+                identity_cached(storage, path, physical, asset_id)))
+            match_cache[key] = value
+            return value
         db.create_function('attachment_group_matches', 7, member)
-        db.create_function('attachment_uid', 4, lambda *args: identity(*args)['uid'])
+        db.create_function('attachment_uid', 4, lambda *args: identity_cached(*args)['uid'])
         db.commit()
         return digest([group['revision'] if group else '', metadata])
 

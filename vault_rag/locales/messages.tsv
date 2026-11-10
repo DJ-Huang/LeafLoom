@@ -1793,7 +1793,7 @@ aw.local|保存在你的知识库|Stored in your workspace|ワークスペース
 aw.localHint|原文件、本地预览、可恢复操作|Original files. Local previews. Recoverable changes.|元ファイル、ローカルプレビュー、復元可能な操作
 aw.preparing|正在准备你的附件库|Preparing your library|添付ライブラリを準備中
 aw.startTitle|让每个附件，都触手可及。|Everything you need, within reach.|必要な添付が、すぐ手元に。
-aw.startHint|建立本机目录缓存后即可搜索和预览，不会准备整理方案。已有服务器附件可在配置并扫描服务器后浏览；新附件保存位置只影响后续上传。|Prepare the local catalog to browse and preview without an organization plan. Configure and scan a server to browse its existing attachments; the save destination only affects future uploads.|端末の目録を準備すると検索・プレビューができ、整理案は作成しません。既存のサーバー添付は設定・走査後に閲覧でき、保存先は今後のアップロードのみに適用します。
+aw.startHint|服务器可选。未配置服务器时，附件保存在本机 _attachments；先建立本机目录缓存即可搜索、预览和上传。配置服务器后可再浏览服务器附件；默认保存位置只影响后续新上传。|Attachment servers are optional. Without one, attachments stay in local _attachments—prepare the local catalog to browse, preview and upload. After you configure a server you can browse its files; the default save destination only affects future uploads.|サーバーは任意です。未設定時は添付をローカルの _attachments に保存します。端末の目録を準備すれば検索・プレビュー・アップロードができます。サーバー設定後にサーバー添付も閲覧でき、保存先は今後のアップロードのみに適用します。
 aw.viewTask|查看任务|View task|タスクを見る
 aw.previewOnly|建立目录缓存不移动原件、不改写引用|Catalog setup does not move originals or rewrite references|目録の準備で原本の移動や参照の更新は行いません
 aw.searchPlaceholder|搜索文件名或路径…|Search names or paths…|ファイル名・パスを検索…
@@ -2034,7 +2034,7 @@ as.title|附件存储|Attachment storage|添付ストレージ
 as.search|WebDAV、NAS、服务器、账号、密码、本地缓存与附件迁移|WebDAV, NAS, server, credentials, local cache and attachment migration|WebDAV、NAS、サーバー、認証、ローカルキャッシュ、添付移行
 as.description|配置通用 WebDAV 服务器。附件设置在此单独保存；笔记继续保存在知识库目录。|Connect a WebDAV server. Save attachment settings here separately; notes remain in the workspace directory.|汎用 WebDAV サーバーを接続します。添付の設定はここで個別に保存し、ノートはワークスペースに残ります。
 as.storageFoot|笔记在本机，附件可连接服务器|Local notes, optional attachment servers|ノートはローカル、添付はサーバーにも対応
-as.localNote|笔记与历史保存在本机；附件可使用服务器与本地缓存。|Notes and history stay local; attachments can use a server and local cache.|ノートと履歴はローカルに保存され、添付にはサーバーとローカルキャッシュを利用できます。
+as.localNote|笔记与历史保存在本机。附件服务器可选：未配置时，新附件保存在本机 _attachments；需要时再添加服务器。|Notes and history stay local. Attachment servers are optional: without one, new attachments stay in local _attachments; add a server when you need it.|ノートと履歴はローカルに保存されます。添付サーバーは任意で、未設定時は新しい添付をローカルの _attachments に保存します。必要になったらサーバーを追加できます。
 as.default|新附件保存位置|Save new attachments to|新しい添付の保存先
 as.defaultHelp|只影响后续新上传；已有本地与服务器附件仍可浏览。切换不会移动、删除、重新上传或自动下载已有原件；迁移需单独预览和执行。|Applies only to future uploads. Existing local and server attachments remain browsable. Switching does not move, delete, re-upload or download originals; migration requires a separate preview and execution.|今後のアップロード先のみ変更します。既存のローカル・サーバー添付は閲覧でき、原本の移動・削除・再送信・自動取得は行いません。移行は別途確認して実行します。
 as.local|本地知识库|Local workspace|ローカルワークスペース
@@ -2075,16 +2075,41 @@ as.credentialsPending|设置与凭据已保存，后台暂未接收凭据；连�
 as.tested|连接测试已完成，请查看服务器连接状态。|Connection test finished. Check the server connection status.|接続テストが完了しました。サーバーの接続状態を確認してください。
 as.scanned|已提交服务器附件扫描。|Server attachment scan requested.|サーバーの添付スキャンを要求しました。
 as.clearCache|清理已下载缓存|Clear downloaded cache|ダウンロード済みキャッシュを削除
-as.cacheCleared|可清理的下载缓存已清除，服务器原件和待上传文件不受影响。|Eligible downloaded cache cleared. Server originals and pending uploads are retained.|削除可能なダウンロードキャッシュを削除しました。サーバーの原本とアップロード待ちファイルは保持されます。
+as.cacheCleared|可清理的下载缓存已清除（含知识库内登记的远程附件缓存副本）；服务器原件和待上传文件不受影响。|Eligible downloaded cache cleared (including vault-path remote attachment cache copies). Server originals and pending uploads are retained.|削除可能なダウンロードキャッシュ（保管庫パス上のリモート添付キャッシュを含む）を削除しました。サーバーの原本とアップロード待ちファイルは保持されます。
 as.saveBeforeExit|附件存储有未保存的更改，请先在此保存附件设置或取消更改。|Attachment storage has unsaved changes. Save attachment settings here or cancel the changes first.|添付ストレージに未保存の変更があります。ここで保存するか変更を取り消してください。
 as.tasks|服务器上传与迁移任务|Server upload and migration tasks|サーバーへのアップロードと移行タスク
-as.migrationHelp|只预览本地附件目录中的文件，工程依赖会排除。核对文件与排除项后再执行；中断时保留任务，原件确认上传并校验后才进入本地清理流程。|Preview files in the local attachment directory; project dependencies are excluded. Review files and exclusions before executing. Tasks survive interruptions; local cleanup begins only after upload and verification.|ローカル添付ディレクトリのファイルをプレビューし、プロジェクト依存は除外します。対象と除外を確認してから実行してください。中断してもタスクを保持し、アップロードと検証後にのみローカルの整理を進めます。
+as.migrationHelp|预览本地附件目录中的文件（已注册 HTML 项目树及其依赖会排除，不参与服务器迁移）。核对后再执行；中断可 resume。上传并校验后，权威原件在服务器，本地同路径保留为版本匹配缓存，不会删除。若待迁移为 0 且全是排除项，是本机规则排除（展开排除项看原因），不是服务器已有。|Preview files in the local attachment directory (registered HTML project trees and their dependencies are excluded from server migration). Review before executing; interrupted jobs can be resumed. After upload and verification the server holds the authoritative original, and the local path is kept as a version-matched cache. If the plan shows 0 files and only exclusions, those are local rules—not “already on the server”; expand exclusions for the reason.|ローカル添付ディレクトリのファイルをプレビューします（登録済み HTML プロジェクトとその依存はサーバー移行対象外）。確認後に実行し、中断したタスクは再開できます。検証後はサーバーが原本、ローカル同パスは版一致キャッシュです。移行対象が 0 で除外のみの場合は端末側ルールによる除外であり、サーバー既存ではありません。除外を開いて理由を確認してください。
+Already on the attachment server|已在附件服务器（本地为缓存副本）|Already on the attachment server (local path is a cache copy)|添付サーバーに既にあり（ローカルはキャッシュ）
+Attachment path not found|附件路径不存在|Attachment path not found|添付パスが見つかりません
+File type is not enabled for attachments|附件类型未启用|File type is not enabled for attachments|添付で許可されていない種類です
+as.remoteBatchHelp|外出经慢链路时：用服务器 Tailscale IP（如 http://100.x.x.x/…），每批约 50–200 个路径，失败只点「继续迁移」不要并行新开全量任务；电脑防休眠。在家优先局域网地址。|On a slow remote link: use the server Tailscale IP (e.g. http://100.x.x.x/…), batch about 50–200 paths, resume the same job instead of starting another full migration, and keep the PC awake. Prefer the LAN address at home.|低速な遠隔経路では、サーバーの Tailscale IP（例: http://100.x.x.x/…）を使い、1 回あたり約 50～200 パスに分割し、失敗時は同じジョブを再開してください。PC のスリープを防ぎ、自宅では LAN アドレスを優先します。
+as.batchPaths|可选：每行一个知识库相对路径；留空则预览整个附件目录|Optional: one vault-relative path per line; leave empty to preview the whole attachment folder|任意: 保管庫相対パスを1行に1つ。空欄なら添付フォルダー全体をプレビュー
+as.batchPathsPlaceholder|留空 = 整个附件目录|Leave empty = whole attachment folder|空欄 = 添付フォルダー全体
+as.batchTooLarge|单批最多 10000 个路径，请拆成更小批次。|At most 10000 paths per batch; split into smaller batches.|1 バッチあたり最大 10000 パスです。より小さく分割してください。
+as.resumeMigration|继续此迁移|Resume this migration|この移行を続行
 as.migrationTarget|选择迁移目标服务器|Choose migration server|移行先サーバーを選択
 as.prepareMigration|预览本地附件迁移|Preview local attachment migration|ローカル添付の移行をプレビュー
+as.previewWorking|正在扫描本地附件并生成预览…|Scanning local attachments and building the preview…|ローカル添付を走査してプレビューを作成しています…
+as.taskWorking|正在处理迁移任务…|Working on the migration task…|移行タスクを処理しています…
+as.cancelWorking|正在取消迁移任务…|Cancelling the migration task…|移行タスクをキャンセルしています…
+as.busyElapsed|已用时 {seconds} 秒|Elapsed {seconds}s|{seconds} 秒経過
 as.migration|附件迁移|Attachment migration|添付の移行
 as.uploadTask|附件上传|Attachment upload|添付のアップロード
 as.taskSummary|{files} 个文件 · {mib} MiB|{files} files · {mib} MiB|{files} ファイル · {mib} MiB
+as.transferProgress|已完成 {done} / {total}|Completed {done} / {total}|完了 {done} / {total}
+as.transferBytes|{done} / {total}|{done} / {total}|{done} / {total}
+as.transferSpeed|{speed}|{speed}|{speed}
+as.transferPhase.hashing|正在校验本地文件|Checking the local file|ローカルファイルを検証中
+as.transferPhase.probing|正在连接／探测服务器|Connecting to or probing the server|サーバーへ接続／確認中
+as.transferPhase.uploading|正在上传当前文件|Uploading the current file|現在のファイルを送信中
+as.transferPhase.verifying|正在校验服务器读回|Verifying the server readback|サーバー読み戻しを検証中
+as.transferProbeHint|尚未开始传文件体；正在连接或探测服务器，请保持本页打开|File body not started yet—connecting to or probing the server; keep this page open|ファイル本体はまだ開始していません。サーバー接続／確認中です。このページを開いたままにしてください
+as.transferVerifyHint|读回校验会再下载整文件做哈希，慢链路大约相当于再传一遍|Readback verification downloads the whole file again to hash it; on a slow link this can take about as long as another upload|読み戻し検証は全体を再ダウンロードしてハッシュします。低速経路では再アップロードと同程度の時間がかかることがあります
+as.transferSlowHint|外出慢链路可能要很久，请保持本页打开|A slow remote link can take a long time—keep this page open|低速な遠隔経路では時間がかかることがあります。このページを開いたままにしてください
 as.migrationFiles|待迁移文件（{count}）|Files to migrate ({count})|移行対象ファイル（{count}）
+as.viewDetails|详情|Details|詳細
+as.hideDetails|收起|Hide|閉じる
+as.dismissTask|关闭|Dismiss|閉じる
 as.exclusions|排除项（{count}）|Exclusions ({count})|除外（{count}）
 as.executeMigration|确认并执行此迁移|Confirm and execute migration|確認して移行を実行
 as.noTasks|尚无服务器上传或迁移任务。|No server upload or migration tasks yet.|サーバーへのアップロードや移行タスクはまだありません。
@@ -2114,6 +2139,8 @@ am.cache|本地缓存|Local cache|ローカルキャッシュ
 am.cache.none|尚未缓存，打开时需要连接|Not cached; connection needed|キャッシュなし、接続が必要
 am.cache.partial|部分缓存，完整读取仍需连接|Partially cached; connection needed for the full file|一部をキャッシュ済み、全体の読み取りには接続が必要
 am.cache.complete|已完整缓存|Fully cached|全体をキャッシュ済み
+am.cacheLocal|缓存到本地|Cache locally|ローカルにキャッシュ
+am.cacheReady|已写入本机附件缓存（非复制到普通 _attachments）|Saved into the vault attachment cache (not copied into ordinary _attachments)|保管庫の添付キャッシュに保存しました（通常の _attachments への複製ではありません）
 am.storageTitle|原件与缓存分开管理|Originals and cache managed separately|原本とキャッシュを個別に管理
 am.storageHint|本地与服务器附件使用同一浏览入口|Browse local and server attachments together|ローカルとサーバーの添付を一緒に閲覧
 aw.result.waiting|已接收，等待同步到服务器|Received; waiting to sync to server|受信済み、サーバーへの同期待ち
@@ -2483,6 +2510,10 @@ as.simpleTitle|附件服务器|Attachment servers|添付サーバー
 as.simpleHelp|填写服务器地址、账号和密码，即可自动同步附件目录与资料。|Enter a server address, account and password to sync attachment directories and metadata automatically.|サーバーのアドレス、アカウント、パスワードを入力すると一覧と資料が自動同期されます。
 as.simpleAddressHelp|支持 WebDAV 地址或 smb://主机/共享目录，也可粘贴 Windows 共享路径。|Use a WebDAV address, smb://host/share, or a Windows shared-folder path.|WebDAV アドレス、smb://host/share、Windows 共有パスに対応します。
 as.connected|已连接，目录将在后台自动同步。|Connected. Directories will sync in the background.|接続しました。一覧はバックグラウンドで同期されます。
+as.latencyMs|往返约 {ms} ms|About {ms} ms round-trip|往復約 {ms} ms
+as.latencyHint.elevated|延迟偏高，浏览与扫描可能变慢|Elevated latency; browsing and scans may feel slow|遅延が高めです。閲覧や走査が遅くなることがあります
+as.latencyHint.high|延迟很高（常见于 VPN/Tailscale 中继）；优先修直连，同网时改用局域网 WebDAV 地址|Very high latency (often a VPN/Tailscale relay). Prefer a direct path; on the same LAN use the local WebDAV URL|遅延が非常に高い（VPN/Tailscale 中継のことが多い）。直通を優先し、同一 LAN ではローカル WebDAV URL を使ってください
+as.networkHelp|附件列表走 WebDAV/SMB，不依赖极空间 Sync 文件夹。公司网或 Tailscale 中继时 RTT 可能达数百毫秒到数秒；回家同网可把地址改成局域网 IP:端口，出门再切回 Tailscale。测试连接会显示往返时延。|Attachment listing uses WebDAV/SMB, not ZSpace Sync folders. On a corporate network or Tailscale relay, RTT can be hundreds of ms to seconds; at home on the same LAN switch the URL to the NAS LAN IP:port, then back to Tailscale when away. Connection tests show round-trip latency.|添付一覧は WebDAV/SMB を使い、ZSpace Sync フォルダーには依存しません。社内網や Tailscale 中継では RTT が数百 ms〜数秒になることがあります。自宅の同一 LAN では NAS の LAN IP:ポートに切り替え、外出時は Tailscale に戻してください。接続テストで往復遅延を表示します。
 as.connecting|正在连接…|Connecting…|接続中…
 as.saveConnect|保存并连接|Save and connect|保存して接続
 as.defaultBadge|新附件默认位置|Default for new attachments|新しい添付の既定先
@@ -2492,7 +2523,7 @@ as.makeDefault|设为新附件默认位置|Use for new attachments|新しい添�
 as.disable|停用|Disable|無効にする
 as.enable|启用|Enable|有効にする
 as.disabled|已停用|Disabled|無効
-as.noServers|添加服务器后，附件目录和资料会自动同步。|Add a server to sync attachment directories and metadata automatically.|サーバーを追加すると一覧と資料が自動同期されます。
+as.noServers|未添加服务器时，附件保存在本机 _attachments，可在附件管理页初始化目录缓存后浏览和上传。添加服务器后，目录与资料可再同步。|Without a server, attachments stay in local _attachments—initialize the catalog on the Attachments page to browse and upload. After you add a server, catalogs and metadata can sync.|サーバー未追加時は添付をローカルの _attachments に保存します。添付管理で目録を初期化すれば閲覧・アップロードできます。サーバー追加後に一覧と資料を同期できます。
 as.optionalName|显示名称（可选）|Display name (optional)|表示名（任意）
 as.connectionState.cancelled|等待重新同步|Waiting to sync again|再同期待ち
 as.connectionState.conflict|资料存在冲突，请查看同步状态|Metadata conflict; check sync status|資料の競合があります。同期状況を確認してください
@@ -2904,6 +2935,12 @@ sc.phase.checking_directories|检查服务器目录变化|Checking server direct
 sc.phase.confirming|确认未列出文件是否仍存在|Verifying files absent from the listing|一覧にないファイルの存在を確認中
 sc.phase.verifying_rules|核对服务器忽略规则|Verifying server ignore rules|サーバーの除外ルールを確認中
 sc.phase.syncing_references|同步已有文件引用|Synchronizing existing file references|既存ファイルの参照を同期中
+sc.phase.catalog|同步服务器目录库|Syncing the server catalog|サーバーのディレクトリ庫を同期中
+sc.phase.import|导入服务器文件到目录库|Importing server files into the catalog|サーバーのファイルをディレクトリ庫へ取り込み中
+sc.membershipDiscover|成员来自目录检查（可导入为目录库权威）|Membership comes from directory checks (import to make the catalog authoritative)|メンバーはディレクトリ確認由来（取り込みでディレクトリ庫を権威にできます）
+sc.membershipAppOnly|成员只认应用写入与目录库（不再自动发现新文件）|Membership is app writes and the catalog only (no automatic discovery)|メンバーはアプリ書き込みとディレクトリ庫のみ（自動発見なし）
+sc.importCatalog|导入现有文件到目录库|Import existing files into catalog|既存ファイルをディレクトリ庫へ取り込み
+sc.importCatalogHelp|一次性把当前服务器文件登记进目录库（不下载原件），之后只认应用上传／迁移；列表只显示预览，整文件需「缓存到本地」。慢网会续跑直到完成。|One-time register of current server files into the catalog (does not download originals). Afterwards only app uploads/migrations count; the list shows previews—use Cache locally for full files. Slow networks keep retrying until finished.|サーバー上の現行ファイルをディレクトリ庫へ登録します（原本はダウンロードしません）。以降はアプリのアップロード／移行のみ。一覧はプレビューのみで、原本は「ローカルにキャッシュ」で取得。遅い回線でも完了まで再試行します。
 sc.metadata.pulling|检查标签、分类与资料更新|Checking tag, category and metadata updates|タグ、分類、資料の更新を確認中
 sc.metadata.publishing|提交本机待同步资料|Publishing queued local metadata|この端末の未送信資料を送信中
 sc.metadata.projecting|更新本机资料汇总|Updating the local metadata summary|この端末の資料一覧を更新中

@@ -42,6 +42,7 @@ def public_settings(remote, root=None):
             'username':source.get('username',''), 'enabled':source.get('enabled',True),
             'connection_hint':source.get('connection_hint','direct'),
             'scan_roots':source.get('scan_roots',['']), 'scan_paused':source.get('scan_paused',False),
+            'membership_mode':source.get('membership_mode', source.get('connection',{}).get('membership_mode','discover')),
             'password_saved':source.get('password_saved',False),
             'connection':source.get('connection',{'state':'unconfigured'}),
         })
@@ -62,7 +63,7 @@ def save_settings(remote, body):
     profiles = body.get('storages')
     if not isinstance(profiles,list) or len(profiles)>32:raise ValueError('Invalid attachment sources')
     sources = []
-    allowed = {'type','storage_id','name','base_url','remote_root','upload_directory','metadata_directory','username','connection_hint','enabled','scan_roots','scan_paused'}
+    allowed = {'type','storage_id','name','base_url','remote_root','upload_directory','metadata_directory','username','connection_hint','enabled','scan_roots','scan_paused','membership_mode'}
     existing={source['id']:source for source in remote._settings(root)['sources']}
     for source in profiles:
         if not isinstance(source,dict) or set(source)-allowed:raise ValueError('Unsupported attachment source setting')
@@ -71,7 +72,7 @@ def save_settings(remote, body):
         if 'metadata_directory' not in value and key in existing:
             value['metadata_directory']=validate_source(existing[key])['metadata_directory']
         old=existing.get(key,{})
-        for field in ('remote_root','upload_directory','connection_hint','scan_roots','scan_paused'):
+        for field in ('remote_root','upload_directory','connection_hint','scan_roots','scan_paused','membership_mode'):
             if field not in value and field in old:value[field]=old[field]
         address=value.get('base_url','')
         protocol='smb' if address.startswith(('smb://','\\\\')) else 'webdav'
@@ -132,13 +133,26 @@ def replace_credentials(remote, body):
 def public_job(value):
     result=dict(value)
     result['job_id']='remote:'+result['id']
+    transfer=result.pop('transfer',None) or {}
+    result.pop('_speed_marks',None);result.pop('_transfer_saved_at',None)
     if result.get('kind')=='upload':
         result['remote_saved']=result.get('state')=='completed'
         result['pending']=not result['remote_saved']
         if result.get('requested_path'):result['path']=result['requested_path']
     if result.get('kind')=='migration':
-        result['summary']={'files':len(result.get('items',[])), 'bytes':result.get('total_bytes',0)}
-        result['progress']={'done':result.get('completed',0),'total':len(result.get('items',[]))}
+        items=result.get('items',[])
+        released=sum(item.get('size',0) for item in items if item.get('state')=='released')
+        current=next((item for item in items if item.get('state') in {'uploading','mapped','releasing'}),None)
+        file_total=transfer.get('file_bytes_total') or ((current or {}).get('size',0) if result.get('state')=='running' else 0)
+        file_done=transfer.get('file_bytes_done',0) if result.get('state')=='running' else 0
+        if current and current.get('state') in {'mapped','releasing'}:file_done=file_total or current.get('size',0)
+        result['summary']={'files':len(items),'bytes':result.get('total_bytes',0)}
+        result['progress']={'done':result.get('completed',0),'total':len(items),
+                            'bytes_done':transfer.get('bytes_done',released),
+                            'bytes_total':transfer.get('bytes_total',result.get('total_bytes',0)),
+                            'speed_bps':transfer.get('speed_bps',0) if result.get('state')=='running' else 0,
+                            'file_bytes_done':file_done,'file_bytes_total':file_total,
+                            'phase':transfer.get('phase','') if result.get('state')=='running' else ''}
     return result
 
 
@@ -257,11 +271,68 @@ def attachment_storage_router(remote, runtime, workspace):
         body=await request.json()
         return await asyncio.to_thread(sync,remote,body['root'],storage_id(body['storage_id']))
 
+    @router.post('/api/attachments/storage/catalog')
+    async def sync_catalog(request:Request):
+        body=await request.json()
+        publish_local=body.get('publish_local',True)
+        if type(publish_local) is not bool:raise ValueError('Invalid catalog sync setting')
+        return await asyncio.to_thread(remote.start_catalog_sync,body['root'],storage_id(body['storage_id']),publish_local=publish_local)
+
+    @router.post('/api/attachments/storage/catalog-import')
+    async def import_catalog(request:Request):
+        body=await request.json()
+        return await asyncio.to_thread(remote.start_catalog_import,body['root'],storage_id(body['storage_id']))
+
+    @router.post('/api/attachments/storage/membership-mode')
+    async def membership_mode(request:Request):
+        from vault_rag.attachment_server_catalog import set_membership_mode
+        body=await request.json()
+        mode=body.get('membership_mode')
+        if mode not in {'discover','app_only'}:raise ValueError('Invalid attachment membership mode')
+        return await asyncio.to_thread(set_membership_mode,remote,body['root'],storage_id(body['storage_id']),mode)
+
     @router.post('/api/attachments/cache/clear')
     async def clear(request:Request):
         body=await request.json()
         await asyncio.to_thread(remote.clear_cache,body['root'])
         return await asyncio.to_thread(public_settings,remote,body['root'])
+
+    @router.post('/api/attachments/cache')
+    async def ensure_cache(request:Request):
+        """Materialize selected remote attachments into the vault cache."""
+        body=await request.json()
+        root=body['root']
+        paths=body.get('paths') or []
+        if not isinstance(paths,list) or not 1<=len(paths)<=100 or any(not isinstance(p,str) for p in paths):
+            raise ValueError('Select between 1 and 100 attachments')
+        items=[]
+        for path in paths:
+            item=await asyncio.to_thread(remote.stat,root,path=path)
+            if item.get('storage_id',item.get('source_id','local'))=='local':
+                items.append(item);continue
+            await asyncio.to_thread(remote.materialize,root,path=path,asset_id=item.get('asset_id',''))
+            items.append(await asyncio.to_thread(remote.stat,root,path=path))
+        return {'items':items}
+
+    @router.post('/api/attachments/cache')
+    async def cache(request:Request):
+        """Materialize selected remote attachments into the vault disk cache."""
+        body=await request.json()
+        root=body['root']
+        paths=body.get('paths')
+        if not isinstance(paths,list) or not 1<=len(paths)<=100 or any(not isinstance(p,str) for p in paths):
+            raise ValueError('Select between 1 and 100 attachments')
+        items=[]
+        for path in paths:
+            target=await asyncio.to_thread(remote.materialize,root,path)
+            detail=await asyncio.to_thread(workspace.details,root,path)
+            items.append(detail)
+            # Touch the path so callers can assert the cache file exists without
+            # exposing absolute filesystem locations to the UI.
+            if not target.is_file():
+                raise FileNotFoundError('Attachment cache is unavailable')
+        runtime.publish('files',list(paths))
+        return {'items':items}
 
     @router.patch('/api/attachments/metadata')
     async def metadata(request:Request):

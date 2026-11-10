@@ -3,7 +3,7 @@
 Server mode uses the server catalog directly. Local initialization no longer prepares an organization plan; this article describes an optional local file operation. See [server originals and device catalogs](attachments.md).
 
 
-Preview and execute server migration separately in **Settings → Files & import → Attachment storage**. It releases local originals only after upload, readback verification and durable old-path mapping, without adding a permanent local `originals/` archive. The `.vault-rag/attachment-migrations/` recovery directories below belong to local organization; existing history and recycle records are not removed automatically. Old links resolve inside LeafLoom; other editors are not guaranteed to support them. See [server attachments and cache](attachments.md).
+Preview and execute server migration in **Settings → Attachment servers**. After upload and readback verification the server holds the authoritative original; the local `_attachments` path stays as a version-matched cache (no permanent local `originals/` archive). HTML project resources do not participate in server migration; relocate legacy ones with `scripts/localize_html_attachments.py` into `Web/` or project `assets/` instead of organizing them into `_attachments`. The `.vault-rag/attachment-migrations/` recovery directories below belong to local organization jobs; existing history and recycle records are not removed automatically. Old links resolve inside LeafLoom; other editors are not guaranteed to support them. See [server attachments and cache](attachments.md).
 
 
 ## Your goal
@@ -12,7 +12,7 @@ Rename, move or recycle supported attachments with reference checks, and keep re
 
 ## Before you start
 
-Back up the vault before structural changes. In [0.1.5](../RELEASE_NOTES_0.1.5.md), migration and organization entry points are hidden; server settings only manage connections. A destination change does not migrate existing originals. See [attachment browsing](attachments.md).
+Back up the vault before structural changes. Local folder-reorganization entry points remain hidden; server migration is under **Settings → Attachment servers**. Changing the new-upload destination does not migrate existing originals. See [attachment browsing](attachments.md).
 
 ## Steps
 

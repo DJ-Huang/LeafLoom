@@ -162,6 +162,29 @@ class ModeSwitchingTests(unittest.TestCase):
         from vault_rag.local_state import ConflictError
         with self.assertRaises(ConflictError):catalog.listing(limit=1,cursor=cursor)
 
+    def test_local_source_listing_skips_remote_lock(self):
+        self.put('local.png',b'local');self.remote_file()
+        files,catalog,_=self.context();files.attachments.refresh()
+        held=self.manager.lock.acquire(blocking=False)
+        self.assertTrue(held)
+        try:
+            page=catalog.listing(source='local')
+            self.assertEqual(page['total'],1)
+            self.assertEqual(page['items'][0]['path'],'local.png')
+            self.assertEqual(page['summary']['by_source']['remote']['files'],0)
+            self.assertEqual(page['summary']['by_source']['local']['files'],1)
+        finally:
+            self.manager.lock.release()
+
+    def test_scan_batches_do_not_publish_files_until_complete(self):
+        published=[]
+        self.manager.runtime=SimpleNamespace(publish=lambda *args,**kwargs:published.append(args))
+        self.dav.files['Incoming/a.bin']=b'one'
+        self.dav.files['Incoming/b.bin']=b'two'
+        result=self.manager.scan(str(self.root),fixtures.SOURCE)
+        self.assertTrue(result['ok'])
+        self.assertEqual(published.count(('files',[])),1)
+
     def test_peer_keeps_local_copy_until_folder_sync_delivers_deletion(self):
         original=self.put('_attachments/photo.png',b'original')
         old_id=self.manager.stat(str(self.root),'_attachments/photo.png')['asset_id']
@@ -176,11 +199,12 @@ class ModeSwitchingTests(unittest.TestCase):
             db.execute('INSERT INTO aliases VALUES(?,?)',('_attachments/photo.png',old_id))
         plan=self.manager.migration_plan(str(self.root),fixtures.SOURCE,['_attachments/photo.png'])
         self.assertEqual(self.manager.migrate(str(self.root),plan['id'])['state'],'completed')
-        self.assertFalse(original.exists())
+        self.assertTrue(original.exists())  # Kept as version-matched vault-path cache.
+        self.assertEqual(self.manager.stat(str(self.root),'_attachments/photo.png')['storage_id'],fixtures.SOURCE)
         self.assertTrue(peer.scan(str(peer_root),fixtures.SOURCE)['ok'])
         peer_file=peer_root/'_attachments/photo.png';self.assertEqual(peer_file.read_bytes(),b'original')
         self.assertEqual(peer.stat(str(peer_root),asset_id=old_id)['storage_id'],'local')
-        peer_file.unlink()  # Simulate Resilio delivering the owner's deletion.
+        peer_file.unlink()  # Simulate peer removing its local copy while owner keeps cache.
         self.assertEqual(peer.stat(str(peer_root),asset_id=old_id)['storage_id'],fixtures.SOURCE)
         self.assertEqual(peer.stat(str(peer_root),'_attachments/photo.png')['storage_id'],fixtures.SOURCE)
 
