@@ -1,7 +1,7 @@
 import {Diagnostic} from './i18n';
 import {t,useLocale} from './i18n';
 import React,{lazy,memo,Suspense,useCallback,useEffect,useId,useMemo,useRef,useState,useSyncExternalStore} from 'react';
-import {BookOpen,Download,FileText,Code,Eye,Search,History,PanelRight,MessageCircle,Link2,MoreHorizontal,Maximize2,Minimize2,Undo2,Redo2} from 'lucide-react';
+import {BookOpen,ClipboardCopy,Download,FileText,Code,Eye,Search,History,PanelRight,MessageCircle,Link2,MoreHorizontal,Maximize2,Minimize2,Undo2,Redo2} from 'lucide-react';
 import {api,affected,Change,media,Note,OpenNote} from './api';
 import {useApi} from './hooks';
 import {Action,ActionMenu,LazyBoundary,FormDialog} from './ui';
@@ -16,11 +16,18 @@ import type {DocumentHeading} from './rich-markdown';
 import {DocumentOutline} from './document-outline';
 import {Annotation,AnnotationAction,AnnotationColor,AnnotationSelection,makeAnchor,resolveAnchor,selectedHighlights} from './annotations';
 import {CommentsPanel} from './annotations-ui';
+import {copyNoteImage,ImageCopyRequest} from './note-image-copy';
 const LiveEditor=lazy(()=>import('./editor').then(module=>({default:module.LiveEditor})));
 const RichEditor=lazy(()=>import('./rich-editor').then(module=>({default:module.RichEditor})));
 const BaseViewer=lazy(()=>import('./base').then(module=>({default:module.BaseViewer})));
 const name=(path:string)=>path.split('/').pop()||path;
 
+function MediaFileView({path,ext,vaultRoot,active,viewKey,notify}:{path:string,ext:string,vaultRoot:string,active:boolean,viewKey:string,notify:(message:string)=>void}){
+ useLocale();
+ const image=/^(png|jpg|jpeg|webp|gif|svg|avif)$/.test(ext),copy=useRef(new ImageCopyRequest());
+ useEffect(()=>()=>copy.current.cancel(),[path]);
+ return <div className="media-view"><div className="media-heading"><h2>{name(path)}</h2><div className="toolbar-actions">{image&&<button type="button" className="button" onClick={()=>{notify(t('design.imageCopying'));void copy.current.run(signal=>copyNoteImage({target:path,url:media(path,false,vaultRoot),notePath:path,root:vaultRoot},signal)).then(done=>{if(done)notify(t('design.imageCopied'));}).catch(error=>notify((error as Error).message));}}><ClipboardCopy size={15}/> {" "}{t('design.copySourceImage')}</button>}<a className="button" href={media(path,true,vaultRoot)}><Download size={15}/> {" "}{t("下载原文件")}</a></div></div>{image?<img src={media(path,false,vaultRoot)} alt={name(path)} decoding="async"/>:/^(mp4|webm|mov|m4v)$/.test(ext)?<VideoPlayer path={path} active={active} stateKey={viewKey}/>:/^(mp3|m4a|wav|ogg|flac)$/.test(ext)?<AudioPlayer path={path} active={active} stateKey={viewKey}/>:ext==='pdf'?active&&<iframe className="pdf-view" src={media(path,false,vaultRoot)} title={name(path)}/>:<div className="empty-state"><BookOpen size={40}/><h2>{t("文件已保存在本地")}</h2><p>{t("此格式可下载后使用对应程序打开。")}</p></div>}</div>;
+}
 function Properties({note,onUpdate,notify}:{note:Note,onUpdate:(note:Note)=>void,notify:(message:string)=>void}){
  useLocale();
  const [editing,setEditing]=useState<{key:string,value:string}|undefined>();
@@ -185,7 +192,7 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
  const releaseEditor=(view:any)=>{sessionStorage.setItem(viewKey+':cursor',String(view.state.selection.main.head));editor.current=null;};
  const readyEditor=(view:any)=>{editor.current=view;area.current?.dispatchEvent(new CustomEvent('vault-document-rendered'));const stored=sessionStorage.getItem('cursor:'+path)||sessionStorage.getItem(viewKey+':cursor');if(stored!==null){sessionStorage.removeItem('cursor:'+path);view.dispatch({selection:{anchor:Math.min(Number(stored)||0,view.state.doc.length)},scrollIntoView:true});}view.dom.addEventListener('keyup',()=>sessionStorage.setItem(viewKey+':cursor',String(view.state.selection.main.head)));if(pendingOutlineJump.current)jumpToOutline(pendingOutlineJump.current);};
  if(ext==='base')return <LazyBoundary><Suspense fallback={<p>{t("正在打开视图…")}</p>}><BaseViewer path={path} onOpen={onOpen} notify={notify}/></Suspense></LazyBoundary>;
- if(!textFile)return <div className="media-view"><div className="media-heading"><h2>{name(path)}</h2><a className="button" href={media(path,true)}><Download size={15}/> {" "}{t("下载原文件")}</a></div>{/^(png|jpg|jpeg|webp|gif|svg|avif)$/.test(ext)?<img src={media(path)} alt={name(path)} decoding="async"/>:/^(mp4|webm|mov|m4v)$/.test(ext)?<VideoPlayer path={path} active={active} stateKey={viewKey}/>:/^(mp3|m4a|wav|ogg|flac)$/.test(ext)?<AudioPlayer path={path} active={active} stateKey={viewKey}/>:ext==='pdf'?active&&<iframe className="pdf-view" src={media(path)} title={name(path)}/>:<div className="empty-state"><BookOpen size={40}/><h2>{t("文件已保存在本地")}</h2><p>{t("此格式可下载后使用对应程序打开。")}</p></div>}</div>;
+ if(!textFile)return <MediaFileView path={path} ext={ext} vaultRoot={vaultRoot} active={active} viewKey={viewKey} notify={notify}/>;
  if(!note&&!(isHtml&&mode==='read'))return <div className={'empty-state '+(session.error?'error':'')}>{session.error||t("正在打开文档…")}{session.error&&<button onClick={()=>void loadDocument(session,undefined,true)}>{t("重试")}</button>}</div>;
  return <div className={'document'+(wide||isHtml?' wide-content':'')} onKeyDown={event=>{
   if(!active||ext!=='md'||event.defaultPrevented||event.nativeEvent.isComposing||!(event.metaKey||event.ctrlKey)||event.altKey)return;

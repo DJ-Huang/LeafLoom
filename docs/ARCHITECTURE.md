@@ -266,7 +266,7 @@ permissions. Display loss or missed heartbeats mute, pause and hide output.
 
 附件来源支持 `webdav` 与 `smb`，从管理 API 的地址推断协议；SMB 使用 `smbprotocol` 的独立连接池，显式凭据、签名、共享根边界与版本校验，不使用系统挂载或默认登录。两种传输统一提供目录扫描、范围读取、独占上传与不可变资料读写，浏览器仍只访问 LeafLoom 媒体接口。旧 WebDAV 配置及官方客户端提示保持兼容。
 
-`RemoteAttachments` 在连接就绪后启动目录发现，每个 root/source 去重，自动发现全局串行，沿用持久成功时间与启动缓冲，完成三十分钟后再次检查；连接恢复唤醒发现，认证失败暂停。成功时间写入 manifest 的 `sync_checkpoints`，状态接口提供 `auto_sync`、`last_success_at` 与 `next_scan_at`。成功扫描唤醒已绑定资料库；资料提交通知前端并唤醒分组同步。任务继续执行来源、凭据和知识库版本检查，不自动搬迁原件。资料库绑定与新上传默认位置独立。
+`RemoteAttachments` 在连接就绪后启动目录发现，每个 root/source 去重，自动发现全局串行，沿用持久成功时间与启动缓冲，完成两小时后再次检查；连接恢复唤醒发现，认证失败暂停。成功时间写入 manifest 的 `sync_checkpoints`，状态接口提供 `auto_sync`、`last_success_at` 与 `next_scan_at`。成功扫描唤醒已绑定资料库；资料提交通知前端并唤醒分组同步。任务继续执行来源、凭据和知识库版本检查，不自动搬迁原件。资料库绑定与新上传默认位置独立。
 
 设置分类内部保留 `files` 标识以兼容导航，显示为“附件服务器”。目录操作通过独立的新建与导入弹窗复用文件 API。附件概览、同步状态与详情开关位于紧凑工具栏，后台目录事件使用保留浏览状态的刷新路径，过期分页保留当前快照等待用户查看最新内容。
 

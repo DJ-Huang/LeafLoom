@@ -181,7 +181,7 @@ class MetadataTests(unittest.TestCase):
             # Make the last pull due without waiting or touching a real server.
             with self.library._db(self.root) as db:
                 checkpoint=self.library._get(db,'pull_checkpoint',{})
-                self.library._set(db,'pull_checkpoint',{**checkpoint,'pulled_at':time.time()-checkpoint.get('interval',1800)-1})
+                self.library._set(db,'pull_checkpoint',{**checkpoint,'pulled_at':time.time()-checkpoint.get('interval',SCAN_INTERVAL)-1})
             self.library.last_pull.clear()
             self.assertEqual(self.library.sync(self.root,_background=True)['state'],'ready')
         with self.library._db(self.root) as db:self.assertEqual(self.library._get(db,'pull_checkpoint')['interval'],6*3600)
@@ -193,7 +193,7 @@ class MetadataTests(unittest.TestCase):
         with patch.object(self.library,'_pull',side_effect=AssertionError('queued edit must not rescan')):
             self.assertEqual(self.library.sync(self.root,_background=True)['pending'],0)
         self.assertTrue(any(method=='PUT' for method,_ in self.dav.calls))
-        with self.library._db(self.root) as db:self.assertEqual(self.library._get(db,'pull_checkpoint')['interval'],1800)
+        with self.library._db(self.root) as db:self.assertEqual(self.library._get(db,'pull_checkpoint')['interval'],SCAN_INTERVAL)
 
 
     def test_failed_metadata_pull_does_not_retry_every_worker_tick(self):

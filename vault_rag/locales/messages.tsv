@@ -2504,7 +2504,7 @@ aw.lastSynced|最近成功同步|Last successful sync|最終同期成功
 aw.notSynced|尚未同步|Not synced yet|未同期
 aw.nextSync|下次检查|Next check|次の確認
 aw.authPaused|请更新账号或密码以恢复同步|Update your account or password to resume sync|同期を再開するにはアカウントまたはパスワードを更新してください
-aw.autoSyncHelp|启动使用已有列表。上传目录约每 30 分钟检查，稳定归档逐步延至最长一周；空闲资料／分组拉取最长 6 小时，重启保留计划。完整核对立即绕过目录缓存；原件按需下载。 暂停只停止目录发现，完整核对仅检查所选范围。|Startup uses the saved list. Upload directories check about every 30 minutes; stable archives back off up to one week, idle metadata/groups up to six hours. Schedules survive restart. Check all directories bypasses cache immediately; originals download on demand. Pausing stops directory discovery; full checks stay within the selected scope.|起動時は保存済み一覧を使用します。アップロード先は約30分ごと、安定したアーカイブは最長1週間、資料・グループは最長6時間まで間隔を延ばし、再起動後も保持します。全確認はキャッシュをすぐに無視し、原本は必要時に取得します。 一時停止はディレクトリ検出のみを止め、全確認は選択範囲に限定します。
+aw.autoSyncHelp|启动使用已有列表。上传目录约每 2 小时检查，稳定归档逐步延至最长一周；空闲资料／分组拉取最长 6 小时，重启保留计划。完整核对立即绕过目录缓存；原件按需下载。 暂停只停止目录发现，完整核对仅检查所选范围。|Startup uses the saved list. Upload directories check about every 2 hours; stable archives back off up to one week, idle metadata/groups up to six hours. Schedules survive restart. Check all directories bypasses cache immediately; originals download on demand. Pausing stops directory discovery; full checks stay within the selected scope.|起動時は保存済み一覧を使用します。アップロード先は約2時間ごと、安定したアーカイブは最長1週間、資料・グループは最長6時間まで間隔を延ばし、再起動後も保持します。全確認はキャッシュをすぐに無視し、原本は必要時に取得します。 一時停止はディレクトリ検出のみを止め、全確認は選択範囲に限定します。
 aw.listUpdated|列表已更新，查看最新内容|List updated — show latest|一覧が更新されました。最新を表示
 as.simpleTitle|附件服务器|Attachment servers|添付サーバー
 as.simpleHelp|填写服务器地址、账号和密码，即可自动同步附件目录与资料。|Enter a server address, account and password to sync attachment directories and metadata automatically.|サーバーのアドレス、アカウント、パスワードを入力すると一覧と資料が自動同期されます。
@@ -3046,6 +3046,7 @@ design.imageCopyTooLarge|图片过大，无法复制：文件需不超过 32 MiB
 design.imageCopyRestart|请重启 LeafLoom 后再复制图片，以加载新版剪贴板支持。|Restart LeafLoom to load image clipboard support, then copy again.|LeafLoom を再起動して画像コピー機能を読み込み、再試行してください。
 design.imageClipboardUnavailable|无法写入图片剪贴板，请检查浏览器权限或使用桌面端重试。|Could not write the image to the clipboard. Check browser permissions or retry in the desktop app.|画像をクリップボードに書き込めません。ブラウザーの権限を確認するかデスクトップ版で再試行してください。
 design.imageCopyFailed|图片复制失败，请重试。|Could not copy the image. Try again.|画像をコピーできませんでした。再試行してください。
+note.imageUnresolved|无法定位该图片，请确认附件仍在知识库中。|Could not locate this image. Check that the attachment is still in the vault.|この画像を特定できません。添付が保管庫にあるか確認してください。
 
 External file changes|外部文件修改|External file changes|外部ファイルの変更
 Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved|设计文件尚未写完或 JSON 格式有误，请完成外部编辑后重试，历史已保留。|Design document is incomplete or invalid JSON; finish the external edit and retry. History is preserved|デザインファイルが未完成か JSON が不正です。外部編集を完了して再試行してください。履歴は保持しています。

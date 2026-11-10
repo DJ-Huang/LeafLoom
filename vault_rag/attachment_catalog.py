@@ -339,7 +339,30 @@ class AttachmentCatalog:
             with closing(self._catalog_connection(local, files)) as db:
                 self._attach(db, path, files)
                 register_scan_scope(db, settings['sources'])
-                view_stamp = presentation.prepare(db, str(root), group_id) if presentation else ''
+                # Directory/source/format groups (e.g. Unity Asset) filter in SQL and
+                # enrich only the returned page — restart must not reload the whole
+                # asset library just to show membership from the local manifest.
+                light_group = False
+                membership = None
+                if presentation and group_id:
+                    from vault_rag.attachment_presentation import membership_sql
+                    _, _, group = presentation.resolve_group(str(root), group_id)
+                    primary = ''
+                    try:
+                        primary = str(presentation.library.settings(str(root)).get('storage_id') or '')
+                    except (FileNotFoundError, ValueError, ConflictError, AttributeError, TypeError):
+                        primary = ''
+                    membership = membership_sql(group, primary_storage_id=primary)
+                    light_group = bool(membership) and not query and not tags and not category
+                # presentation.cte() LEFT JOINs attachment_enrichment. Build that
+                # table whenever enrichment is required — including the ungrouped
+                # "all attachments" view — otherwise listing returns HTTP 500.
+                if presentation and not light_group:
+                    view_stamp = presentation.prepare(db, str(root), group_id or '', enrich=True)
+                elif presentation and group_id:
+                    view_stamp = presentation.prepare(db, str(root), group_id, enrich=False)
+                else:
+                    view_stamp = ''
                 db.execute('BEGIN')
                 scanned = db.execute('SELECT scanned_at FROM main.state WHERE root=?', (str(root),)).fetchone()
                 generation = db.execute('SELECT generation FROM manifest.catalog_state WHERE id=1').fetchone()[0]
@@ -356,7 +379,7 @@ class AttachmentCatalog:
                 if storage_id:
                     origins.append('storage_id=?')
                     origin_args.append(storage_id)
-                cte = presentation.cte(self._cte()) if presentation else self._cte()
+                cte = self._cte() if light_group or not presentation else presentation.cte(self._cte())
                 # Materialize group membership once. Unity Asset groups previously
                 # re-ran the Python matcher for COUNT, facets, and the page query.
                 if presentation and group_id:
@@ -364,10 +387,16 @@ class AttachmentCatalog:
                     db.execute('CREATE TEMP TABLE attachment_group_hit(storage_id TEXT NOT NULL, path TEXT NOT NULL, '
                                'PRIMARY KEY(storage_id, path)) WITHOUT ROWID')
                     # CTE binds the logical remote prefix once (`? || source_id || '/' || path`).
-                    db.execute(cte + 'INSERT OR IGNORE INTO attachment_group_hit(storage_id, path) '
-                               'SELECT storage_id, path FROM catalog WHERE '
-                               'attachment_group_matches(storage_id,path,remote_path,name,tags,category,asset_id)=1',
-                               [prefix])
+                    if membership:
+                        predicate_sql, membership_args = membership
+                        db.execute(cte + 'INSERT OR IGNORE INTO attachment_group_hit(storage_id, path) '
+                                   'SELECT storage_id, path FROM catalog WHERE ' + predicate_sql,
+                                   [prefix, *membership_args])
+                    else:
+                        db.execute(cte + 'INSERT OR IGNORE INTO attachment_group_hit(storage_id, path) '
+                                   'SELECT storage_id, path FROM catalog WHERE '
+                                   'attachment_group_matches(storage_id,path,remote_path,name,tags,category,asset_id)=1',
+                                   [prefix])
                     origins.append('EXISTS (SELECT 1 FROM attachment_group_hit g '
                                    'WHERE g.storage_id=catalog.storage_id AND g.path=catalog.path)')
                 where, args = list(origins), list(origin_args)
@@ -399,14 +428,17 @@ class AttachmentCatalog:
                     summary['by_source'][origin]['bytes'] += size
                 result_summary = None
                 if presentation:
-                    matched = db.execute(cte + "SELECT CASE WHEN storage_id='local' THEN 'local' ELSE 'remote' END," +
-                        _KIND_SQL + ',COUNT(*),COALESCE(SUM(size),0) FROM catalog WHERE ' + predicate + ' GROUP BY 1,2', args).fetchall()
-                    result_summary = {'files': sum(r[2] for r in matched), 'bytes': sum(r[3] for r in matched), 'kinds': {},
-                        'by_source': {'local': {'files': 0, 'bytes': 0}, 'remote': {'files': 0, 'bytes': 0}}}
-                    for origin, file_kind, count, size in matched:
-                        result_summary['kinds'][file_kind] = result_summary['kinds'].get(file_kind, 0) + count
-                        result_summary['by_source'][origin]['files'] += count
-                        result_summary['by_source'][origin]['bytes'] += size
+                    if light_group and kind == 'all':
+                        result_summary = summary
+                    else:
+                        matched = db.execute(cte + "SELECT CASE WHEN storage_id='local' THEN 'local' ELSE 'remote' END," +
+                            _KIND_SQL + ',COUNT(*),COALESCE(SUM(size),0) FROM catalog WHERE ' + predicate + ' GROUP BY 1,2', args).fetchall()
+                        result_summary = {'files': sum(r[2] for r in matched), 'bytes': sum(r[3] for r in matched), 'kinds': {},
+                            'by_source': {'local': {'files': 0, 'bytes': 0}, 'remote': {'files': 0, 'bytes': 0}}}
+                        for origin, file_kind, count, size in matched:
+                            result_summary['kinds'][file_kind] = result_summary['kinds'].get(file_kind, 0) + count
+                            result_summary['by_source'][origin]['files'] += count
+                            result_summary['by_source'][origin]['bytes'] += size
                 field = _SORTS[sort]
                 direction, sign = ('ASC', '>') if order == 'asc' else ('DESC', '<')
                 if cursor:
@@ -430,6 +462,8 @@ class AttachmentCatalog:
                     files.config.path_for(row['path'])
                 except (ValueError, OSError):
                     continue
+                # Light directory groups stay on the local manifest for the grid;
+                # product covers/tags are filled when the detail pane opens.
                 items.append(self._public(row, sources))
             local._check_root(root)
             with self._remote.lock:

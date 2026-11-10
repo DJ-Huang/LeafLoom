@@ -668,7 +668,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
             if not name or name.startswith('.') or '/' in name or '\\' in name or any(ord(c)<32 for c in name) or len(name.encode())>200:
                 raise ValueError('Use a plain attachment filename')
             # Land in `_attachments` first so notes can link immediately; promote
-            # to the server in the background and keep the vault bytes as cache.
+            # in the background. Note-sized images stay as vault cache after
+            # promote; larger/non-image staging drops to thumbnails.
             folder=relative(config.data.get('attachment_folder','_attachments') if central or not folder else folder)
             logical='/'.join((folder,uuid.uuid4().hex,name))
             destination=config.path_for(logical,writable=True)

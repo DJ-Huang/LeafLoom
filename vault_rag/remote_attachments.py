@@ -1509,10 +1509,16 @@ class RemoteAttachments:
         value['remote_path']='/'.join(p for p in (source['upload_directory'],value['id']+'-'+name) if p)
         directory=self._state('outbox');directory.mkdir(parents=True,exist_ok=True,mode=0o700)
         staged=self._state('outbox',value['id']+'.blob')
-        with self.lock:
-            if attachment:require_allowed(self._files(),path)
+        # Stage outside the manager lock so paste/upload hashing and copies do not
+        # stall note opens and other attachment reads that share the same lock.
+        try:
             size,value['sha256']=self._stage_upload(root,local_path,staged,guard)
             value['size']=size
+        except Exception:
+            staged.unlink(missing_ok=True)
+            raise
+        with self.lock:
+            if attachment:require_allowed(self._files(),path)
             if guard is not None:self.guards[value['id']]=guard
             try:
                 with self._db(root) as db:
@@ -1527,9 +1533,9 @@ class RemoteAttachments:
                     old=db.execute('SELECT asset_id FROM aliases WHERE path=?',(path,)).fetchone()
                     if old:raise ConflictError('Attachment logical path already exists')
                     db.execute('INSERT INTO aliases VALUES(?,?)',(path,value['asset_id']))
-                    # Staging bytes may sit under `_attachments` for the note link
-                    # while the upload is pending; they are removed after promote so
-                    # the grid keeps only lightweight thumbnails, not full originals.
+                    # Staging bytes sit under `_attachments` for the note link while
+                    # upload is pending. After promote, note-sized images stay as
+                    # vault cache; larger/non-image originals drop to thumbnails.
                     self._job_save(db,value)
                     if idempotency_key:db.execute('INSERT INTO upload_receipts VALUES(?,?,?,?)',(owner,idempotency_key,fingerprint,value['id']))
             except Exception:
@@ -1550,23 +1556,36 @@ class RemoteAttachments:
             if size+1024*1024>shutil.disk_usage(staged.parent).free:raise ValueError('Insufficient space for attachment outbox')
             if guard is not None:guard()
             if source is None:
+                digest=hashlib.sha256()
                 with staged.open('xb') as dst:
-                    created=True;dst.write(original);dst.flush();os.fsync(dst.fileno())
-            else:
-                # This path is a trusted server-created multipart staging file;
-                # MCP adapters never expose the server-local argument.
-                before_hash,before_version=_hash_file(source)
-                descriptor=os.open(source,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_BINARY',0))
-                with os.fdopen(descriptor,'rb') as src,staged.open('xb') as dst:
-                    created=True
-                    if _version(os.fstat(src.fileno()))!=before_version:raise ConflictError('Upload source changed')
-                    while chunk:=src.read(1024*1024):
-                        if guard is not None:guard()
-                        dst.write(chunk)
-                    dst.flush();os.fsync(dst.fileno())
-                if _hash_file(staged)[0]!=before_hash or _version(source.stat())!=before_version:raise ConflictError('Upload source changed')
+                    created=True;digest.update(original);dst.write(original);dst.flush();os.fsync(dst.fileno())
+                private_file_mode(staged)
+                return size,digest.hexdigest()
+            # Prefer a same-volume hard link so paste returns after one hash instead
+            # of copy + three full reads. Falls back to a single-pass copy+hash.
+            try:
+                os.link(source,staged)
+                created=True
+                private_file_mode(staged)
+                digest,version=_hash_file(staged)
+                if _version(source.stat())!=version:raise ConflictError('Upload source changed')
+                return size,digest
+            except OSError:
+                if created:
+                    staged.unlink(missing_ok=True);created=False
+            digest=hashlib.sha256()
+            descriptor=os.open(source,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_BINARY',0))
+            with os.fdopen(descriptor,'rb') as src,staged.open('xb') as dst:
+                created=True
+                before_version=_version(os.fstat(src.fileno()))
+                while chunk:=src.read(1024*1024):
+                    if guard is not None:guard()
+                    digest.update(chunk);dst.write(chunk)
+                dst.flush();os.fsync(dst.fileno())
+                if _version(os.fstat(src.fileno()))!=before_version:raise ConflictError('Upload source changed')
+            if _version(source.stat())!=before_version:raise ConflictError('Upload source changed')
             private_file_mode(staged)
-            return size,_hash_file(staged)[0]
+            return size,digest.hexdigest()
         except Exception:
             if created:staged.unlink(missing_ok=True)
             raise
@@ -1711,12 +1730,15 @@ class RemoteAttachments:
             value['state']='completed';value['verified']=True;value.pop('error',None)
             for field in ('retry_attempts','next_retry_at','retry_paused'):value.pop(field,None)
             self._job_save(db,value)
-        # Staging under `_attachments` is only for the pending note link. Once the
-        # server object is authoritative, drop those full bytes so the device keeps
-        # membership + small thumbnails, not a second copy of every original.
+        # Staging under `_attachments` backs the pending note link. After promote,
+        # keep note-sized images as vault cache so embeds stay local; drop larger
+        # / non-image staging so the device keeps membership + thumbnails only.
         self._drop_upload_staging(root,value)
         staged.unlink(missing_ok=True)
         self._connection_ready(root,value['source_id'],context=provider.connection_context)
+
+    _NOTE_IMAGE_SUFFIXES=frozenset({'.png','.jpg','.jpeg','.gif','.webp','.bmp','.tif','.tiff','.avif'})
+    _NOTE_IMAGE_CACHE_MAX=16*1024*1024
 
     def _drop_local_original(self,root,*,path,asset_id=''):
         """Drop vault originals after server authority; keep only lightweight previews.
@@ -1730,7 +1752,7 @@ class RemoteAttachments:
             vault=self.config.path_for(path)
         except (ValueError,OSError):
             return
-        if vault.is_file() and Path(path).suffix.lower() in {'.png','.jpg','.jpeg','.gif','.webp','.bmp','.tif','.tiff','.avif'}:
+        if vault.is_file() and Path(path).suffix.lower() in self._NOTE_IMAGE_SUFFIXES:
             try:
                 workspace=getattr(getattr(self.runtime,'files',None),'workspace',None)
                 if workspace is not None:
@@ -1753,9 +1775,38 @@ class RemoteAttachments:
         changed=getattr(getattr(self.runtime,'files',None),'changed',None)
         if callable(changed):changed(path)
 
+    def _retain_vault_staging(self,root,*,path,asset_id=''):
+        """Keep pasted note images as same-origin vault cache after promote."""
+        if not path or not asset_id:return False
+        if Path(path).suffix.lower() not in self._NOTE_IMAGE_SUFFIXES:return False
+        try:
+            vault=self.config.path_for(path)
+        except (ValueError,OSError):
+            return False
+        if not vault.is_file() or is_link(vault):return False
+        try:
+            if vault.stat().st_size>self._NOTE_IMAGE_CACHE_MAX:return False
+        except OSError:
+            return False
+        try:
+            workspace=getattr(getattr(self.runtime,'files',None),'workspace',None)
+            if workspace is not None:workspace.thumbnail(root,path)
+        except Exception:
+            pass
+        with self.lock,self._db(root) as db:
+            row=db.execute('SELECT * FROM assets WHERE id=?',(asset_id,)).fetchone()
+            if not row or not vault.is_file():return False
+            self._register_vault_cache(db,row,vault,sha256=row['sha256'] or '',verified=time.time(),alias=path)
+        changed=getattr(getattr(self.runtime,'files',None),'changed',None)
+        if callable(changed):changed(path)
+        return True
+
     def _drop_upload_staging(self,root,value):
-        """Remove vault staging originals after a successful remote promote."""
-        self._drop_local_original(root,path=value.get('requested_path') or '',asset_id=value.get('asset_id',''))
+        """Keep note-sized image staging as vault cache; drop other originals."""
+        path=value.get('requested_path') or ''
+        asset_id=value.get('asset_id','')
+        if self._retain_vault_staging(root,path=path,asset_id=asset_id):return
+        self._drop_local_original(root,path=path,asset_id=asset_id)
 
     def _job_retry_due(self,value):
         if value.get('state') not in {'waiting_for_connection','waiting_for_auth'}:return True

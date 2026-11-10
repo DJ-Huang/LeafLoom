@@ -95,6 +95,23 @@ class ServerCatalogTests(unittest.TestCase):
         members = [name for name in self.dav.files if '/attachments/v1/members/' in name]
         self.assertTrue(members)
 
+    def test_promote_keeps_note_image_as_vault_cache(self):
+        folder = self.root / '_attachments' / 'cafecafecafecafecafecafecafecafe'
+        folder.mkdir(parents=True)
+        local = folder / 'clip.png'
+        local.write_bytes(b'png-bytes-for-note')
+        logical = '_attachments/cafecafecafecafecafecafecafecafe/clip.png'
+        job = self.remote.queue_upload(str(self.root), SOURCE, logical, local, attachment=True)
+        self.remote.process_pending()
+        with self.remote.lock, self.remote._db(str(self.root)) as db:
+            asset = db.execute('SELECT state FROM assets WHERE id=?', (job['asset_id'],)).fetchone()
+            self.assertEqual(asset[0], 'ready')
+            cache = db.execute('SELECT file FROM cache WHERE asset_id=?', (job['asset_id'],)).fetchone()
+            self.assertIsNotNone(cache)
+            self.assertTrue(str(cache[0]).startswith('vault:'))
+        self.assertTrue(local.is_file())
+        self.assertEqual(local.read_bytes(), b'png-bytes-for-note')
+
     def test_unreachable_upload_stays_retryable(self):
         local = self.root / '_attachments' / 'x' / 'a.bin'
         local.parent.mkdir(parents=True)

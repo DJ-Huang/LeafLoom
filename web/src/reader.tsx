@@ -3,12 +3,15 @@ import {t,useLocale} from './i18n';
 import React,{lazy,memo,Suspense,useEffect,useMemo,useRef,useState} from 'react';
 import {createRoot,Root} from 'react-dom/client';
 import DOMPurify from 'dompurify';
+import {ClipboardCopy} from 'lucide-react';
 import {api,affected,Change,media,OpenNote} from './api';
 import {useApi} from './hooks';
 import {VirtualList,VirtualTableBody} from './virtual';
 import {VideoPlayer} from './media';
 import {HtmlBlock,ReadingJump} from './html-block';
 import {Block,blocks,createMarkdown,hasMath,stripFrontmatter} from './markdown-core';
+import {copyNoteImage,ImageCopyRequest} from './note-image-copy';
+import {ActionMenu} from './ui';
 export {stripFrontmatter};
 const BaseViewer=lazy(()=>import('./base').then(module=>({default:module.BaseViewer})));
 let diagramModule:Promise<typeof import('mermaid')>|undefined;
@@ -42,11 +45,16 @@ function Embed({target,source,onOpen,depth}:{target:string,source:string,onOpen:
  return <button className="text-link" onClick={()=>onOpen(path)}>{target}</button>;
 }
 
-export const MarkdownPreview=memo(function MarkdownPreview({text,path,onOpen,onTask,depth=0,active=true}:{text:string,path:string,onOpen:OpenNote,onTask?:(index:number)=>void,depth?:number,active?:boolean}){
+export const MarkdownPreview=memo(function MarkdownPreview({text,path,onOpen,onTask,depth=0,active=true,notify}:{text:string,path:string,onOpen:OpenNote,onTask?:(index:number)=>void,depth?:number,active?:boolean,notify?:(message:string)=>void}){
  useLocale();
  const ref=useRef<HTMLDivElement>(null),roots=useRef<Map<HTMLElement,Root>>(new Map()),openRef=useRef(onOpen);openRef.current=onOpen;
  const [parts,setParts]=useState<Block[]>([]),[visible,setVisible]=useState(16),[error,setError]=useState('');
  const [jump,setJump]=useState<{block:number,value:ReadingJump}>();
+ const [imageMenu,setImageMenu]=useState<{anchor:HTMLElement,point:{x:number,y:number},target:string,url:string}>();
+ const [copyStatus,setCopyStatus]=useState('');
+ const imageCopy=useRef(new ImageCopyRequest());
+ const report=notify||setCopyStatus;
+ useEffect(()=>()=>imageCopy.current.cancel(),[]);
  useEffect(()=>{const area=ref.current?.closest('.writing-area');if(!area)return;const reveal=(event:Event)=>{const detail=(event as CustomEvent).detail;const index=parts.findIndex(part=>part.from<=detail.pos&&part.to>detail.pos);if(index<0)return;const part=parts[index],needle=detail.needle||'',before=text.slice(part.from,detail.pos);setVisible(value=>Math.max(value,index+1));setJump({block:index,value:{nonce:performance.now(),needle,label:detail.label,occurrence:needle?before.toLocaleLowerCase().split(needle.toLocaleLowerCase()).length-1:0}});};area.addEventListener('vault-reading-jump',reveal);return()=>area.removeEventListener('vault-reading-jump',reveal);},[parts,text]);
  useEffect(()=>{if(!active)return;const changed=(event:Event)=>{const change=(event as CustomEvent<Change>).detail;ref.current?.querySelectorAll<HTMLImageElement|HTMLMediaElement>('img,video,audio').forEach(element=>{const url=new URL(element.src,location.origin),target=url.searchParams.get('path');if(url.origin===location.origin&&url.pathname==='/api/media'&&target&&affected('file?path='+encodeURIComponent(target),change)){const seconds=element instanceof HTMLMediaElement?element.currentTime:0;element.src=media(target);if(element instanceof HTMLMediaElement)element.addEventListener('loadedmetadata',()=>{element.currentTime=Math.min(seconds,element.duration||0);},{once:true});}});};window.addEventListener('vault-data-changed',changed);return()=>window.removeEventListener('vault-data-changed',changed);},[active]);
  useEffect(()=>{
@@ -72,5 +80,5 @@ export const MarkdownPreview=memo(function MarkdownPreview({text,path,onOpen,onT
  },[parts,visible,path,depth,onTask]);
  useEffect(()=>()=>{const old=[...roots.current.values()];roots.current.clear();queueMicrotask(()=>old.forEach(root=>root.unmount()));},[]);
  if(error)return <p className="error">{<Diagnostic message={error}/>}</p>;
- return <div ref={ref} className="markdown" onClick={event=>{const input=event.target as HTMLInputElement;if(input.type==='checkbox'&&input.dataset.task!==undefined){onTask?.(Number(input.dataset.task));return;}const anchor=(event.target as HTMLElement).closest<HTMLAnchorElement>('a');if(!anchor)return;const target=anchor.dataset.note||anchor.getAttribute('href')||'';if(!target||/^https?:|^mailto:/.test(target)){anchor.target='_blank';anchor.rel='noopener';return;}event.preventDefault();onOpen(target);}}>{parts.slice(0,visible).map((part,index)=>part.kind==='query'?<QueryView key={index} query={part.query} onOpen={onOpen}/>:<HtmlBlock key={index} html={part.html} editable={!!onTask} jump={jump?.block===index?jump.value:undefined}/>)}{visible<parts.length&&<p className="subtle">{t("正在加载后续内容…")}</p>}</div>;
+ return <div ref={ref} className="markdown" onContextMenu={event=>{const image=(event.target as HTMLElement).closest('img');if(!image||!ref.current?.contains(image))return;const target=image.dataset.vaultSrc||'';if(!target&&!image.currentSrc)return;event.preventDefault();setImageMenu({anchor:image,point:{x:event.clientX,y:event.clientY},target,url:image.currentSrc||image.src});}} onClick={event=>{const input=event.target as HTMLInputElement;if(input.type==='checkbox'&&input.dataset.task!==undefined){onTask?.(Number(input.dataset.task));return;}const anchor=(event.target as HTMLElement).closest<HTMLAnchorElement>('a');if(!anchor)return;const target=anchor.dataset.note||anchor.getAttribute('href')||'';if(!target||/^https?:|^mailto:/.test(target)){anchor.target='_blank';anchor.rel='noopener';return;}event.preventDefault();onOpen(target);}}>{parts.slice(0,visible).map((part,index)=>part.kind==='query'?<QueryView key={index} query={part.query} onOpen={onOpen}/>:<HtmlBlock key={index} html={part.html} editable={!!onTask} jump={jump?.block===index?jump.value:undefined}/>)}{visible<parts.length&&<p className="subtle">{t("正在加载后续内容…")}</p>}{copyStatus&&<p className="subtle" role="status">{copyStatus}</p>}{imageMenu&&<ActionMenu title={t('design.copySourceImage')} anchor={imageMenu.anchor} point={imageMenu.point} onClose={()=>setImageMenu(undefined)}><button type="button" onClick={event=>{event.stopPropagation();const source={target:imageMenu.target,url:imageMenu.url,notePath:path};setImageMenu(undefined);report(t('design.imageCopying'));void imageCopy.current.run(signal=>copyNoteImage(source,signal)).then(copied=>{if(copied)report(t('design.imageCopied'));}).catch(error=>report((error as Error).message));}}><ClipboardCopy size={14}/>{t('design.copySourceImage')}</button></ActionMenu>}</div>;
 });

@@ -75,6 +75,33 @@ class AttachmentGroupTests(unittest.TestCase):
         self.assertEqual(self.dav.files['Artwork/cat.png'],b'original')
         self.assertFalse(any(method in {'DELETE','MOVE','COPY'} for method,_ in self.dav.calls))
 
+    def test_directory_group_lists_from_manifest_without_library_enrichment(self):
+        self.dav.files['Packages/A.unitypackage']=b'pkg-a'
+        self.dav.files['Packages/B.unitypackage']=b'pkg-b'
+        self.dav.files['Other/skip.bin']=b'skip'
+        self.scan();self.initialize()
+        manager=self.manager();presentation=AttachmentPresentation(manager,self.library)
+        files=self.remote._files();catalog=AttachmentCatalog(files.attachments,self.remote);catalog.presentation=presentation
+        group=manager.update(self.root,'create',{'name':'Unity Asset','rules':{'directories':['Packages']}})['groups'][0]
+        with patch.object(presentation,'metadata',side_effect=AssertionError('directory groups must not load the asset library on list')):
+            page=catalog.listing(group_id=group['id'],limit=50)
+        self.assertEqual(page['total'],2)
+        paths={item['path'] for item in page['items']}
+        self.assertTrue(any(path.endswith('A.unitypackage') for path in paths))
+        self.assertTrue(any(path.endswith('B.unitypackage') for path in paths))
+        self.assertFalse(any('skip.bin' in path for path in paths))
+
+    def test_ungrouped_listing_builds_enrichment_when_presentation_attached(self):
+        # Default attachment hub uses group_id='' with presentation attached;
+        # presentation.cte() joins attachment_enrichment and must not 500.
+        self.dav.files['Artwork/cat.png']=b'cat'
+        self.scan();self.initialize()
+        manager=self.manager();presentation=AttachmentPresentation(manager,self.library)
+        files=self.remote._files();catalog=AttachmentCatalog(files.attachments,self.remote);catalog.presentation=presentation
+        page=catalog.listing(limit=50)
+        self.assertGreaterEqual(page['total'],1)
+        self.assertTrue(any(item['name']=='cat.png' for item in page['items']))
+
     def test_catalog_inherits_source_metadata_searches_groups_and_keeps_personal(self):
         self.dav.files['Packages/Fictional.unitypackage']=b'original'
         self.scan();self.initialize()

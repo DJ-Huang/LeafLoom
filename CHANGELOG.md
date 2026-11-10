@@ -4,7 +4,17 @@
 
 ## Unreleased
 
-- Attachment servers can use an app-written **membership catalog** on the NAS (`LeafLoomCatalog/.../attachments/v1/members/`): import existing server files once, then stop automatic full-tree discovery. Central paste/upload and migration promote to the server, then **drop local originals by default**—the attachment grid shows lightweight thumbnails/previews; full files download only when you **Cache locally** or open them. Slow networks and disconnects keep retrying until work finishes (auth failures still pause). Sync status shows membership mode and **Import existing files into catalog**.
+- Copy images from notes to the system clipboard: right-click **Copy image**, or select an image and press `Ctrl/⌘+C` (also available when opening an image file). Reuses the desktop PNG clipboard path so pastes work in other apps and notes.
+
+- Fix attachment hub “all files” listing crashing with `Internal Server Error` / invalid JSON after the directory-group speed-up (enrichment table was skipped when no group was selected).
+
+- Speed up note paste and open with a remote attachment default: stage uploads without holding the attachment lock during copy/hash, prefer a same-volume hard link (or a single-pass hash+copy), and keep note-sized pasted images as local vault cache after promote so embeds do not rematerialize from the NAS. Larger and non-image staging still drops to thumbnails.
+
+- Lengthen automatic attachment-server directory checks: the upload tree and related discovery cadence move from about 30 minutes to about **2 hours** (stable archives still back off up to one week; **Sync now** / **Check all directories** stay immediate).
+
+- Speed up restart listing for directory-rule groups such as **Unity Asset**: filter membership from the local manifest in SQL and skip reloading the whole asset library for the grid (covers/tags still load in the detail pane).
+
+- Attachment servers can use an app-written **membership catalog** on the NAS (`LeafLoomCatalog/.../attachments/v1/members/`): import existing server files once, then stop automatic full-tree discovery. Central paste/upload and migration promote to the server; **note-sized images stay as vault cache** for embeds, while larger/non-image staging **drops** so the grid keeps lightweight thumbnails/previews. Catalog import still does not download originals; use **Cache locally** or open for other full files. Slow networks and disconnects keep retrying until work finishes (auth failures still pause). Sync status shows membership mode and **Import existing files into catalog**.
 
 - Speed up attachment browsing with NAS servers: stop mid-scan list refresh storms, keep **Local** listings off the remote scan lock, reuse a short-lived presence digest, prefer ranged thumbnail fetches before full materialize, and add **Cache locally** plus connection round-trip latency hints (prefer Tailscale direct / LAN WebDAV; listing does not use ZSpace Sync).
 
