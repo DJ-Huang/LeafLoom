@@ -73,6 +73,11 @@ class RemoteAttachments:
         self.poll_cursor=0
         self.cancelled=set()
         self.cache_ttl=60
+        self.cache_checks={}
+        self.cache_lock=threading.RLock()
+        self.cache_checked={}
+        self.cache_readers={}
+        self.cache_deletions={}
         self.scan_threads={}
         self.scan_locks={}
         self.scan_statuses={}
@@ -784,12 +789,12 @@ class RemoteAttachments:
                                            (time.time(),asset_id,source_id,path,revision)).rowcount
                         if not changed:continue
                         missing+=1
-                        stale_files.extend(self._state('cache',row[0]) for row in db.execute('SELECT file FROM cache WHERE asset_id=? UNION ALL SELECT file FROM ranges WHERE asset_id=?',(asset_id,asset_id)))
+                        stale_files.extend((asset_id,self._cache_file_path(root,row[0])) for row in db.execute('SELECT file FROM cache WHERE asset_id=? UNION ALL SELECT file FROM ranges WHERE asset_id=?',(asset_id,asset_id)))
                         db.execute('DELETE FROM cache WHERE asset_id=?',(asset_id,));db.execute('DELETE FROM ranges WHERE asset_id=?',(asset_id,))
                     check()
                 if checkpoint is not None:checkpoint.complete()
-                for cache_path in stale_files:
-                    try:cache_path.unlink(missing_ok=True)
+                for asset_id,cache_path in stale_files:
+                    try:self._remove_cached_file(root,asset_id,cache_path)
                     except OSError:pass  # Detached cache is disposable; never touch source/outbox.
             except RemoteStorageError as error:
                 if connection_is_current():self.connections[source_id]={**self.connections.get(source_id,{}),'state':error.state,'code':error.code,**progress,'checked_at':time.time()}
@@ -1082,7 +1087,8 @@ class RemoteAttachments:
             if not asset_id and not source_id and path and self.config.path_for(relative(path)).is_file():
                 logical=relative(path)
                 has_remote=db.execute(
-                    "SELECT 1 FROM aliases al JOIN assets a ON a.id=al.asset_id WHERE al.path=? AND a.source_id!='local'",
+                    "SELECT 1 FROM aliases al JOIN assets a ON a.id=al.asset_id WHERE al.path=? AND a.source_id!='local' "
+                    "AND (a.state='pending' OR EXISTS (SELECT 1 FROM cache c WHERE c.asset_id=a.id AND c.file='vault:'||al.path))",
                     (logical,)).fetchone()
                 has_local=db.execute(
                     "SELECT 1 FROM assets WHERE source_id='local' AND path=? AND state!='redirected'",
@@ -1159,10 +1165,124 @@ class RemoteAttachments:
     def _drop_cache_row(self,db,root,asset_id):
         item=db.execute('SELECT file FROM cache WHERE asset_id=?',(asset_id,)).fetchone()
         if not item:return
-        self._cache_file_path(root,item[0]).unlink(missing_ok=True)
+        self._remove_cached_file(root,asset_id,self._cache_file_path(root,item[0]))
         db.execute('DELETE FROM cache WHERE asset_id=?',(asset_id,))
 
-    def _cached(self,root,row):
+    def acquire_cache_read(self,root,asset_id):
+        """Keep preview bytes alive until the response (or thumbnail) closes."""
+        key=(str(root),asset_id)
+        with self.lock:
+            self._root(root)
+            with self.cache_lock:self.cache_readers[key]=self.cache_readers.get(key,0)+1
+        released=False
+        def release():
+            nonlocal released
+            with self.cache_lock:
+                if released:return
+                released=True
+                remaining=self.cache_readers[key]-1
+                if remaining:self.cache_readers[key]=remaining
+                else:
+                    del self.cache_readers[key]
+                    for path,identity in self.cache_deletions.pop(key,{}).items():
+                        try:
+                            if not is_link(path) and _version(path.stat())==identity:path.unlink(missing_ok=True)
+                        except OSError:pass
+                self.wake.set()
+        return release
+
+    def _remove_cached_file(self,root,asset_id,path):
+        with self.cache_lock:
+            key=(str(root),asset_id)
+            if self.cache_readers.get(key):
+                try:self.cache_deletions.setdefault(key,{})[path]=_version(path.stat())
+                except FileNotFoundError:pass
+            else:path.unlink(missing_ok=True)
+
+    def queue_preview_check(self,root,asset_id,verified=0):
+        with self.lock,self._db(root) as db:
+            row=self._resolve(db,asset_id=asset_id)
+        self._queue_cache_check(root,row,verified)
+
+    def _queue_cache_check(self,root,row,verified):
+        if row['state']!='ready' or time.time()-verified<self.cache_ttl:return
+        try:
+            with self.lock:
+                if self.stopped.is_set():return
+                source=self._source(row['source_id'],root)
+                if not source.get('enabled',True):return
+                context=self._connection_context(root,row['source_id'])
+                if not context[3]:return
+                state=self._connection_state(root,row['source_id'])
+                if state.get('retry_paused') or (state.get('state')=='unreachable' and (state.get('next_retry_at') or 0)>time.time()):return
+                key=(str(root),row['id'])
+                settings_revision=self._settings(root)['revision']
+                revision=self.config.data.get('revision')
+                self.cache_checks={pending:task for pending,task in self.cache_checks.items()
+                                   if pending[0]==str(root) and task['revision']==revision}
+                signature=(context,revision,settings_revision,_remote_version(row),row.get('content_generation',0))
+                checked=self.cache_checked.get(key)
+                if checked and checked[0]==signature and time.time()-checked[1]<self.cache_ttl:return
+                if key not in self.cache_checks and len(self.cache_checks)<128:
+                    self.cache_checks[key]={'context':context,'revision':revision,'settings_revision':settings_revision,'row':dict(row)}
+                    self.wake.set()
+        except (ConflictError,ValueError,OSError,sqlite3.Error):return
+
+    def process_cache_checks(self):
+        """Revalidate one saved object, never holding the metadata lock over I/O."""
+        with self.lock:
+            if self.stopped.is_set():return
+            entry=next(((key,task) for key,task in self.cache_checks.items()
+                        if 'metadata' not in task or not self.cache_readers.get(key)),None)
+            if entry is None:return
+            key,task=entry
+        root,asset_id=key;row=task['row'];context=task['context']
+        def guard():
+            if (self.stopped.is_set() or self.config.data.get('revision')!=task['revision'] or
+                    self._settings(root)['revision']!=task['settings_revision'] or
+                    self._connection_context(root,row['source_id'])!=context):
+                raise ConflictError('Attachment cache check expired')
+        keep=False
+        try:
+            guard()
+            if 'metadata' not in task:
+                provider=self._provider(row['source_id'],root,guard=guard)
+                try:task['metadata']=provider.stat(row['path'])
+                except RemoteStorageError as error:
+                    if error.code!='remote_not_found':raise
+                    task['metadata']=None
+            with self.lock,self.cache_lock:
+                guard()
+                if self.cache_readers.get(key):
+                    keep=True
+                    return
+                with self._db(root) as db:
+                    current=self._resolve(db,asset_id=asset_id)
+                    self._require_current(current,row)
+                    if (current['source_id'],current['path'],current['state'],_remote_version(current))!=(
+                            row['source_id'],row['path'],row['state'],_remote_version(row)):return
+                    metadata=task['metadata']
+                    if metadata is None or _remote_version(metadata)!=_remote_version(row):
+                        if metadata is not None:self._upsert(db,row['source_id'],metadata,state=row['state'])
+                        self._drop_cache_row(db,root,asset_id)
+                        for cached in db.execute('SELECT file FROM ranges WHERE asset_id=?',(asset_id,)).fetchall():
+                            self._remove_cached_file(root,asset_id,self._state('cache',cached[0]))
+                        db.execute('DELETE FROM ranges WHERE asset_id=?',(asset_id,))
+                    else:
+                        for table in ('cache','ranges'):
+                            db.execute('UPDATE '+table+' SET verified=? WHERE asset_id=?',(time.time(),asset_id))
+                    self.cache_checked[key]=((context,task['revision'],task['settings_revision'],_remote_version(row),row.get('content_generation',0)),time.time())
+                    if len(self.cache_checked)>128:self.cache_checked.pop(next(iter(self.cache_checked)))
+            self._connection_ready(root,row['source_id'],context=context)
+        except RemoteStorageError as error:
+            self._connection_failed(root,row['source_id'],error,context=context)
+        except (ConflictError,PermissionError,InterruptedError,FileNotFoundError,ValueError,OSError,sqlite3.Error):pass
+        finally:
+            if not keep:
+                with self.lock:
+                    if self.cache_checks.get(key) is task:self.cache_checks.pop(key,None)
+
+    def _cached(self,root,row,*,cache_first=False):
         with self._db(root) as db:
             self._require_current(self._resolve(db,asset_id=row['id']),row)
             item=db.execute('SELECT * FROM cache WHERE asset_id=?',(row['id'],)).fetchone()
@@ -1190,6 +1310,9 @@ class RemoteAttachments:
                 if row['sha256'] and digest!=row['sha256']:return None
                 self._register_vault_cache(db,row,candidate,sha256=digest,alias=alias)
                 path=candidate;verified=time.time()
+        if cache_first:
+            self._queue_cache_check(root,row,verified)
+            return path
         source=next((s for s in self._settings(root)['sources'] if s['id']==row['source_id']),None)
         if source and source.get('enabled',True) and time.time()-verified>=self.cache_ttl:
             try:
@@ -1211,7 +1334,7 @@ class RemoteAttachments:
                 db.execute('UPDATE cache SET verified=? WHERE asset_id=?',(time.time(),row['id']))
         return path
 
-    def materialize(self,root,path='',*,asset_id='',source_id=''):
+    def materialize(self,root,path='',*,asset_id='',source_id='',cache_first=False):
         self._root(root)
         self.stat(root,path,asset_id=asset_id,source_id=source_id)
         with self.lock,self._db(root) as db:row=self._resolve(db,path,asset_id,source_id)
@@ -1224,7 +1347,7 @@ class RemoteAttachments:
         with asset_lock:
             with self.lock,self._db(root) as db:row=self._resolve(db,asset_id=row['id']);alias=self._vault_alias_for(db,row)
             self._require_available(row)
-            cached=self._cached(root,row)
+            cached=self._cached(root,row,cache_first=cache_first)
             if cached:return cached
             # Pending bytes are durable outbox data, not disposable cache.
             if row['state']=='pending':
@@ -1240,7 +1363,7 @@ class RemoteAttachments:
             maximum=self._settings(root)['cache_max_bytes']
             if row['size']>maximum:raise ValueError('Attachment exceeds the disk cache limit; use byte ranges')
             with self.lock:self._evict(root,reserve=row['size'])
-            use_vault=bool(alias)
+            use_vault=bool(alias) and not (self.cache_readers.get((str(root),row['id'])) and self.config.path_for(alias).exists())
             if use_vault:
                 destination=self.config.path_for(alias);destination.parent.mkdir(parents=True,exist_ok=True)
                 temporary=destination.with_name(destination.name+'.'+uuid.uuid4().hex+'.partial')
@@ -1271,13 +1394,13 @@ class RemoteAttachments:
             self._connection_ready(root,row['source_id'],context=provider.connection_context)
             return destination
 
-    def read_range(self,root,path='',start=0,end=None,*,asset_id='',source_id=''):
+    def read_range(self,root,path='',start=0,end=None,*,asset_id='',source_id='',cache_first=False):
         self._root(root)
         self.stat(root,path,asset_id=asset_id,source_id=source_id)
         with self.lock,self._db(root) as db:row=self._resolve(db,path,asset_id,source_id)
         self._require_available(row)
         if type(start)is not int or start<0 or (end is not None and (type(end)is not int or end<start)):raise ValueError('Invalid attachment byte range')
-        local=self.config.path_for(row['path']) if row['source_id']=='local' else self._cached(root,row)
+        local=self.config.path_for(row['path']) if row['source_id']=='local' else self._cached(root,row,cache_first=cache_first)
         if row['state']=='pending':local=self.materialize(root,asset_id=row['id'])
         requested_end=end
         if start>=row['size']:
@@ -1293,7 +1416,7 @@ class RemoteAttachments:
                 if _version(os.fstat(stream.fileno()))!=_version(before):raise ConflictError('Attachment changed while reading')
             with self.lock,self._db(root) as db:self._require_current(self._resolve(db,asset_id=row['id']),row)
             return data,{**self._public_asset(row,bool(local)),'start':start,'end':end,'total':row['size']}
-        partial=self._range_cached(root,row,start,end)
+        partial=self._range_cached(root,row,start,end,cache_first=cache_first)
         if partial is not None:
             return partial,{**self._public_asset(row),'cache_state':'partial','start':start,'end':end,'total':row['size']}
         self._refresh_remote_version(root,row)
@@ -1307,7 +1430,7 @@ class RemoteAttachments:
         self._connection_ready(root,row['source_id'],context=provider.connection_context)
         return data,{**self._public_asset(row),'cache_state':'partial' if self._settings(root)['cache_max_bytes']>=len(data) else 'none','start':start,'end':end,'total':row['size']}
 
-    def _range_cached(self,root,row,start,end):
+    def _range_cached(self,root,row,start,end,*,cache_first=False):
         with self.lock,self._db(root) as db:
             self._require_current(self._resolve(db,asset_id=row['id']),row)
             item=db.execute('SELECT * FROM ranges WHERE asset_id=? AND start<=? AND end>=? ORDER BY size LIMIT 1',(row['id'],start,end)).fetchone()
@@ -1321,10 +1444,12 @@ class RemoteAttachments:
                     valid=_hash_file(path)[0]==item['sha256']
                     if valid:db.execute('UPDATE ranges SET identity=? WHERE asset_id=? AND start=? AND end=?',(identity,row['id'],item['start'],item['end']))
             if not valid:
-                path.unlink(missing_ok=True)
+                self._remove_cached_file(root,row['id'],path)
                 db.execute('DELETE FROM ranges WHERE asset_id=? AND start=? AND end=?',(row['id'],item['start'],item['end']));return None
         source=next((s for s in self._settings(root)['sources'] if s['id']==row['source_id']),None)
-        if source and source.get('enabled',True) and time.time()-item['verified']>=self.cache_ttl:
+        if cache_first:
+            self._queue_cache_check(root,row,item['verified'])
+        if not cache_first and source and source.get('enabled',True) and time.time()-item['verified']>=self.cache_ttl:
             try:
                 provider=self._provider(row['source_id'],root);remote=provider.stat(row['path'])
             except RemoteStorageError as error:
@@ -1338,7 +1463,7 @@ class RemoteAttachments:
                     if (remote['size'],remote['etag'],remote['mtime'])!=(row['size'],row['etag'],row['mtime']):
                         self._upsert(db,row['source_id'],remote,state=row['state'])
                         row.update(dict(db.execute('SELECT * FROM assets WHERE id=?',(row['id'],)).fetchone()))
-                        for old in db.execute('SELECT file FROM ranges WHERE asset_id=?',(row['id'],)).fetchall():self._state('cache',old[0]).unlink(missing_ok=True)
+                        for old in db.execute('SELECT file FROM ranges WHERE asset_id=?',(row['id'],)).fetchall():self._remove_cached_file(root,row['id'],self._state('cache',old[0]))
                         db.execute('DELETE FROM ranges WHERE asset_id=?',(row['id'],));return None
                     db.execute('UPDATE ranges SET verified=? WHERE asset_id=? AND start=? AND end=?',(time.time(),row['id'],item['start'],item['end']))
         with self.lock,self._db(root) as db:
@@ -1366,7 +1491,7 @@ class RemoteAttachments:
                 if (current['size'],current['etag'],current['mtime'])!=(row['size'],row['etag'],row['mtime']):
                     path.unlink(missing_ok=True);raise ConflictError('Attachment metadata changed')
                 previous=db.execute('SELECT file FROM ranges WHERE asset_id=? AND start=? AND end=?',(row['id'],start,end)).fetchone()
-                if previous:self._state('cache',previous[0]).unlink(missing_ok=True)
+                if previous:self._remove_cached_file(root,row['id'],self._state('cache',previous[0]))
                 db.execute('INSERT OR REPLACE INTO ranges VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
                            (row['id'],start,end,filename,len(data),row['size'],hashlib.sha256(data).hexdigest(),row['etag'],row['mtime'],time.time(),time.time(),_json(_version(path.stat()))))
 
@@ -1376,7 +1501,7 @@ class RemoteAttachments:
             items=db.execute("SELECT asset_id,file,size,accessed,'cache' AS kind,0 AS start,0 AS end FROM cache UNION ALL SELECT asset_id,file,size,accessed,'ranges' AS kind,start,end FROM ranges ORDER BY accessed").fetchall();total=sum(r['size'] for r in items)
             for item in items:
                 if total<=maximum:break
-                if item['asset_id']==keep:continue
+                if item['asset_id']==keep or self.cache_readers.get((str(root),item['asset_id'])):continue
                 self._cache_file_path(root,item['file']).unlink(missing_ok=True)
                 if item['kind']=='cache':db.execute('DELETE FROM cache WHERE asset_id=?',(item['asset_id'],))
                 else:db.execute('DELETE FROM ranges WHERE asset_id=? AND start=? AND end=?',(item['asset_id'],item['start'],item['end']))
@@ -1387,8 +1512,8 @@ class RemoteAttachments:
         with self.lock,self._db(root) as db:
             items=list(db.execute('SELECT * FROM cache').fetchall())
             ranges=list(db.execute('SELECT * FROM ranges').fetchall())
-            for item in items:self._cache_file_path(root,item['file']).unlink(missing_ok=True)
-            for item in ranges:self._state('cache',item['file']).unlink(missing_ok=True)
+            for item in items:self._remove_cached_file(root,item['asset_id'],self._cache_file_path(root,item['file']))
+            for item in ranges:self._remove_cached_file(root,item['asset_id'],self._state('cache',item['file']))
             db.execute('DELETE FROM cache')
             db.execute('DELETE FROM ranges')
         return {'cleared':len(items)+len(ranges),'outbox_preserved':True,'vault_cache_cleared':True}
@@ -1760,7 +1885,7 @@ class RemoteAttachments:
             except Exception:
                 pass
         if vault.is_file():
-            vault.unlink(missing_ok=True)
+            self._remove_cached_file(root,asset_id,vault)
             parent=vault.parent
             try:
                 if parent.is_dir() and not any(parent.iterdir()):
@@ -1845,6 +1970,7 @@ class RemoteAttachments:
             self.wake.wait(3);self.wake.clear()
             if self.stopped.is_set():break
             try:
+                self.process_cache_checks()
                 self.poll_connections()
                 self.poll_scans()
                 self.process_pending()
@@ -2120,4 +2246,4 @@ class RemoteAttachments:
         self.thread.join(timeout=max(0,deadline-time.monotonic()))
         with self.lock:threads=list(self.scan_threads.values())
         for thread in threads:thread.join(timeout=max(0,deadline-time.monotonic()))
-        with self.lock:self.credentials.clear();self.guards.clear()
+        with self.lock:self.credentials.clear();self.guards.clear();self.cache_checks.clear()

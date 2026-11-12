@@ -110,6 +110,7 @@ class AttachmentCatalogTests(unittest.TestCase):
 
     def test_local_fast_path_and_transparent_delegation(self):
         self.put('local.png')
+        self.local.refresh()
         with patch.object(self.remote, 'manifest_path', side_effect=AssertionError('created manifest')):
             self.assertEqual(self.catalog.listing()['total'], 1)
             self.assertEqual(self.catalog.listing()['summary']['by_source'], {'local': {'files': 1, 'bytes': 1}, 'remote': {'files': 0, 'bytes': 0}})
@@ -129,9 +130,10 @@ class AttachmentCatalogTests(unittest.TestCase):
         self.put('same.png', 4, 800000000000)
         self.put('z.png', 1, 200000000000)
         self.prepare()
-        (self.root / 'same.png').unlink()  # Released original, stale filename index.
+        (self.root / 'same.png').unlink()  # Update the filename index after releasing the original.
+        self.local.apply(['same.png'])
         self.remote.add('incoming/x.png', alias='same.png', size=8)
-        # The remote alias supersedes the old local index entry.
+        # The released path can use its remote alias.
         self.remote.add('same.png', source=SOURCE_B, size=2, mtime=900000000000)
         self.remote.add('incoming/a.png', alias='a.png', size=7)
         for sort, field in [('path', 'path'), ('name', 'name'), ('modified', 'mtime'), ('size', 'size')]:
@@ -193,6 +195,7 @@ class AttachmentCatalogTests(unittest.TestCase):
         key = self.remote.add('Incoming/object.png', alias='old.png', size=12, state='migration_pending')
         self.assertEqual([(i['storage_id'], i['size']) for i in self.catalog.listing()['items']], [('local', 3)])
         (self.root / 'old.png').unlink()
+        self.local.apply(['old.png'])
         with self.remote.db() as db:
             db.execute("UPDATE assets SET state='ready' WHERE id=?", (key,))
         self.assertEqual([(i['storage_id'], i['size']) for i in self.catalog.listing()['items']], [(SOURCE_A, 12)])
@@ -362,9 +365,71 @@ class AttachmentCatalogTests(unittest.TestCase):
         self.assertNotIn('warning', local)
         self.assertEqual(sorted(item['path'] for item in combined['items']), ['Notes/a.png', 'Other/b.png'])
         self.assertEqual(combined['warning'], 'cache_unavailable')
-        self.assertIn('database is locked', combined['warning_detail'])
+        self.assertNotIn('warning_detail', combined)
         self.assertEqual(remote['items'], [])
         self.assertEqual(remote['warning'], 'cache_unavailable')
+
+    def test_missing_server_catalog_never_initializes_or_walks_local_files(self):
+        self.put('unindexed.png')
+        self.catalog.presentation = object()
+        with patch.object(self.local, 'refresh', side_effect=AssertionError('implicit scan')):
+            remote = self.catalog.listing(source='remote')
+            combined = self.catalog.listing()
+        self.assertEqual(remote['total'], 0)
+        self.assertEqual(combined['total'], 0)
+        self.assertFalse(self.files.state_path('remote-attachments', 'manifest.sqlite').exists())
+
+    def test_server_pages_ignore_local_index_and_use_unambiguous_paths(self):
+        self.put('same.png')
+        self.prepare()
+        key = self.remote.add('incoming/server.png', alias='same.png')
+        self.remote.add('incoming/second.png')
+        with patch.object(self.local, '_connect', side_effect=AssertionError('local index read')):
+            with patch.object(AttachmentCatalog, '_local_ready', side_effect=AssertionError('local readiness read')):
+                first = self.catalog.listing(source='remote', limit=1)
+                self.local.generation += 1
+                second = self.catalog.listing(source='remote', cursor=first['cursor'], limit=1)
+        items = first['items'] + second['items']
+        item = next(item for item in items if item['asset_id'] == key)
+        self.assertEqual(item['path'], '_attachments/_remote/' + SOURCE_A + '/incoming/server.png')
+        self.assertEqual(item['name'], 'same.png')
+
+    def test_fallback_keeps_group_search_order_and_local_pagination(self):
+        for path in ('Notes/a.png', 'Notes/b.png', 'Notes/c.png', 'Other/a.png'):
+            self.put(path)
+        self.prepare()
+        class Group:
+            def resolve_group(self, root, group_id):
+                return [], 'device', {'rules': {'directories': ['Notes']},
+                    'included': [{'scope': 'local:other-device', 'path': 'Other/a.png'}],
+                    'excluded': [{'scope': 'local:device', 'path': 'Notes/b.png'}]}
+        self.catalog.presentation = Group()
+        with patch.object(AttachmentCatalog, '_attach', side_effect=sqlite3.OperationalError('locked')):
+            first = self.catalog.listing(group_id='notes', query='.png', sort='name', order='desc', limit=1)
+        # The server has recovered, but a local cursor must stay a local cursor.
+        second = self.catalog.listing(group_id='notes', query='.png', sort='name', order='desc',
+                                      limit=1, cursor=first['cursor'])
+        self.assertEqual([first['items'][0]['path'], second['items'][0]['path']], ['Notes/c.png', 'Notes/a.png'])
+        self.assertEqual(first['total'], 2)
+        self.assertEqual(second['total'], 2)
+        self.assertIsNone(second['cursor'])
+        # Missing metadata cannot silently turn into an unfiltered local page.
+        with patch.object(AttachmentCatalog, '_attach', side_effect=sqlite3.OperationalError('locked')):
+            self.assertEqual(self.catalog.listing(tags=['tag'])['items'], [])
+        with patch.object(AttachmentCatalog, '_attach', side_effect=AssertionError('server catalog read')):
+            self.assertEqual(self.catalog.listing(source='local', category='category')['warning'], 'local_group_uncached')
+
+    def test_local_group_includes_and_excludes_respect_device_scope(self):
+        self.put('Notes/a.png'); self.put('Other/b.png'); self.put('Other/c.png')
+        self.prepare()
+        class Group:
+            def resolve_group(self, root, group_id):
+                return [], 'this-device', {'rules': {'directories': ['Notes']},
+                    'included': [{'scope': 'local:this-device', 'path': 'Other/b.png'},
+                                 {'scope': 'local:other-device', 'path': 'Other/c.png'}],
+                    'excluded': [{'scope': 'local:this-device', 'path': 'Notes/a.png'}]}
+        self.catalog.presentation = Group()
+        self.assertEqual([item['path'] for item in self.catalog.listing(source='local', group_id='group')['items']], ['Other/b.png'])
 
     def test_local_source_does_not_scan_before_the_index_exists(self):
         self.put('local.png')

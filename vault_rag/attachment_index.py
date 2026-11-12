@@ -231,7 +231,9 @@ class AttachmentIndex:
                     where+=' AND ('+predicate+')'
                     args.extend(predicate_args)
                 if kind!='all':where+=' AND ('+category+')=?';args.append(kind)
-                total=db.execute('SELECT count(*) FROM assets WHERE '+where,args).fetchone()[0]
+                matched=db.execute('SELECT '+category+',count(*),coalesce(sum(size),0) FROM assets WHERE '+where+' GROUP BY 1',args).fetchall()
+                result_summary={'files':sum(r[1] for r in matched),'bytes':sum(r[2] for r in matched),'kinds':{r[0]:r[1] for r in matched}}
+                total=result_summary['files']
                 stats_where='attachment_allowed(path)=1'+(' AND ('+predicate+')' if predicate else '')
                 stats=db.execute('SELECT '+category+',count(*),coalesce(sum(size),0) FROM assets WHERE '+stats_where+' GROUP BY 1',predicate_args if predicate else []).fetchall()
                 summary={'files':sum(r[1] for r in stats),'bytes':sum(r[2] for r in stats),'kinds':{r[0]:r[1] for r in stats}}
@@ -255,4 +257,4 @@ class AttachmentIndex:
                 last=rows[limit-1];next_after=last[0]
                 next_cursor=base64.urlsafe_b64encode(json.dumps([scope,last[5],last[0]],ensure_ascii=False).encode()).decode().rstrip('=')
             return {'items':items,'next_cursor':next_after if sort=='path' and order=='asc' and not cursor else next_cursor,
-                    'cursor':next_cursor,'total':total,'summary':summary,'last_scanned_at':scanned[0] if scanned else None}
+                    'cursor':next_cursor,'total':total,'summary':summary,'result_summary':result_summary,'last_scanned_at':scanned[0] if scanned else None}

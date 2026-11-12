@@ -591,6 +591,37 @@ class AttachmentStorageApiTests(unittest.TestCase):
         cached=self.request('POST','/api/attachments/cache',json={'root':str(self.root),'paths':[item['path']]}).json()
         self.assertEqual(cached['items'][0]['cache_state'],'complete')
 
+    def test_cached_previews_skip_foreground_validation_but_downloads_keep_it(self):
+        import io
+        from PIL import Image
+        from vault_rag.remote_webdav import WebDAVSource
+        output=io.BytesIO();Image.new('RGB',(32,24),'#4a7c59').save(output,'PNG');payload=output.getvalue()
+        self.configure();self.dav.files['Incoming/cached-preview.png']=payload
+        root=str(self.root);self.remote.scan(root,SOURCE)
+        # Server browsing must work without touching the uninitialized local index.
+        index=self.app.state.runtime.files.attachments._local_index
+        with patch.object(index,'_connect',side_effect=AssertionError('local index read')):
+            items=self.request('GET','/api/attachments',params={'root':root,'source':'remote'}).json()['items']
+        self.assertEqual(len(items),1)
+        item=items[0];self.remote.materialize(root,asset_id=item['asset_id']);self.remote.cache_ttl=0
+        params={'root':root,'path':item['path']}
+        with patch.object(WebDAVSource,'stat',side_effect=AssertionError('foreground server validation')):
+            response=self.request('GET','/api/media',params=params)
+            self.assertEqual(response.content,payload)
+            partial=self.request('GET','/api/media',params=params,headers={'Range':'bytes=2-5'},expected=206)
+            self.assertEqual(partial.content,payload[2:6])
+            self.assertEqual(partial.headers['content-range'],f'bytes 2-5/{len(payload)}')
+            self.request('GET','/api/attachments/thumbnail',params=params)
+            self.request('GET','/api/media',params=params,headers={'If-None-Match':response.headers['etag']},expected=304)
+        self.assertEqual(self.remote.cache_readers,{})
+        original=WebDAVSource.stat;calls=[]
+        def tracked(provider,path):
+            calls.append(path)
+            return original(provider,path)
+        with patch.object(WebDAVSource,'stat',tracked):
+            self.assertEqual(self.request('GET','/api/media',params={**params,'download':'true'}).content,payload)
+        self.assertIn('Incoming/cached-preview.png',calls)
+
     def test_connection_test_reports_latency(self):
         self.configure()
         result=self.request('POST','/api/attachments/storage/test',

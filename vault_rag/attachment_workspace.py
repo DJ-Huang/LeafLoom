@@ -86,6 +86,17 @@ class AttachmentWorkspace:
             raise ValueError('Image thumbnail is unavailable') from error
 
     def thumbnail(self,root,path):
+        release=None
+        if self.remote:
+            try:
+                item=self.remote.stat(root,path=path)
+                if item.get('source')=='remote':release=self.remote.acquire_cache_read(root,item['asset_id'])
+            except FileNotFoundError:pass
+        try:return self._thumbnail(root,path)
+        finally:
+            if release:release()
+
+    def _thumbnail(self,root,path):
         import io
         files=self.files(root);path=relative(path);source=files.config.path_for(path)
         if Path(path).suffix.lower() not in {'.png','.jpg','.jpeg','.gif','.webp','.bmp','.tif','.tiff','.avif'}:
@@ -105,6 +116,7 @@ class AttachmentWorkspace:
                 key=hashlib.sha256(json.dumps(identity).encode()).hexdigest()
                 target=files.state_path('remote-attachment-thumbnails',key+'.webp')
                 if target.is_file():
+                    self.remote.queue_preview_check(root,item['asset_id'],item.get('last_verified',0))
                     self.migrations._guard(root);self.config.path_for(path)
                     return target
                 remote=True
@@ -113,17 +125,17 @@ class AttachmentWorkspace:
                 # multi‑MB/GB originals just to render a 256px tile.
                 if item['size'] <= 8 * 1024 * 1024:
                     try:
-                        prefix_bytes, _ = self.remote.read_range(root, asset_id=item['asset_id'], start=0, end=item['size'] - 1)
+                        prefix_bytes, _ = self.remote.read_range(root, asset_id=item['asset_id'], start=0, end=item['size'] - 1, cache_first=True)
                     except (RemoteStorageError, ConflictError, ValueError, OSError):
                         prefix_bytes = None
                 if prefix_bytes is None and item['size'] > 0:
                     try:
                         end = min(item['size'] - 1, 8 * 1024 * 1024 - 1)
-                        prefix_bytes, _ = self.remote.read_range(root, asset_id=item['asset_id'], start=0, end=end)
+                        prefix_bytes, _ = self.remote.read_range(root, asset_id=item['asset_id'], start=0, end=end, cache_first=True)
                     except (RemoteStorageError, ConflictError, ValueError, OSError):
                         prefix_bytes = None
                 if prefix_bytes is None:
-                    source = self.remote.materialize(root, asset_id=item['asset_id'])
+                    source = self.remote.materialize(root, asset_id=item['asset_id'], cache_first=True)
         before = None if prefix_bytes is not None else source.stat()
         if before is not None and before.st_size > 64 * 1024 * 1024:
             raise ValueError('Image is too large for a thumbnail')
@@ -149,7 +161,7 @@ class AttachmentWorkspace:
                     if prefix_bytes is not None and remote_item is not None:
                         # Truncated streams (TIFF/PNG/AVIF) fall back to a full
                         # materialize once; keep the range path as the default.
-                        source = self.remote.materialize(root, asset_id=remote_item['asset_id'])
+                        source = self.remote.materialize(root, asset_id=remote_item['asset_id'], cache_first=True)
                         before = source.stat()
                         with os.fdopen(os.open(source, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0)), 'rb') as stream:
                             data = self._encode_thumbnail(stream)
@@ -188,7 +200,8 @@ class AttachmentWorkspace:
         return files.state_path('attachment-downloads',key,name)
 
     def _save_download(self,files,job):
-        atomic_write(self._download_path(files,job['id'],'job.json'),json.dumps(job).encode())
+        with self.lock:
+            atomic_write(self._download_path(files,job['id'],'job.json'),json.dumps(job).encode())
 
     def download(self,root,paths,*,guard=None):
         files=self.files(root)
@@ -272,7 +285,7 @@ class AttachmentWorkspace:
 
     def _browser_download_record(self,root,key):
         files=self.files(root)
-        job=json.loads(self._download_path(files,key,'job.json').read_text())
+        with self.lock:job=json.loads(self._download_path(files,key,'job.json').read_text())
         if job['root']!=root:raise ConflictError('Download belongs to another folder')
         self._download_guard(job)
         if job.get('owner','local')!='local':raise PermissionError('Download owner mismatch')
@@ -289,7 +302,7 @@ class AttachmentWorkspace:
 
     def download_status(self,root,key,cancel=False):
         files=self.files(root);record=self._download_path(files,key,'job.json')
-        job=json.loads(record.read_text())
+        with self.lock:job=json.loads(record.read_text())
         if job['root']!=root:raise ConflictError('Download belongs to another folder')
         self._download_guard(job)
         if time.time()-job['created_at']>3600:

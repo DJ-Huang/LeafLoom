@@ -156,7 +156,26 @@ def public_job(value):
     return result
 
 
-async def remote_media(remote, request, item, root, download=False, _retried=False):
+class _CacheReadResponse(Response):
+    def __init__(self,response,release):
+        super().__init__(status_code=response.status_code,headers=dict(response.headers))
+        self.response,self.release=response,release
+
+    async def __call__(self,scope,receive,send):
+        try:await self.response(scope,receive,send)
+        finally:self.release()
+
+
+async def remote_media(remote, request, item, root, download=False):
+    if download:return await _remote_media(remote,request,item,root,download=True)
+    release=await asyncio.to_thread(remote.acquire_cache_read,root,item['asset_id'])
+    try:return _CacheReadResponse(await _remote_media(remote,request,item,root),release)
+    except BaseException:
+        release()
+        raise
+
+
+async def _remote_media(remote, request, item, root, download=False, _retried=False):
     """Serve existing LeafLoom URLs without exposing a NAS URL to the browser."""
     if item.get('state')=='missing':raise RemoteStorageError('remote_asset_missing','missing')
     settings=remote._settings(root)
@@ -170,7 +189,7 @@ async def remote_media(remote, request, item, root, download=False, _retried=Fal
     if not re.fullmatch(r'[\w.+-]+/[\w.+-]+',mime):mime='application/octet-stream'
     size=int(item['size'])
     if size<=min(settings['cache_max_bytes'],64*1024*1024) or item.get('state')=='pending':
-        target=await asyncio.to_thread(remote.materialize,root,asset_id=item['asset_id'])
+        target=await asyncio.to_thread(remote.materialize,root,asset_id=item['asset_id'],cache_first=not download)
         return conditional_file(target,request,headers=sandbox,identity=root+item['asset_id'],
             filename=name,media_type=mime,
             content_disposition_type='attachment' if download else 'inline')
@@ -202,14 +221,14 @@ async def remote_media(remote, request, item, root, download=False, _retried=Fal
     headers['Content-Length']=str(end-start+1 if size else 0)
     block=8*1024*1024
     first_end=min(end,start+block-1)
-    first,current=await asyncio.to_thread(remote.read_range,root,asset_id=item['asset_id'],start=start,end=first_end)
+    first,current=await asyncio.to_thread(remote.read_range,root,asset_id=item['asset_id'],start=start,end=first_end,cache_first=not download)
     # A listing may omit ETag or lag behind the server. read_range revalidates
     # uncached bytes before returning them; build browser validators and Range
     # headers from that same version, including when returning a 304.
     if (any(current.get(key)!=item.get(key) for key in ('size','etag','mtime','mime')) or
             current.get('content_generation',0)!=item.get('content_generation',0)):
         if _retried:raise ConflictError('Attachment changed while opening')
-        return await remote_media(remote,request,current,root,download,_retried=True)
+        return await _remote_media(remote,request,current,root,download,_retried=True)
     if len(first)!=(first_end-start+1 if size else 0) or current['size']!=size:
         raise ConflictError('Attachment changed while opening')
     if etag in [tag.strip() for tag in request.headers.get('if-none-match','').split(',')]:
@@ -219,7 +238,7 @@ async def remote_media(remote, request, item, root, download=False, _retried=Fal
         position=first_end+1
         while position<=end:
             last=min(end,position+block-1)
-            chunk,metadata=remote.read_range(root,asset_id=item['asset_id'],start=position,end=last)
+            chunk,metadata=remote.read_range(root,asset_id=item['asset_id'],start=position,end=last,cache_first=not download)
             if (len(chunk)!=last-position+1 or metadata['size']!=size or
                     metadata.get('etag')!=current.get('etag') or metadata.get('mtime')!=current.get('mtime') or
                     metadata.get('content_generation',0)!=current.get('content_generation',0)):

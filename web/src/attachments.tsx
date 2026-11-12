@@ -67,16 +67,16 @@ function AttachmentFiles({root,active=true,onOpen,onChanged,onDownloads}:Attachm
  const cursorRef=useRef(cursor);cursorRef.current=cursor;
  const pageRef=useRef(page);pageRef.current=page;
  const storageOptions=useRef<NonNullable<Page['storages']>>([]);
- const listingBusy=useRef(false),listingQueued=useRef(false),listingFailed=useRef(false);
+ const listingBusy=useRef(false),listingQueued=useRef(false),listingFailed=useRef(false),listingVersion=useRef(0);
  const quietRefresh=useCallback(()=>{if(cursorRef.current){setListUpdated(true);return;}if(listingFailed.current)return;if(listingBusy.current){listingQueued.current=true;return;}setRevision(value=>value+1);},[]);
- useEffect(()=>{setSourceFilter('all');},[root]);
+ useEffect(()=>{listingVersion.current++;listing.current?.abort();setSourceFilter('all');setIndex(undefined);setPage(undefined);pageRef.current=undefined;storageOptions.current=[];statusMarker.current='';policyMarker.current=undefined;observed.current.clear();setCursor('');setCursors([]);setSelected([]);setFocused(undefined);setDetail(undefined);setError('');setListUpdated(false);},[root]);
  const [selected,setSelected]=useState<string[]>([]),[focused,setFocused]=useState<Item>(),[detail,setDetail]=useState<Detail>(),[expanded,setExpanded]=useState(false),[loading,setLoading]=useState(false),[error,setError]=useState(''),[revision,setRevision]=useState(0);
  const [jobs,setJobs]=useState<Job[]>([]),[jobId,setJobId]=useState(''),[showTasks,setShowTasks]=useState(false),[busy,setBusy]=useState(false),[operation,setOperation]=useState<{kind:string,paths:string[]}>(),[operationValue,setOperationValue]=useState(''),[confirmation,setConfirmation]=useState<{job:Job,action:'execute'|'rollback'|'resume'}>();
  const [uploads,setUploads]=useState<UploadItem[]>([]),[message,setMessage]=useState(''),[staleJobs,setStaleJobs]=useState<Set<string>>(new Set());
  const life=useRef<AbortController>(new AbortController()),listing=useRef<AbortController|undefined>(undefined),uploading=useRef(false),requests=useRef<XMLHttpRequest[]>([]),input=useRef<HTMLInputElement>(null),scroller=useRef<HTMLDivElement>(null),scrollPosition=useRef(0),statusMarker=useRef(''),policyMarker=useRef<string|undefined>(undefined),observed=useRef(new Map<string,string>()),tasksButton=useRef<HTMLButtonElement>(null);
  const localIndex=index?.local_index||index,localReady=!!localIndex?.usable,indexBuilding=localIndex?.state==='building';
  const ready=!!index?.usable&&index.state!=='unsupported',job=jobs.find(value=>value.id===jobId)||jobs[0],running=jobs.some(activeJob),mutating=jobs.some(j=>['running','rolling_back'].includes(j.state));
- const refresh=useCallback(()=>{listingFailed.current=false;setCursor('');setCursors([]);setSelected([]);setListUpdated(false);setRevision(value=>value+1);},[]);
+ const refresh=useCallback(()=>{listingVersion.current++;listing.current?.abort();listingFailed.current=false;setLoading(true);setCursor('');setCursors([]);setSelected([]);setListUpdated(false);setRevision(value=>value+1);},[]);
  const poll=useCallback(async()=>{
   const signal=life.current.signal;
   try{
@@ -116,19 +116,21 @@ function AttachmentFiles({root,active=true,onOpen,onChanged,onDownloads}:Attachm
  useEffect(()=>{
   if(!ready)return;
   const parent=new AbortController();listing.current?.abort();listing.current=parent;
+  const version=++listingVersion.current;
   let disposed=false,localTimer=0,mergedTimer=0;listingBusy.current=true;listingQueued.current=false;listingFailed.current=false;
+  const current=()=>!disposed&&version===listingVersion.current;
   const [field,order]=sort.split(':'),source=sourceFilter==='all'?'all':sourceFilter==='local'?'local':'remote',storage_id=sourceFilter.startsWith('storage:')?sourceFilter.slice(8):'';
-  // Group filters (Unity Asset, etc.) materialize membership once; give them more room than all-files.
+  // Group membership can require more work than the unfiltered catalog.
   const timeoutMs=groupId?45000:20000;
   const load=(nextSource:string,nextCursor:string,signal:AbortSignal)=>api<Page>('attachments?'+new URLSearchParams({root,query:query.trim(),kind,source:nextSource,storage_id,sort:field,order,cursor:nextCursor,group_id:groupId,limit:'100'}),undefined,'GET',{signal,force:true});
   const timer=window.setTimeout(async()=>{
    setLoading(true);let completed=false,paintedLocal=false;
    const detailOf=(timedOut:boolean,reason:unknown)=>timedOut?'aw.listTimeout':(reason as Error).message||'aw.listFailed';
-   const noteCatalog=(detail:string)=>{
+   const noteCatalog=()=>{
     listingFailed.current=false;setError('');
     setPage(current=>{
      const base=current||{items:[],cursor:null,total:0,summary:{files:0,bytes:0,kinds:{},by_source:{local:{files:0,bytes:0},remote:{files:0,bytes:0}}},storages:storageOptions.current};
-     return {...base,warning:'cache_unavailable',warning_detail:detail,storages:base.storages?.length?base.storages:storageOptions.current};
+     return {...base,warning:'cache_unavailable',storages:base.storages?.length?base.storages:storageOptions.current};
     });
    };
    try{
@@ -142,30 +144,30 @@ function AttachmentFiles({root,active=true,onOpen,onChanged,onDownloads}:Attachm
      localTimer=window.setTimeout(()=>localAbort.abort(),timeoutMs);
      try{
       const local=await load('local','',localAbort.signal);
-      if(disposed)return;
+      if(!current())return;
       if(local.storages?.length)storageOptions.current=local.storages;
       setPage(local);setError('');setFocused(current=>current&&(local.items.find(item=>item.path===current.path)||current));paintedLocal=true;
-     }catch{if(disposed)return;}
+     }catch{if(!current())return;}
      finally{window.clearTimeout(localTimer);parent.signal.removeEventListener('abort',stopLocal);}
     }
-    if(disposed)return;
+    if(!current())return;
     let timedOut=false;
     mergedTimer=window.setTimeout(()=>{timedOut=true;parent.abort();},timeoutMs);
     try{
      const result=await load(source,cursor,parent.signal);
-     if(disposed)return;
-     storageOptions.current=result.storages||[];setPage(result);setError('');setFocused(current=>current&&(result.items.find(item=>item.path===current.path)||current));completed=true;
+     if(!current()||parent.signal.aborted)return;
+     storageOptions.current=result.storages||[];setPage(result);setError('');setFocused(current=>current&&(result.items.find(item=>item.path===current.path)||current));completed=!result.warning;
     }catch(reason){
-     if(disposed)return;
+     if(!current()||(!timedOut&&parent.signal.aborted))return;
      if((reason as {status?:number}).status===409&&cursor){setListUpdated(true);return;}
      const detail=detailOf(timedOut,reason);
-     if(paintedLocal||source==='remote'||!!storage_id){noteCatalog(detail);return;}
-     if(source==='all'&&pageRef.current){noteCatalog(detail);return;}
+     if(paintedLocal||source==='remote'||!!storage_id){noteCatalog();return;}
+     if(source==='all'&&pageRef.current){noteCatalog();return;}
      listingFailed.current=true;setError(detail);
     }
    }finally{
     window.clearTimeout(mergedTimer);
-    if(!disposed){
+    if(current()){
      listingBusy.current=false;setLoading(false);
      const queued=listingQueued.current;listingQueued.current=false;
      // Scan notifications can arrive faster than a large catalog can be read.
@@ -180,6 +182,7 @@ function AttachmentFiles({root,active=true,onOpen,onChanged,onDownloads}:Attachm
  const filter=(change:()=>void)=>{
   // An old page belongs to its previous filters. Keep snapshots only for quiet
   // refreshes, never beneath a newly selected group/source/search context.
+  listingVersion.current++;listing.current?.abort();pageRef.current=undefined;
   change();listingFailed.current=false;setPage(undefined);setError('');setListUpdated(false);setLoading(true);
   setCursor('');setCursors([]);setSelected([]);setFocused(undefined);setDetail(undefined);setExpanded(false);setRevision(value=>value+1);
   if(scroller.current)scroller.current.scrollTop=0;scrollPosition.current=0;
@@ -232,7 +235,7 @@ function AttachmentFiles({root,active=true,onOpen,onChanged,onDownloads}:Attachm
   <input ref={input} type="file" accept={index?.allowed_extensions?.join(',')} multiple hidden onChange={event=>{void uploadFiles(Array.from(event.target.files||[]));event.target.value='';}}/>
   {(error||index?.error)&&<div className="aw-alert" role="alert"><Diagnostic message={error||index!.error!}/><button onClick={()=>{setError('');refresh();void poll();}}>{t('重试')}</button></div>}
   {ready&&!localReady&&<div className="aw-alert" role="status"><p>{t(indexBuilding?'aw.localCatalogBuilding':'aw.localCatalogMissing')}</p>{localIndex?.error&&<p><Diagnostic message={localIndex.error}/></p>}{indexBuilding&&<small>{t('aw.processed',{count:(localIndex?.progress?.done||0).toLocaleString(locale)})}</small>}<button disabled={busy||indexBuilding||localIndex?.state==='unsupported'} onClick={()=>void initialize()}>{t(indexBuilding?'aw.building':'aw.initialize')}</button></div>}
-  {listWarning&&<div className="aw-alert" role="status"><p>{t(listWarning)}</p>{page?.warning_detail&&<p><Diagnostic message={page.warning_detail}/></p>}</div>}
+  {listWarning&&<div className="aw-alert" role="status"><p>{t(listWarning)}</p>{page?.warning==='cache_unavailable'&&<button onClick={refresh}>{t('重试')}</button>}</div>}
   {!ready?<div className="aw-onboarding"><div className="aw-onboarding-icon"><Paperclip size={42} strokeWidth={1.2}/></div><h2>{t(running||indexBuilding?'aw.preparing':'aw.startTitle')}</h2><p>{t('aw.startHint')}</p>{running&&job?<div className="aw-onboarding-progress"><JobProgress job={job}/><button onClick={()=>setShowTasks(true)}>{t('aw.viewTask')}<ArrowRight size={15}/></button></div>:<button className="primary" disabled={!index||busy||indexBuilding||index.state==='unsupported'} onClick={()=>void initialize()}><Sparkles size={16}/>{t(indexBuilding?'aw.building':'aw.initialize')}</button>}<span className="aw-onboarding-safe"><ShieldCheck size={14}/>{t('aw.previewOnly')}</span></div>:<>
   <div className="aw-toolbar"><label className="aw-source-filter"><span>{t('aw.sourceFilter')}</span><select aria-label={t('aw.sourceFilter')} value={sourceFilter} onChange={event=>filter(()=>setSourceFilter(event.target.value))}><option value="all">{t('aw.sourceAll')}</option><option value="local">{t('aw.sourceLocal')}</option><option value="remote">{t('aw.sourceRemote')}</option>{!!page?.storages?.length&&<optgroup label={t('aw.sourceServers')}>{page.storages.map(storage=><option key={storage.storage_id} value={'storage:'+storage.storage_id}>{storage.name||t('as.unnamed')}{storage.enabled?'':' · '+t('aw.sourceDisabled')}</option>)}</optgroup>}</select></label><div className="aw-search"><Search size={17}/><input type="search" placeholder={t('aw.searchPlaceholder')} aria-label={t('attachments.searchLabel')} value={query} onChange={event=>filter(()=>setQuery(event.target.value))}/>{query&&<button className="icon-button" aria-label={t('aw.clearSearch')} onClick={()=>filter(()=>setQuery(''))}><X size={14}/></button>}</div><div className="aw-toolbar-right"><ArrowDownUp size={15}/><select aria-label={t('aw.sort')} value={sort} onChange={event=>filter(()=>setSort(event.target.value))}>{['modified:desc','modified:asc','name:asc','name:desc','size:desc','size:asc'].map(value=><option key={value} value={value}>{t('aw.sort.'+value.replace(':','.'))}</option>)}</select><div className="aw-layout-switch"><button aria-label={t('aw.grid')} aria-pressed={layout==='grid'} onClick={()=>setView('grid')}><Grid2X2 size={16}/></button><button aria-label={t('aw.list')} aria-pressed={layout==='list'} onClick={()=>setView('list')}><LayoutList size={17}/></button></div><button className="icon-button" aria-label={t('aw.indexRefresh')} title={t('aw.indexRefreshHint')} onClick={refresh}><RefreshCw size={16} className={loading?'aw-spin':''}/></button></div></div>
   <nav className="aw-filters" aria-label={t('aw.types')}>{kinds.map(value=><button key={value} aria-pressed={kind===value} onClick={()=>filter(()=>setKind(value))}>{t('aw.type.'+value)}<span>{page?((value==='all'?page.summary.files:page.summary.kinds[value])??0).toLocaleString(locale):'—'}</span></button>)}</nav>

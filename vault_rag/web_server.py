@@ -451,9 +451,11 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         return await asyncio.to_thread(index_jobs.cancel_job,body['root'])
     @app.get('/api/attachments')
     async def attachments(query:str='',after:str='',limit:int=100,root:str='',kind:str='all',sort:str='path',order:str='asc',cursor:str='',source:str='all',storage_id:str='',tags:str='',category:str='',group_id:str=''):
-        status=await asyncio.to_thread(index_jobs.status,root)
-        if not status['usable']:
-            return json_response({'error':'Initialize the attachment index first','initialization_required':True},409)
+        index_jobs._guard(root)
+        if source!='remote' and storage_id in {'','local'}:
+            status=await asyncio.to_thread(index_jobs.status,root)
+            if not status['usable']:
+                return json_response({'error':'Initialize the attachment index first','initialization_required':True},409)
         try:
             result=await asyncio.to_thread(runtime.files.attachments.listing,query,after,limit,kind=kind,sort=sort,order=order,cursor=cursor,
                 source=source,storage_id=storage_id,tags=[tag.strip() for tag in tags.split(',') if tag.strip()],category=category,group_id=group_id)

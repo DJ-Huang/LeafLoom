@@ -8,11 +8,12 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import posixpath
 import re
 import sqlite3
 import uuid
-from contextlib import closing
+from contextlib import closing, nullcontext
 from pathlib import PurePosixPath
 
 from vault_rag.attachment_scan_policy import register_scan_scope
@@ -71,8 +72,8 @@ class AttachmentCatalog:
             return False
 
     @classmethod
-    def _catalog_connection(cls, local, files):
-        if not cls._local_ready(files):
+    def _catalog_connection(cls, local, files, *, include_local=True):
+        if not include_local or not cls._local_ready(files):
             # A server catalog remains browsable before local setup, including
             # when an incompatible local index is preserved for a newer app.
             db = sqlite3.connect(':memory:', uri=True)
@@ -108,7 +109,16 @@ class AttachmentCatalog:
         # with a retry. Virtual `_remote/` names are catalog aliases, not
         # local files. A file removed outside the app stays listed until the
         # index updates.
-        indexed = {row[0] for row in db.execute('SELECT path FROM main.assets')}
+        indexed = {row[0]: (row[1],row[2]) for row in db.execute('SELECT path,size,mtime_ns FROM main.assets')}
+        # A completed migration can precede the filename-index notification.
+        # Only its recorded source version may suppress that stale index row;
+        # an unrelated local file at the same alias remains a local original.
+        if indexed and db.execute("SELECT 1 FROM manifest.sqlite_master WHERE type='table' AND name='jobs'").fetchone():
+            for path,size,mtime in db.execute("SELECT json_extract(i.value,'$.path'),"
+                    "json_extract(i.value,'$.source_version[2]'),json_extract(i.value,'$.source_version[3]') "
+                    "FROM manifest.jobs j,json_each(j.payload,'$.items') i "
+                    "WHERE j.kind='migration' AND json_extract(i.value,'$.state')='released'"):
+                if indexed.get(path)==(size,mtime):indexed.pop(path,None)
         virtual_prefix = files.config.data.get('attachment_folder', '_attachments') + '/_remote/'
         def exists(path):
             if not isinstance(path, str) or path.startswith(virtual_prefix):
@@ -117,13 +127,14 @@ class AttachmentCatalog:
         db.create_function('catalog_local_exists', 1, exists)
 
     @staticmethod
-    def _cte():
+    def _cte(*, remote_only=False):
         # Aliases are authoritative once a verified migration has released its
         # local source. A pending migration keeps the existing local entry.
         # Vault-path caches and pending promotes keep their logical aliases even
         # while the bytes still exist under `_attachments`. Those paths must not
         # also appear as independent local originals.
-        return '''WITH alias_choice AS (
+        remote_path = "? || a.source_id || '/' || a.path" if remote_only else "COALESCE(x.logical_path,? || a.source_id || '/' || a.path)"
+        return f'''WITH alias_choice AS (
             SELECT al.asset_id,MIN(al.path) AS logical_path FROM manifest.aliases al
             JOIN manifest.assets owner ON owner.id=al.asset_id
             WHERE NOT catalog_local_exists(al.path)
@@ -143,9 +154,10 @@ class AttachmentCatalog:
               AND NOT EXISTS (
                 SELECT 1 FROM manifest.aliases al JOIN manifest.assets a ON a.id=al.asset_id
                 WHERE al.path=l.path AND a.source_id!='local' AND a.state NOT IN ('missing','excluded','redirected','migration_pending')
+                  AND EXISTS (SELECT 1 FROM alias_choice chosen WHERE chosen.asset_id=a.id AND chosen.logical_path=l.path)
               )
             UNION ALL
-            SELECT COALESCE(x.logical_path,? || a.source_id || '/' || a.path) AS path,
+            SELECT {remote_path} AS path,
                 catalog_basename(COALESCE(x.logical_path,a.path)) AS name,
                 catalog_path_key(catalog_basename(COALESCE(x.logical_path,a.path))) AS name_key,
                 a.size,a.mtime_ns,a.mime,a.id AS asset_id,a.source_id AS storage_id,
@@ -228,29 +240,24 @@ class AttachmentCatalog:
                 storages = []
         return {'items': [], 'next_cursor': None, 'cursor': None, 'total': 0, 'summary': summary, 'storages': storages}
 
-    def _cache_failed(self, local, files, error, *, query, after, limit, kind, sort, order, cursor, source, storage_id):
+    def _cache_failed(self, local, files, error, *, query, after, limit, kind, sort, order, cursor, source, storage_id,
+                      tags, category, group_id):
         """A locked or missing server catalog must not hide local files or raise."""
         cache_only = source == 'remote' or storage_id not in {'', 'local'}
-        if cache_only or not self._local_ready(files):
-            # Not ready means there is no local index yet. Do not call listing():
-            # that walks the vault. The hub already offers Initialize.
+        if cursor.startswith(_CURSOR_PREFIX):
+            raise ConflictError(_STALE)
+        if cache_only:
             result = self._blank_page(files)
         else:
-            if str(cursor).startswith(_CURSOR_PREFIX):
-                cursor = ''
-            result = local.listing(query, after, limit, kind=kind, sort=sort, order=order, cursor=cursor)
-            self._as_local_items(result)
-            result['summary']['by_source'] = {
-                'local': {'files': result['summary']['files'], 'bytes': result['summary']['bytes']},
-                'remote': {'files': 0, 'bytes': 0},
-            }
-            result['storages'] = self._blank_page(files)['storages']
-        result['warning'] = 'cache_unavailable'
-        result['warning_detail'] = str(error)
+            result = self._local_listing(local, files, query=query, after=after, limit=limit, kind=kind,
+                sort=sort, order=order, cursor=cursor, tags=tags, category=category, group_id=group_id)
+        result.setdefault('warning', 'cache_unavailable')
+        if error is not None:
+            logging.getLogger(__name__).warning('Saved attachment catalog unavailable: %s', type(error).__name__)
         return result
 
     @staticmethod
-    def _local_group_clause(group):
+    def _local_group_clause(group, device=''):
         """Filter the local filename index without opening the server catalog.
 
         Returns None when membership depends on server metadata (tags, categories
@@ -259,24 +266,12 @@ class AttachmentCatalog:
         """
         if not group:
             return '1=1', []
-        if group.get('excluded'):
-            return None
         rules = {key: value for key, value in (group.get('rules') or {}).items() if value}
-        included = [member.get('path') for member in group.get('included') or []
-                    if isinstance(member.get('path'), str) and member.get('path')]
-        if group.get('included') and rules:
-            return None
-        if group.get('included'):
-            if not included:
-                return '0=1', []
-            return 'path IN (' + ','.join('?' * len(included)) + ')', included
-        if not rules:
-            return '0=1', []
         if set(rules) - {'directories', 'sources', 'formats'}:
             return None
-        if 'sources' in rules and 'local' not in {str(item) for item in rules['sources']}:
-            return '0=1', []
         parts, args = [], []
+        if 'sources' in rules and 'local' not in rules['sources']:
+            parts.append('0=1')
         if 'directories' in rules:
             dir_parts = []
             for raw in rules['directories']:
@@ -299,7 +294,47 @@ class AttachmentCatalog:
             if not fmt_parts:
                 return '0=1', []
             parts.append('(' + ' OR '.join(fmt_parts) + ')')
-        return (' AND '.join(parts) if parts else '1=1'), args
+        clause = (' AND '.join(parts) or '1=1') if rules else '0=1'
+        for field, operator in (('included', 'OR'), ('excluded', 'AND NOT')):
+            paths = [member['path'] for member in group.get(field) or []
+                     if device and member.get('scope') == 'local:' + device and member.get('path')]
+            if paths:
+                clause = '(' + clause + ') ' + operator + ' path IN (' + ','.join('?' * len(paths)) + ')'
+                args.extend(paths)
+        return clause, args
+
+    def _local_listing(self, local, files, *, query, after, limit, kind, sort, order, cursor, tags, category, group_id):
+        if cursor.startswith(_CURSOR_PREFIX):
+            raise ConflictError(_STALE)
+        if not self._local_ready(files):
+            result = self._blank_page(files)
+            result['warning'] = 'local_catalog_missing'
+            return result
+        predicate, predicate_args = '', []
+        presentation = self.__dict__.get('presentation')
+        clause = None if tags or category else ('1=1', [])
+        if clause and presentation and group_id:
+            _, device, group = presentation.resolve_group(str(files.config.root), group_id)
+            clause = self._local_group_clause(group, device)
+        if clause is None:
+            result = self._blank_page(files)
+            result['warning'] = 'local_group_uncached'
+            return result
+        if clause[0] != '1=1':
+            predicate, predicate_args = clause
+        result = local.listing(query, after, limit, kind=kind, sort=sort, order=order, cursor=cursor,
+                               predicate=predicate, predicate_args=predicate_args)
+        self._as_local_items(result)
+        result['summary']['by_source'] = {
+            'local': {'files': result['summary']['files'], 'bytes': result['summary']['bytes']},
+            'remote': {'files': 0, 'bytes': 0},
+        }
+        result['result_summary']['by_source'] = {
+            'local': {'files': result['result_summary']['files'], 'bytes': result['result_summary']['bytes']},
+            'remote': {'files': 0, 'bytes': 0},
+        }
+        result['storages'] = self._blank_page(files)['storages']
+        return result
 
     def listing(self, query='', after='', limit=100, *, kind='all', sort='path', order='asc', cursor='',
                 source='all', storage_id='', tags=None, category='', group_id=''):
@@ -322,86 +357,46 @@ class AttachmentCatalog:
             raise ValueError('Use a cursor for sorted attachments')
         limit = max(1, min(int(limit), 500))
         local = self._local_index
-        with local.lock:
+        remote_only = source == 'remote' or storage_id not in {'', 'local'}
+        with nullcontext() if remote_only else local.lock:
             files = local._snapshot()
             root = files.config.root
+            local_only = source == 'local' or storage_id == 'local'
+            remote_only = source == 'remote' or storage_id not in {'', 'local'}
+            options = dict(query=query, after=after, limit=limit, kind=kind, sort=sort, order=order,
+                           cursor=cursor, tags=tags, category=category, group_id=group_id)
+            if local_only:
+                if remote_only:
+                    return self._blank_page(files)
+                return self._local_listing(local, files, **options)
+            # A local fallback cursor stays in its own snapshot until the caller
+            # refreshes from the first page. It cannot enter the merged catalog.
+            if not remote_only and source == 'all' and cursor and not cursor.startswith(_CURSOR_PREFIX):
+                return self._cache_failed(local, files, None, source=source, storage_id=storage_id, **options)
             path = self._manifest(files)
+            if path is None:
+                if remote_only:
+                    return self._cache_failed(local, files, None, source=source, storage_id=storage_id, **options)
+                result = self._local_listing(local, files, **options)
+                if result['storages']:
+                    result.setdefault('warning', 'cache_unavailable')
+                return result
             presentation = self.__dict__.get('presentation')
-            # Local ignores the server catalog, including while a group is selected.
-            # Directory/format rules are applied to the local index below.
-            local_only = source == 'local' and storage_id in {'', 'local'} and not tags and not category
-            if local_only and not self._local_ready(files):
-                result = self._blank_page(files)
-                result['warning'] = 'local_catalog_missing'
-                return result
-            if path is None and presentation and self._remote and not local_only:
-                # First open may create the empty catalog. A locked writer must
-                # not turn that into a failed list or a vault walk.
-                try:
-                    with self._remote._db(str(root)):
-                        pass
-                except sqlite3.Error as exc:
-                    return self._cache_failed(local, files, exc, query=query, after=after, limit=limit,
-                        kind=kind, sort=sort, order=order, cursor=cursor, source=source, storage_id=storage_id)
-                path = self._manifest(files)
-            predicate, predicate_args = '', []
-            if local_only and presentation and group_id:
-                _, _, group = presentation.resolve_group(str(root), group_id)
-                clause = self._local_group_clause(group)
-                if clause is None:
-                    result = self._blank_page(files)
-                    result['warning'] = 'local_group_uncached'
-                    return result
-                if clause[0] != '1=1':
-                    predicate, predicate_args = clause
-            if path is None or local_only:
-                if path is None and cursor.startswith(_CURSOR_PREFIX):
-                    raise ConflictError(_STALE)
-                # Local filter skips the unified manifest CTE and remote.lock so a
-                # background NAS scan cannot stall "本地附件" browsing. Catalog
-                # cursors from an "all/remote" page are not valid here.
-                if local_only and path is not None and cursor.startswith(_CURSOR_PREFIX):
-                    raise ConflictError(_STALE)
-                result = local.listing(query, after, limit, kind=kind, sort=sort, order=order, cursor=cursor,
-                                       predicate=predicate, predicate_args=predicate_args)
-                self._as_local_items(result)
-                if path is None and (source == 'remote' or storage_id not in {'', 'local'} or tags or category):
-                    result.update(items=[], total=0, cursor=None, next_cursor=None)
-                if path is None and (source == 'remote' or storage_id not in {'', 'local'}):
-                    result['summary'] = {'files': 0, 'bytes': 0, 'kinds': {}}
-                result['summary']['by_source'] = {
-                    'local': {'files': result['summary']['files'], 'bytes': result['summary']['bytes']},
-                    'remote': {'files': 0, 'bytes': 0},
-                }
-                settings = self._remote._settings(str(root)) if self._remote else {'sources': []}
-                result['storages'] = self._storage_options(settings)
-                return result
-            # Read the saved catalog without waiting on the scan/job lock.
-            # Writers keep their own lock; this connection is read-only and
-            # gives up quickly if SQLite itself is busy.
             try:
                 local._check_root(root)
-                files = local._snapshot()
                 settings = self._remote._settings(str(root))
                 stamp = self._settings_stamp(files, settings)
                 prefix = files.config.data.get('attachment_folder', '_attachments') + '/_remote/'
-            except sqlite3.Error as exc:
-                return self._cache_failed(local, files, exc, query=query, after=after, limit=limit,
-                    kind=kind, sort=sort, order=order, cursor=cursor, source=source, storage_id=storage_id)
-            except json.JSONDecodeError as exc:
-                return self._cache_failed(local, files, exc, query=query, after=after, limit=limit,
-                    kind=kind, sort=sort, order=order, cursor=cursor, source=source, storage_id=storage_id)
-            try:
                 return self._finish_cached_listing(
                     local, files, root, path, presentation, settings, stamp, prefix, query, after, limit,
                     kind, sort, order, cursor, source, storage_id, tags, category, group_id)
-            except sqlite3.Error as exc:
-                return self._cache_failed(local, files, exc, query=query, after=after, limit=limit,
-                    kind=kind, sort=sort, order=order, cursor=cursor, source=source, storage_id=storage_id)
+            except (sqlite3.Error, json.JSONDecodeError) as exc:
+                return self._cache_failed(local, files, exc, source=source, storage_id=storage_id, **options)
 
     def _finish_cached_listing(self, local, files, root, path, presentation, settings, stamp, prefix,
                                query, after, limit, kind, sort, order, cursor, source, storage_id, tags, category, group_id):
-        with closing(self._catalog_connection(local, files)) as db:
+        remote_only = source == 'remote' or storage_id not in {'', 'local'}
+        with closing(self._catalog_connection(local, files, include_local=not remote_only)) as db:
                 self._attach(db, path, files)
                 register_scan_scope(db, settings['sources'])
                 # Directory/source/format groups (e.g. Unity Asset) filter in SQL and
@@ -437,8 +432,9 @@ class AttachmentCatalog:
                 # Cursor scope follows the local index generation and the saved
                 # catalog generation. It does not walk the vault to see which
                 # files still exist on disk.
-                presence = f'{local.generation}:{generation}'
-                scope = self._scope([str(root), stamp, scanned[0] if scanned else None, local.generation,
+                local_generation = 0 if remote_only else local.generation
+                presence = f'{local_generation}:{generation}'
+                scope = self._scope([str(root), stamp, scanned[0] if scanned else None, local_generation,
                                      generation, presence, query, kind, sort, order, source, storage_id,
                                      sorted(set(tags)), category, group_id, view_stamp])
                 origins, origin_args = ['1=1'], [prefix]
@@ -449,7 +445,9 @@ class AttachmentCatalog:
                 if storage_id:
                     origins.append('storage_id=?')
                     origin_args.append(storage_id)
-                cte = presentation.cte(self._cte()) if use_enriched else self._cte()
+                cte = self._cte(remote_only=remote_only)
+                if use_enriched:
+                    cte = presentation.cte(cte)
                 # Materialize group membership once. Unity Asset groups previously
                 # re-ran the Python matcher for COUNT, facets, and the page query.
                 if presentation and group_id:
@@ -472,8 +470,8 @@ class AttachmentCatalog:
                 where, args = list(origins), list(origin_args)
                 if query:
                     pattern = '%' + query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
-                    where.append("(path LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR tags LIKE ? ESCAPE '\\' OR category LIKE ? ESCAPE '\\')")
-                    args.extend([pattern] * 4)
+                    where.append("(path LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR tags LIKE ? ESCAPE '\\' OR category LIKE ? ESCAPE '\\')")
+                    args.extend([pattern] * 5)
                 if kind != 'all':
                     where.append('(' + _KIND_SQL + ')=?')
                     args.append(kind)

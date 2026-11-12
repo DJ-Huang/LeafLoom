@@ -1,5 +1,6 @@
 """Attachment identity and visibility across destinations and folder-sync lag."""
 from pathlib import Path
+from contextlib import closing
 import shutil
 import sqlite3
 from types import SimpleNamespace
@@ -90,7 +91,7 @@ class ModeSwitchingTests(unittest.TestCase):
 
     def test_incompatible_local_index_does_not_block_server_or_get_overwritten(self):
         self.remote_file();files,catalog,jobs=self.context();path=files.state_path('attachments.sqlite')
-        with sqlite3.connect(path) as db:db.execute('PRAGMA user_version=99')
+        with closing(sqlite3.connect(path)) as db:db.execute('PRAGMA user_version=99');db.commit()
         before=path.read_bytes()
         for destination in (fixtures.SOURCE,'local'):
             self.destination(destination)

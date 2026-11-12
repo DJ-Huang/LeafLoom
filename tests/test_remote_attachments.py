@@ -27,7 +27,7 @@ SECRET='fixture-password-never-persist'
 
 class FakeDAV:
     def __init__(self):
-        self.files={};self.directories=set();self.calls=[];self.offline=False;self.redirect=False
+        self.files={};self.content_types={};self.directories=set();self.calls=[];self.offline=False;self.redirect=False
         self.corrupt=False;self.after_put=None;self.bad_range=False
         self.interrupt_put=False
         self.failure_status=None
@@ -57,7 +57,7 @@ class FakeDAV:
                 href='/'+name+('/' if directory and name else '')
                 size=0 if directory else len(self.files[name])
                 kind='<collection/>' if directory else ''
-                items.append('<response><href>'+xml.sax.saxutils.escape(href)+'</href><propstat><prop><resourcetype>'+kind+'</resourcetype><getcontentlength>'+str(size)+'</getcontentlength><getlastmodified>Wed, 21 Oct 2026 00:00:00 GMT</getlastmodified><getetag>"fixture"</getetag><getcontenttype>application/octet-stream</getcontenttype></prop><status>HTTP/1.1 200 OK</status></propstat></response>')
+                items.append('<response><href>'+xml.sax.saxutils.escape(href)+'</href><propstat><prop><resourcetype>'+kind+'</resourcetype><getcontentlength>'+str(size)+'</getcontentlength><getlastmodified>Wed, 21 Oct 2026 00:00:00 GMT</getlastmodified><getetag>"fixture"</getetag><getcontenttype>'+self.content_types.get(name,'application/octet-stream')+'</getcontenttype></prop><status>HTTP/1.1 200 OK</status></propstat></response>')
             return httpx.Response(207,content=('<multistatus xmlns="DAV:">'+''.join(items)+'</multistatus>').encode())
         if request.method=='MKCOL':
             if path in self.directories:return httpx.Response(405)
@@ -74,7 +74,7 @@ class FakeDAV:
         if path in self.directories and request.method=='HEAD':return httpx.Response(200,headers={'content-length':'0'})
         if path not in self.files:return httpx.Response(404)
         data=self.files[path]
-        headers={'content-length':str(len(data)),'etag':'"fixture"','last-modified':'Wed, 21 Oct 2026 00:00:00 GMT','content-type':'application/octet-stream'}
+        headers={'content-length':str(len(data)),'etag':'"fixture"','last-modified':'Wed, 21 Oct 2026 00:00:00 GMT','content-type':self.content_types.get(path,'application/octet-stream')}
         if request.method=='HEAD':return httpx.Response(200,headers=headers)
         if request.method=='GET':
             if 'range' in request.headers:
@@ -339,6 +339,111 @@ class RemoteAttachmentTests(unittest.TestCase):
         self.assertEqual(self.manager.test(str(self.root),SOURCE)['state'],'ready')
         self.assertEqual(self.manager.read_range(str(self.root),path,6,13)[0],b'6789abcd')
         self.assertLessEqual(self.manager.status(str(self.root))['cache']['used_bytes'],8)
+
+    def test_preview_cache_returns_before_validation_and_defers_invalidation_until_close(self):
+        root=str(self.root)
+        self.dav.files['Incoming/preview.bin']=b'old-preview'
+        self.manager.scan(root,SOURCE)
+        path='_attachments/_remote/'+SOURCE+'/Incoming/preview.bin'
+        cached=self.manager.materialize(root,path)
+        item=self.manager.stat(root,path)
+        self.manager.cache_ttl=0
+        release=self.manager.acquire_cache_read(root,item['asset_id'])
+        entered,finish=threading.Event(),threading.Event()
+        original=WebDAVSource.stat
+        def blocked(provider,path):
+            entered.set()
+            if not finish.wait(5):raise AssertionError('validation was not released')
+            return original(provider,path)
+        self.dav.files['Incoming/preview.bin']=b'updated-preview-content'
+        worker=None
+        try:
+            with patch.object(WebDAVSource,'stat',blocked):
+                self.assertEqual(self.manager.materialize(root,path,cache_first=True).read_bytes(),b'old-preview')
+                self.assertFalse(entered.is_set())
+                worker=threading.Thread(target=self.manager.process_cache_checks)
+                worker.start();self.assertTrue(entered.wait(2))
+                self.assertEqual(self.manager.materialize(root,path,cache_first=True),cached)
+                self.assertEqual(len(self.manager.cache_checks),1)
+                finish.set();worker.join(3);self.assertFalse(worker.is_alive())
+            self.assertEqual(cached.read_bytes(),b'old-preview')
+            self.assertEqual(self.manager.stat(root,path)['size'],len(b'old-preview'))
+        finally:
+            finish.set()
+            if worker:worker.join(3)
+            release()
+        self.manager.process_cache_checks()
+        self.assertFalse(cached.exists())
+        self.assertEqual(self.manager.materialize(root,path).read_bytes(),b'updated-preview-content')
+
+    def test_preview_range_cache_does_not_wait_for_remote_and_clear_preserves_active_bytes(self):
+        root=str(self.root);settings=self.manager._settings(root);settings['cache_max_bytes']=8
+        self.manager.save(root,settings)
+        self.dav.files['Incoming/range.bin']=b'0123456789abcdef'
+        self.manager.scan(root,SOURCE)
+        path='_attachments/_remote/'+SOURCE+'/Incoming/range.bin'
+        self.assertEqual(self.manager.read_range(root,path,2,5)[0],b'2345')
+        self.manager.cache_ttl=0
+        with patch.object(WebDAVSource,'stat',side_effect=AssertionError('foreground remote validation')):
+            self.assertEqual(self.manager.read_range(root,path,3,4,cache_first=True)[0],b'34')
+        self.assertEqual(len(self.manager.cache_checks),1)
+        item=self.manager.stat(root,path);release=self.manager.acquire_cache_read(root,item['asset_id'])
+        with self.manager._db(root) as db:
+            filename=db.execute('SELECT file FROM ranges WHERE asset_id=?',(item['asset_id'],)).fetchone()[0]
+        cached=self.manager._state('cache',filename)
+        self.manager.clear_cache(root)
+        self.assertTrue(cached.exists())
+        release();release()
+        self.assertFalse(cached.exists())
+        self.assertEqual(self.dav.files['Incoming/range.bin'],b'0123456789abcdef')
+
+    def test_background_cache_validation_discards_expired_contexts(self):
+        root=str(self.root)
+        self.dav.files['Incoming/context.bin']=b'original'
+        self.manager.scan(root,SOURCE)
+        path='_attachments/_remote/'+SOURCE+'/Incoming/context.bin'
+        cached=self.manager.materialize(root,path)
+        self.manager.cache_ttl=0
+        original=WebDAVSource.stat
+        for change in ('credentials','source','folder','stop'):
+            with self.subTest(change=change):
+                self.manager.materialize(root,path,cache_first=True)
+                self.assertEqual(len(self.manager.cache_checks),1)
+                settings=self.manager._settings(root)
+                def changed(provider,physical):
+                    metadata=original(provider,physical)
+                    if change=='credentials':self.manager.set_credentials(SOURCE,'leafloom',SECRET,revision='new-revision')
+                    elif change=='source':
+                        updated={**settings,'sources':[{**s,'base_url':'http://127.0.0.1:10001/'} for s in settings['sources']]}
+                        self.manager.save(root,updated)
+                    elif change=='folder':
+                        other=self.home/'other';other.mkdir(exist_ok=True)
+                        self.config.save({'root':str(other)})
+                        self.config.save({'root':root})
+                    else:self.manager.stopped.set()
+                    return {**metadata,'size':1000,'etag':'changed'}
+                with patch.object(WebDAVSource,'stat',changed):self.manager.process_cache_checks()
+                self.assertEqual(self.manager.stat(root,path)['size'],len(b'original'))
+                self.assertEqual(cached.read_bytes(),b'original')
+                self.assertEqual(self.manager.cache_checks,{})
+                if change=='source':self.manager.save(root,{key:value for key,value in settings.items() if key!='revision'})
+
+    def test_scan_defers_missing_cache_cleanup_until_preview_closes(self):
+        root=str(self.root)
+        self.dav.files['Incoming/missing-preview.bin']=b'cached-original'
+        self.manager.scan(root,SOURCE)
+        path='_attachments/_remote/'+SOURCE+'/Incoming/missing-preview.bin'
+        cached=self.manager.materialize(root,path)
+        item=self.manager.stat(root,path)
+        release=self.manager.acquire_cache_read(root,item['asset_id'])
+        try:
+            del self.dav.files['Incoming/missing-preview.bin']
+            result=self.manager.scan(root,SOURCE)
+            self.assertEqual(result['missing'],1)
+            self.assertEqual(cached.read_bytes(),b'cached-original')
+            self.assertEqual(self.manager.stat(root,asset_id=item['asset_id'])['state'],'missing')
+        finally:release()
+        self.assertFalse(cached.exists())
         self.manager.clear_cache(str(self.root))
         self.assertEqual(self.manager.stat(str(self.root),path)['cache_state'],'none')
 
