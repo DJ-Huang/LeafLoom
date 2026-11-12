@@ -127,6 +127,25 @@ class LeafLoomWindowsCliTests(unittest.TestCase):
                 self.assertEqual(code, 0, result)
                 self.assertEqual(self.requests, [('/api/leafloom/status', 'Bearer fictional-token', {})])
 
+    def test_stdin_accepts_utf8_with_or_without_bom_without_retrying(self):
+        arguments = {'text': '\u77e5\u8bc6 \u2713', 'nested': {'enabled': True}}
+        payload = json.dumps(arguments, ensure_ascii=False).encode('utf-8')
+        for prefix in (b'', b'\xef\xbb\xbf'):
+            for status in (200, 409):
+                with self.subTest(bom=bool(prefix), status=status):
+                    self.status = status
+                    self.requests.clear()
+                    result = subprocess.run(
+                        [sys.executable, '-X', 'utf8', str(self.scripts / 'leafloom.py'), 'note-update', '-'],
+                        input=prefix + payload, env=self.env, capture_output=True, timeout=30)
+                    self.assertFalse(result.stderr, result.stderr.decode('utf-8', errors='replace'))
+                    body = json.loads(result.stdout.decode('utf-8'))
+                    self.assertEqual(result.returncode, int(status != 200), body)
+                    self.assertEqual(body['echo'], arguments)
+                    if status != 200:
+                        self.assertEqual(body['http_status'], status)
+                    self.assertEqual(self.requests, [('/api/leafloom/note-update', 'Bearer fictional-token', arguments)])
+
     def test_missing_python_returns_actionable_json_without_service_request(self):
         for shell in SHELLS:
             with self.subTest(shell=shell):

@@ -57,7 +57,8 @@ def main():
     parser.add_argument('arguments', nargs='?', default='{}', help='JSON object, or - to read UTF-8 JSON from stdin')
     options = parser.parse_args()
     try:
-        arguments = json.loads(sys.stdin.buffer.read().decode('utf-8') if options.arguments == '-' else options.arguments)
+        # Windows PowerShell can prepend a UTF-8 BOM to a native stdin pipe.
+        arguments = json.loads(sys.stdin.buffer.read().decode('utf-8-sig') if options.arguments == '-' else options.arguments)
         if not re.fullmatch(r'[a-z][a-z0-9-]*', options.operation) or not isinstance(arguments, dict):
             raise ValueError('Expected a LeafLoom operation and a JSON object')
         result, exit_code = request(options.operation, arguments)
