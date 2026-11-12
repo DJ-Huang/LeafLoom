@@ -85,6 +85,14 @@ jobs:
         run: uv sync --locked --no-dev
       - name: Migration regressions
         run: uv run --no-sync python -X utf8 -m unittest discover -s tests -p test_desktop.py
+      - name: Calendar synchronization and migration contracts
+        run: uv run --no-sync python -X utf8 -m unittest discover -s tests -p 'test_calendar*.py'
+      - name: Skill installation and symlink boundary contracts
+        if: runner.os == 'macOS'
+        run: uv run --no-sync python -X utf8 -m unittest discover -s tests -p test_skill_install.py
+      - name: Windows skill CLI compatibility
+        if: runner.os == 'Windows'
+        run: uv run --no-sync python -X utf8 -m unittest discover -s tests -p test_leafloom_cli.py
       - name: HTML project origins and migration contracts
         run: uv run --no-sync python -X utf8 -m unittest discover -s tests -p test_html_projects.py
       - name: MCP authentication and Tunnel lifecycle

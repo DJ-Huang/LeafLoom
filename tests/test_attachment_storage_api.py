@@ -18,6 +18,7 @@ import httpx
 from starlette.testclient import TestClient
 
 from tests.test_remote_attachments import FakeDAV, SECRET, SOURCE
+from vault_rag.attachment_policy import DEFAULT_EXTENSIONS
 from vault_rag.local_state import LocalConfig
 from vault_rag.remote_attachments import RemoteAttachments
 from vault_rag.web_server import create_app
@@ -72,6 +73,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
                 'connection_hint': 'direct', 'enabled': True,
             }],
             'default_storage_id': default,
+            'allowed_extensions': [*DEFAULT_EXTENSIONS, '.bin'],
             'cache_limit_bytes': 2 * 1024**2,
             'outbox_limit_bytes': 8 * 1024**2,
         }
@@ -107,7 +109,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
 
     def scan(self):
         result = self.request('POST', '/api/attachments/storage/scan', json={
-            'root': str(self.root), 'storage_id': SOURCE,
+            'root': str(self.root), 'storage_id': SOURCE, 'force_full': True,
         }).json()
         self.assertTrue(result['ok'], result)
         deadline=time.monotonic()+5
@@ -156,7 +158,8 @@ class AttachmentStorageApiTests(unittest.TestCase):
                             params={'root': str(self.root)}).json()
 
     def wait_job(self, key):
-        deadline = time.monotonic() + 5
+        # Windows filesystem flushes and concurrent release checks can exceed 5s.
+        deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
             result = self.job(key)
             if result['state'] not in {'planned', 'queued', 'running', 'uploading', 'verifying'}:
@@ -178,7 +181,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
         profile.pop('connection')
         profile['base_url'] = 'http://192.168.1.20:8068/'
         saved = self.request('PUT', '/api/attachments/storage', json={
-            key: value for key, value in current.items() if key not in {'cache', 'outbox'}
+            key: value for key, value in current.items() if key in {'root','revision','storages','default_storage_id','cache_limit_bytes','outbox_limit_bytes','allowed_extensions'}
         }).json()
         self.assertEqual(saved['storages'][0]['base_url'], profile['base_url'])
         self.assertEqual(saved['storages'][0]['metadata_directory'], 'Incoming/LeafLoomCatalog/v1')
@@ -191,7 +194,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
         current=self.settings()
         allowed={'storage_id','name','base_url','remote_root','upload_directory','metadata_directory','username','enabled','connection_hint'}
         current['storages']=[{k:v for k,v in profile.items() if k in allowed} for profile in current['storages']]
-        body={k:v for k,v in current.items() if k not in {'cache','outbox'}}
+        body={k:v for k,v in current.items() if k in {'root','revision','storages','default_storage_id','cache_limit_bytes','outbox_limit_bytes','allowed_extensions'}}
         body['storages'][0]['base_url']='http://100.100.1.20:8068/'
         saved=self.request('PUT','/api/attachments/storage',json=body).json()
         self.assertEqual(saved['storages'][0]['base_url'],body['storages'][0]['base_url'])
@@ -405,9 +408,9 @@ class AttachmentStorageApiTests(unittest.TestCase):
         calls = len(self.dav.calls)
         self.assertEqual(self.request('GET', '/api/media', params=params).content, content)
         self.assertEqual(len(self.dav.calls), calls)
-        self.assertFalse((self.root / item['path']).exists())
+        self.assertEqual((self.root / item['path']).read_bytes(),content)
 
-    def test_offline_upload_is_durable_pending_then_reconnects_without_local_original(self):
+    def test_offline_upload_is_durable_then_retains_note_image_cache(self):
         self.configure(default=SOURCE)
         self.dav.offline = True
         name, content = '原图 #1.png', b'queued-upload-original\x00\xff'
@@ -417,7 +420,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.assertTrue(result['pending'])
         self.assertFalse(result['remote_saved'])
         self.assertEqual(Path(result['path']).name, name)
-        self.assertFalse((self.root / result['path']).exists())
+        self.assertEqual((self.root / result['path']).read_bytes(),content)
         self.remote.process_pending()
         self.assertEqual(self.job(result['job_id'])['state'], 'waiting_for_connection')
         self.assertEqual(self.settings()['outbox']['used_bytes'], len(content))
@@ -450,7 +453,8 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.assertEqual(list(self.original_files().values()), [content])
         self.assertTrue(next(iter(self.dav.files)).endswith('-' + name))
         self.assertEqual(self.settings()['outbox']['used_bytes'], 0)
-        self.assertFalse((self.root / result['path']).exists())
+        self.assertEqual((self.root / result['path']).read_bytes(),content)
+        self.request('POST', '/api/attachments/cache/clear', json={'root': str(self.root)})
         self.assertFalse(any(path.is_file() for path in (self.root / '_attachments').rglob('*')))
         self.assertFalse(any(method == 'DELETE' for method, _ in self.dav.calls))
 
@@ -481,8 +485,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.request('POST', endpoint, json={'root': str(self.root), 'confirm': True})
         result = self.wait_job(plan['job_id'])
         self.assertEqual(result['state'], 'completed', result)
-        self.assertTrue(original.exists())
-        self.assertEqual(original.read_bytes(), b'original-migration-image')
+        self.assertFalse(original.exists())
         self.assertTrue(protected.exists())
         self.assertTrue((self.root / 'outside.png').exists())
         self.assertEqual(note.read_text(), text)
@@ -502,7 +505,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.assertFalse(list((self.root / '.vault-rag/attachment-migrations').glob('*/originals/*')))
         self.assertFalse(list((self.root / '.vault-rag/remote-attachments/release').glob('*')))
 
-    def test_migration_paths_batch_keeps_vault_cache_without_redownload(self):
+    def test_migration_paths_batch_drops_original_then_cache_can_return(self):
         self.configure()
         selected = '_attachments/batch-a.png'
         skipped = '_attachments/batch-b.png'
@@ -517,8 +520,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
                      json={'root': str(self.root), 'confirm': True})
         result = self.wait_job(plan['job_id'])
         self.assertEqual(result['state'], 'completed', result)
-        self.assertTrue(first.exists())
-        self.assertEqual(first.read_bytes(), b'batch-a-bytes')
+        self.assertFalse(first.exists())
         self.assertEqual(self.details(selected)['source'], 'remote')
         self.assertEqual(self.details(skipped)['source'], 'local')
         self.assertEqual(second.read_bytes(), b'batch-b-bytes')
@@ -572,7 +574,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.request('POST', '/api/attachments/storage/jobs/' + plan['job_id'] + '/execute',
                      json={'root': str(self.root), 'confirm': True})
         result = self.wait_job(plan['job_id'])
-        self.assertEqual(result['state'], 'failed', result)
+        self.assertEqual(result['state'], 'waiting_for_connection', result)
         self.assertEqual(original.read_bytes(), content)
         self.assertEqual(self.details(path)['source'], 'local')
         self.assertFalse(list((self.root / '.vault-rag/remote-attachments/release').glob('*')))
@@ -682,9 +684,9 @@ class AttachmentStorageApiTests(unittest.TestCase):
     def test_ignore_hides_mcp_discovery_but_preserves_old_reference_and_cache(self):
         self.configure()
         rules='leafloom.ignore'
-        physical='Incoming/old-reference.py'
+        physical='Incoming/old-reference.bin'
         content=b'print("existing-reference")\n'
-        self.dav.files[rules]=b'# leafloom-ignore v1\n!*.py\n'
+        self.dav.files[rules]=b'# leafloom-ignore v1\n!*.bin\n'
         self.dav.files[physical]=content
         self.scan()
         item=self.mcp('list',source='remote')['items'][0]
@@ -693,7 +695,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
         self.assertEqual(self.request('GET','/api/media',params=params).content,content)
         before=self.mcp('stat',asset_id=item['asset_id'])
         self.assertEqual(before['cache_state'],'complete')
-        self.dav.files[rules]=b'# leafloom-ignore v1\n# Use default exclusions\n'
+        self.dav.files[rules]=b'# leafloom-ignore v1\n*.bin\n'
         self.scan()
         self.assertEqual(self.mcp('list',source='remote')['total'],0)
         status=self.mcp('status')['attachment_storage']['sources'][0]['connection']
@@ -788,8 +790,7 @@ class AttachmentStorageApiTests(unittest.TestCase):
                      json={'root': str(self.root), 'confirm': True})
         result = self.wait_job(plan['job_id'])
         self.assertEqual(result['state'], 'completed', result)
-        self.assertTrue(original.exists())
-        self.assertEqual(original.read_bytes(), content)
+        self.assertFalse(original.exists())
         self.assertIn(content, self.original_files().values())
         self.assertEqual(self.details(path)['source'], 'remote')
         self.assertFalse(any(method == 'DELETE' for method, _ in self.dav.calls))

@@ -2113,7 +2113,7 @@ class RemoteAttachments:
             self._check_job(value)
             for item in value['items']:
                 if item['state']=='released':continue
-                item['state']='uploading'
+                if item['state'] not in {'mapped','releasing'}:item['state']='uploading'
                 self._report_transfer(value,sent=0,total=item.get('size',0),item=item,force=True,phase='hashing')
                 self._check_job(value);self._migrate_one(value,item)
                 value['completed']=sum(i['state']=='released' for i in value['items'])
@@ -2165,9 +2165,14 @@ class RemoteAttachments:
                 publish_member(self,root,value['source_id'],item['asset_id'],provider)
                 with self.lock,self._db(root) as db:self._activate_redirects(db,item['asset_id'])
                 self._finish_release(value,item);return
-            if item['state']=='releasing':
-                with self.lock,self._db(root) as db:self._activate_redirects(db,item['asset_id'])
-                self._finish_release(value,item);return
+        # A releasing journal has already verified bytes and published mappings.
+        # The local cache may be absent after a previous finish attempt. Never
+        # remove a different file which appeared at the old path meanwhile.
+        if item['state']=='releasing':
+            if source.exists() and _hash_file(source)[0]!=item['sha256']:
+                raise ConflictError('A new local source appeared during migration')
+            self._check_job(value)
+            self._finish_release(value,item);return
         size=item.get('size',0)
         self._report_transfer(value,sent=0,total=size,item=item,force=True,phase='hashing')
         current_hash,current_version=_hash_file(source)

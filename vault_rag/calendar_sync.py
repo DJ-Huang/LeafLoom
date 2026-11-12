@@ -223,7 +223,8 @@ class CalendarSync:
                     target=sqlite3.connect(temporary)
                     try:reader.backup(target)
                     finally:target.close();reader.close()
-                    with temporary.open('rb') as stream:os.fsync(stream.fileno())
+                    # Windows requires a writable handle when flushing the backup.
+                    with temporary.open('r+b') as stream:os.fsync(stream.fileno())
                     move_exclusive(temporary,backup)
                 finally:temporary.unlink(missing_ok=True)
             verified=sqlite3.connect(backup.as_uri()+'?mode=ro',uri=True);verified.row_factory=sqlite3.Row
