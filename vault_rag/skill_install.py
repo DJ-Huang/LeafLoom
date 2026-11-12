@@ -12,7 +12,7 @@ _SKILLS = {
                            'references/imports.md', 'references/tasks-reports.md',
                            'references/feishu.md', 'references/gitlab.md', 'references/settings.md',
                            'references/feishu-sync.md', 'assets/workspace.base',
-                           'scripts/leafloom.py', 'scripts/task_sync.py', 'scripts/feishu_sync.py')),
+                           'scripts/leafloom.py', 'scripts/leafloom.ps1', 'scripts/task_sync.py', 'scripts/feishu_sync.py')),
 }
 # Prior installable skills replaced by the unified leafloom bundle.
 _SUPERSEDED = {'leafloom': ('wiki-search', 'work-hub')}

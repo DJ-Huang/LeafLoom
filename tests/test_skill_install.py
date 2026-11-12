@@ -116,7 +116,7 @@ class SkillInstallTests(unittest.TestCase):
         for name in ('references/workspace.md', 'references/imports.md',
                      'references/feishu.md', 'references/gitlab.md', 'references/settings.md',
                      'references/tasks-reports.md', 'references/feishu-sync.md',
-                     'assets/workspace.base', 'scripts/leafloom.py', 'scripts/task_sync.py', 'scripts/feishu_sync.py'):
+                     'assets/workspace.base', 'scripts/leafloom.py', 'scripts/leafloom.ps1', 'scripts/task_sync.py', 'scripts/feishu_sync.py'):
             self.assertEqual((target / name).read_bytes(), (skill_source('leafloom').parent / name).read_bytes())
         personal = target / 'personal.md'; personal.write_text('keep')
         script = target / 'scripts/task_sync.py'; script.write_text('personal script')
@@ -141,7 +141,7 @@ class SkillInstallTests(unittest.TestCase):
 
     def test_work_hub_missing_resource_is_outdated(self):
         install_skill('leafloom')
-        for resource in ('assets/workspace.base', 'references/feishu.md', 'references/gitlab.md'):
+        for resource in ('assets/workspace.base', 'references/feishu.md', 'references/gitlab.md', 'scripts/leafloom.ps1'):
             with self.subTest(resource=resource):
                 (self.home / '.agents/skills/leafloom' / resource).unlink()
                 self.assertTrue(skill_status('leafloom')['installed'])

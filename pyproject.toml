@@ -77,4 +77,5 @@ torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'win32'" }]
 "leafloom/references/workspace.md" = "vault_rag/skills/leafloom/references/workspace.md"
 "leafloom/scripts/feishu_sync.py" = "vault_rag/skills/leafloom/scripts/feishu_sync.py"
 "leafloom/scripts/leafloom.py" = "vault_rag/skills/leafloom/scripts/leafloom.py"
+"leafloom/scripts/leafloom.ps1" = "vault_rag/skills/leafloom/scripts/leafloom.ps1"
 "leafloom/scripts/task_sync.py" = "vault_rag/skills/leafloom/scripts/task_sync.py"

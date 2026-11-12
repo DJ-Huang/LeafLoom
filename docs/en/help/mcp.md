@@ -22,6 +22,8 @@ Every mutation checks the workspace revision; existing notes also require their 
 
 Install **LeafLoom skill** from **Settings → Skill**, then use `$leafloom` in a local Codex chat. It connects directly to the running app for knowledge search and task operations. For MCP clients, see the [tool contract](../../MCP.md).
 
+On Windows, update the installed skill to use `scripts/leafloom.ps1`: it selects an available Python 3.11+ interpreter, skips Store aliases and sends PowerShell hashtables as UTF-8 JSON. Open a new chat after updating. See the [platform-specific examples](../../../leafloom/SKILL.md).
+
 ### AI asset search and delivery
 
 Before searching, enable **Use for AI asset search** in each desired attachment group. All groups start off; only the selected groups’ union enters keyword/semantic retrieval, and no selection returns `scope_not_configured` without a full-library fallback. This choice syncs to NAS with group metadata. Conflicted groups are excluded until explicitly resolved. Normal attachment browsing and note references remain available.

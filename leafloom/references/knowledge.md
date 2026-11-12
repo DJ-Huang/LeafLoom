@@ -1,6 +1,6 @@
 # 知识库检索
 
-使用 `scripts/leafloom.py`。围绕问题提取主题和精确标识，按需补查，证据足以回答时停止。
+按 [入口](../SKILL.md) 选择平台调用方式（Windows / PowerShell 使用 `scripts/leafloom.ps1`）。围绕问题提取主题和精确标识，按需补查，证据足以回答时停止。
 
 1. 用 `search` 传 `query`、`mode:"rag"`、`top_k:3`。需要补齐截断的证据时用 `chunk`（`key` 为返回的片段 ID），核对完整原文时用 `source`（`path` 为命中的知识库相对路径）。工时经验加 `domain:"estimation"`，必要时加 `note_type:"estimation"`。已知规则存于库中且当前缺失时用 `rules`，传 `query`、`top_k:3` 和已知的 `domain`。
 2. 结果不足时用 `search` 的 `mode:"wiki"`。从 `navigation.sources` 追溯原文，过期摘要只作定位。检索范围是 LeafLoom 配置的目录。
