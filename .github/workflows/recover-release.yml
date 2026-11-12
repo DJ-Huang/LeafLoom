@@ -1,0 +1,75 @@
+name: Recover verified release draft
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Native desktop run whose two package jobs succeeded
+        required: true
+        type: string
+      tag:
+        description: Existing stable release tag (never changed here)
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: ${{ inputs.run_id }}
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify original native jobs and exact source commit
+        run: |
+          python - <<'PY'
+          import json, os, re, subprocess
+          from scripts import desktop_release as release
+          tag=os.environ['RELEASE_TAG']; run_id=os.environ['SOURCE_RUN']
+          assert re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+',tag)
+          assert run_id.isdigit()
+          repo=os.environ['GITHUB_REPOSITORY']
+          run=release.gh_json(f'repos/{repo}/actions/runs/{run_id}')
+          sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          assert run['head_sha']==sha and run['path']=='.github/workflows/desktop.yml'
+          assert run['status']=='completed'
+          jobs=release.gh_json(f'repos/{repo}/actions/runs/{run_id}/jobs?per_page=100')['jobs']
+          by_name={j['name']:j for j in jobs}
+          for name in ('validate','package (windows-2025, WINDOWS)','package (macos-15, MAC)'):
+              assert by_name[name]['conclusion']=='success', name
+          release.application_version(tag=tag)
+          release.require_draft(release.find_release(repo,tag))
+          print('Verified native artifacts at',sha)
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          pattern: leafloom-*-unsigned-test
+          path: dist/release
+          merge-multiple: true
+      - name: Recover draft with original artifacts and verify uploaded bytes
+        run: |
+          python - <<'PY'
+          import os, subprocess
+          from pathlib import Path
+          from scripts import desktop_release as release
+          tag=os.environ['RELEASE_TAG']; version=release.application_version(tag=tag)
+          notes=Path('docs/en')/f'RELEASE_NOTES_{version}.md'
+          text=notes.read_text(encoding='utf-8')
+          prefix=f'# LeafLoom {version} - '
+          if text.startswith(prefix):
+              notes.write_text(text.replace(prefix,f'# LeafLoom {version} \u2014 ',1),encoding='utf-8')
+          release.curated_release_notes(version)
+          os.environ['GITHUB_SHA']=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          os.environ['GITHUB_RUN_ID']=os.environ['SOURCE_RUN']
+          release.create_draft(os.environ['GITHUB_REPOSITORY'],tag,Path('dist/release'))
+          PY
