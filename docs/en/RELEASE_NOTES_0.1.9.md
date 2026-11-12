@@ -1,4 +1,4 @@
-# LeafLoom 0.1.9 - Calendar, unified skill and faster attachments
+# LeafLoom 0.1.9 — Calendar, unified skill and faster attachments
 
 Release date: 2026-11-12 · Changes since v0.1.8
 
