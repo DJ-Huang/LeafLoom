@@ -2,6 +2,8 @@
 
 Install **LeafLoom skill** from **Settings → Skill**. Its work hub workflow, database template and optional helpers are bundled under `~/.agents/skills/leafloom/`.
 
+Windows PowerShell 5.1/7 uses `scripts/leafloom.ps1 <operation> @{ key = value }`. It probes available Python 3.11+ interpreters, skips Microsoft Store aliases, serializes the hashtable to UTF-8 stdin and preserves the Python client's response and exit code. Runtime probing never retries a service request. macOS/Linux retain `python3 scripts/leafloom.py`; see the [platform-specific examples](../leafloom/SKILL.md).
+
 ## 能力边界 / Capabilities / 機能の境界
 
 | 能力 / Capability / 機能 | 依赖 / Dependency / 依存 |

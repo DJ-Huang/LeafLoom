@@ -8,8 +8,10 @@
 
 脚本要求 Python 3.11+、本机运行的 LeafLoom 服务、已登录的 `lark-cli`，以及已配置且有权限的附件服务器。远程连接返回的服务器路径不表示本机可访问：这时不能直接运行本地脚本，需在有相应权限的服务主机执行。
 
-```sh
-python3 <本 Skill 目录>/scripts/feishu_sync.py --source <飞书页面URL> --destination <本地目录>
+Windows 使用已确认可用的 `python` 或 `py -3`，macOS / Linux 使用 `python3`；脚本路径始终加引号。以下为 PowerShell 示例：
+
+```powershell
+python "<skill>/scripts/feishu_sync.py" --source "<飞书页面URL>" --destination "<本地目录>"
 ```
 
 省略 `--destination` 使用上述默认相对目录。初次使用当前默认附件服务器，此后固定其 ID；不会悄悄回退到本地附件。`--config-dir` 仅用于非默认的 LeafLoom 配置目录，不需要把认证令牌传给脚本或聊天。

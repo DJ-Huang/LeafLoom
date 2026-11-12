@@ -4,6 +4,8 @@
 
 Install or update the bundled **LeafLoom skill** from **Settings → Skill**. In a new local Codex chat, use `$leafloom` to search your knowledge, manage project tasks or capture work. For design, it guides you to **Design Studio**. The skill calls the running app directly. Enable local AI reading in **Settings → AI integration**, and enable writing when you want it to save changes.
 
+On Windows, the skill uses its PowerShell entry point to select an available Python 3.11+ interpreter and send parameters as UTF-8, avoiding Store aliases and JSON quoting problems. Update the installed skill and open a new chat to pick up the [platform-specific examples](../../leafloom/SKILL.md).
+
 Work records and reports use the connected vault's `工作中枢/` by default. Optional Feishu/Lark and GitLab workflows load when requested. See [Work hub](../WORK_HUB.md).
 
 **Choose your office platforms:** Open **Settings → Skill → Work hub settings** and check all the platforms you use, such as Feishu/Lark and Notion together. Each change saves immediately. Automatic source selection and local-only mode are separate, exclusive choices; clearing every platform restores automatic selection. DingTalk, WeCom and Notion currently save preferences only and are marked not integrated. Sign-in and permissions are separate. In chat, say “use Feishu and Notion” or “add Notion.” Both edit `工作中枢/配置.md`; old single selections are read compatibly. Multiple platforms do not expand collection scope or broadcast task writes. Reload settings after chat edits. Change the hub directory under **Templates and writing → Default write locations** without moving existing notes.

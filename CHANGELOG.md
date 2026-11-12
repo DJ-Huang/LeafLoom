@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- LeafLoom skill on Windows: add a PowerShell entry point that selects Python 3.11+, skips Microsoft Store aliases and passes UTF-8 JSON through stdin, preserving Unicode, quotes, paths and nested arguments without manual escaping.
+
 - Attachment sources now load independently, preserving filters and pagination when the server catalog is unavailable. All attachments merge under the selected sort order. Previews use valid local file and range caches immediately while checking server versions in the background; active reads retain consistent content. Error messages are shorter and provide retry actions. Download status reads no longer race with updates on Windows.
 
 - Show note image right-click actions in one vertical menu (copy, comment, and the other selection actions) instead of two overlapping bars.
