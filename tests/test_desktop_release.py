@@ -32,6 +32,10 @@ class DesktopReleaseTests(unittest.TestCase):
             file.write_bytes(b"fictional installer " + name.encode())
             self.files.append(file)
 
+    def test_current_release_notes_match_current_application_version(self):
+        version = release.application_version()
+        self.assertTrue(release.curated_release_notes(version).startswith(f"# LeafLoom {version}"))
+
     def test_versions_and_stable_tag(self):
         self.assertEqual(release.application_version(self.root, "v1.2.3"), "1.2.3")
         for tag in ("v1.2.4", "1.2.3", "v1.2.3-rc.1", "v01.2.3"):
