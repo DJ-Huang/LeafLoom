@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+## 0.1.9 - 2026-11-12
+
+- Fix Windows legacy Calendar migration failing while flushing its SQLite backup; keep the verified backup and calendar data.
+
+- Fix attachment reference synchronization treating membership-catalog child records as references. Resuming migration preserves confirmed mapping and cleanup stages, avoids re-uploading already verified transfers, and stops rather than removing a locally changed replacement file.
+
 - LeafLoom skill on Windows: add a PowerShell entry point that selects Python 3.11+, skips Microsoft Store aliases and passes UTF-8 JSON through stdin, preserving Unicode, quotes, paths and nested arguments without manual escaping.
 
 - Attachment sources now load independently, preserving filters and pagination when the server catalog is unavailable. All attachments merge under the selected sort order. Previews use valid local file and range caches immediately while checking server versions in the background; active reads retain consistent content. Error messages are shorter and provide retry actions. Download status reads no longer race with updates on Windows.
@@ -26,7 +32,7 @@
 
 - Keep HTML project and Design Studio assets inside the project folder; they no longer participate in attachment-server migration. For older registered projects still under `_attachments`, use the one-off script `scripts/localize_html_attachments.py` (dry-run by default; `--apply` writes). Attachment servers remain optional: without one, prepare the local catalog on **Attachments** to browse and upload into local `_attachments`.
 
-- Restore attachment-server migration under **Settings → Attachment servers**: optional path batches, resume the same job after interruption, and keep `_attachments` paths as a version-matched local cache after upload/verify (clearing cache removes local copies only; NAS originals stay). Prefer LAN URLs at home; on slow remote links use the Tailscale `100.x` address with small batches and resume instead of a single full-library run. While transferring, the job card shows completed/total counts, byte progress, transfer speed, phase (hash/probe/upload/verify) and the current file; slow-link PUT/readback timeouts are extended so DERP transfers are less likely to stall at 0 B/s during probing. Server readback verification reports its own download progress/speed (it re-downloads the file to hash).
+- Restore attachment-server migration under **Settings → Attachment servers**: optional path batches, resume the same job after interruption, and remove migrated local originals after upload/verification, retaining lightweight previews; use **Cache locally** or open a file when full local content is needed (clearing downloaded cache does not delete NAS originals). Prefer LAN URLs at home; on slow remote links use the Tailscale `100.x` address with small batches and resume instead of a single full-library run. While transferring, the job card shows completed/total counts, byte progress, transfer speed, phase (hash/probe/upload/verify) and the current file; slow-link PUT/readback timeouts are extended so DERP transfers are less likely to stall at 0 B/s during probing. Server readback verification reports its own download progress/speed (it re-downloads the file to hash).
 
 - LeafLoom skill: treat「全天／半天」as `daily_hours` when recording; hours reports must not say “no data” if activities exist but only lack numeric hours.
 

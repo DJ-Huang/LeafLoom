@@ -74,7 +74,11 @@ let server,browser,page,logs='';
  await source().selectOption('local');await idle();await source().selectOption('all');await idle();
  await page.getByText('Some server attachments could not be loaded. Please retry.',{exact:true}).waitFor();
  const localFirst=await page.locator('.aw-file-open').allTextContents();
- await page.locator('.aw-pagination button').last().click();await idle();
+ await page.locator('.aw-pagination button').last().click();
+ // A completed previous render can still be idle before the click effect runs.
+ await page.waitForFunction(previous=>{const cards=[...document.querySelectorAll('.aw-file-open')];
+  return cards.length>0&&cards.length<100&&cards.every(card=>!previous.includes(card.textContent))&&
+   document.querySelector('.aw-file-scroll')?.getAttribute('aria-busy')==='false';},localFirst);
  const localSecond=await page.locator('.aw-file-open').allTextContents();
  assert.ok(localSecond.length>0&&localSecond.length<100);
  assert.ok(localSecond.every(name=>!localFirst.includes(name)));
@@ -96,6 +100,8 @@ let server,browser,page,logs='';
  assert.equal(await source().inputValue(),'local');assert.equal(await card('Server specimen.bin').count(),0);
  // Preview bytes remain available while their server version check is blocked.
  await source().selectOption('remote');await searchFor('Server preview','Server preview.png');
+ // Measure the warm preview, not queued thumbnail work from earlier pagination.
+ await page.waitForLoadState('networkidle');
  assert.ok((await page.request.post('/api/attachment-fixture/preview-block',{headers})).ok());
  await card('Server preview.png').click();
  await page.getByRole('button',{name:'Attachment information',exact:true}).click();

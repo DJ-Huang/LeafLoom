@@ -3,7 +3,7 @@
 服务器模式直接使用服务器目录；本地初始化也不再准备整理方案。本文描述可选的本地文件整理操作，服务器用户参见[服务器原件与本机目录缓存](attachments.md)。
 
 
-服务器迁移在 **设置 → 附件服务器** 预览和执行：上传并读回校验后权威原件在服务器，本地 `_attachments` 同路径保留为版本匹配缓存，不新增永久的本地 `originals/` 归档。HTML 项目资源不参与服务器迁移；遗留项目请用 `scripts/localize_html_attachments.py` 迁到 `Web/` 或项目 `assets/`，不要整理进 `_attachments`。下文的 `.vault-rag/attachment-migrations/` 恢复目录属于本地整理任务；已有历史与回收记录不会自动清除。旧链接在 LeafLoom 内继续解析，其他编辑器不保证兼容。详见[服务器附件与缓存](attachments.md)。
+服务器迁移在 **设置 → 附件服务器** 预览和执行：上传并读回校验后权威原件在服务器，迁移完成后移除本地原件，保留轻量预览，不新增永久的本地 `originals/` 归档；需要完整本地内容时使用 **缓存到本地** 或打开文件。HTML 项目资源不参与服务器迁移；遗留项目请用 `scripts/localize_html_attachments.py` 迁到 `Web/` 或项目 `assets/`，不要整理进 `_attachments`。下文的 `.vault-rag/attachment-migrations/` 恢复目录属于本地整理任务；已有历史与回收记录不会自动清除。旧链接在 LeafLoom 内继续解析，其他编辑器不保证兼容。详见[服务器附件与缓存](attachments.md)。
 
 
 ## 使用目标

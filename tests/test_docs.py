@@ -81,16 +81,16 @@ class DocumentationTests(unittest.TestCase):
                 if parsed.fragment:
                     self.assertIn(unquote(parsed.fragment), pages[target].ids, (path, link))
 
-    def test_release_notes_route_points_to_current_v018(self):
+    def test_release_notes_route_points_to_current_v019(self):
         self.assertEqual(
             self.docs.navigation["sources"]["release-notes"],
-            "docs/{lang}/RELEASE_NOTES_0.1.8.md",
+            "docs/{lang}/RELEASE_NOTES_0.1.9.md",
         )
         for lang in LANGUAGES:
             article = self.docs.articles[lang, "release-notes"]
-            self.assertIn("LeafLoom 0.1.8", article["title"])
+            self.assertIn("LeafLoom 0.1.9", article["title"])
             html = (self.output / "docs" / lang / "release-notes/index.html").read_text()
-            self.assertIn(f"docs/{lang}/RELEASE_NOTES_0.1.8.md", html)
+            self.assertIn(f"docs/{lang}/RELEASE_NOTES_0.1.9.md", html)
             for version in ("0.1.3", "0.1.4", "0.1.5", "0.1.6", "0.1.7"):
                 self.assertTrue((ROOT / "docs" / lang / f"RELEASE_NOTES_{version}.md").is_file())
 

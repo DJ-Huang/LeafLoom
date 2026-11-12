@@ -1,5 +1,6 @@
 """Device isolation and server references with two independent synthetic clients."""
 import json
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -21,13 +22,13 @@ class DeviceStateTests(unittest.TestCase):
             home = Path(home).resolve(); root = home / 'notes'; root.mkdir()
             legacy = root / '.vault-rag'; legacy.mkdir()
             old = legacy / 'attachments.sqlite'
-            with sqlite3.connect(old) as db:
+            with closing(sqlite3.connect(old)) as db, db:
                 db.execute('CREATE TABLE example(value TEXT)'); db.execute("INSERT INTO example VALUES('original')")
             first = LocalConfig(home / 'first'); first.save({'root': str(root)})
             files = Files(first); path = files.state_path('attachments.sqlite')
             self.assertTrue(path.is_relative_to(first.directory))
-            with sqlite3.connect(old) as db: db.execute("UPDATE example SET value='synced elsewhere'")
-            with sqlite3.connect(path) as db: self.assertEqual(db.execute('SELECT value FROM example').fetchone()[0], 'original')
+            with closing(sqlite3.connect(old)) as db, db: db.execute("UPDATE example SET value='synced elsewhere'")
+            with closing(sqlite3.connect(path)) as db, db: self.assertEqual(db.execute('SELECT value FROM example').fetchone()[0], 'original')
             second = LocalConfig(home / 'second'); second.save({'root': str(root)})
             self.assertNotEqual(Files(second).state_path('attachments.sqlite'), path)
             self.assertTrue(old.exists())
@@ -38,7 +39,12 @@ class DeviceStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home:
             home = Path(home).resolve(); root = home / 'notes'; root.mkdir()
             legacy = root / '.vault-rag'; legacy.mkdir(); outside = home / 'private'; outside.write_bytes(b'private')
-            (legacy / 'attachments.sqlite').symlink_to(outside)
+            try:
+                (legacy / 'attachments.sqlite').symlink_to(outside)
+            except OSError as error:
+                if getattr(error,'winerror',None)==1314:
+                    self.skipTest('Windows symlink creation privilege is unavailable')
+                raise
             config = LocalConfig(home / 'state'); config.save({'root': str(root)})
             with self.assertRaises(ValueError): Files(config).state_path('attachments.sqlite')
             self.assertEqual(outside.read_bytes(), b'private')
@@ -49,7 +55,7 @@ class DeviceStateTests(unittest.TestCase):
             legacy=root/'.vault-rag/remote-attachments';legacy.mkdir(parents=True)
             (legacy/'settings.json').write_text(json.dumps({'root':'C:\\Users\\fixture\\notes','revision':'old',
                 'sources':[],'default_source':'local'}))
-            with sqlite3.connect(legacy/'manifest.sqlite') as db:
+            with closing(sqlite3.connect(legacy/'manifest.sqlite')) as db, db:
                 db.execute('CREATE TABLE jobs(payload TEXT)');db.execute("INSERT INTO jobs VALUES('foreign job')")
             config=LocalConfig(home/'state');config.save({'root':str(root)})
             files=Files(config);settings=files.state_path('remote-attachments','settings.json')
@@ -64,7 +70,7 @@ class DeviceStateTests(unittest.TestCase):
             (remote/'settings.json').write_text(json.dumps({'root':str(root)}))
             for name in ('outbox','cache','release'):
                 (remote/name).mkdir();(remote/name/'content').write_bytes(name.encode())
-            with sqlite3.connect(remote/'manifest.sqlite') as db:
+            with closing(sqlite3.connect(remote/'manifest.sqlite')) as db, db:
                 db.execute('CREATE TABLE cache(file TEXT)');db.execute("INSERT INTO cache VALUES('content')")
                 db.execute('CREATE TABLE jobs(payload TEXT)');db.execute("INSERT INTO jobs VALUES('unsent')")
             downloads=legacy/'asset-downloads';downloads.mkdir();(downloads/'verified.bin').write_bytes(b'verified')
@@ -74,7 +80,7 @@ class DeviceStateTests(unittest.TestCase):
             self.assertFalse(files.state_path('remote-attachments','cache').exists())
             self.assertEqual(files.state_path('remote-attachments','release','content').read_bytes(),b'release')
             self.assertEqual(files.state_path('asset-downloads','verified.bin').read_bytes(),b'verified')
-            with sqlite3.connect(files.state_path('remote-attachments','manifest.sqlite')) as db:
+            with closing(sqlite3.connect(files.state_path('remote-attachments','manifest.sqlite'))) as db, db:
                 self.assertEqual(db.execute('SELECT count(*) FROM cache').fetchone()[0],0)
                 self.assertEqual(db.execute('SELECT payload FROM jobs').fetchone()[0],'unsent')
             self.assertEqual((remote/'cache/content').read_bytes(),b'cache')
@@ -157,6 +163,17 @@ class ServerReferenceTests(unittest.TestCase):
         sync(self.manager, str(self.root), fixtures.SOURCE)
         self.assertEqual(set(self.dav.files), before)
         with self.assertRaises(FileNotFoundError): self.manager.stat(str(self.root), 'wrong/object.png')
+
+    def test_reference_pull_ignores_nested_membership_records(self):
+        key = self.seed(); root = str(self.root)
+        provider = self.manager._provider(fixtures.SOURCE, root)
+        publish(self.manager, root, fixtures.SOURCE, key, provider)
+        from vault_rag.attachment_server_catalog import publish_member
+        publish_member(self.manager, root, fixtures.SOURCE, key, provider)
+        self.dav.calls.clear()
+        self.assertGreater(pull(self.manager, root, fixtures.SOURCE, provider), 0)
+        self.assertFalse(any(method == 'GET' and '/members/' in url
+                             for method, url in self.dav.calls))
 
     def test_verified_reference_records_are_reused_without_reading_originals(self):
         key=self.seed();provider=self.manager._provider(fixtures.SOURCE,str(self.root))

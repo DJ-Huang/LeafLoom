@@ -10,7 +10,7 @@
 
 **[ヘルプセンター](https://dj-huang.github.io/LeafLoom/docs/ja/)** · メモ・添付・デザイン・AI 連携・復元のガイドを検索できます。
 
-**[0.1.8 の更新：Design Studio と Markdown 目次](RELEASE_NOTES_0.1.8.md)**
+**[0.1.9 の新機能：カレンダー、統合スキル、添付ファイルの高速化](RELEASE_NOTES_0.1.9.md)**
 
 散らばったメモ、プロジェクト資料、保存したウェブページを、つながる知識ベースへ。**LeafLoom は、オープンソースでローカルファーストのナレッジ管理ツール・個人 Wiki** です。Markdown と HTML、出典をたどれる検索、知識グラフ、MCP、Skill、AI Chat、ChatGPT 連携を一つのワークスペースで使えます。
 

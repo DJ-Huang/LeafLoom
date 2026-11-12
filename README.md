@@ -10,7 +10,7 @@
 
 **[Help center](https://dj-huang.github.io/LeafLoom/docs/en/)** · Searchable guides for notes, attachments, Design Studio, AI connections and recovery.
 
-**[New in 0.1.8: Design Studio workflows and Markdown outlines](docs/en/RELEASE_NOTES_0.1.8.md)**
+**[New in 0.1.9: Calendar, unified skill and faster attachments](docs/en/RELEASE_NOTES_0.1.9.md)**
 
 Turn scattered notes, project docs and saved webpages into a connected knowledge base. **LeafLoom is an open-source, local-first knowledge management workspace and personal wiki** for Markdown and HTML, with source-linked search, a knowledge graph, MCP, Skills, AI Chat and ChatGPT integration.
 

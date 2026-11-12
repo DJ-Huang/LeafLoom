@@ -145,7 +145,7 @@ class RemoteAttachmentTests(unittest.TestCase):
         self.assertEqual(self.manager.job(str(self.root),job['id'])['state'],'waiting_for_connection')
         self.manager.stop();self.dav.offline=False
         manager=self.manager_for_config();manager.set_credentials(SOURCE,'',SECRET,revision='stable-revision')
-        with patch('vault_rag.remote_attachments.time.time',return_value=time.time()+3):manager.process_pending()
+        with patch('vault_rag.remote_attachments.time.time',return_value=time.time()+10):manager.process_pending()
         done=manager.job(str(self.root),job['id'])
         self.assertEqual(done['state'],'completed',done);self.assertTrue(done['remote_saved'])
         asset=manager.stat(str(self.root),'_attachments/new/asset.bin')
@@ -275,7 +275,7 @@ class RemoteAttachmentTests(unittest.TestCase):
         plan=self.manager.migration_plan(str(self.root),SOURCE)
         self.dav.corrupt=True
         result=self.manager.migrate(str(self.root),plan['id'])
-        self.assertEqual(result['state'],'failed',result);self.assertEqual(source.read_bytes(),b'original-image')
+        self.assertEqual(result['state'],'waiting_for_connection',result);self.assertEqual(source.read_bytes(),b'original-image')
         self.dav.corrupt=False
         plan=self.manager.migration_plan(str(self.root),SOURCE)
         self.dav.after_put=lambda:source.write_bytes(b'edited-during-upload')
@@ -457,10 +457,10 @@ class RemoteAttachmentTests(unittest.TestCase):
         self.assertEqual(failed['state'],'waiting_for_connection');self.assertTrue(failed['confirmed'])
         self.manager.stop();self.dav.offline=False
         manager=self.manager_for_config();manager.set_credentials(SOURCE,'',SECRET,revision='stable-revision')
-        with patch('vault_rag.remote_attachments.time.time',return_value=time.time()+3):manager.process_pending()
+        with patch('vault_rag.remote_attachments.time.time',return_value=time.time()+10):manager.process_pending()
         self.assertEqual(manager.job(str(self.root),plan['id'])['state'],'completed')
-        self.assertTrue(source.exists())
-        self.assertEqual(source.read_bytes(),b'original-image')
+        self.assertFalse(source.exists())
+        self.assertEqual(manager.read_range(str(self.root),'_attachments/photo.png',0,13)[0],b'original-image')
 
     def test_idempotent_queue_and_partial_put_retry_keep_same_logical_asset(self):
         job=self.manager.queue_upload(str(self.root),SOURCE,'_attachments/first.bin',b'complete-body',idempotency_key='operation-1',fingerprint='same-intent')
@@ -470,7 +470,7 @@ class RemoteAttachmentTests(unittest.TestCase):
             self.manager.queue_upload(str(self.root),SOURCE,'_attachments/other.bin',b'different',idempotency_key='operation-1',fingerprint='changed-intent')
         self.dav.interrupt_put=True;self.manager.process_pending()
         self.assertEqual(self.manager.job(str(self.root),job['id'])['state'],'waiting_for_connection')
-        with patch('vault_rag.remote_attachments.time.time',return_value=time.time()+3):self.manager.process_pending()
+        with patch('vault_rag.remote_attachments.time.time',return_value=time.time()+10):self.manager.process_pending()
         done=self.manager.job(str(self.root),job['id'])
         self.assertEqual(done['state'],'completed',done)
         self.assertEqual(len(done['remote_orphans']),1)
@@ -572,15 +572,59 @@ class RemoteAttachmentTests(unittest.TestCase):
         plan=self.manager.migration_plan(str(self.root),SOURCE)
         with patch.object(self.manager,'_finish_release',side_effect=RuntimeError('fixture process stop')):
             failed=self.manager.migrate(str(self.root),plan['id'])
-        self.assertEqual(failed['state'],'failed');self.assertFalse(source.exists())
-        self.assertEqual(self.manager.stat(str(self.root),'_attachments/photo.png')['state'],'migration_pending')
+        self.assertEqual(failed['state'],'failed');self.assertTrue(source.exists())
+        with self.manager._db(str(self.root)) as db:
+            self.assertEqual(db.execute('SELECT state FROM assets WHERE id=?',
+                                       (failed['items'][0]['asset_id'],)).fetchone()[0],'migration_pending')
         recovered=self.manager.migrate(str(self.root),plan['id'])
         self.assertEqual(recovered['state'],'completed',recovered)
         self.assertEqual(self.manager.stat(str(self.root),'_attachments/photo.png')['state'],'ready')
 
+    def test_mapped_migration_resume_does_not_reupload_verified_original(self):
+        self.put('_attachments/photo.png',b'original-image')
+        root=str(self.root);plan=self.manager.migration_plan(root,SOURCE)
+        with patch('vault_rag.attachment_server_references.publish',side_effect=RuntimeError('fixture stop')):
+            failed=self.manager.migrate(root,plan['id'])
+        self.assertEqual(failed['items'][0]['state'],'mapped')
+        self.dav.calls.clear()
+        recovered=self.manager.migrate(root,plan['id'])
+        self.assertEqual(recovered['state'],'completed',recovered)
+        original=failed['items'][0]['remote_path']
+        self.assertFalse(any(method in {'PUT','GET'} and url.endswith('/'+original)
+                             for method,url in self.dav.calls))
+
+    def test_releasing_migration_recovers_missing_cache_without_reupload(self):
+        source=self.put('_attachments/photo.png',b'original-image')
+        root=str(self.root)
+        old=self.manager.update_metadata(root,'_attachments/photo.png',{'tags':['kept']})
+        plan=self.manager.migration_plan(root,SOURCE)
+        with patch.object(self.manager,'_finish_release',side_effect=RuntimeError('fixture stop')):
+            failed=self.manager.migrate(root,plan['id'])
+        self.assertEqual(failed['items'][0]['state'],'releasing')
+        source.unlink();self.dav.calls.clear()
+        recovered=self.manager.migrate(root,plan['id'])
+        self.assertEqual(recovered['state'],'completed',recovered)
+        self.assertFalse(self.dav.calls)
+        self.assertEqual(self.manager.stat(root,'_attachments/photo.png')['state'],'ready')
+        redirected=self.manager.stat(root,asset_id=old['asset_id'])
+        self.assertEqual(redirected['asset_id'],recovered['items'][0]['asset_id'])
+        self.assertEqual(redirected['tags'],['kept'])
+
+    def test_releasing_migration_preserves_new_local_content(self):
+        source=self.put('_attachments/photo.png',b'original-image')
+        root=str(self.root);plan=self.manager.migration_plan(root,SOURCE)
+        with patch.object(self.manager,'_finish_release',side_effect=RuntimeError('fixture stop')):
+            failed=self.manager.migrate(root,plan['id'])
+        self.assertEqual(failed['items'][0]['state'],'releasing')
+        source.write_bytes(b'new-user-content')
+        recovered=self.manager.migrate(root,plan['id'])
+        self.assertEqual(recovered['state'],'conflict',recovered)
+        self.assertEqual(source.read_bytes(),b'new-user-content')
+
     def test_failed_staging_is_removed_and_local_identity_move_is_guarded(self):
         source=self.put('original.png',b'original')
-        with patch('vault_rag.remote_attachments.os.fsync',side_effect=OSError('fixture full disk')):
+        with patch('vault_rag.remote_attachments.os.link',side_effect=OSError('fixture different volume')), \
+             patch('vault_rag.remote_attachments.os.fsync',side_effect=OSError('fixture full disk')):
             with self.assertRaises(OSError):self.manager.queue_upload(str(self.root),SOURCE,'_attachments/new.bin',source)
         self.assertEqual(self.manager.status(str(self.root))['outbox']['used_bytes'],0)
         asset=self.manager.update_metadata(str(self.root),'original.png',{'tags':['retained']})
@@ -631,7 +675,7 @@ class RemoteAttachmentTests(unittest.TestCase):
                 discovered.append(self.manager._upsert(db,SOURCE,{'path':path,'size':len(self.dav.files[path]),'mtime':'Wed, 21 Oct 2026 00:00:00 GMT','etag':'"fixture"'}))
         self.dav.after_put=discover_during_upload
         result=self.manager.migrate(str(self.root),plan['id'])
-        self.assertEqual(result['state'],'completed',result);self.assertTrue(source.exists())
+        self.assertEqual(result['state'],'completed',result);self.assertFalse(source.exists())
         self.assertEqual(result['items'][0]['asset_id'],discovered[0])
         asset=self.manager.stat(str(self.root),'_attachments/photo.png')
         self.assertEqual(asset['asset_id'],discovered[0]);self.assertEqual(asset['state'],'ready')
@@ -956,38 +1000,38 @@ class RemoteAttachmentTests(unittest.TestCase):
         self.assertFalse(any(method=='GET' and not url.endswith('/'+IGNORE_NAME) for method,url in self.dav.calls))
 
     def test_ignore_of_absent_old_asset_preserves_cache_reference_and_receipt(self):
-        self.dav.files[IGNORE_NAME]=(IGNORE_HEADER+'\n!*.md\n').encode()
-        job=self.manager.queue_upload(str(self.root),SOURCE,'_attachments/old.md',b'cached-old-note')
+        self.dav.files[IGNORE_NAME]=(IGNORE_HEADER+'\n!*.bin\n').encode()
+        job=self.manager.queue_upload(str(self.root),SOURCE,'_attachments/old.bin',b'cached-old-note')
         self.manager.process_pending();self.manager.scan(str(self.root),SOURCE)
-        old=self.manager.update_metadata(str(self.root),'_attachments/old.md',{'tags':['kept'],'description':'retained'})
+        old=self.manager.update_metadata(str(self.root),'_attachments/old.bin',{'tags':['kept'],'description':'retained'})
         self.manager.read_range(str(self.root),asset_id=old['asset_id'],start=0,end=5)
         cached=self.manager.materialize(str(self.root),asset_id=old['asset_id'])
         with self.manager._db(str(self.root)) as db:
             counts=tuple(db.execute('SELECT (SELECT COUNT(*) FROM cache),(SELECT COUNT(*) FROM ranges)').fetchone())
-        del self.dav.files[job['remote_path']];self.dav.files[IGNORE_NAME]=(IGNORE_HEADER+'\n*.md\n').encode()
+        del self.dav.files[job['remote_path']];self.dav.files[IGNORE_NAME]=(IGNORE_HEADER+'\n*.bin\n').encode()
         call_count=len(self.dav.calls);result=self.manager.scan(str(self.root),SOURCE)
         self.assertTrue(result['ok']);self.assertEqual(result['missing'],0)
-        after=self.manager.stat(str(self.root),'_attachments/old.md')
+        after=self.manager.stat(str(self.root),'_attachments/old.bin')
         self.assertEqual((after['asset_id'],after['state'],after['tags'],after['content_generation']),
                          (old['asset_id'],'excluded',['kept'],old['content_generation']))
         self.assertEqual(after['sha256'],old['sha256']);self.assertTrue(cached.exists())
         self.assertFalse(any(method=='HEAD' and url.endswith('/'+job['remote_path']) for method,url in self.dav.calls[call_count:]))
-        self.assertEqual(self.manager.read_range(str(self.root),'_attachments/old.md',0,14)[0],b'cached-old-note')
+        self.assertEqual(self.manager.read_range(str(self.root),'_attachments/old.bin',0,14)[0],b'cached-old-note')
         self.assertEqual(self.manager.job(str(self.root),job['id'])['state'],'completed')
         with self.manager._db(str(self.root)) as db:
             self.assertEqual(tuple(db.execute('SELECT (SELECT COUNT(*) FROM cache),(SELECT COUNT(*) FROM ranges)').fetchone()),counts)
-        self.dav.files[job['remote_path']]=b'cached-old-note';self.dav.files[IGNORE_NAME]=(IGNORE_HEADER+'\n!*.md\n').encode()
+        self.dav.files[job['remote_path']]=b'cached-old-note';self.dav.files[IGNORE_NAME]=(IGNORE_HEADER+'\n!*.bin\n').encode()
         self.assertTrue(self.manager.scan(str(self.root),SOURCE)['ok'])
-        restored=self.manager.stat(str(self.root),'_attachments/old.md')
+        restored=self.manager.stat(str(self.root),'_attachments/old.bin')
         self.assertEqual((restored['asset_id'],restored['state'],restored['tags']), (old['asset_id'],'ready',['kept']))
         self.assertEqual(restored['content_generation'],old['content_generation']);self.assertTrue(cached.exists())
 
     def test_ignore_errors_and_midscan_changes_do_not_partially_hide_existing_assets(self):
-        self.dav.files.update({IGNORE_NAME:(IGNORE_HEADER+'\n!*.md\n').encode(),'old.md':b'old'})
+        self.dav.files.update({IGNORE_NAME:(IGNORE_HEADER+'\n!*.bin\n').encode(),'old.bin':b'old'})
         self.manager.scan(str(self.root),SOURCE)
-        path='_attachments/_remote/'+SOURCE+'/old.md';before=self.manager.stat(str(self.root),path)
+        path='_attachments/_remote/'+SOURCE+'/old.bin';before=self.manager.stat(str(self.root),path)
         cached=self.manager.materialize(str(self.root),path)
-        self.dav.files[IGNORE_NAME]=(IGNORE_HEADER+'\n*.md\n').encode()
+        self.dav.files[IGNORE_NAME]=(IGNORE_HEADER+'\n*.bin\n').encode()
         cases=[(b'not-a-control-file','application/octet-stream',200),
                (b'\xff','application/octet-stream',200),
                ((IGNORE_HEADER+'\n\x00').encode(),'application/octet-stream',200),
@@ -1064,6 +1108,7 @@ class RemoteAttachmentTests(unittest.TestCase):
         self.assertEqual(after['asset_id'],canonical);self.assertEqual(after['tags'],['preserved'])
         self.assertEqual(after['description'],'same asset')
         self.assertEqual(self.manager.read_range(str(self.root),asset_id=old_id,start=0,end=8)[0],original)
+        source.parent.mkdir(parents=True,exist_ok=True)
         source.write_bytes(b'new-local-file')
         replacement=self.manager.stat(str(self.root),'_attachments/photo.png')
         self.assertEqual(replacement['source'],'local');self.assertNotIn(replacement['asset_id'],{old_id,canonical})

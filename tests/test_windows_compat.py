@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contextlib import contextmanager
 import io
 import json
 import os
@@ -66,7 +67,17 @@ class WindowsCompatibilityTests(unittest.TestCase):
         outside=self.directory/'outside';outside.mkdir()
         fake=self.root/'escape';fake.mkdir()
         def link(path):return path==fake
-        with patch('vault_rag.local_state.is_link',side_effect=link):
+        scan=os.scandir
+        @contextmanager
+        def scan_with_junction(path):
+            with scan(path) as entries:
+                yield [SimpleNamespace(name=entry.name, stat=lambda **kwargs: SimpleNamespace(
+                    st_mode=0, st_reparse_tag=0xA0000003)) if entry.name=='escape' else entry
+                    for entry in entries]
+        # Tree listing checks the entry metadata directly, while path access
+        # and walking use is_link. Model the same junction at both boundaries.
+        with patch('vault_rag.local_state.is_link',side_effect=link), \
+                patch('vault_rag.local_state.os.scandir',side_effect=scan_with_junction):
             with self.assertRaises(ValueError):self.config.path_for('escape/private.md')
             self.assertNotIn('escape',[x['name'] for x in Files(self.config).tree()])
             self.assertFalse(list(Files(self.config).walk()))

@@ -61,6 +61,9 @@ def pull(remote, root, source_id, provider):
             return 0
         raise
     records = provider.scan(directory, max_files=10000, max_depth=1, prune_reserved=False, read_ignore=False)
+    # Membership records live in a child namespace and are not references.
+    records = [item for item in records
+               if '/' not in item['path'].removeprefix(directory + '/')]
     digests = [item['path'].rsplit('/', 1)[-1][:-5] for item in records]
     with remote.lock, remote._db(root) as db:
         cached = {}

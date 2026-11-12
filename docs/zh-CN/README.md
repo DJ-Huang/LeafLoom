@@ -10,7 +10,7 @@
 
 **[帮助中心](https://dj-huang.github.io/LeafLoom/docs/zh-CN/)** · 搜索笔记、附件、设计工作台、AI 接入与恢复指南。
 
-**[0.1.8 更新：设计工作台与 Markdown 目录](RELEASE_NOTES_0.1.8.md)**
+**[0.1.9 更新：日历、统一技能与更快的附件体验](RELEASE_NOTES_0.1.9.md)**
 
 让零散笔记、项目文档和收藏网页，成为查得到、连得起、用得上的知识。**LeafLoom 是开源、本地优先的知识库管理工具与个人 Wiki**，支持 Markdown 与 HTML，集成来源可追溯的检索、知识图谱、MCP、Skill、AI Chat 和 ChatGPT 连接。
 
