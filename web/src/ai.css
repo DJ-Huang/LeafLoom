@@ -29,7 +29,7 @@
 .ai-composer-actions { display:flex; justify-content:space-between; align-items:center; margin-top:8px; gap:8px; font-size:11px; }
 .ai-composer-actions label { display:flex; align-items:center; gap:4px; }.ai-composer-actions button { display:flex; align-items:center; gap:6px; }
 .ai-retry { font-size:11px; padding:8px 0; }.ai-retry button { padding:4px; margin-left:4px; font-size:11px; }
-.ai-selection-menu { position:fixed; z-index:100; border:1px solid var(--line); padding:4px; border-radius:6px; background:var(--paper); box-shadow:var(--shadow); }.ai-selection-menu button { border:0; }
+.ai-selection-menu { position:fixed; z-index:100; display:flex; flex-direction:column; min-width:168px; border:1px solid var(--line); padding:4px; border-radius:6px; background:var(--paper); box-shadow:var(--shadow); }.ai-selection-menu button { display:flex; align-items:center; gap:8px; width:100%; border:0; background:none; text-align:left; padding:8px 10px; }
 .ai-draft-banner { display:flex; align-items:center; gap:8px; padding:8px 16px; background:#fff8e5; border-bottom:1px solid var(--line); font-size:12px; }.ai-draft-banner span { flex:1; }.ai-draft-banner button { padding:4px 8px; }
 .ai-open-button { margin-left:auto; display:flex; align-items:center; gap:6px; }
 .app:has(.ai-panel:not([hidden])) .related-panel { display:none; }

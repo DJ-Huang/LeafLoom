@@ -91,16 +91,18 @@ class AttachmentGroupTests(unittest.TestCase):
         self.assertTrue(any(path.endswith('B.unitypackage') for path in paths))
         self.assertFalse(any('skip.bin' in path for path in paths))
 
-    def test_ungrouped_listing_builds_enrichment_when_presentation_attached(self):
-        # Default attachment hub uses group_id='' with presentation attached;
-        # presentation.cte() joins attachment_enrichment and must not 500.
+    def test_ungrouped_listing_does_not_load_the_asset_library(self):
+        # The default hub is group_id='' with presentation attached. That grid
+        # must read the saved catalog even when the asset library database is locked.
         self.dav.files['Artwork/cat.png']=b'cat'
         self.scan();self.initialize()
         manager=self.manager();presentation=AttachmentPresentation(manager,self.library)
         files=self.remote._files();catalog=AttachmentCatalog(files.attachments,self.remote);catalog.presentation=presentation
-        page=catalog.listing(limit=50)
+        with patch.object(presentation,'metadata',side_effect=AssertionError('ungrouped list must not load the asset library')):
+            page=catalog.listing(limit=50)
         self.assertGreaterEqual(page['total'],1)
         self.assertTrue(any(item['name']=='cat.png' for item in page['items']))
+        self.assertNotIn('warning',page)
 
     def test_catalog_inherits_source_metadata_searches_groups_and_keeps_personal(self):
         self.dav.files['Packages/Fictional.unitypackage']=b'original'

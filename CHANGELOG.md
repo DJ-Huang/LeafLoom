@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+- Attachment lists follow the source filter when a catalog is missing or locked. **Local** reads the local index and ignores the server catalog. **All** draws the local catalog first, then the saved server catalog. If that read fails or times out, the local files stay on screen with a note instead of a full-page retry. **Server** reads only the saved catalog and does not scan the NAS for the list. A locked catalog explains itself instead of failing the whole page. The list trusts the local index instead of checking every file on disk; a file removed outside the app stays until that index updates.
+
+- Show note image right-click actions in one vertical menu (copy, comment, and the other selection actions) instead of two overlapping bars.
+
 - Copy images from notes to the system clipboard: right-click **Copy image**, or select an image and press `Ctrl/⌘+C` (also available when opening an image file). Reuses the desktop PNG clipboard path so pastes work in other apps and notes.
 
 - Fix attachment hub “all files” listing crashing with `Internal Server Error` / invalid JSON after the directory-group speed-up (enrichment table was skipped when no group was selected).

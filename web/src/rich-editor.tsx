@@ -4,10 +4,10 @@ import DragHandle from '@tiptap/extension-drag-handle';
 import {NodeSelection,TextSelection} from '@tiptap/pm/state';
 import type {Node as PMNode} from '@tiptap/pm/model';
 import {createRoot} from 'react-dom/client';
-import {ClipboardCopy,GripVertical,Plus} from 'lucide-react';
+import {GripVertical,Plus} from 'lucide-react';
 import {api,OpenNote} from './api';
 import {t,useLocale} from './i18n';
-import {ActionMenu,FormDialog} from './ui';
+import {FormDialog} from './ui';
 import {DocumentState,documentHistory,travelDocument} from './document-state';
 import type {EditMeta,TextSelection as SourceSelection} from './edit-history';
 import {insertCommands,InsertId,safeLink} from './editor-catalog';
@@ -28,7 +28,6 @@ type Props={initial:string,path:string,root:string,session:DocumentState,active:
 type ManualMenu={kind:'insert'|'block',anchor:AnchorRect,target:BlockTarget,query:string};
 type LinkState={id:string,label:string,target:string,wiki:boolean,anchor:AnchorRect};
 type DialogState={id:string,kind:'link'|'wiki'|'math'|'mermaid'|'query'|'inlineMath',label:string,value:string};
-type ImageMenu={source:NoteImageSource,anchor:HTMLElement,point:{x:number,y:number}};
 const recentKey='leafloom-editor-recent';
 function recentCommands():InsertId[]{try{return JSON.parse(localStorage.getItem(recentKey)||'[]').filter((id:InsertId)=>insertCommands.some(command=>command.id===id)).slice(0,6);}catch{return [];}}
 function commandRows(query:string):CommandRow[]{
@@ -68,7 +67,6 @@ export function RichEditor(props:Props){
  const [manual,setManual]=useState<ManualMenu>(),[link,setLink]=useState<LinkState>(),[dialog,setDialog]=useState<DialogState>();
  const [selected,setSelected]=useState(0),[dismissed,setDismissed]=useState(''),[wikiRows,setWikiRows]=useState<{path:string,title?:string}[]>([]),[wikiStatus,setWikiStatus]=useState('');
  const [status,setStatus]=useState<{message:string,error?:boolean}>();
- const [imageMenu,setImageMenu]=useState<ImageMenu>();
  const composing=useRef(false),compositionId=useRef(''),syncing=useRef(false),resyncing=useRef(false),refocus=useRef(false),sourceSelection=useRef<SourceSelection>({from:0,to:0});
  const pending=useRef(new Map<string,{controller:AbortController,input?:HTMLInputElement}>()),hover=useRef<BlockTarget|null>(null),handlers=useRef<any>({});
  const imageCopy=useRef(new ImageCopyRequest());
@@ -242,14 +240,14 @@ export function RichEditor(props:Props){
       contextmenu(view,event){
        const image=(event.target as HTMLElement).closest('img');
        if(!image||!view.dom.contains(image))return false;
-       let target=image.dataset.vaultSrc||'';
-       view.state.doc.descendants((node,pos)=>{
-        if(node.type.name==='vaultImage'&&view.nodeDOM(pos)===image){target=node.attrs.src;return false;}
+       let pos:number|undefined;
+       view.state.doc.descendants((node,at)=>{
+        if(node.type.name==='vaultImage'&&view.nodeDOM(at)===image){pos=at;return false;}
        });
-       if(!target&&!image.currentSrc)return false;
+       (event as MouseEvent & {leafloomImage?:{target:string,url:string}}).leafloomImage={target:image.dataset.vaultSrc||'',url:image.currentSrc||image.src};
+       if(pos!==undefined)view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc,pos)));
        event.preventDefault();
-       setImageMenu({source:{target,url:image.currentSrc||image.src,notePath:callbacks.current.path,root:callbacks.current.root},anchor:image,point:{x:event.clientX,y:event.clientY}});
-       return true;
+       return false;
       },
      }
     },
@@ -316,7 +314,7 @@ export function RichEditor(props:Props){
  },[props.initial,props.session.externalEpoch,editor]);
  useEffect(()=>{
   const current=editorRef.current;if(!current)return;
-  if(!props.active){cancelPending();imageCopy.current.cancel();setManual(undefined);setLink(undefined);setDialog(undefined);setImageMenu(undefined);}
+  if(!props.active){cancelPending();imageCopy.current.cancel();setManual(undefined);setLink(undefined);setDialog(undefined);}
   current.setEditable(props.active&&!resyncing.current,false);refresh();
  },[props.active,editor]);
  useEffect(()=>{if(editor&&!editor.isDestroyed)editor.view.dispatch(editor.state.tr.setMeta('leafloomAnnotationRefresh',true));},[editor,props.annotations,props.initial]);
@@ -351,7 +349,6 @@ export function RichEditor(props:Props){
   {editor&&tableAnchor&&<TableBar editor={editor} anchor={tableAnchor} onAction={refresh}/>}
   {editor&&props.active&&link&&<LinkPopover anchor={link.anchor} label={link.label} target={link.target} onClose={closePanels} onOpen={()=>{if(safeLink(link.target))window.open(link.target,'_blank','noopener,noreferrer');else props.onOpen(link.target);closePanels();}} onEdit={()=>{const range=trackedRichRange(editor,link.id);if(range)showLinkDialog(range,link.label,link.target,link.wiki?'wiki':'link',link.id);}} onRemove={()=>{const range=trackedRichRange(editor,link.id);if(range){if(link.wiki)editor.commands.insertContentAt(range,{type:'text',text:link.label});else editor.chain().focus().setTextSelection(range).unsetLink().run();}closePanels();}}/>}
   {status&&<div className={'editor-upload-status'+(status.error?' error':'')} role="status"><span>{status.message}</span><button type="button" aria-label={t('关闭')} onClick={()=>setStatus(undefined)}>×</button></div>}
-  {imageMenu&&<ActionMenu title={t('design.copySourceImage')} anchor={imageMenu.anchor} point={imageMenu.point} onClose={()=>setImageMenu(undefined)}><button type="button" onClick={event=>{event.stopPropagation();const source=imageMenu.source;setImageMenu(undefined);runImageCopy(source);}}><ClipboardCopy size={14}/>{t('design.copySourceImage')}</button></ActionMenu>}
   {dialog&&<FormDialog title={t(dialog.kind==='link'?'网页链接':dialog.kind==='wiki'?'笔记链接':dialog.kind==='mermaid'?'Mermaid 图表':dialog.kind==='query'?'查询':'公式')} fields={dialog.kind==='link'||dialog.kind==='wiki'?[{name:'target',label:t(dialog.kind==='wiki'?'笔记路径':'链接地址'),value:dialog.value,required:true},{name:'label',label:t('显示文字'),value:dialog.label}]:[{name:'content',label:t(dialog.kind==='mermaid'?'图表内容':dialog.kind==='query'?'查询内容':'公式内容'),value:dialog.value,multiline:true,required:true}]} onClose={closeDialog} submitLabel={t('保存')} onSubmit={async values=>{
    const current=editorRef.current,range=current&&trackedRichRange(current,dialog.id);if(!current||!range||!props.active)throw new Error(t('插入位置已改变，请重新操作'));
    if(dialog.kind==='link'){

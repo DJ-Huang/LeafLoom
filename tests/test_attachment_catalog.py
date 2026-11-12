@@ -38,7 +38,8 @@ class Manifest:
     def initialize(self):
         path = self.manifest_path(str(self.files.config.root))
         path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(path) as db:
+        db = sqlite3.connect(path)
+        try:
             db.executescript('''
                 CREATE TABLE assets(id TEXT PRIMARY KEY,source_id TEXT,path TEXT,name TEXT,size INTEGER,
                     mtime_ns INTEGER,mime TEXT,mtime TEXT,etag TEXT,state TEXT,description TEXT,tags TEXT,
@@ -54,11 +55,18 @@ class Manifest:
                 for action in ('INSERT', 'UPDATE', 'DELETE'):
                     db.execute(f'CREATE TRIGGER gen_{table}_{action} AFTER {action} ON {table} '
                                'BEGIN UPDATE catalog_state SET generation=generation+1; END')
+            db.commit()
+        finally:
+            db.close()
 
     @contextmanager
     def db(self):
-        with sqlite3.connect(self.manifest_path(str(self.files.config.root))) as db:
-            yield db
+        connection = sqlite3.connect(self.manifest_path(str(self.files.config.root)))
+        try:
+            yield connection
+            connection.commit()
+        finally:
+            connection.close()
 
     def add(self, path, *, source=SOURCE_A, alias=None, size=10, mtime=123000000000,
             tags=(), category='', description='', state='ready', mime='image/png'):
@@ -199,6 +207,13 @@ class AttachmentCatalogTests(unittest.TestCase):
         cursor = self.catalog.listing(limit=1)['cursor']
         with self.remote.db() as db:
             db.execute("UPDATE assets SET state='missing' WHERE id=?", (missing,))
+        with self.assertRaises(ConflictError):
+            self.catalog.listing(cursor=cursor)
+        # The deleted file stays until the local index updates. Marking the
+        # remote missing must not be what removes it, and must not list it.
+        self.assertIn('old.png', {item['path'] for item in self.catalog.listing()['items']})
+        self.assertNotIn(missing, {item.get('asset_id') for item in self.catalog.listing()['items']})
+        self.local.apply(['old.png'])
         result = self.catalog.listing()
         self.assertEqual({item['path'] for item in result['items']}, {'keep.png', 'active.png'})
         self.assertEqual(result['total'], 2)
@@ -220,6 +235,8 @@ class AttachmentCatalogTests(unittest.TestCase):
         excluded = self.remote.add('Incoming/old.png', alias='old.png', size=9,
                                    tags=['kept-tag'], description='Kept for old references', state='excluded')
         self.remote.add('Incoming/active.png', alias='active.png', size=11)
+        self.assertIn('old.png', {item['path'] for item in self.catalog.listing()['items']})
+        self.local.apply(['old.png'])
         result = self.catalog.listing()
         self.assertEqual({item['path'] for item in result['items']}, {'keep.png', 'active.png'})
         self.assertEqual(result['total'], 2)
@@ -325,6 +342,60 @@ class AttachmentCatalogTests(unittest.TestCase):
             self.catalog.listing(tags='hero')
         with self.assertRaises(ConflictError):
             self.catalog.listing(cursor='ac1.invalid')
+
+    def test_local_source_ignores_a_locked_server_catalog(self):
+        self.put('Notes/a.png')
+        self.put('Other/b.png')
+        self.prepare()
+        self.remote.add('incoming/remote.png', alias='remote.png')
+
+        class DirectoryGroup:
+            def resolve_group(self, root, group_id):
+                return [], '', {'rules': {'directories': ['Notes']}, 'included': [], 'excluded': []}
+
+        self.catalog.presentation = DirectoryGroup()
+        with patch.object(AttachmentCatalog, '_attach', side_effect=sqlite3.OperationalError('database is locked')):
+            local = self.catalog.listing(source='local', group_id='notes')
+            combined = self.catalog.listing(source='all')
+            remote = self.catalog.listing(source='remote')
+        self.assertEqual([item['path'] for item in local['items']], ['Notes/a.png'])
+        self.assertNotIn('warning', local)
+        self.assertEqual(sorted(item['path'] for item in combined['items']), ['Notes/a.png', 'Other/b.png'])
+        self.assertEqual(combined['warning'], 'cache_unavailable')
+        self.assertIn('database is locked', combined['warning_detail'])
+        self.assertEqual(remote['items'], [])
+        self.assertEqual(remote['warning'], 'cache_unavailable')
+
+    def test_local_source_does_not_scan_before_the_index_exists(self):
+        self.put('local.png')
+        with patch.object(self.local, 'refresh', side_effect=AssertionError('vault walk')):
+            page = self.catalog.listing(source='local')
+        self.assertEqual(page['items'], [])
+        self.assertEqual(page['warning'], 'local_catalog_missing')
+        self.assertIsNone(AttachmentCatalog._local_group_clause(
+            {'rules': {'tags': ['forest']}, 'included': [], 'excluded': []}))
+
+    def test_listing_trusts_the_index_when_stat_is_forbidden(self):
+        self.put('local.png', 3)
+        self.prepare()
+        self.remote.add('remote.png', size=4)
+        real = Path.is_file
+        vault = self.root
+
+        def guarded(path):
+            if Path(path).is_relative_to(vault):
+                raise AssertionError('listing stated ' + str(path))
+            return real(path)
+
+        with patch.object(Path, 'is_file', guarded):
+            page = self.catalog.listing()
+            tagged = self.catalog.listing(tags=['none'])
+        self.assertEqual(page['total'], 2)
+        self.assertEqual({item['path'] for item in page['items']}, {
+            'local.png', '_attachments/_remote/' + SOURCE_A + '/remote.png'})
+        self.assertEqual({item['source'] for item in page['items']}, {'local', 'remote'})
+        self.assertNotIn('warning', page)
+        self.assertEqual(tagged['total'], 0)
 
 
 if __name__ == '__main__':

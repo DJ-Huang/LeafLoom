@@ -454,8 +454,18 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         status=await asyncio.to_thread(index_jobs.status,root)
         if not status['usable']:
             return json_response({'error':'Initialize the attachment index first','initialization_required':True},409)
-        result=await asyncio.to_thread(runtime.files.attachments.listing,query,after,limit,kind=kind,sort=sort,order=order,cursor=cursor,
-            source=source,storage_id=storage_id,tags=[tag.strip() for tag in tags.split(',') if tag.strip()],category=category,group_id=group_id)
+        try:
+            result=await asyncio.to_thread(runtime.files.attachments.listing,query,after,limit,kind=kind,sort=sort,order=order,cursor=cursor,
+                source=source,storage_id=storage_id,tags=[tag.strip() for tag in tags.split(',') if tag.strip()],category=category,group_id=group_id)
+        except ConflictError as exc:
+            return json_response({'error':str(exc),'conflict':True},409)
+        except FileNotFoundError as exc:
+            return json_response({'error':str(exc)},404)
+        except ValueError as exc:
+            return json_response({'error':str(exc)},400)
+        except Exception as exc:
+            logging.exception('Attachment list failed')
+            return json_response({'error':str(exc) or 'Attachment list failed'},500)
         if root:migrations._guard(root)
         return result
     @app.get('/api/tree')

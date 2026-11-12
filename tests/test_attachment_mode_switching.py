@@ -154,13 +154,45 @@ class ModeSwitchingTests(unittest.TestCase):
         self.assertEqual(peer.attachments.listing()['total'],2)
         self.assertEqual((second/'notes/page.md').read_bytes(),note.read_bytes())
 
-    def test_external_local_presence_change_invalidates_a_sorted_cursor(self):
+    def test_external_delete_keeps_the_cursor_until_the_index_updates(self):
         self.put('local.png',b'local');self.remote_file()
         files,catalog,jobs=self.context();files.attachments.refresh()
         cursor=catalog.listing(limit=1)['cursor'];self.assertTrue(cursor)
         (self.root/'local.png').unlink()
+        page=catalog.listing(limit=1,cursor=cursor)
+        self.assertTrue(page['items'])
+        self.assertIn('local.png',{item['path'] for item in catalog.listing()['items']})
+        files.attachments.apply(['local.png'])
         from vault_rag.local_state import ConflictError
         with self.assertRaises(ConflictError):catalog.listing(limit=1,cursor=cursor)
+
+    def test_listing_returns_saved_rows_when_stat_is_forbidden(self):
+        self.put('local.png',b'local');self.remote_file()
+        files,catalog,_=self.context();files.attachments.refresh()
+        real=Path.is_file
+        def guarded(path):
+            if Path(path).is_relative_to(self.root):
+                raise AssertionError('listing stated '+str(path))
+            return real(path)
+        with patch.object(Path,'is_file',guarded):
+            page=catalog.listing()
+        self.assertEqual(page['total'],2)
+        self.assertEqual({item['source'] for item in page['items']},{'local','remote'})
+        self.assertNotIn('warning',page)
+
+    def test_all_listing_reads_the_saved_catalog_while_the_writer_lock_is_held(self):
+        self.put('local.png',b'local');self.remote_file()
+        files,catalog,_=self.context();files.attachments.refresh()
+        held=self.manager.lock.acquire(blocking=False)
+        self.assertTrue(held)
+        try:
+            with patch.object(self.manager,'manifest_path',side_effect=AssertionError('listing opened the manifest writer')):
+                page=catalog.listing()
+            self.assertEqual(page['total'],2)
+            self.assertEqual({item['source'] for item in page['items']},{'local','remote'})
+            self.assertNotIn('warning',page)
+        finally:
+            self.manager.lock.release()
 
     def test_local_source_listing_skips_remote_lock(self):
         self.put('local.png',b'local');self.remote_file()

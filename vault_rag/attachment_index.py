@@ -205,9 +205,10 @@ class AttachmentIndex:
             # Re-encode literal %, # and | to avoid a second interpretation.
             return files.resolve(quote(target, safe='/'), source, paths=paths)
 
-    def listing(self, query='', after='', limit=100, *, kind='all', sort='path', order='asc', cursor=''):
+    def listing(self, query='', after='', limit=100, *, kind='all', sort='path', order='asc', cursor='', predicate='', predicate_args=None):
         limit = max(1, min(int(limit), 500))
-        if len(query)>500 or len(after)>4096 or len(cursor)>8192:
+        predicate_args = [] if predicate_args is None else list(predicate_args)
+        if len(query)>500 or len(after)>4096 or len(cursor)>8192 or (predicate and not isinstance(predicate, str)):
             raise ValueError('Attachment query is too long')
         fields={'path':'path','name':'name_key','modified':'mtime_ns','size':'size'}
         if kind not in {'all','image','pdf','audio','video','other'} or sort not in fields or order not in {'asc','desc'}:
@@ -221,11 +222,18 @@ class AttachmentIndex:
             with closing(self._connect(files)) as db:
                 extensions=extensions_for(files);register_policy(db,extensions)
                 scanned=db.execute('SELECT scanned_at FROM state WHERE root=?',(str(root),)).fetchone()
-                scope=hashlib.sha256(json.dumps([str(root),query,kind,sort,order,scanned,self.generation,extensions],ensure_ascii=False).encode()).hexdigest()[:24]
+                scope_key=[str(root),query,kind,sort,order,scanned,self.generation,extensions]
+                if predicate:
+                    scope_key.extend([predicate,*predicate_args])
+                scope=hashlib.sha256(json.dumps(scope_key,ensure_ascii=False).encode()).hexdigest()[:24]
                 where="attachment_allowed(path)=1 AND path LIKE ? ESCAPE '\\'";args=[pattern]
+                if predicate:
+                    where+=' AND ('+predicate+')'
+                    args.extend(predicate_args)
                 if kind!='all':where+=' AND ('+category+')=?';args.append(kind)
                 total=db.execute('SELECT count(*) FROM assets WHERE '+where,args).fetchone()[0]
-                stats=db.execute('SELECT '+category+',count(*),coalesce(sum(size),0) FROM assets WHERE attachment_allowed(path)=1 GROUP BY 1').fetchall()
+                stats_where='attachment_allowed(path)=1'+(' AND ('+predicate+')' if predicate else '')
+                stats=db.execute('SELECT '+category+',count(*),coalesce(sum(size),0) FROM assets WHERE '+stats_where+' GROUP BY 1',predicate_args if predicate else []).fetchall()
                 summary={'files':sum(r[1] for r in stats),'bytes':sum(r[2] for r in stats),'kinds':{r[0]:r[1] for r in stats}}
                 field=fields[sort];direction='ASC' if order=='asc' else 'DESC';sign='>' if order=='asc' else '<'
                 if cursor:
