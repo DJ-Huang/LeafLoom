@@ -58,7 +58,7 @@ def validate_source(source):
     if isinstance(source,dict) and (source.get('type')=='smb' or str(source.get('base_url','')).startswith(('smb://','\\\\'))):
         from vault_rag.remote_smb import validate_smb_source
         return validate_smb_source(source)
-    allowed = {'id','name','type','base_url','remote_root','username','enabled','upload_directory','metadata_directory','secret_ref','allow_private_http','connection_hint','revision','scan_roots','scan_paused'}
+    allowed = {'id','name','type','base_url','remote_root','username','enabled','upload_directory','metadata_directory','secret_ref','allow_private_http','connection_hint','revision','scan_roots','scan_paused','membership_mode'}
     if not isinstance(source, dict) or set(source) - allowed:
         raise ValueError('Unsupported attachment source setting')
     result = dict(source)
@@ -89,6 +89,8 @@ def validate_source(source):
     result['scan_roots']=normalize_scan_roots(result.get('scan_roots',['']))
     result['scan_paused']=result.get('scan_paused',False)
     if type(result['scan_paused'])is not bool:raise ValueError('Invalid automatic scan setting')
+    result['membership_mode']=result.get('membership_mode','discover')
+    if result['membership_mode'] not in {'discover','app_only'}:raise ValueError('Invalid attachment membership mode')
     if type(result['enabled'])is not bool:raise ValueError('Invalid source enabled setting')
     writable=result['upload_directory']
     result['metadata_directory']=remote_path(result.get('metadata_directory','/'.join(p for p in (writable,'LeafLoomCatalog/v1') if p)),allow_empty=False)
@@ -119,6 +121,10 @@ class WebDAVSource:
     def fork(self):
         return type(self)(self.source,self.credentials,transport=self.transport,guard=self.guard,on_error=self.on_error)
 
+    # Large PUT/GET over slow remote links (e.g. Tailscale DERP) need room to
+    # write and read; the default 30s timeout aborts mid-transfer.
+    TRANSFER_TIMEOUT=httpx.Timeout(300.0,connect=15.0,write=300.0,read=300.0)
+
     def _client(self,*,keepalive=True):
         options={} if keepalive else {'limits':httpx.Limits(max_keepalive_connections=0)}
         return httpx.Client(auth=httpx.BasicAuth(*self.credentials) if self.credentials else None,
@@ -146,7 +152,7 @@ class WebDAVSource:
         if response.status_code in {404,410} and response.status_code not in allowed:raise RemoteStorageError('remote_not_found')
         if response.status_code not in allowed:raise RemoteStorageError('unexpected_http_status')
 
-    def _request(self, method, path, *, headers=None, content=None, allowed=(200,), limit=2*1024*1024, retry_timeouts=0):
+    def _request(self, method, path, *, headers=None, content=None, allowed=(200,), limit=2*1024*1024, retry_timeouts=0, timeout=None):
         for attempt in range(retry_timeouts+1):
             self.guard()
             try:
@@ -157,7 +163,8 @@ class WebDAVSource:
                     # ambient authentication on a later metadata request.
                     client.cookies.clear()
                     try:
-                        with client.stream(method,target,headers=headers,content=content) as response:
+                        request_timeout={'timeout':timeout} if timeout is not None else {}
+                        with client.stream(method,target,headers=headers,content=content,**request_timeout) as response:
                             self._status(response, allowed)
                             data = bytearray()
                             for chunk in response.iter_bytes():
@@ -436,8 +443,9 @@ class WebDAVSource:
             if created:destination.unlink(missing_ok=True)
             raise
 
-    def upload(self,path,local_path,*,expected_sha256):
+    def upload(self,path,local_path,*,expected_sha256,progress=None,on_phase=None,verify_progress=None):
         path=remote_path(path,allow_empty=False)
+        if on_phase is not None:on_phase('probing')
         status,_,_=self._request('HEAD',path,allowed=(404,),limit=0)
         source=Path(local_path)
         try:
@@ -446,25 +454,37 @@ class WebDAVSource:
                 info=os.fstat(stream.fileno());size=info.st_size
                 import stat
                 if not stat.S_ISREG(info.st_mode):raise ValueError('Upload source must be a regular file')
+                # Report against actual request-body reads so slow links update
+                # bytes/speed while httpx drains the stream, not only after PUT.
+                sent=0;first=True
+                if on_phase is not None:on_phase('uploading')
+                if progress is not None:progress(0,size)
                 def chunks():
+                    nonlocal sent,first
                     remaining=size
                     while remaining:
-                        self.guard();chunk=stream.read(min(1024*1024,remaining))
+                        self.guard()
+                        chunk=stream.read(min(64*1024 if first else 256*1024,remaining));first=False
                         if not chunk:raise RemoteStorageError('upload_source_changed')
-                        remaining-=len(chunk);yield chunk
-                self._request('PUT',path,headers={'If-None-Match':'*','Content-Type':'application/octet-stream','Content-Length':str(size)},content=chunks(),allowed=(201,204),limit=65536)
+                        remaining-=len(chunk);sent+=len(chunk)
+                        if progress is not None:progress(sent,size)
+                        yield chunk
+                self._request('PUT',path,headers={'If-None-Match':'*','Content-Type':'application/octet-stream','Content-Length':str(size)},
+                              content=chunks(),allowed=(201,204),limit=65536,timeout=self.TRANSFER_TIMEOUT)
         except httpx.HTTPError:self._failed('connection_unavailable','unreachable')
         # Read back and hash in memory-sized chunks; a multi-GB upload must not
         # require a second multi-GB verification copy on the local disk.
-        return self.checksum(path,expected_size=size,expected_sha256=expected_sha256)
+        if on_phase is not None:on_phase('verifying')
+        return self.checksum(path,expected_size=size,expected_sha256=expected_sha256,progress=verify_progress)
 
-    def checksum(self,path,*,expected_size=None,expected_sha256=''):
+    def checksum(self,path,*,expected_size=None,expected_sha256='',progress=None):
         meta=self.stat(path)
         if expected_size is not None and meta['size']!=expected_size:raise RemoteStorageError('remote_version_changed')
         headers={'If-Match':meta['etag']} if meta['etag'] else {}
         digest=hashlib.sha256();total=0
+        if progress is not None:progress(0,meta['size'])
         try:
-            with self._client() as client,client.stream('GET',self.url(path),headers=headers) as response:
+            with self._client() as client,client.stream('GET',self.url(path),headers=headers,timeout=self.TRANSFER_TIMEOUT) as response:
                 self._status(response)
                 if response.headers.get('content-length')!=str(meta['size']):raise RemoteStorageError('invalid_content_length')
                 if 'text/html' in response.headers.get('content-type','').lower() and Path(path).suffix.lower() not in {'.html','.htm'}:
@@ -474,6 +494,7 @@ class WebDAVSource:
                     self.guard();total+=len(chunk)
                     if total>meta['size']:raise RemoteStorageError('invalid_content_length')
                     digest.update(chunk)
+                    if progress is not None:progress(total,meta['size'])
             if total!=meta['size']:raise RemoteStorageError('incomplete_download')
             after=self.stat(path)
             if (after['size'],after['etag'],after['mtime'])!=(meta['size'],meta['etag'],meta['mtime']):raise RemoteStorageError('remote_version_changed')

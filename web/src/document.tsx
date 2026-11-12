@@ -1,7 +1,7 @@
 import {Diagnostic} from './i18n';
 import {t,useLocale} from './i18n';
 import React,{lazy,memo,Suspense,useCallback,useEffect,useId,useMemo,useRef,useState,useSyncExternalStore} from 'react';
-import {BookOpen,Download,FileText,Code,Eye,Search,History,PanelRight,MessageCircle,Link2,MoreHorizontal,Maximize2,Minimize2,Undo2,Redo2} from 'lucide-react';
+import {BookOpen,ClipboardCopy,Download,FileText,Code,Eye,Search,History,PanelRight,MessageCircle,Link2,MoreHorizontal,Maximize2,Minimize2,Undo2,Redo2} from 'lucide-react';
 import {api,affected,Change,media,Note,OpenNote} from './api';
 import {useApi} from './hooks';
 import {Action,ActionMenu,LazyBoundary,FormDialog} from './ui';
@@ -16,11 +16,18 @@ import type {DocumentHeading} from './rich-markdown';
 import {DocumentOutline} from './document-outline';
 import {Annotation,AnnotationAction,AnnotationColor,AnnotationSelection,makeAnchor,resolveAnchor,selectedHighlights} from './annotations';
 import {CommentsPanel} from './annotations-ui';
+import {copyNoteImage,ImageCopyRequest} from './note-image-copy';
 const LiveEditor=lazy(()=>import('./editor').then(module=>({default:module.LiveEditor})));
 const RichEditor=lazy(()=>import('./rich-editor').then(module=>({default:module.RichEditor})));
 const BaseViewer=lazy(()=>import('./base').then(module=>({default:module.BaseViewer})));
 const name=(path:string)=>path.split('/').pop()||path;
 
+function MediaFileView({path,ext,vaultRoot,active,viewKey,notify}:{path:string,ext:string,vaultRoot:string,active:boolean,viewKey:string,notify:(message:string)=>void}){
+ useLocale();
+ const image=/^(png|jpg|jpeg|webp|gif|svg|avif)$/.test(ext),copy=useRef(new ImageCopyRequest());
+ useEffect(()=>()=>copy.current.cancel(),[path]);
+ return <div className="media-view"><div className="media-heading"><h2>{name(path)}</h2><div className="toolbar-actions">{image&&<button type="button" className="button" onClick={()=>{notify(t('design.imageCopying'));void copy.current.run(signal=>copyNoteImage({target:path,url:media(path,false,vaultRoot),notePath:path,root:vaultRoot},signal)).then(done=>{if(done)notify(t('design.imageCopied'));}).catch(error=>notify((error as Error).message));}}><ClipboardCopy size={15}/> {" "}{t('design.copySourceImage')}</button>}<a className="button" href={media(path,true,vaultRoot)}><Download size={15}/> {" "}{t("下载原文件")}</a></div></div>{image?<img src={media(path,false,vaultRoot)} alt={name(path)} decoding="async"/>:/^(mp4|webm|mov|m4v)$/.test(ext)?<VideoPlayer path={path} active={active} stateKey={viewKey}/>:/^(mp3|m4a|wav|ogg|flac)$/.test(ext)?<AudioPlayer path={path} active={active} stateKey={viewKey}/>:ext==='pdf'?active&&<iframe className="pdf-view" src={media(path,false,vaultRoot)} title={name(path)}/>:<div className="empty-state"><BookOpen size={40}/><h2>{t("文件已保存在本地")}</h2><p>{t("此格式可下载后使用对应程序打开。")}</p></div>}</div>;
+}
 function Properties({note,onUpdate,notify}:{note:Note,onUpdate:(note:Note)=>void,notify:(message:string)=>void}){
  useLocale();
  const [editing,setEditing]=useState<{key:string,value:string}|undefined>();
@@ -48,7 +55,8 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
  const [,setResourceVersion]=useState(0);
  const visible=useRef(active);visible.current=active;
  const moreAnchor=useRef<HTMLElement|null>(null);
- const [selectionMenu,setSelectionMenu]=useState<{x:number,y:number,text:string,range?:AnnotationSelection}>();
+ const [selectionMenu,setSelectionMenu]=useState<{x:number,y:number,text:string,range?:AnnotationSelection,image?:{target:string,url:string}}>();
+ const imageCopy=useRef(new ImageCopyRequest());
  useEffect(()=>{if(!selectionMenu)return;const close=()=>setSelectionMenu(undefined);window.addEventListener('pointerdown',close);window.addEventListener('scroll',close,true);const key=(e:KeyboardEvent)=>{if(e.key==='Escape')close();};window.addEventListener('keydown',key);return()=>{window.removeEventListener('pointerdown',close);window.removeEventListener('scroll',close,true);window.removeEventListener('keydown',key);};},[selectionMenu]);
  const area=useRef<HTMLDivElement>(null),editor=useRef<any>(null),restored=useRef(false),pendingAnchor=useRef('');
  const {data:related}=useApi('related?path='+encodeURIComponent(path),[],active&&side&&textFile&&ext!=='base');
@@ -185,7 +193,7 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
  const releaseEditor=(view:any)=>{sessionStorage.setItem(viewKey+':cursor',String(view.state.selection.main.head));editor.current=null;};
  const readyEditor=(view:any)=>{editor.current=view;area.current?.dispatchEvent(new CustomEvent('vault-document-rendered'));const stored=sessionStorage.getItem('cursor:'+path)||sessionStorage.getItem(viewKey+':cursor');if(stored!==null){sessionStorage.removeItem('cursor:'+path);view.dispatch({selection:{anchor:Math.min(Number(stored)||0,view.state.doc.length)},scrollIntoView:true});}view.dom.addEventListener('keyup',()=>sessionStorage.setItem(viewKey+':cursor',String(view.state.selection.main.head)));if(pendingOutlineJump.current)jumpToOutline(pendingOutlineJump.current);};
  if(ext==='base')return <LazyBoundary><Suspense fallback={<p>{t("正在打开视图…")}</p>}><BaseViewer path={path} onOpen={onOpen} notify={notify}/></Suspense></LazyBoundary>;
- if(!textFile)return <div className="media-view"><div className="media-heading"><h2>{name(path)}</h2><a className="button" href={media(path,true)}><Download size={15}/> {" "}{t("下载原文件")}</a></div>{/^(png|jpg|jpeg|webp|gif|svg|avif)$/.test(ext)?<img src={media(path)} alt={name(path)} decoding="async"/>:/^(mp4|webm|mov|m4v)$/.test(ext)?<VideoPlayer path={path} active={active} stateKey={viewKey}/>:/^(mp3|m4a|wav|ogg|flac)$/.test(ext)?<AudioPlayer path={path} active={active} stateKey={viewKey}/>:ext==='pdf'?active&&<iframe className="pdf-view" src={media(path)} title={name(path)}/>:<div className="empty-state"><BookOpen size={40}/><h2>{t("文件已保存在本地")}</h2><p>{t("此格式可下载后使用对应程序打开。")}</p></div>}</div>;
+ if(!textFile)return <MediaFileView path={path} ext={ext} vaultRoot={vaultRoot} active={active} viewKey={viewKey} notify={notify}/>;
  if(!note&&!(isHtml&&mode==='read'))return <div className={'empty-state '+(session.error?'error':'')}>{session.error||t("正在打开文档…")}{session.error&&<button onClick={()=>void loadDocument(session,undefined,true)}>{t("重试")}</button>}</div>;
  return <div className={'document'+(wide||isHtml?' wide-content':'')} onKeyDown={event=>{
   if(!active||ext!=='md'||event.defaultPrevented||event.nativeEvent.isComposing||!(event.metaKey||event.ctrlKey)||event.altKey)return;
@@ -200,16 +208,23 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
   {find&&(mode==='read'||ext==='md'&&mode==='live')&&<div className="reading-search"><input autoFocus aria-label={t("文内查找")} placeholder={t("查找正文…")} value={search} onChange={event=>{setSearch(event.target.value);setMatch(0);}} onKeyDown={event=>{if(event.key==='Enter'&&matches.length)jump(matches[match%matches.length]);if(event.key==='Escape')setFind(false);}}/><span>{matches.length?`${match%matches.length+1} / ${matches.length}`:t("0 个匹配")}</span><button onClick={()=>{if(matches.length){const next=(match+1)%matches.length;setMatch(next);jump(matches[next]);}}}>{t("下一个")}</button></div>}
   {session.manualSave&&<div className="ai-draft-banner" role="status"><span>{t("AI 草稿尚未写入文件")}</span><button onClick={()=>void saveDocument(session)}>{t("保存草稿")}</button><button onClick={()=>{if(confirm(t("丢弃当前 AI 草稿并恢复磁盘正文？")))void discardAiDraft(session).catch(error=>notify(error.message));}}>{t("丢弃草稿")}</button></div>}
   {selectionMenu&&<div className="ai-selection-menu" role="menu" style={{left:selectionMenu.x,top:selectionMenu.y}} onPointerDown={event=>event.stopPropagation()}>
-   <button autoFocus role="menuitem" onClick={()=>{addAiReference({root:vaultRoot,path,text:selectionMenu.text});setSelectionMenu(undefined);}}>{t("添加到 AI 对话")}</button>
+   {selectionMenu.image&&<button autoFocus role="menuitem" onClick={()=>{const image=selectionMenu.image!;setSelectionMenu(undefined);notify(t('design.imageCopying'));void imageCopy.current.run(signal=>copyNoteImage({target:image.target,url:image.url,notePath:path,root:vaultRoot},signal)).then(done=>{if(done)notify(t('design.imageCopied'));}).catch(error=>notify((error as Error).message));}}><ClipboardCopy size={14}/>{t('design.copySourceImage')}</button>}
+   {!!selectionMenu.text.trim()&&<button autoFocus={!selectionMenu.image} role="menuitem" onClick={()=>{addAiReference({root:vaultRoot,path,text:selectionMenu.text});setSelectionMenu(undefined);}}>{t("添加到 AI 对话")}</button>}
    {ext==='md'&&selectionMenu.range&&<><button role="menuitem" onClick={()=>{requestAnnotation('highlight','yellow',selectionMenu.range!);setSelectionMenu(undefined);}}>{t('添加高亮')}</button><button role="menuitem" disabled={!selectedHighlights(session.text,annotations,selectionMenu.range).length} onClick={()=>{requestAnnotation('clear-highlight',undefined,selectionMenu.range!);setSelectionMenu(undefined);}}>{t('清除高亮')}</button><button role="menuitem" onClick={()=>{requestAnnotation('comment',undefined,selectionMenu.range!);setSelectionMenu(undefined);}}>{t('添加评论')}</button></>}
   </div>}
   <div ref={body} className="document-body">{ext==='md'&&<DocumentOutline id={outlineId} headings={outline} compact={compactOutline} expanded={outlineVisible} current={outline.some(heading=>heading.pos===currentHeading)?currentHeading:outline[0]?.pos} toggleRef={outlineToggle} onToggle={()=>setOutlinePreference(!outlineVisible)} onJump={(heading,keepOutline)=>{jumpToOutline(heading);if(compactOutline&&!keepOutline)setOutlinePreference(false);}}/>}<div ref={area} className={'writing-area'+(isHtml?' html-writing-area':'')} onContextMenu={event=>{
    if(!active||!['md','txt'].includes(ext))return;
+   const marked=(event.nativeEvent as MouseEvent & {leafloomImage?:{target:string,url:string}}).leafloomImage;
+   const image=(event.target as HTMLElement).closest('img');
+   const noteImage=marked||(image&&area.current?.contains(image)?{target:image.dataset.vaultSrc||'',url:image.currentSrc||image.src}:undefined);
    const selection=window.getSelection();let selected='';
    const range=editor.current?.state.selection.main as {from:number,to:number}|undefined;
    if(range&&range.from!==range.to)selected=session.text.slice(range.from,range.to);
-   if(!selected&&selection?.rangeCount&&area.current?.contains(selection.anchorNode)&&area.current?.contains(selection.focusNode))selected=selection.toString();
-   if(selected.trim()){event.preventDefault();setSelectionMenu({x:Math.max(8,Math.min(event.clientX,window.innerWidth-190)),y:Math.max(8,Math.min(event.clientY,window.innerHeight-55)),text:selected,...(range&&range.from!==range.to?{range:{from:range.from,to:range.to}}:{})});}
+   if(!selected&&!noteImage&&selection?.rangeCount&&area.current?.contains(selection.anchorNode)&&area.current?.contains(selection.focusNode))selected=selection.toString();
+   if(!selected.trim()&&!(noteImage&&(noteImage.target||noteImage.url)))return;
+   event.preventDefault();
+   const items=1+(selected.trim()?1:0)+(ext==='md'&&range&&range.from!==range.to?3:0);
+   setSelectionMenu({x:Math.max(8,Math.min(event.clientX,window.innerWidth-190)),y:Math.max(8,Math.min(event.clientY,window.innerHeight-8-items*36)),text:selected,...(noteImage&&(noteImage.target||noteImage.url)?{image:noteImage}:{}),...(range&&range.from!==range.to?{range:{from:range.from,to:range.to}}:{})});
   }}>
    <LazyBoundary><Suspense fallback={<p className="pad subtle">{t("正在打开内容…")}</p>}>{ext==='md'&&mode!=='source'?<RichEditor key={path+'rich'} initial={text} path={path} root={vaultRoot} session={session} active={active} annotations={annotations} onAnnotation={requestAnnotation} onOpenAnnotation={openAnnotation} onChange={(value,meta)=>changeDocument(session,value,meta)} onOpen={onOpen} onRelease={releaseEditor} onReady={readyEditor} onSource={position=>{sessionStorage.setItem('cursor:'+path,String(position));setMode('source');}}/>:mode==='read'?(isHtml?active&&<HtmlPreview path={path} root={vaultRoot} draft={session.dirty?text:undefined} active/>:<pre className="plain-reading">{text}</pre>):<LiveEditor key={path+mode+(ext==='md'?'':session.externalEpoch)} initial={text} path={path} root={vaultRoot} active={active} annotations={annotations} onOpenAnnotation={openAnnotation} source={mode==='source'||ext!=='md'} session={ext==='md'?session:undefined} onChange={(value,meta)=>changeDocument(session,value,meta)} onOpen={onOpen} onRelease={releaseEditor} onReady={readyEditor}/>}</Suspense></LazyBoundary>
   </div>{commentsOpen&&ext==='md'&&note&&<CommentsPanel annotations={annotations} source={session.text} selectedId={selectedAnnotation}

@@ -18,6 +18,7 @@ import {Annotation,AnnotationAction,AnnotationColor,AnnotationSelection,selected
 import {releaseRichRange,RichRange,richAnchorKey,trackRichRange,trackedRichRange} from './rich-anchors';
 import {blockAction,BlockTarget,CommandContext,convertRichBlock,insertRichAssets,insertRichCommand,matchingRichCommands,richBlock,richContext,setRichLink} from './rich-commands';
 import {uploadEditorAssets} from './editor-assets';
+import {copyNoteImage,ImageCopyRequest,NoteImageSource} from './note-image-copy';
 import {AnchorRect,BlockMenu,CommandMenu,CommandRow,FormatBar,LinkPopover,TableBar,WikiMenu} from './rich-ui';
 import './rich-editor.css';
 
@@ -68,7 +69,14 @@ export function RichEditor(props:Props){
  const [status,setStatus]=useState<{message:string,error?:boolean}>();
  const composing=useRef(false),compositionId=useRef(''),syncing=useRef(false),resyncing=useRef(false),refocus=useRef(false),sourceSelection=useRef<SourceSelection>({from:0,to:0});
  const pending=useRef(new Map<string,{controller:AbortController,input?:HTMLInputElement}>()),hover=useRef<BlockTarget|null>(null),handlers=useRef<any>({});
+ const imageCopy=useRef(new ImageCopyRequest());
  const refresh=()=>setVersion(value=>value+1);
+ const runImageCopy=(source:NoteImageSource)=>{
+  setStatus({message:t('design.imageCopying')});
+  void imageCopy.current.run(signal=>copyNoteImage(source,signal)).then(copied=>{
+   if(copied)setStatus({message:t('design.imageCopied')});
+  }).catch(error=>setStatus({message:(error as Error).message,error:true}));
+ };
  const context=editor&&props.active?richContext(editor):null,contextKey=context?context.kind+':'+context.from+':'+context.query:'';
  const automatic=!!context&&!!editor?.isEditable&&!!editor?.view.hasFocus()&&contextKey!==dismissed&&!manual&&!dialog&&!link&&!composing.current;
  const rows=useMemo(()=>commandRows(manual?.kind==='insert'?manual.query:context?.query||''),[manual?.query,context?.query,locale,manual?.kind,version]);
@@ -120,7 +128,7 @@ export function RichEditor(props:Props){
   const label=wikiRows.find(row=>row.path===path)?.title||path.split('/').pop()||path;
   current.chain().focus().insertContentAt({from:actual.from,to:actual.to+closing},{type:'wikiLink',attrs:{target:path,label}}).run();setDismissed(contextKey);setSelected(0);
  };
- handlers.current={chooseCommand,chooseWiki,showSpecialDialog,showLinkDialog,rows,wikiRows,selected,contextKey,dismissed,manual,dialog,link,refresh};
+ handlers.current={chooseCommand,chooseWiki,showSpecialDialog,showLinkDialog,copyImage:runImageCopy,rows,wikiRows,selected,contextKey,dismissed,manual,dialog,link,refresh};
  useEffect(()=>{setSelected(0);},[contextKey,manual?.query]);
  useEffect(()=>{
   if(!context||context.kind!=='wiki'||!automatic){setWikiRows([]);return;}
@@ -159,6 +167,14 @@ export function RichEditor(props:Props){
       const current=instance!,ui=handlers.current,actual=richContext(current),key=event.key.toLowerCase(),mod=event.metaKey||event.ctrlKey;
       if(mod&&key==='z'){event.preventDefault();travelDocument(callbacks.current.session,event.shiftKey?'redo':'undo');return true;}
       if(mod&&key==='y'){event.preventDefault();travelDocument(callbacks.current.session,'redo');return true;}
+      if(mod&&key==='c'&&!event.shiftKey&&!event.altKey){
+       const selection=current.state.selection;
+       if(selection instanceof NodeSelection&&selection.node.type.name==='vaultImage'){
+        event.preventDefault();
+        handlers.current.copyImage({target:selection.node.attrs.src,notePath:callbacks.current.path,root:callbacks.current.root});
+        return true;
+       }
+      }
       if(mod&&key==='d'){event.preventDefault();return blockAction(current,'duplicate');}
       if(mod&&event.shiftKey&&key==='m'&&!current.state.selection.empty){
        event.preventDefault();if(bridgeRef.current)callbacks.current.onAnnotation?.('comment',undefined,markdownSelection(current,bridgeRef.current));return true;
@@ -214,6 +230,25 @@ export function RichEditor(props:Props){
       dragover(_view,event){if((event as DragEvent).dataTransfer?.types.includes('Files')){event.preventDefault();return true;}return false;},
       compositionstart(){composing.current=true;compositionId.current=crypto.randomUUID();refresh();return false;},compositionend(){composing.current=false;queueMicrotask(refresh);return false;},
       beforeinput(_view,event){const input=event as InputEvent;if(input.inputType==='historyUndo'||input.inputType==='historyRedo'){event.preventDefault();travelDocument(callbacks.current.session,input.inputType==='historyUndo'?'undo':'redo');return true;}return false;},
+      copy(view,event){
+       const selection=view.state.selection;
+       if(!(selection instanceof NodeSelection)||selection.node.type.name!=='vaultImage')return false;
+       event.preventDefault();
+       handlers.current.copyImage({target:selection.node.attrs.src,url:(view.nodeDOM(selection.from) as HTMLImageElement|null)?.currentSrc||'',notePath:callbacks.current.path,root:callbacks.current.root});
+       return true;
+      },
+      contextmenu(view,event){
+       const image=(event.target as HTMLElement).closest('img');
+       if(!image||!view.dom.contains(image))return false;
+       let pos:number|undefined;
+       view.state.doc.descendants((node,at)=>{
+        if(node.type.name==='vaultImage'&&view.nodeDOM(at)===image){pos=at;return false;}
+       });
+       (event as MouseEvent & {leafloomImage?:{target:string,url:string}}).leafloomImage={target:image.dataset.vaultSrc||'',url:image.currentSrc||image.src};
+       if(pos!==undefined)view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc,pos)));
+       event.preventDefault();
+       return false;
+      },
      }
     },
     onTransaction({editor:current,transaction}){
@@ -250,9 +285,10 @@ export function RichEditor(props:Props){
    callbacks.current.onReady?.(facade);
   };
   void init().catch(error=>{if(error.name!=='AbortError'){setError(String(error));setLoading(false);}});
-  return()=>{controller.abort();cancelPending();if(instance){if(facade)callbacks.current.onRelease?.(facade);instance.destroy();}handle?.remove();if(handleRoot)queueMicrotask(()=>handleRoot?.unmount());editorRef.current=undefined;bridgeRef.current=undefined;setEditor(undefined);};
+  return()=>{controller.abort();cancelPending();imageCopy.current.cancel();if(instance){if(facade)callbacks.current.onRelease?.(facade);instance.destroy();}handle?.remove();if(handleRoot)queueMicrotask(()=>handleRoot?.unmount());editorRef.current=undefined;bridgeRef.current=undefined;setEditor(undefined);};
  },[props.path,props.root]);
  handlers.current.upload=upload;
+ handlers.current.copyImage=runImageCopy;
  useLayoutEffect(()=>{
   const current=editorRef.current,bridge=bridgeRef.current;if(!current||!bridge)return;
   const resume=()=>{const focus=refocus.current&&callbacks.current.active&&(document.activeElement===document.body||document.activeElement===current.view.dom);resyncing.current=false;current.setEditable(callbacks.current.active,false);if(focus)current.view.focus();refocus.current=false;};
@@ -278,7 +314,7 @@ export function RichEditor(props:Props){
  },[props.initial,props.session.externalEpoch,editor]);
  useEffect(()=>{
   const current=editorRef.current;if(!current)return;
-  if(!props.active){cancelPending();setManual(undefined);setLink(undefined);setDialog(undefined);}
+  if(!props.active){cancelPending();imageCopy.current.cancel();setManual(undefined);setLink(undefined);setDialog(undefined);}
   current.setEditable(props.active&&!resyncing.current,false);refresh();
  },[props.active,editor]);
  useEffect(()=>{if(editor&&!editor.isDestroyed)editor.view.dispatch(editor.state.tr.setMeta('leafloomAnnotationRefresh',true));},[editor,props.annotations,props.initial]);

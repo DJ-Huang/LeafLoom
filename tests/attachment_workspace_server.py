@@ -75,19 +75,39 @@ app.state.websites.ui_host='127.0.0.1'
 app.state.websites.ui_origin=f'http://127.0.0.1:{port}'
 if os.environ.get('LEAFLOOM_ATTACHMENT_MODE_TEST')=='1':
     import httpx
+    import threading
     from tests.test_remote_attachments import FakeDAV,SOURCE,SECRET
     (other/'Other local.bin').write_bytes(b'other-local-original')
     fixture_dav=FakeDAV();fixture_dav.files['Incoming/Server specimen.bin']=b'fictional-server-original'
-    app.state.remote_attachments.transports[SOURCE]=httpx.MockTransport(fixture_dav)
+    preview_bytes=io.BytesIO();Image.new('RGB',(48,32),'#617969').save(preview_bytes,'PNG')
+    fixture_dav.files['Incoming/Server preview.png']=preview_bytes.getvalue()
+    fixture_dav.content_types['Incoming/Server preview.png']='image/png'
+    preview_check=threading.Event();preview_check.set()
+    def fixture_transport(request):
+        if request.method=='HEAD' and request.url.path.endswith('/Server preview.png'):
+            preview_check.wait(10)
+        return fixture_dav(request)
+    app.state.remote_attachments.transports[SOURCE]=httpx.MockTransport(fixture_transport)
     @app.post('/api/attachment-fixture/server')
     async def enable_fixture_server():
         current=str(config.root);remote=app.state.remote_attachments
-        remote.save(current,{'sources':[{'id':SOURCE,'name':'Fictional NAS','type':'webdav',
+        from vault_rag.attachment_policy import DEFAULT_EXTENSIONS
+        remote.save(current,{'allowed_extensions':[*DEFAULT_EXTENSIONS,'.bin'],'sources':[{'id':SOURCE,'name':'Fictional NAS','type':'webdav',
             'base_url':'https://files.example.invalid/','username':'leafloom','upload_directory':'Incoming','enabled':True}],
             'default_source':SOURCE})
         remote.set_credentials(SOURCE,'leafloom',SECRET)
         remote.scan(current,SOURCE)
-        return {'fixture':True,'storage_id':SOURCE,'remote_path':'_attachments/_remote/'+SOURCE+'/Incoming/Server specimen.bin'}
+        preview_path='_attachments/_remote/'+SOURCE+'/Incoming/Server preview.png'
+        remote.materialize(current,preview_path);remote.cache_ttl=0
+        return {'fixture':True,'storage_id':SOURCE,'remote_path':'_attachments/_remote/'+SOURCE+'/Incoming/Server specimen.bin','preview_path':preview_path}
+    @app.post('/api/attachment-fixture/preview-block')
+    async def block_preview_check():
+        preview_check.clear()
+        return {'fixture':True}
+    @app.post('/api/attachment-fixture/preview-release')
+    async def release_preview_check():
+        preview_check.set()
+        return {'fixture':True}
 @app.get('/api/attachment-fixture')
 async def fixture():return {'fixture':True,'root':str(root),'other_root':str(other),'ui':app.state.websites.ui_origin,'port':port}
 print(json.dumps({'fixture':True,'ui':app.state.websites.ui_origin,'port':port}),flush=True)

@@ -1,5 +1,5 @@
 """Directory discovery preferences do not grant or revoke byte access."""
-SCAN_INTERVAL = 30 * 60
+SCAN_INTERVAL = 2 * 60 * 60
 STARTUP_GRACE = 60
 MAX_DIRECTORY_INTERVAL = 7 * 24 * 60 * 60
 MAX_METADATA_INTERVAL = 6 * 60 * 60

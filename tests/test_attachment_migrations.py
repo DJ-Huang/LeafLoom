@@ -84,7 +84,10 @@ class AttachmentMigrationTests(unittest.TestCase):
         before={p:p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
         plan=self.plan();self.assertEqual(plan['state'],'ready',plan)
         self.assertEqual([m['source'] for m in plan['moves']],['loose/photo.png'])
-        self.assertEqual(plan['summary']['excluded'],3)
+        reasons={item['path']:item['reason'] for item in plan['exclusions']}
+        self.assertEqual(reasons['site/local.png'],'Preserved HTML project resource or shared runtime dependency')
+        self.assertEqual(reasons['shared/logo.png'],'Preserved HTML project resource or shared runtime dependency')
+        self.assertEqual(reasons['shared/bg.png'],'Preserved HTML project resource or shared runtime dependency')
         self.assertEqual(self.execute(plan)['state'],'completed')
         for path,data in before.items():
             if path.relative_to(self.root).parts[0] in ('site','shared'):self.assertEqual(path.read_bytes(),data)

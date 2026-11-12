@@ -4,6 +4,28 @@
 
 ## Unreleased
 
+- Attachment sources now load independently, preserving filters and pagination when the server catalog is unavailable. All attachments merge under the selected sort order. Previews use valid local file and range caches immediately while checking server versions in the background; active reads retain consistent content. Error messages are shorter and provide retry actions. Download status reads no longer race with updates on Windows.
+
+- Show note image right-click actions in one vertical menu (copy, comment, and the other selection actions) instead of two overlapping bars.
+
+- Copy images from notes to the system clipboard: right-click **Copy image**, or select an image and press `Ctrl/⌘+C` (also available when opening an image file). Reuses the desktop PNG clipboard path so pastes work in other apps and notes.
+
+- Fix attachment hub “all files” listing crashing with `Internal Server Error` / invalid JSON after the directory-group speed-up (enrichment table was skipped when no group was selected).
+
+- Speed up note paste and open with a remote attachment default: stage uploads without holding the attachment lock during copy/hash, prefer a same-volume hard link (or a single-pass hash+copy), and keep note-sized pasted images as local vault cache after promote so embeds do not rematerialize from the NAS. Larger and non-image staging still drops to thumbnails.
+
+- Lengthen automatic attachment-server directory checks: the upload tree and related discovery cadence move from about 30 minutes to about **2 hours** (stable archives still back off up to one week; **Sync now** / **Check all directories** stay immediate).
+
+- Speed up restart listing for directory-rule groups such as **Unity Asset**: filter membership from the local manifest in SQL and skip reloading the whole asset library for the grid (covers/tags still load in the detail pane).
+
+- Attachment servers can use an app-written **membership catalog** on the NAS (`LeafLoomCatalog/.../attachments/v1/members/`): import existing server files once, then stop automatic full-tree discovery. Central paste/upload and migration promote to the server; **note-sized images stay as vault cache** for embeds, while larger/non-image staging **drops** so the grid keeps lightweight thumbnails/previews. Catalog import still does not download originals; use **Cache locally** or open for other full files. Slow networks and disconnects keep retrying until work finishes (auth failures still pause). Sync status shows membership mode and **Import existing files into catalog**.
+
+- Speed up attachment browsing with NAS servers: stop mid-scan list refresh storms, keep **Local** listings off the remote scan lock, reuse a short-lived presence digest, prefer ranged thumbnail fetches before full materialize, and add **Cache locally** plus connection round-trip latency hints (prefer Tailscale direct / LAN WebDAV; listing does not use ZSpace Sync).
+
+- Keep HTML project and Design Studio assets inside the project folder; they no longer participate in attachment-server migration. For older registered projects still under `_attachments`, use the one-off script `scripts/localize_html_attachments.py` (dry-run by default; `--apply` writes). Attachment servers remain optional: without one, prepare the local catalog on **Attachments** to browse and upload into local `_attachments`.
+
+- Restore attachment-server migration under **Settings → Attachment servers**: optional path batches, resume the same job after interruption, and keep `_attachments` paths as a version-matched local cache after upload/verify (clearing cache removes local copies only; NAS originals stay). Prefer LAN URLs at home; on slow remote links use the Tailscale `100.x` address with small batches and resume instead of a single full-library run. While transferring, the job card shows completed/total counts, byte progress, transfer speed, phase (hash/probe/upload/verify) and the current file; slow-link PUT/readback timeouts are extended so DERP transfers are less likely to stall at 0 B/s during probing. Server readback verification reports its own download progress/speed (it re-downloads the file to hash).
+
 - LeafLoom skill: treat「全天／半天」as `daily_hours` when recording; hours reports must not say “no data” if activities exist but only lack numeric hours.
 
 - LeafLoom skill: when recording work, dual-write the structured activity and the human-readable period log under `工作目录/` (configured via `work_hub.human_work_log`).

@@ -49,6 +49,60 @@ let server,browser,page,logs='';
  const opened=await page.request.get('/api/media?'+new URLSearchParams({root:fixture.root,path:enabled.remote_path}));
  assert.equal(await opened.text(),'fictional-server-original');
  await showAll();
+ // The first local page must be visible while the saved merged catalog is held.
+ const source=()=>page.getByRole('combobox',{name:'Attachment source',exact:true});
+ const idle=()=>page.waitForFunction(()=>document.querySelector('.aw-file-scroll')?.getAttribute('aria-busy')==='false');
+ let releaseMerged,enteredMerged;
+ const mergedGate=new Promise(resolve=>releaseMerged=resolve),mergedEntered=new Promise(resolve=>enteredMerged=resolve);
+ const holdMerged=async route=>{
+  const url=new URL(route.request().url());
+  if(url.searchParams.get('source')==='all'){enteredMerged();await mergedGate;}
+  await route.continue().catch(()=>{});
+ };
+ await page.route('**/api/attachments?*',holdMerged);
+ await source().selectOption('local');await idle();await source().selectOption('all');
+ await mergedEntered;assert.equal(await page.locator('.aw-card').count(),100);
+ assert.equal(await page.locator('.aw-file-scroll').getAttribute('aria-busy'),'true');
+ releaseMerged();await idle();await page.unroute('**/api/attachments?*',holdMerged);
+ // An unavailable merged read keeps local pagination separate, then retry merges again.
+ const failMerged=async route=>{
+  const url=new URL(route.request().url());
+  if(url.searchParams.get('source')==='all'&&!url.searchParams.get('cursor'))await route.fulfill({status:503,json:{error:'synthetic catalog failure'}});
+  else await route.continue();
+ };
+ await page.route('**/api/attachments?*',failMerged);
+ await source().selectOption('local');await idle();await source().selectOption('all');await idle();
+ await page.getByText('Some server attachments could not be loaded. Please retry.',{exact:true}).waitFor();
+ const localFirst=await page.locator('.aw-file-open').allTextContents();
+ await page.locator('.aw-pagination button').last().click();await idle();
+ const localSecond=await page.locator('.aw-file-open').allTextContents();
+ assert.ok(localSecond.length>0&&localSecond.length<100);
+ assert.ok(localSecond.every(name=>!localFirst.includes(name)));
+ await page.unroute('**/api/attachments?*',failMerged);
+ await page.locator('.aw-alert').getByRole('button',{name:'Retry',exact:true}).click();await idle();
+ assert.equal(await page.locator('.aw-card').count(),100);
+ assert.equal(await page.getByText('Some server attachments could not be loaded. Please retry.',{exact:true}).count(),0);
+ // A late response from the server source cannot replace a newer local selection.
+ let releaseRemote,enteredRemote;
+ const remoteGate=new Promise(resolve=>releaseRemote=resolve),remoteEntered=new Promise(resolve=>enteredRemote=resolve);
+ const holdRemote=async route=>{
+  if(new URL(route.request().url()).searchParams.get('source')==='remote'){enteredRemote();await remoteGate;}
+  await route.continue().catch(()=>{});
+ };
+ await page.route('**/api/attachments?*',holdRemote);
+ await source().selectOption('remote');await remoteEntered;
+ await source().selectOption('local');await idle();releaseRemote();
+ await page.unroute('**/api/attachments?*',holdRemote);
+ assert.equal(await source().inputValue(),'local');assert.equal(await card('Server specimen.bin').count(),0);
+ // Preview bytes remain available while their server version check is blocked.
+ await source().selectOption('remote');await searchFor('Server preview','Server preview.png');
+ assert.ok((await page.request.post('/api/attachment-fixture/preview-block',{headers})).ok());
+ await card('Server preview.png').click();
+ await page.getByRole('button',{name:'Attachment information',exact:true}).click();
+ await page.waitForFunction(()=>{const image=document.querySelector('.aw-preview-content img');return image?.complete&&image.naturalWidth>0;},null,{timeout:3000});
+ assert.ok((await page.request.post('/api/attachment-fixture/preview-release',{headers})).ok());
+ await page.locator('.aw-preview').getByRole('button',{name:'Close',exact:true}).click();
+ await showAll();
  await page.screenshot({path:path.join(output,'server-default-existing-local-retained.png'),fullPage:true});
  async function chooseLocal(){
   await page.getByRole('button',{name:'Settings',exact:true}).click();
@@ -77,6 +131,6 @@ let server,browser,page,logs='';
  await searchFor('Other local','Other local.bin');
  assert.equal((await (await page.request.get('/api/attachments/migrations')).json()).jobs.length,0);
  assert.deepEqual(errors,[]);
- console.log('Attachment mode UI passed: local setup, both switch directions, retained origins, no implicit migration, incomplete-local notice and explicit local setup.');
+ console.log('Attachment mode UI passed: staged loading, fallback pagination/retry, stale response isolation, cached preview, destination switches and explicit local setup.');
 })().catch(async error=>{await page?.screenshot({path:path.join(output,'failure.png'),fullPage:true}).catch(()=>{});console.error(error);console.error(logs.slice(-1800));process.exitCode=1;})
  .finally(async()=>{await browser?.close();server?.kill('SIGINT');});

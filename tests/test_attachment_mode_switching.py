@@ -1,5 +1,6 @@
 """Attachment identity and visibility across destinations and folder-sync lag."""
 from pathlib import Path
+from contextlib import closing
 import shutil
 import sqlite3
 from types import SimpleNamespace
@@ -90,7 +91,7 @@ class ModeSwitchingTests(unittest.TestCase):
 
     def test_incompatible_local_index_does_not_block_server_or_get_overwritten(self):
         self.remote_file();files,catalog,jobs=self.context();path=files.state_path('attachments.sqlite')
-        with sqlite3.connect(path) as db:db.execute('PRAGMA user_version=99')
+        with closing(sqlite3.connect(path)) as db:db.execute('PRAGMA user_version=99');db.commit()
         before=path.read_bytes()
         for destination in (fixtures.SOURCE,'local'):
             self.destination(destination)
@@ -154,13 +155,68 @@ class ModeSwitchingTests(unittest.TestCase):
         self.assertEqual(peer.attachments.listing()['total'],2)
         self.assertEqual((second/'notes/page.md').read_bytes(),note.read_bytes())
 
-    def test_external_local_presence_change_invalidates_a_sorted_cursor(self):
+    def test_external_delete_keeps_the_cursor_until_the_index_updates(self):
         self.put('local.png',b'local');self.remote_file()
         files,catalog,jobs=self.context();files.attachments.refresh()
         cursor=catalog.listing(limit=1)['cursor'];self.assertTrue(cursor)
         (self.root/'local.png').unlink()
+        page=catalog.listing(limit=1,cursor=cursor)
+        self.assertTrue(page['items'])
+        self.assertIn('local.png',{item['path'] for item in catalog.listing()['items']})
+        files.attachments.apply(['local.png'])
         from vault_rag.local_state import ConflictError
         with self.assertRaises(ConflictError):catalog.listing(limit=1,cursor=cursor)
+
+    def test_listing_returns_saved_rows_when_stat_is_forbidden(self):
+        self.put('local.png',b'local');self.remote_file()
+        files,catalog,_=self.context();files.attachments.refresh()
+        real=Path.is_file
+        def guarded(path):
+            if Path(path).is_relative_to(self.root):
+                raise AssertionError('listing stated '+str(path))
+            return real(path)
+        with patch.object(Path,'is_file',guarded):
+            page=catalog.listing()
+        self.assertEqual(page['total'],2)
+        self.assertEqual({item['source'] for item in page['items']},{'local','remote'})
+        self.assertNotIn('warning',page)
+
+    def test_all_listing_reads_the_saved_catalog_while_the_writer_lock_is_held(self):
+        self.put('local.png',b'local');self.remote_file()
+        files,catalog,_=self.context();files.attachments.refresh()
+        held=self.manager.lock.acquire(blocking=False)
+        self.assertTrue(held)
+        try:
+            with patch.object(self.manager,'manifest_path',side_effect=AssertionError('listing opened the manifest writer')):
+                page=catalog.listing()
+            self.assertEqual(page['total'],2)
+            self.assertEqual({item['source'] for item in page['items']},{'local','remote'})
+            self.assertNotIn('warning',page)
+        finally:
+            self.manager.lock.release()
+
+    def test_local_source_listing_skips_remote_lock(self):
+        self.put('local.png',b'local');self.remote_file()
+        files,catalog,_=self.context();files.attachments.refresh()
+        held=self.manager.lock.acquire(blocking=False)
+        self.assertTrue(held)
+        try:
+            page=catalog.listing(source='local')
+            self.assertEqual(page['total'],1)
+            self.assertEqual(page['items'][0]['path'],'local.png')
+            self.assertEqual(page['summary']['by_source']['remote']['files'],0)
+            self.assertEqual(page['summary']['by_source']['local']['files'],1)
+        finally:
+            self.manager.lock.release()
+
+    def test_scan_batches_do_not_publish_files_until_complete(self):
+        published=[]
+        self.manager.runtime=SimpleNamespace(publish=lambda *args,**kwargs:published.append(args))
+        self.dav.files['Incoming/a.bin']=b'one'
+        self.dav.files['Incoming/b.bin']=b'two'
+        result=self.manager.scan(str(self.root),fixtures.SOURCE)
+        self.assertTrue(result['ok'])
+        self.assertEqual(published.count(('files',[])),1)
 
     def test_peer_keeps_local_copy_until_folder_sync_delivers_deletion(self):
         original=self.put('_attachments/photo.png',b'original')
@@ -176,11 +232,12 @@ class ModeSwitchingTests(unittest.TestCase):
             db.execute('INSERT INTO aliases VALUES(?,?)',('_attachments/photo.png',old_id))
         plan=self.manager.migration_plan(str(self.root),fixtures.SOURCE,['_attachments/photo.png'])
         self.assertEqual(self.manager.migrate(str(self.root),plan['id'])['state'],'completed')
-        self.assertFalse(original.exists())
+        self.assertTrue(original.exists())  # Kept as version-matched vault-path cache.
+        self.assertEqual(self.manager.stat(str(self.root),'_attachments/photo.png')['storage_id'],fixtures.SOURCE)
         self.assertTrue(peer.scan(str(peer_root),fixtures.SOURCE)['ok'])
         peer_file=peer_root/'_attachments/photo.png';self.assertEqual(peer_file.read_bytes(),b'original')
         self.assertEqual(peer.stat(str(peer_root),asset_id=old_id)['storage_id'],'local')
-        peer_file.unlink()  # Simulate Resilio delivering the owner's deletion.
+        peer_file.unlink()  # Simulate peer removing its local copy while owner keeps cache.
         self.assertEqual(peer.stat(str(peer_root),asset_id=old_id)['storage_id'],fixtures.SOURCE)
         self.assertEqual(peer.stat(str(peer_root),'_attachments/photo.png')['storage_id'],fixtures.SOURCE)
 

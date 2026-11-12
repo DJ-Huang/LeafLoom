@@ -11,7 +11,7 @@ import {AttachmentGroupBar,GroupMembership,useAttachmentGroups} from './attachme
 import './attachments.css';
 
 type Item={path:string,name:string,size:number,mtime:number,mime:string,asset_id?:string,storage_id?:string,source?:'local'|'remote',cache_state?:'none'|'partial'|'complete',tags?:string[],category?:string,description?:string,cover_id?:string,attachment_uid?:string,personal_metadata?:{tags?:string[],category?:string,description?:string},official_metadata?:{title?:string,summary_zh?:string,description?:string,url?:string,publisher?:string,compatibility?:string|unknown[]|Record<string,unknown>},metadata_revision?:string|number,capabilities?:{rename:boolean,move:boolean,trash:boolean}};
-type Page={result_summary?:{files:number,bytes:number,kinds:Record<string,number>,by_source?:{local:{files:number,bytes:number},remote:{files:number,bytes:number}}},items:Item[],cursor:string|null,total:number,storages?:{storage_id:string,name:string,enabled:boolean}[],summary:{files:number,bytes:number,kinds:Record<string,number>,by_source?:{local:{files:number,bytes:number},remote:{files:number,bytes:number}}}};
+type Page={result_summary?:{files:number,bytes:number,kinds:Record<string,number>,by_source?:{local:{files:number,bytes:number},remote:{files:number,bytes:number}}},items:Item[],cursor:string|null,total:number,warning?:string,warning_detail?:string,storages?:{storage_id:string,name:string,enabled:boolean}[],summary:{files:number,bytes:number,kinds:Record<string,number>,by_source?:{local:{files:number,bytes:number},remote:{files:number,bytes:number}}}};
 type Index={allowed_extensions?:string[],state:string,usable:boolean,storage_mode?:string,default_storage_id?:string,local_index?:{state:string,usable:boolean,error?:string,progress?:{done:number},last_scanned_at?:number},folder?:string,error?:string,progress?:{done:number}};
 type Job={id:string,root:string,kind?:string,state:string,phase?:string,stage?:string,destination:string,created_at:number,error?:string,progress?:{done:number,total:number},summary?:{files:number,bytes:number,notes:number,excluded?:number,blockers?:number},moves?:{source:string,destination:string,size:number}[],blockers?:{path:string,reason:string}[],exclusions?:{path:string,reason:string}[],references?:string[],results?:{path:string,state:string}[]};
 type Detail=Item&{protected:boolean};
@@ -65,17 +65,18 @@ function AttachmentFiles({root,active=true,onOpen,onChanged,onDownloads}:Attachm
  const [infoOpen,setInfoOpen]=useState(()=>{try{return localStorage.getItem('attachments-info-open')==='true';}catch{return false;}}),[overview,setOverview]=useState(false),[listUpdated,setListUpdated]=useState(false);
  const toggleInfo=(value:boolean)=>{setInfoOpen(value);try{localStorage.setItem('attachments-info-open',String(value));}catch{}};
  const cursorRef=useRef(cursor);cursorRef.current=cursor;
+ const pageRef=useRef(page);pageRef.current=page;
  const storageOptions=useRef<NonNullable<Page['storages']>>([]);
- const listingBusy=useRef(false),listingQueued=useRef(false),listingFailed=useRef(false);
+ const listingBusy=useRef(false),listingQueued=useRef(false),listingFailed=useRef(false),listingVersion=useRef(0);
  const quietRefresh=useCallback(()=>{if(cursorRef.current){setListUpdated(true);return;}if(listingFailed.current)return;if(listingBusy.current){listingQueued.current=true;return;}setRevision(value=>value+1);},[]);
- useEffect(()=>{setSourceFilter('all');},[root]);
+ useEffect(()=>{listingVersion.current++;listing.current?.abort();setSourceFilter('all');setIndex(undefined);setPage(undefined);pageRef.current=undefined;storageOptions.current=[];statusMarker.current='';policyMarker.current=undefined;observed.current.clear();setCursor('');setCursors([]);setSelected([]);setFocused(undefined);setDetail(undefined);setError('');setListUpdated(false);},[root]);
  const [selected,setSelected]=useState<string[]>([]),[focused,setFocused]=useState<Item>(),[detail,setDetail]=useState<Detail>(),[expanded,setExpanded]=useState(false),[loading,setLoading]=useState(false),[error,setError]=useState(''),[revision,setRevision]=useState(0);
  const [jobs,setJobs]=useState<Job[]>([]),[jobId,setJobId]=useState(''),[showTasks,setShowTasks]=useState(false),[busy,setBusy]=useState(false),[operation,setOperation]=useState<{kind:string,paths:string[]}>(),[operationValue,setOperationValue]=useState(''),[confirmation,setConfirmation]=useState<{job:Job,action:'execute'|'rollback'|'resume'}>();
  const [uploads,setUploads]=useState<UploadItem[]>([]),[message,setMessage]=useState(''),[staleJobs,setStaleJobs]=useState<Set<string>>(new Set());
  const life=useRef<AbortController>(new AbortController()),listing=useRef<AbortController|undefined>(undefined),uploading=useRef(false),requests=useRef<XMLHttpRequest[]>([]),input=useRef<HTMLInputElement>(null),scroller=useRef<HTMLDivElement>(null),scrollPosition=useRef(0),statusMarker=useRef(''),policyMarker=useRef<string|undefined>(undefined),observed=useRef(new Map<string,string>()),tasksButton=useRef<HTMLButtonElement>(null);
  const localIndex=index?.local_index||index,localReady=!!localIndex?.usable,indexBuilding=localIndex?.state==='building';
  const ready=!!index?.usable&&index.state!=='unsupported',job=jobs.find(value=>value.id===jobId)||jobs[0],running=jobs.some(activeJob),mutating=jobs.some(j=>['running','rolling_back'].includes(j.state));
- const refresh=useCallback(()=>{listingFailed.current=false;setCursor('');setCursors([]);setSelected([]);setListUpdated(false);setRevision(value=>value+1);},[]);
+ const refresh=useCallback(()=>{listingVersion.current++;listing.current?.abort();listingFailed.current=false;setLoading(true);setCursor('');setCursors([]);setSelected([]);setListUpdated(false);setRevision(value=>value+1);},[]);
  const poll=useCallback(async()=>{
   const signal=life.current.signal;
   try{
@@ -91,27 +92,82 @@ function AttachmentFiles({root,active=true,onOpen,onChanged,onDownloads}:Attachm
    for(const value of result.jobs){const previous=observed.current.get(value.id);if(previous&&previous!==value.state&&['completed','rolled_back'].includes(value.state)){refresh();onChanged?.();}observed.current.set(value.id,value.state);}
   }catch(reason){if(!signal.aborted)setError((reason as Error).message);}
  },[root,refresh,quietRefresh,onChanged]);
- useEffect(()=>{const controller=new AbortController();life.current=controller;void poll();const changed=(event:Event)=>{const change=(event as CustomEvent).detail;if(change?.type==='attachment-policy'&&change.root===root){listing.current?.abort();setPage(undefined);setFocused(undefined);setDetail(undefined);setExpanded(false);refresh();}setStaleJobs(current=>new Set([...current,...[...observed.current].filter(([,state])=>state==='ready').map(([id])=>id)]));quietRefresh();void poll();};window.addEventListener('vault-data-changed',changed);return()=>{controller.abort();listing.current?.abort();requests.current.forEach(request=>request.abort());window.removeEventListener('vault-data-changed',changed);};},[poll,quietRefresh]);
+ useEffect(()=>{const controller=new AbortController();life.current=controller;void poll();
+  let refreshTimer=0;
+  const changed=(event:Event)=>{
+   const change=(event as CustomEvent).detail;
+   if(change?.type==='attachment-policy'&&change.root===root){
+    window.clearTimeout(refreshTimer);listing.current?.abort();setPage(undefined);setFocused(undefined);setDetail(undefined);setExpanded(false);refresh();
+   }else{
+    // Coalesce generic vault-data-changed (including end-of-scan files) so an
+    // in-flight catalog read is not aborted and immediately restarted.
+    window.clearTimeout(refreshTimer);
+    refreshTimer=window.setTimeout(()=>quietRefresh(),1500);
+   }
+   setStaleJobs(current=>new Set([...current,...[...observed.current].filter(([,state])=>state==='ready').map(([id])=>id)]));
+   void poll();
+  };
+  window.addEventListener('vault-data-changed',changed);
+  return()=>{controller.abort();listing.current?.abort();requests.current.forEach(request=>request.abort());window.clearTimeout(refreshTimer);window.removeEventListener('vault-data-changed',changed);};
+ },[poll,quietRefresh,refresh,root]);
  useEffect(()=>{if(!running&&!indexBuilding)return;const timer=window.setInterval(()=>void poll(),1200);return()=>window.clearInterval(timer);},[running,indexBuilding,poll]);
  useEffect(()=>{if(!active){setExpanded(false);setShowTasks(false);setOperation(undefined);setConfirmation(undefined);}},[active]);
  useEffect(()=>{if(!active)return;requestAnimationFrame(()=>{if(scroller.current)scroller.current.scrollTop=scrollPosition.current;});},[active]);
  useEffect(()=>{
   if(!ready)return;
-  const controller=new AbortController();listing.current?.abort();listing.current=controller;
-  let disposed=false,timedOut=false;listingBusy.current=true;listingQueued.current=false;listingFailed.current=false;
-  const timeout=window.setTimeout(()=>{timedOut=true;controller.abort();},20000);
+  const parent=new AbortController();listing.current?.abort();listing.current=parent;
+  const version=++listingVersion.current;
+  let disposed=false,localTimer=0,mergedTimer=0;listingBusy.current=true;listingQueued.current=false;listingFailed.current=false;
+  const current=()=>!disposed&&version===listingVersion.current;
+  const [field,order]=sort.split(':'),source=sourceFilter==='all'?'all':sourceFilter==='local'?'local':'remote',storage_id=sourceFilter.startsWith('storage:')?sourceFilter.slice(8):'';
+  // Group membership can require more work than the unfiltered catalog.
+  const timeoutMs=groupId?45000:20000;
+  const load=(nextSource:string,nextCursor:string,signal:AbortSignal)=>api<Page>('attachments?'+new URLSearchParams({root,query:query.trim(),kind,source:nextSource,storage_id,sort:field,order,cursor:nextCursor,group_id:groupId,limit:'100'}),undefined,'GET',{signal,force:true});
   const timer=window.setTimeout(async()=>{
-   setLoading(true);let completed=false;
+   setLoading(true);let completed=false,paintedLocal=false;
+   const detailOf=(timedOut:boolean,reason:unknown)=>timedOut?'aw.listTimeout':(reason as Error).message||'aw.listFailed';
+   const noteCatalog=()=>{
+    listingFailed.current=false;setError('');
+    setPage(current=>{
+     const base=current||{items:[],cursor:null,total:0,summary:{files:0,bytes:0,kinds:{},by_source:{local:{files:0,bytes:0},remote:{files:0,bytes:0}}},storages:storageOptions.current};
+     return {...base,warning:'cache_unavailable',storages:base.storages?.length?base.storages:storageOptions.current};
+    });
+   };
    try{
-    const [field,order]=sort.split(':'),source=sourceFilter==='all'?'all':sourceFilter==='local'?'local':'remote',storage_id=sourceFilter.startsWith('storage:')?sourceFilter.slice(8):'';
-    const result=await api<Page>('attachments?'+new URLSearchParams({root,query:query.trim(),kind,source,storage_id,sort:field,order,cursor,group_id:groupId,limit:'100'}),undefined,'GET',{signal:controller.signal,force:true});
-    if(disposed)return;
-    storageOptions.current=result.storages||[];setPage(result);setError('');setFocused(current=>current&&(result.items.find(item=>item.path===current.path)||current));completed=true;
-   }catch(reason){
-    if(!disposed){listingFailed.current=true;if((reason as {status?:number}).status===409&&cursor)setListUpdated(true);else setError(timedOut?'aw.listTimeout':(reason as Error).message);}
+    // All paints the local index first. The saved server catalog is a second
+    // read: if it is slow or fails, the local grid stays and the center does
+    // not turn into a retry.
+    if(source==='all'&&!cursor){
+     const localAbort=new AbortController();
+     const stopLocal=()=>localAbort.abort();
+     parent.signal.addEventListener('abort',stopLocal,{once:true});
+     localTimer=window.setTimeout(()=>localAbort.abort(),timeoutMs);
+     try{
+      const local=await load('local','',localAbort.signal);
+      if(!current())return;
+      if(local.storages?.length)storageOptions.current=local.storages;
+      setPage(local);setError('');setFocused(current=>current&&(local.items.find(item=>item.path===current.path)||current));paintedLocal=true;
+     }catch{if(!current())return;}
+     finally{window.clearTimeout(localTimer);parent.signal.removeEventListener('abort',stopLocal);}
+    }
+    if(!current())return;
+    let timedOut=false;
+    mergedTimer=window.setTimeout(()=>{timedOut=true;parent.abort();},timeoutMs);
+    try{
+     const result=await load(source,cursor,parent.signal);
+     if(!current()||parent.signal.aborted)return;
+     storageOptions.current=result.storages||[];setPage(result);setError('');setFocused(current=>current&&(result.items.find(item=>item.path===current.path)||current));completed=!result.warning;
+    }catch(reason){
+     if(!current()||(!timedOut&&parent.signal.aborted))return;
+     if((reason as {status?:number}).status===409&&cursor){setListUpdated(true);return;}
+     const detail=detailOf(timedOut,reason);
+     if(paintedLocal||source==='remote'||!!storage_id){noteCatalog();return;}
+     if(source==='all'&&pageRef.current){noteCatalog();return;}
+     listingFailed.current=true;setError(detail);
+    }
    }finally{
-    window.clearTimeout(timeout);
-    if(!disposed){
+    window.clearTimeout(mergedTimer);
+    if(current()){
      listingBusy.current=false;setLoading(false);
      const queued=listingQueued.current;listingQueued.current=false;
      // Scan notifications can arrive faster than a large catalog can be read.
@@ -120,12 +176,13 @@ function AttachmentFiles({root,active=true,onOpen,onChanged,onDownloads}:Attachm
     }
    }
   },query?250:0);
-  return()=>{disposed=true;window.clearTimeout(timer);window.clearTimeout(timeout);controller.abort();if(listing.current===controller)listingBusy.current=false;};
+  return()=>{disposed=true;window.clearTimeout(timer);window.clearTimeout(localTimer);window.clearTimeout(mergedTimer);parent.abort();if(listing.current===parent)listingBusy.current=false;};
  },[root,ready,query,kind,sourceFilter,sort,cursor,revision,groupId,groupState.data.groups.find(g=>g.id===groupId)?.revision]);
  useEffect(()=>{setDetail(current=>current?.path===focused?.path?current:undefined);if(!focused||!active)return;const controller=new AbortController();void api<Detail>('attachments/details?'+new URLSearchParams({root,path:focused.path}),undefined,'GET',{signal:controller.signal,force:true}).then(result=>{if(!controller.signal.aborted)setDetail(result);}).catch(reason=>{if(!controller.signal.aborted)setMessage((reason as Error).message);});return()=>controller.abort();},[focused?.path,active,root,revision]);
  const filter=(change:()=>void)=>{
   // An old page belongs to its previous filters. Keep snapshots only for quiet
   // refreshes, never beneath a newly selected group/source/search context.
+  listingVersion.current++;listing.current?.abort();pageRef.current=undefined;
   change();listingFailed.current=false;setPage(undefined);setError('');setListUpdated(false);setLoading(true);
   setCursor('');setCursors([]);setSelected([]);setFocused(undefined);setDetail(undefined);setExpanded(false);setRevision(value=>value+1);
   if(scroller.current)scroller.current.scrollTop=0;scrollPosition.current=0;
@@ -154,6 +211,14 @@ function AttachmentFiles({root,active=true,onOpen,onChanged,onDownloads}:Attachm
   if(locals.length)await api('attachments/downloads',{root,paths:locals},'POST',{signal:life.current.signal});
   onDownloads?.();
  }catch(reason){if(!life.current.signal.aborted)setError((reason as Error).message);}};
+ const cacheLocal=async(paths:string[])=>{
+  setBusy(true);setMessage('');
+  try{
+   await api('attachments/cache',{root,paths},'POST',{signal:life.current.signal});
+   if(!life.current.signal.aborted){setMessage(t('am.cacheReady'));refresh();}
+  }catch(reason){if(!life.current.signal.aborted)setMessage((reason as Error).message);}
+  finally{if(!life.current.signal.aborted)setBusy(false);}
+ };
 
  const choose=(item:Item)=>{setFocused(item);setMessage('');};
  const pickAll=()=>setSelected(selected.length===page?.items.length?[]:page?.items.map(item=>item.path)||[]);
@@ -163,25 +228,27 @@ function AttachmentFiles({root,active=true,onOpen,onChanged,onDownloads}:Attachm
  const can=(operation:'rename'|'move'|'trash')=>writable&&(detail?.capabilities?.[operation]??detail?.source!=='remote');
  const canBatch=(operation:'move'|'trash')=>!running&&selected.every(path=>{const item=page?.items.find(item=>item.path===path);return item&&(item.capabilities?.[operation]??item.source!=='remote');});
  const visibleStats=page?.result_summary||page?.summary;
+ const listWarning=page?.warning==='cache_unavailable'?(sourceFilter==='all'||sourceFilter==='local'?'aw.cacheSkipped':'aw.cacheUnavailable'):page?.warning==='local_group_uncached'?'aw.localGroupUncached':page?.warning==='local_catalog_missing'&&localReady?'aw.localCatalogMissing':'';
  const activeCount=jobs.filter(activeJob).length+uploads.filter(item=>item.state==='uploading'||item.state==='pending'||item.state==='waiting').length;
  return <div className="attachment-hub" hidden={!active}><AttachmentGroupBar groups={groupState.data.groups} selected={groupId} onSelect={id=>filter(()=>setGroupId(id))} update={groupState.update} pending={groupState.data.pending} sync={groupState.data.sync.state} storages={storageOptions.current}/>{groupState.error&&<p className="aw-alert" role="alert"><Diagnostic message={groupState.error}/></p>}<section className="attachment-workspace" aria-label={t('attachments.title')} onDragOver={event=>{if(event.dataTransfer.types.includes('Files'))event.preventDefault();}} onDrop={event=>{event.preventDefault();if(ready)void uploadFiles(Array.from(event.dataTransfer.files));}}>
   <header className="aw-header aw-compact-header"><h1>{activeGroup?.name||t('attachments.title')}</h1><div className="aw-header-actions">{ready&&<button className="primary" disabled={mutating||uploading.current} onClick={()=>input.current?.click()}><Upload size={15}/>{t('aw.upload')}</button>}<button onClick={onDownloads}><Download size={15}/>{t('dl.title')}</button>{(uploads.length>0||jobs.length>0)&&<button ref={tasksButton} onClick={()=>setShowTasks(true)}><Archive size={15}/>{t('aw.activity')}{activeCount>0&&<b className="aw-counter">{activeCount}</b>}</button>}<button onClick={()=>setOverview(true)}><Info size={15}/>{t('aw.overview')}</button><AttachmentServerRefresh key={root} root={root}/><button aria-pressed={infoOpen} aria-controls="attachment-information" onClick={()=>toggleInfo(!infoOpen)}><Info size={15}/>{t('aw.information')}</button></div></header>
   <input ref={input} type="file" accept={index?.allowed_extensions?.join(',')} multiple hidden onChange={event=>{void uploadFiles(Array.from(event.target.files||[]));event.target.value='';}}/>
   {(error||index?.error)&&<div className="aw-alert" role="alert"><Diagnostic message={error||index!.error!}/><button onClick={()=>{setError('');refresh();void poll();}}>{t('重试')}</button></div>}
   {ready&&!localReady&&<div className="aw-alert" role="status"><p>{t(indexBuilding?'aw.localCatalogBuilding':'aw.localCatalogMissing')}</p>{localIndex?.error&&<p><Diagnostic message={localIndex.error}/></p>}{indexBuilding&&<small>{t('aw.processed',{count:(localIndex?.progress?.done||0).toLocaleString(locale)})}</small>}<button disabled={busy||indexBuilding||localIndex?.state==='unsupported'} onClick={()=>void initialize()}>{t(indexBuilding?'aw.building':'aw.initialize')}</button></div>}
+  {listWarning&&<div className="aw-alert" role="status"><p>{t(listWarning)}</p>{page?.warning==='cache_unavailable'&&<button onClick={refresh}>{t('重试')}</button>}</div>}
   {!ready?<div className="aw-onboarding"><div className="aw-onboarding-icon"><Paperclip size={42} strokeWidth={1.2}/></div><h2>{t(running||indexBuilding?'aw.preparing':'aw.startTitle')}</h2><p>{t('aw.startHint')}</p>{running&&job?<div className="aw-onboarding-progress"><JobProgress job={job}/><button onClick={()=>setShowTasks(true)}>{t('aw.viewTask')}<ArrowRight size={15}/></button></div>:<button className="primary" disabled={!index||busy||indexBuilding||index.state==='unsupported'} onClick={()=>void initialize()}><Sparkles size={16}/>{t(indexBuilding?'aw.building':'aw.initialize')}</button>}<span className="aw-onboarding-safe"><ShieldCheck size={14}/>{t('aw.previewOnly')}</span></div>:<>
   <div className="aw-toolbar"><label className="aw-source-filter"><span>{t('aw.sourceFilter')}</span><select aria-label={t('aw.sourceFilter')} value={sourceFilter} onChange={event=>filter(()=>setSourceFilter(event.target.value))}><option value="all">{t('aw.sourceAll')}</option><option value="local">{t('aw.sourceLocal')}</option><option value="remote">{t('aw.sourceRemote')}</option>{!!page?.storages?.length&&<optgroup label={t('aw.sourceServers')}>{page.storages.map(storage=><option key={storage.storage_id} value={'storage:'+storage.storage_id}>{storage.name||t('as.unnamed')}{storage.enabled?'':' · '+t('aw.sourceDisabled')}</option>)}</optgroup>}</select></label><div className="aw-search"><Search size={17}/><input type="search" placeholder={t('aw.searchPlaceholder')} aria-label={t('attachments.searchLabel')} value={query} onChange={event=>filter(()=>setQuery(event.target.value))}/>{query&&<button className="icon-button" aria-label={t('aw.clearSearch')} onClick={()=>filter(()=>setQuery(''))}><X size={14}/></button>}</div><div className="aw-toolbar-right"><ArrowDownUp size={15}/><select aria-label={t('aw.sort')} value={sort} onChange={event=>filter(()=>setSort(event.target.value))}>{['modified:desc','modified:asc','name:asc','name:desc','size:desc','size:asc'].map(value=><option key={value} value={value}>{t('aw.sort.'+value.replace(':','.'))}</option>)}</select><div className="aw-layout-switch"><button aria-label={t('aw.grid')} aria-pressed={layout==='grid'} onClick={()=>setView('grid')}><Grid2X2 size={16}/></button><button aria-label={t('aw.list')} aria-pressed={layout==='list'} onClick={()=>setView('list')}><LayoutList size={17}/></button></div><button className="icon-button" aria-label={t('aw.indexRefresh')} title={t('aw.indexRefreshHint')} onClick={refresh}><RefreshCw size={16} className={loading?'aw-spin':''}/></button></div></div>
   <nav className="aw-filters" aria-label={t('aw.types')}>{kinds.map(value=><button key={value} aria-pressed={kind===value} onClick={()=>filter(()=>setKind(value))}>{t('aw.type.'+value)}<span>{page?((value==='all'?page.summary.files:page.summary.kinds[value])??0).toLocaleString(locale):'—'}</span></button>)}</nav>
   <div className={'aw-body '+(infoOpen?'has-preview':'info-collapsed')}>
-   <div className="aw-browser"><div className="aw-selection">{listUpdated&&<button onClick={refresh}>{t('aw.listUpdated')}</button>}<label><input type="checkbox" aria-label={t('aw.selectPage')} checked={!!page?.items.length&&selected.length===page.items.length} onChange={pickAll}/><span role="status">{!page?(loading?t('aw.loading'):error?t('aw.listFailed'):''):selected.length?t('aw.selected',{count:selected.length}):t('aw.results',{count:page.total})}</span></label>{selected.length>0?<div className="aw-batch-actions"><GroupMembership groups={groupState.data.groups} paths={selected} current={groupId} update={groupState.update} onUpdated={refresh}/><button onClick={()=>openOperation('move',selected)} disabled={!canBatch('move')}><FolderInput size={14}/>{t('aw.move')}</button><button onClick={()=>void startDownload(selected)}><Download size={14}/>{t('下载')}</button><button onClick={()=>openOperation('trash',selected)} disabled={!canBatch('trash')}><Trash2 size={14}/>{t('aw.recycle')}</button><button className="icon-button" aria-label={t('aw.clearSelection')} onClick={()=>setSelected([])}><X size={14}/></button></div>:<small>{t('aw.selectHint')}</small>}</div>
+   <div className="aw-browser"><div className="aw-selection">{listUpdated&&<button onClick={refresh}>{t('aw.listUpdated')}</button>}<label><input type="checkbox" aria-label={t('aw.selectPage')} checked={!!page?.items.length&&selected.length===page.items.length} onChange={pickAll}/><span role="status">{!page?(loading?t('aw.loading'):error?t('aw.listFailed'):''):selected.length?t('aw.selected',{count:selected.length}):t('aw.results',{count:page.total})}</span></label>{selected.length>0?<div className="aw-batch-actions"><GroupMembership groups={groupState.data.groups} paths={selected} current={groupId} update={groupState.update} onUpdated={refresh}/><button onClick={()=>openOperation('move',selected)} disabled={!canBatch('move')}><FolderInput size={14}/>{t('aw.move')}</button><button onClick={()=>void startDownload(selected)}><Download size={14}/>{t('下载')}</button><button disabled={busy||!selected.some(path=>page?.items.find(item=>item.path===path)?.source==='remote')} onClick={()=>void cacheLocal(selected.filter(path=>page?.items.find(item=>item.path===path)?.source==='remote'))}><Archive size={14}/>{t('am.cacheLocal')}</button><button onClick={()=>openOperation('trash',selected)} disabled={!canBatch('trash')}><Trash2 size={14}/>{t('aw.recycle')}</button><button className="icon-button" aria-label={t('aw.clearSelection')} onClick={()=>setSelected([])}><X size={14}/></button></div>:<small>{t('aw.selectHint')}</small>}</div>
    <div ref={scroller} className="aw-file-scroll" onScroll={event=>{scrollPosition.current=event.currentTarget.scrollTop;}} onKeyDown={keyboard} aria-busy={loading}>
-    {loading&&!page?<div className="aw-loading" role="status"><Loader2 className="aw-spin"/>{activeGroup?t('ag.loading',{name:activeGroup.name}):t('aw.loading')}</div>:!page&&error?<div className="aw-empty"><Info size={32}/><p>{t('aw.listFailed')}</p><button onClick={refresh}>{t('重试')}</button></div>:page?.items.length?<ul className={'aw-items '+layout} aria-label={t('aw.files')}>{page.items.map(item=><li key={item.path} className={'aw-card '+(focused?.path===item.path?'focused ':'')+(selected.includes(item.path)?'checked':'')}>
+    {loading&&!page?<div className="aw-loading" role="status"><Loader2 className="aw-spin"/>{activeGroup?t('ag.loading',{name:activeGroup.name}):t('aw.loading')}</div>:!page&&error?<div className="aw-empty"><Info size={32}/><p>{t('aw.listFailed')}</p><p><Diagnostic message={error}/></p><button onClick={refresh}>{t('重试')}</button></div>:page?.items.length?<ul className={'aw-items '+layout} aria-label={t('aw.files')}>{page.items.map(item=><li key={item.path} className={'aw-card '+(focused?.path===item.path?'focused ':'')+(selected.includes(item.path)?'checked':'')}>
      <label className="aw-check"><input type="checkbox" aria-label={t('aw.selectFile',{name:item.name})} checked={selected.includes(item.path)} onChange={event=>setSelected(current=>event.target.checked?[...current,item.path]:current.filter(path=>path!==item.path))}/></label>
      <button className="aw-file-open" data-path={item.path} aria-pressed={focused?.path===item.path} onClick={()=>choose(item)}><span className={'aw-thumb '+category(item)}><Thumb item={item} root={root}/><span className="aw-file-extension">{item.name.split('.').pop()?.toUpperCase()}</span></span><span className="aw-file-copy"><strong title={item.name}>{item.name}</strong><small title={item.path}>{item.path.includes('/')?item.path.slice(0,item.path.lastIndexOf('/')):t('知识库根目录')}</small><span className="aw-file-meta"><span>{formatSize(item.size)}</span><span>{t(item.source==='remote'?'am.remote':'am.local')}</span><time dateTime={new Date(item.mtime*1000).toISOString()}>{new Date(item.mtime*1000).toLocaleDateString(locale,{month:'short',day:'numeric'})}</time></span>{(item.category||!!item.tags?.length)&&<span className="aw-file-tags">{[item.category,...(item.tags||[])].filter(Boolean).slice(0,4).map((tag,i)=><small key={i}>{tag}</small>)}</span>}</span></button>
-    </li>)}</ul>:<div className="aw-empty"><Search size={34} strokeWidth={1.25}/><h3>{t('attachments.empty')}</h3><p>{t('aw.emptyHint')}</p>{query&&<button onClick={()=>filter(()=>{setQuery('');setKind('all');})}>{t('aw.clearSearch')}</button>}</div>}
+    </li>)}</ul>:<div className="aw-empty"><Search size={34} strokeWidth={1.25}/>{listWarning?<p>{t(listWarning)}</p>:<><h3>{t('attachments.empty')}</h3><p>{t('aw.emptyHint')}</p></>}{query&&<button onClick={()=>filter(()=>{setQuery('');setKind('all');})}>{t('aw.clearSearch')}</button>}</div>}
    </div><footer className="aw-pagination"><span>{page?t('aw.pageRange',{start:page.total?cursors.length*100+1:0,end:cursors.length*100+page.items.length,total:page.total}):loading?t('aw.loading'):''}</span><div><button aria-label={t('aw.previous')} disabled={!cursors.length||loading} onClick={()=>{setCursor(cursors[cursors.length-1]);setCursors(current=>current.slice(0,-1));setSelected([]);}}><ArrowLeft size={15}/></button><button aria-label={t('aw.next')} disabled={!page?.cursor||loading} onClick={()=>{setCursors(current=>[...current,cursor]);setCursor(page!.cursor!);setSelected([]);}}><ArrowRight size={15}/></button></div></footer></div>
    <aside id="attachment-information" hidden={!infoOpen} className="aw-preview" aria-label={t('aw.preview')}>
-    {focused?<><header><button className="icon-button aw-back" aria-label={t('aw.backToFiles')} onClick={()=>toggleInfo(false)}><ArrowLeft size={17}/></button><span>{t('aw.preview')}</span><div>{(category(focused)!=='other'||!!(detail?.cover_id||focused.cover_id))&&<button className="icon-button" aria-label={t('aw.expand')} onClick={()=>setExpanded(true)}><Expand size={16}/></button>}<button className="icon-button" aria-label={t('关闭')} onClick={()=>toggleInfo(false)}><X size={16}/></button></div></header><div className="aw-preview-content"><Preview key={root+focused.path} item={{...focused,...(detail?.path===focused.path?detail:{})}} root={root} active={active&&infoOpen&&!expanded}/></div><div className="aw-details"><div className="aw-detail-name"><FileIcon item={focused} size={20}/><h2>{focused.name}</h2></div><dl><dt>{t('aw.location')}</dt><dd title={focused.path}>{focused.path}</dd><dt>{t('aw.size')}</dt><dd>{formatSize(focused.size)}</dd><dt>{t('aw.modified')}</dt><dd>{new Date(focused.mtime*1000).toLocaleString(locale)}</dd><dt>{t('aw.format')}</dt><dd>{focused.mime}</dd><dt>{t('am.source')}</dt><dd>{t(focused.source==='remote'?'am.remote':'am.local')}</dd>{focused.source==='remote'&&<><dt>{t('am.cache')}</dt><dd>{t('am.cache.'+(detail?.cache_state||focused.cache_state||'none'))}</dd></>}</dl>{detail?.official_metadata&&Object.keys(detail.official_metadata).length>0&&<section className="aw-official"><h3>{t('ag.sourceInfo')}</h3><strong>{detail.official_metadata.title}</strong><p>{detail.description}</p>{detail.official_metadata.publisher&&<p>{detail.official_metadata.publisher}</p>}<CompatibilityInfo value={detail.official_metadata.compatibility}/>{detail.official_metadata.url&&/^https:\/\//.test(detail.official_metadata.url)&&<a href={detail.official_metadata.url} target="_blank" rel="noopener noreferrer">{t('ag.sourceLink')}</a>}</section>}{detail?.path===focused.path&&<AttachmentMetadataEditor key={root+focused.path} root={root} item={detail} onSaved={result=>{setDetail(current=>current&&({...current,...result}));refresh();}}/>}{detail?.protected&&<p className="aw-protected"><ShieldCheck size={14}/>{t('aw.protected')}</p>}{message&&<p role="status" className="error"><Diagnostic message={message}/></p>}{focused.source==='remote'?<button className="aw-download" onClick={()=>void startDownload([focused.path])}><Download size={15}/>{t('dl.download')}</button>:<a className="button aw-download" href={media(focused.path,true,root)} download><Download size={15}/>{t('dl.download')}</a>}<GroupMembership groups={groupState.data.groups} paths={[focused.path]} current={groupId} update={groupState.update} onUpdated={refresh}/><div className="aw-detail-actions"><button disabled={!can('rename')} onClick={()=>openOperation('rename',[focused.path])}><Pencil size={14}/>{t('重命名')}</button><button disabled={!can('move')} onClick={()=>openOperation('move',[focused.path])}><FolderInput size={14}/>{t('aw.move')}</button><button disabled={!can('trash')} onClick={()=>openOperation('trash',[focused.path])}><Trash2 size={14}/>{t('aw.recycle')}</button></div>{window.leafloomDesktop&&focused.source!=='remote'&&<button className="text-link" onClick={()=>void window.leafloomDesktop!.revealFile(focused.path).catch(reason=>setMessage(reason.message))}>{t('在文件管理器中显示')}</button>}</div></>:<div className="aw-preview-empty"><div><ImageIcon size={35} strokeWidth={1}/></div><h3>{t('aw.selectPreview')}</h3><p>{t('aw.selectPreviewHint')}</p><span>PNG · JPG · PDF · MP4 · MP3</span></div>}
+    {focused?<><header><button className="icon-button aw-back" aria-label={t('aw.backToFiles')} onClick={()=>toggleInfo(false)}><ArrowLeft size={17}/></button><span>{t('aw.preview')}</span><div>{(category(focused)!=='other'||!!(detail?.cover_id||focused.cover_id))&&<button className="icon-button" aria-label={t('aw.expand')} onClick={()=>setExpanded(true)}><Expand size={16}/></button>}<button className="icon-button" aria-label={t('关闭')} onClick={()=>toggleInfo(false)}><X size={16}/></button></div></header><div className="aw-preview-content"><Preview key={root+focused.path} item={{...focused,...(detail?.path===focused.path?detail:{})}} root={root} active={active&&infoOpen&&!expanded}/></div><div className="aw-details"><div className="aw-detail-name"><FileIcon item={focused} size={20}/><h2>{focused.name}</h2></div><dl><dt>{t('aw.location')}</dt><dd title={focused.path}>{focused.path}</dd><dt>{t('aw.size')}</dt><dd>{formatSize(focused.size)}</dd><dt>{t('aw.modified')}</dt><dd>{new Date(focused.mtime*1000).toLocaleString(locale)}</dd><dt>{t('aw.format')}</dt><dd>{focused.mime}</dd><dt>{t('am.source')}</dt><dd>{t(focused.source==='remote'?'am.remote':'am.local')}</dd>{focused.source==='remote'&&<><dt>{t('am.cache')}</dt><dd>{t('am.cache.'+(detail?.cache_state||focused.cache_state||'none'))}</dd></>}</dl>{detail?.official_metadata&&Object.keys(detail.official_metadata).length>0&&<section className="aw-official"><h3>{t('ag.sourceInfo')}</h3><strong>{detail.official_metadata.title}</strong><p>{detail.description}</p>{detail.official_metadata.publisher&&<p>{detail.official_metadata.publisher}</p>}<CompatibilityInfo value={detail.official_metadata.compatibility}/>{detail.official_metadata.url&&/^https:\/\//.test(detail.official_metadata.url)&&<a href={detail.official_metadata.url} target="_blank" rel="noopener noreferrer">{t('ag.sourceLink')}</a>}</section>}{detail?.path===focused.path&&<AttachmentMetadataEditor key={root+focused.path} root={root} item={detail} onSaved={result=>{setDetail(current=>current&&({...current,...result}));refresh();}}/>}{detail?.protected&&<p className="aw-protected"><ShieldCheck size={14}/>{t('aw.protected')}</p>}{message&&<p role="status" className="error"><Diagnostic message={message}/></p>}{focused.source==='remote'&&(detail?.cache_state||focused.cache_state)!=='complete'&&<button className="aw-download" disabled={busy} onClick={()=>void cacheLocal([focused.path])}><Archive size={15}/>{t('am.cacheLocal')}</button>}{focused.source==='remote'?<button className="aw-download" onClick={()=>void startDownload([focused.path])}><Download size={15}/>{t('dl.download')}</button>:<a className="button aw-download" href={media(focused.path,true,root)} download><Download size={15}/>{t('dl.download')}</a>}<GroupMembership groups={groupState.data.groups} paths={[focused.path]} current={groupId} update={groupState.update} onUpdated={refresh}/><div className="aw-detail-actions"><button disabled={!can('rename')} onClick={()=>openOperation('rename',[focused.path])}><Pencil size={14}/>{t('重命名')}</button><button disabled={!can('move')} onClick={()=>openOperation('move',[focused.path])}><FolderInput size={14}/>{t('aw.move')}</button><button disabled={!can('trash')} onClick={()=>openOperation('trash',[focused.path])}><Trash2 size={14}/>{t('aw.recycle')}</button></div>{window.leafloomDesktop&&focused.source!=='remote'&&<button className="text-link" onClick={()=>void window.leafloomDesktop!.revealFile(focused.path).catch(reason=>setMessage(reason.message))}>{t('在文件管理器中显示')}</button>}</div></>:<div className="aw-preview-empty"><div><ImageIcon size={35} strokeWidth={1}/></div><h3>{t('aw.selectPreview')}</h3><p>{t('aw.selectPreviewHint')}</p><span>PNG · JPG · PDF · MP4 · MP3</span></div>}
    </aside>
   </div></>}
   {overview&&<Modal title={t('aw.overview')} onClose={()=>setOverview(false)} className="aw-overview"><div className="pad"><p>{t('aw.catalogHelp')}</p><p>{t(index?.default_storage_id&&index.default_storage_id!=='local'?'aw.saveServer':'aw.saveLocal',{name:storageOptions.current.find(storage=>storage.storage_id===index?.default_storage_id)?.name||t('as.unnamed')})}</p>  <div className="aw-stats"><div><Paperclip size={18}/><span>{t('aw.total')}<strong>{visibleStats?.files.toLocaleString(locale)??'—'}</strong></span></div>{(sourceFilter==='all'||sourceFilter==='local')&&<div><Archive size={18}/><span>{t('aw.localOriginalBytes')}<strong>{!localReady?'—':sourceFilter==='all'?(visibleStats?.by_source?formatSize(visibleStats!.by_source.local.bytes):'—'):page?formatSize(visibleStats!.bytes):'—'}</strong></span></div>}{sourceFilter!=='local'&&<div><Archive size={18}/><span>{t(sourceFilter.startsWith('storage:')?'aw.serverOriginalBytes':'aw.remoteOriginalBytes')}<strong>{sourceFilter==='all'?(visibleStats?.by_source?formatSize(visibleStats!.by_source.remote.bytes):'—'):page?formatSize(visibleStats!.bytes):'—'}</strong></span></div>}</div><p className="aw-space-note"><ShieldCheck size={13}/>{t('aw.originalBytesHelp')}</p>

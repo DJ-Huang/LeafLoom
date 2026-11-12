@@ -64,13 +64,47 @@ class AttachmentWorkspace:
             result={**metadata,**result}
         self.migrations._guard(root);self.config.path_for(path);return result
 
-    def thumbnail(self,root,path):
+    @staticmethod
+    def _encode_thumbnail(stream):
         from PIL import Image, ImageOps, UnidentifiedImageError
+        import io
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('error', Image.DecompressionBombWarning)
+                with Image.open(stream) as picture:
+                    if picture.width * picture.height > 32_000_000:
+                        raise ValueError('Image is too large for a thumbnail')
+                    picture.seek(0)
+                    picture.draft('RGB', (256, 256))
+                    picture = ImageOps.exif_transpose(picture)
+                    picture.thumbnail((256, 256))
+                    picture = picture.convert('RGBA' if 'A' in picture.getbands() else 'RGB')
+                    data = io.BytesIO()
+                    picture.save(data, 'WEBP', quality=78)
+                    return data.getvalue()
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombWarning, Image.DecompressionBombError) as error:
+            raise ValueError('Image thumbnail is unavailable') from error
+
+    def thumbnail(self,root,path):
+        release=None
+        if self.remote:
+            try:
+                item=self.remote.stat(root,path=path)
+                if item.get('source')=='remote':release=self.remote.acquire_cache_read(root,item['asset_id'])
+            except FileNotFoundError:pass
+        try:return self._thumbnail(root,path)
+        finally:
+            if release:release()
+
+    def _thumbnail(self,root,path):
+        import io
         files=self.files(root);path=relative(path);source=files.config.path_for(path)
         if Path(path).suffix.lower() not in {'.png','.jpg','.jpeg','.gif','.webp','.bmp','.tif','.tiff','.avif'}:
             raise ValueError('Thumbnail format is unsupported')
         remote=False
+        remote_item=None
         target=None
+        prefix_bytes=None
         if self.remote:
             try:item=self.remote.stat(root,path=path)
             except FileNotFoundError:item=None
@@ -82,44 +116,69 @@ class AttachmentWorkspace:
                 key=hashlib.sha256(json.dumps(identity).encode()).hexdigest()
                 target=files.state_path('remote-attachment-thumbnails',key+'.webp')
                 if target.is_file():
+                    self.remote.queue_preview_check(root,item['asset_id'],item.get('last_verified',0))
                     self.migrations._guard(root);self.config.path_for(path)
                     return target
-                source=self.remote.materialize(root,asset_id=item['asset_id']);remote=True
-        before=source.stat()
-        if before.st_size>64*1024*1024:raise ValueError('Image is too large for a thumbnail')
-        key=hashlib.sha256(json.dumps([root,path,before.st_size,before.st_mtime_ns,self.config.data.get('revision')]).encode()).hexdigest()
-        if target is None:target=files.state_path('attachment-thumbnails',key+'.webp')
+                remote=True
+                remote_item=item
+                # Prefer a bounded range so the attachment grid does not pull
+                # multi‑MB/GB originals just to render a 256px tile.
+                if item['size'] <= 8 * 1024 * 1024:
+                    try:
+                        prefix_bytes, _ = self.remote.read_range(root, asset_id=item['asset_id'], start=0, end=item['size'] - 1, cache_first=True)
+                    except (RemoteStorageError, ConflictError, ValueError, OSError):
+                        prefix_bytes = None
+                if prefix_bytes is None and item['size'] > 0:
+                    try:
+                        end = min(item['size'] - 1, 8 * 1024 * 1024 - 1)
+                        prefix_bytes, _ = self.remote.read_range(root, asset_id=item['asset_id'], start=0, end=end, cache_first=True)
+                    except (RemoteStorageError, ConflictError, ValueError, OSError):
+                        prefix_bytes = None
+                if prefix_bytes is None:
+                    source = self.remote.materialize(root, asset_id=item['asset_id'], cache_first=True)
+        before = None if prefix_bytes is not None else source.stat()
+        if before is not None and before.st_size > 64 * 1024 * 1024:
+            raise ValueError('Image is too large for a thumbnail')
+        if target is None:
+            key = hashlib.sha256(json.dumps([root, path, before.st_size, before.st_mtime_ns, self.config.data.get('revision')]).encode()).hexdigest()
+            target = files.state_path('attachment-thumbnails', key + '.webp')
         with self.images:
-            target.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             if not target.exists():
-                import io
                 try:
-                    with warnings.catch_warnings():
-                        warnings.simplefilter('error',Image.DecompressionBombWarning)
-                        with os.fdopen(os.open(source,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)|getattr(os,'O_BINARY',0)),'rb') as stream, Image.open(stream) as picture:
-                            opened=os.fstat(stream.fileno())
-                            if not stat.S_ISREG(opened.st_mode) or (opened.st_size,opened.st_mtime_ns,opened.st_ino)!=(before.st_size,before.st_mtime_ns,before.st_ino):raise ConflictError('Image changed while opening')
-                            if picture.width*picture.height>32_000_000:raise ValueError('Image is too large for a thumbnail')
-                            picture.seek(0);picture.draft('RGB',(256,256))
-                            picture=ImageOps.exif_transpose(picture);picture.thumbnail((256,256))
-                            picture=picture.convert('RGBA' if 'A' in picture.getbands() else 'RGB')
-                            data=io.BytesIO();picture.save(data,'WEBP',quality=78)
-                except (UnidentifiedImageError,OSError,Image.DecompressionBombWarning,Image.DecompressionBombError) as error:
-                    raise ValueError('Image thumbnail is unavailable') from error
-                after=source.stat() if remote else files.config.path_for(path).stat()
+                    if prefix_bytes is not None:
+                        data = self._encode_thumbnail(io.BytesIO(prefix_bytes))
+                    else:
+                        with os.fdopen(os.open(source, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0)), 'rb') as stream:
+                            opened = os.fstat(stream.fileno())
+                            if not stat.S_ISREG(opened.st_mode) or (opened.st_size, opened.st_mtime_ns, opened.st_ino) != (before.st_size, before.st_mtime_ns, before.st_ino):
+                                raise ConflictError('Image changed while opening')
+                            data = self._encode_thumbnail(stream)
+                        after = source.stat() if remote else files.config.path_for(path).stat()
+                        if (before.st_size, before.st_mtime_ns, before.st_ino) != (after.st_size, after.st_mtime_ns, after.st_ino):
+                            raise ConflictError('Image changed while preparing its thumbnail')
+                except ValueError:
+                    if prefix_bytes is not None and remote_item is not None:
+                        # Truncated streams (TIFF/PNG/AVIF) fall back to a full
+                        # materialize once; keep the range path as the default.
+                        source = self.remote.materialize(root, asset_id=remote_item['asset_id'], cache_first=True)
+                        before = source.stat()
+                        with os.fdopen(os.open(source, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0)), 'rb') as stream:
+                            data = self._encode_thumbnail(stream)
+                    else:
+                        raise
                 self.migrations._guard(root)
-                if (before.st_size,before.st_mtime_ns,before.st_ino)!=(after.st_size,after.st_mtime_ns,after.st_ino):
-                    raise ConflictError('Image changed while preparing its thumbnail')
-                atomic_write(target,data.getvalue())
-                entries=list(target.parent.glob('*.webp'))
-                if not remote and len(entries)>1024:
-                    for old in sorted(entries,key=lambda p:p.stat().st_mtime)[:len(entries)-1024]:
-                        if old!=target:old.unlink(missing_ok=True)
+                atomic_write(target, data)
+                entries = list(target.parent.glob('*.webp'))
+                if not remote and len(entries) > 1024:
+                    for old in sorted(entries, key=lambda p: p.stat().st_mtime)[:len(entries) - 1024]:
+                        if old != target:
+                            old.unlink(missing_ok=True)
         self.migrations._guard(root);self.config.path_for(path)
-        if remote:
-            current=self.remote.stat(root,asset_id=item['asset_id'])
+        if remote and remote_item is not None:
+            current=self.remote.stat(root,asset_id=remote_item['asset_id'])
             if current.get('state')=='missing':raise RemoteStorageError('remote_asset_missing','missing')
-            if current.get('content_generation',0)!=item.get('content_generation',0):
+            if current.get('content_generation',0)!=remote_item.get('content_generation',0):
                 raise ConflictError('Attachment availability changed while preparing its thumbnail')
         return target
 
@@ -141,7 +200,8 @@ class AttachmentWorkspace:
         return files.state_path('attachment-downloads',key,name)
 
     def _save_download(self,files,job):
-        atomic_write(self._download_path(files,job['id'],'job.json'),json.dumps(job).encode())
+        with self.lock:
+            atomic_write(self._download_path(files,job['id'],'job.json'),json.dumps(job).encode())
 
     def download(self,root,paths,*,guard=None):
         files=self.files(root)
@@ -225,7 +285,7 @@ class AttachmentWorkspace:
 
     def _browser_download_record(self,root,key):
         files=self.files(root)
-        job=json.loads(self._download_path(files,key,'job.json').read_text())
+        with self.lock:job=json.loads(self._download_path(files,key,'job.json').read_text())
         if job['root']!=root:raise ConflictError('Download belongs to another folder')
         self._download_guard(job)
         if job.get('owner','local')!='local':raise PermissionError('Download owner mismatch')
@@ -242,7 +302,7 @@ class AttachmentWorkspace:
 
     def download_status(self,root,key,cancel=False):
         files=self.files(root);record=self._download_path(files,key,'job.json')
-        job=json.loads(record.read_text())
+        with self.lock:job=json.loads(record.read_text())
         if job['root']!=root:raise ConflictError('Download belongs to another folder')
         self._download_guard(job)
         if time.time()-job['created_at']>3600:

@@ -373,14 +373,16 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     @app.post('/api/attachments/migrations')
     async def plan_attachment_migration(request:Request):
         body=await request.json()
-        return await asyncio.to_thread(migrations.create,body['root'],body.get('destination','_attachments'))
+        return await asyncio.to_thread(migrations.create,body['root'],body.get('destination','_attachments'),
+            kind=body.get('kind','organize'),selection=body.get('selection'),destinations=body.get('destinations'))
     @app.get('/api/attachments/migrations/{key}')
     async def get_attachment_migration(key:str):
         return await asyncio.to_thread(migrations.get,key)
     @app.post('/api/attachments/migrations/{key}/{action}')
     async def act_attachment_migration(key:str,action:str,request:Request):
         body=await request.json()
-        return await asyncio.to_thread(migrations.action,key,action,body['root'],body.get('confirm',False))
+        return await asyncio.to_thread(migrations.action,key,action,body['root'],body.get('confirm',False),
+            expected_revision=body.get('expected_revision'))
     @app.get('/api/attachments/details')
     async def attachment_details(root:str,path:str):
         value=await asyncio.to_thread(attachments_workspace.details,root,path)
@@ -449,11 +451,23 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         return await asyncio.to_thread(index_jobs.cancel_job,body['root'])
     @app.get('/api/attachments')
     async def attachments(query:str='',after:str='',limit:int=100,root:str='',kind:str='all',sort:str='path',order:str='asc',cursor:str='',source:str='all',storage_id:str='',tags:str='',category:str='',group_id:str=''):
-        status=await asyncio.to_thread(index_jobs.status,root)
-        if not status['usable']:
-            return json_response({'error':'Initialize the attachment index first','initialization_required':True},409)
-        result=await asyncio.to_thread(runtime.files.attachments.listing,query,after,limit,kind=kind,sort=sort,order=order,cursor=cursor,
-            source=source,storage_id=storage_id,tags=[tag.strip() for tag in tags.split(',') if tag.strip()],category=category,group_id=group_id)
+        index_jobs._guard(root)
+        if source!='remote' and storage_id in {'','local'}:
+            status=await asyncio.to_thread(index_jobs.status,root)
+            if not status['usable']:
+                return json_response({'error':'Initialize the attachment index first','initialization_required':True},409)
+        try:
+            result=await asyncio.to_thread(runtime.files.attachments.listing,query,after,limit,kind=kind,sort=sort,order=order,cursor=cursor,
+                source=source,storage_id=storage_id,tags=[tag.strip() for tag in tags.split(',') if tag.strip()],category=category,group_id=group_id)
+        except ConflictError as exc:
+            return json_response({'error':str(exc),'conflict':True},409)
+        except FileNotFoundError as exc:
+            return json_response({'error':str(exc)},404)
+        except ValueError as exc:
+            return json_response({'error':str(exc)},400)
+        except Exception as exc:
+            logging.exception('Attachment list failed')
+            return json_response({'error':str(exc) or 'Attachment list failed'},500)
         if root:migrations._guard(root)
         return result
     @app.get('/api/tree')
@@ -533,6 +547,15 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
         body=await request.json()
         if not isinstance(body,dict) or any(not isinstance(body.get(key),str) for key in ('root','directory','entry')):raise ValueError('项目需要关联目录、项目文件夹和入口路径')
         return json_response(await asyncio.to_thread(websites.register,body['root'],body['directory'],body['entry'],body.get('spa',False),body.get('id')))
+    @app.post('/api/html-projects/assets')
+    async def upload_html_project_asset(request:Request,root:str,project_id:str,name:str,subdirectory:str='assets'):
+        if not root or not project_id or not name:raise ValueError('HTML project asset upload needs root, project_id and name')
+        chunks,size=[],0
+        async for part in request.stream():
+            size+=len(part)
+            if size>128*1024*1024:raise ValueError('HTML project asset exceeds 128 MiB')
+            chunks.append(part)
+        return json_response(await asyncio.to_thread(websites.write_asset,root,project_id,name,b''.join(chunks),subdirectory=subdirectory or 'assets'))
     @app.post('/api/html-sessions')
     async def create_html_session(request:Request):
         body=await request.json()
@@ -656,27 +679,39 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
             if root is None:raise ValueError('Select the connected folder before uploading')
             if not name or name.startswith('.') or '/' in name or '\\' in name or any(ord(c)<32 for c in name) or len(name.encode())>200:
                 raise ValueError('Use a plain attachment filename')
+            # Land in `_attachments` first so notes can link immediately; promote
+            # in the background. Note-sized images stay as vault cache after
+            # promote; larger/non-image staging drops to thumbnails.
             folder=relative(config.data.get('attachment_folder','_attachments') if central or not folder else folder)
             logical='/'.join((folder,uuid.uuid4().hex,name))
-            config.path_for(logical,writable=True)
-            directory=runtime.files.state_path('remote-upload-staging');directory.mkdir(parents=True,exist_ok=True,mode=0o700)
-            stage=runtime.files.state_path('remote-upload-staging',uuid.uuid4().hex+'.blob')
+            destination=config.path_for(logical,writable=True)
+            destination.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
             revision=config.data.get('revision')
             def guard():
                 if str(config.root)!=root or config.data.get('revision')!=revision:raise ConflictError('Connected folder changed')
+            temporary=destination.with_name('.upload-'+uuid.uuid4().hex)
             try:
                 written=0
-                with stage.open('xb') as stream:
+                with temporary.open('xb') as stream:
                     async for part in request.stream():
                         guard();written+=len(part)
-                        if written>settings['outbox_max_bytes'] or shutil.disk_usage(directory).free<len(part)+1024**3:
+                        if written>settings['outbox_max_bytes'] or shutil.disk_usage(destination.parent).free<len(part)+1024**3:
                             raise ValueError('Attachment upload staging space is full')
                         stream.write(part)
                     stream.flush();os.fsync(stream.fileno())
-                value=await asyncio.to_thread(remote_attachments.queue_upload,root,selected,logical,stage,guard=guard,attachment=central)
+                os.replace(temporary,destination)
+                value=await asyncio.to_thread(remote_attachments.queue_upload,root,selected,logical,destination,guard=guard,attachment=central)
+                # Do not index as an independent local original; the remote
+                # pending/ready row owns this vault path as staging/同源缓存.
                 runtime.publish('files',[logical])
-                return public_job(value)
-            finally:stage.unlink(missing_ok=True)
+                result=public_job(value)
+                result['path']=logical
+                result['pending_sync']=True
+                return result
+            except Exception:
+                temporary.unlink(missing_ok=True)
+                if destination.exists() and destination.stat().st_size==0:destination.unlink(missing_ok=True)
+                raise
         from vault_rag.attachment_uploads import UploadTarget
         target=UploadTarget(runtime,folder=folder,name=name,root=root,create_folder=create_folder,central=central,unique=unique)
         try:

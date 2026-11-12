@@ -32,6 +32,14 @@ INTERNAL = '/__leafloom__/'
 MIME = {'.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
         '.wasm': 'application/wasm', '.json': 'application/json', '.svg': 'image/svg+xml',
         '.html': 'text/html', '.htm': 'text/html', '.woff2': 'font/woff2'}
+# Restricted write target for project-local assets (not the central attachment library).
+ASSET_EXTENSIONS = frozenset({
+    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.bmp', '.ico', '.svg',
+    '.mp3', '.m4a', '.wav', '.ogg', '.flac', '.aac', '.mp4', '.mov', '.webm', '.m4v',
+    '.woff', '.woff2', '.ttf', '.otf', '.css', '.js', '.mjs', '.cjs', '.json', '.wasm',
+    '.pdf', '.zip', '.glb', '.gltf',
+})
+MAX_ASSET_BYTES = 128 * 1024 * 1024
 
 
 class HtmlProjects:
@@ -50,7 +58,7 @@ class HtmlProjects:
         self.ui_origin = f'http://{self.ui_host}:{port}'
         self.boot_secret = secrets.token_bytes(32)
         self.registry_file = config.directory / 'html-projects.json'
-        self.projects = json.loads(self.registry_file.read_text()) if self.registry_file.exists() else []
+        self.projects = json.loads(self.registry_file.read_text(encoding='utf-8')) if self.registry_file.exists() else []
         self.sessions = OrderedDict()
         self.tickets = {}
 
@@ -106,6 +114,49 @@ class HtmlProjects:
                     if session.get('project_id') == project['id']:
                         self._release(sid)
             return project
+
+    def write_asset(self, root, project_id, name, data, *, subdirectory='assets'):
+        """Write a file under a registered project's assets/ (or Design/Assets) tree."""
+        with self.config.lock, self.lock:
+            self._check_root(root)
+            if not isinstance(name, str) or not name or name in {'.', '..'} or '/' in name or '\\' in name or '\x00' in name:
+                raise ValueError('Use a plain asset filename')
+            if any(ord(c) < 32 for c in name) or len(name.encode()) > 200:
+                raise ValueError('Use a plain asset filename')
+            suffix = PurePosixPath(name).suffix.lower()
+            if suffix not in ASSET_EXTENSIONS:
+                raise ValueError('This file type is not allowed for HTML project assets')
+            if not isinstance(data, (bytes, bytearray)) or len(data) > MAX_ASSET_BYTES:
+                raise ValueError('HTML project asset exceeds 128 MiB')
+            project = next((p for p in self.projects if p['id'] == project_id and p['vault'] == root), None)
+            if project is None:
+                raise ValueError('网页项目不存在')
+            base = self._directory(project['directory'])
+            subdirectory = relative(subdirectory or 'assets')
+            if not subdirectory or subdirectory in {'.', '..'} or any(part.startswith('.') for part in PurePosixPath(subdirectory).parts):
+                raise ValueError('Asset subdirectory is not allowed')
+            allowed = {'assets', 'Design/Assets', 'Design/Assets/Imported'}
+            if subdirectory not in allowed and not subdirectory.startswith('Design/Assets/'):
+                raise ValueError('Asset subdirectory is not allowed')
+            folder = base / subdirectory
+            if not folder.resolve().is_relative_to(base.resolve()):
+                raise ValueError('Asset path escapes the HTML project')
+            folder.mkdir(parents=True, exist_ok=True)
+            destination = folder / name
+            if not destination.resolve().is_relative_to(base.resolve()):
+                raise ValueError('Asset path escapes the HTML project')
+            if destination.exists():
+                stem, ext = destination.stem, destination.suffix
+                n = 2
+                while True:
+                    candidate = destination.with_name(f'{stem} ({n}){ext}')
+                    if not candidate.exists():
+                        destination = candidate
+                        break
+                    n += 1
+            atomic_write(destination, bytes(data))
+            rel = destination.relative_to(self.config.root).as_posix()
+            return {'path': rel, 'project_id': project_id, 'directory': project['directory']}
 
     def create(self, root, path='', project_id=None, draft=None, url=None):
         with self.config.lock, self.lock:
