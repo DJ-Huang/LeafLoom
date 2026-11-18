@@ -1,8 +1,10 @@
 """Focused safety and persistence checks for structured Design Studio documents."""
 import base64
+import contextlib
 import copy
 import json
 import hashlib
+import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -11,6 +13,7 @@ import unittest
 from unittest.mock import patch
 
 from vault_rag.design_documents import DesignDocuments, DOCUMENT_PATH, _diff, _patch
+from vault_rag.design_locations import DesignLocations
 from vault_rag.local_state import ConflictError, Files, LocalConfig
 
 
@@ -23,7 +26,8 @@ class DesignDocumentTests(unittest.TestCase):
         self.config = LocalConfig(self.home / 'config')
         self.config.save({'root': str(self.root), 'include_roots': ['Projects']})
         self.files = Files(self.config)
-        self.studio = SimpleNamespace(config=self.config, runtime=SimpleNamespace(), files=self.files)
+        self.studio = SimpleNamespace(config=self.config, runtime=SimpleNamespace(), files=self.files,
+                                      locations=DesignLocations(self.config))
         self.service = DesignDocuments(self.studio)
         self.directory = 'Projects/Pets'
         (self.root / self.directory).mkdir(parents=True)
@@ -32,6 +36,16 @@ class DesignDocumentTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    @contextlib.contextmanager
+    def database(self, document_id):
+        """Commit like `with sqlite3.connect()` but always release the file handle."""
+        db = self.service._database(document_id)
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     @property
     def path(self):
@@ -79,7 +93,7 @@ class DesignDocumentTests(unittest.TestCase):
         self.apply({'type': 'project.update', 'patch': {'name': 'Synced design'}})
         original = self.path.read_bytes()
         foreign_owner = 'D:\\Knowledge\n' + self.directory
-        with self.service._database(self.current['document']['id']) as db:
+        with self.database(self.current['document']['id']) as db:
             db.execute('UPDATE meta SET owner=? WHERE id=1', (foreign_owner,))
         destination = self.home / 'synced-vault'
         shutil.copytree(self.root, destination)
@@ -90,7 +104,7 @@ class DesignDocumentTests(unittest.TestCase):
         self.assertEqual(synced['revision'], self.current['revision'])
         self.assertTrue(synced['history']['can_undo'])
         self.assertEqual((destination / self.directory / DOCUMENT_PATH).read_bytes(), original)
-        with self.service._database(synced['document']['id']) as db:
+        with self.database(synced['document']['id']) as db:
             self.assertEqual(db.execute('SELECT owner FROM meta WHERE id=1').fetchone()[0], foreign_owner)
         self.history('undo')
         self.assertEqual(self.current['document']['name'], 'Pet Home')
@@ -99,7 +113,7 @@ class DesignDocumentTests(unittest.TestCase):
         self.assertEqual(self.path.read_bytes(), original)
 
     def test_synced_identity_still_rejects_a_different_relative_directory(self):
-        with self.service._database(self.current['document']['id']) as db:
+        with self.database(self.current['document']['id']) as db:
             db.execute('UPDATE meta SET owner=? WHERE id=1', ('D:\\Knowledge\n' + self.directory,))
         shutil.copytree(self.root / self.directory, self.root / 'Projects/Copy')
         original = self.path.read_bytes()
@@ -112,7 +126,7 @@ class DesignDocumentTests(unittest.TestCase):
         self.assertEqual(self.service.read(self.directory)['revision'], self.current['revision'])
 
     def test_synced_root_adopts_external_content_without_changing_owner(self):
-        with self.service._database(self.current['document']['id']) as db:
+        with self.database(self.current['document']['id']) as db:
             db.execute('UPDATE meta SET owner=? WHERE id=1', ('/another/computer/vault\n' + self.directory,))
         document = copy.deepcopy(self.current['document'])
         document['name'] = 'External edit'
@@ -122,7 +136,7 @@ class DesignDocumentTests(unittest.TestCase):
         self.assertEqual(current['document'], document)
         self.assertNotEqual(current['revision'], self.current['revision'])
         self.assertEqual(self.path.read_bytes(), original)
-        with self.service._database(document['id']) as db:
+        with self.database(document['id']) as db:
             self.assertEqual(db.execute('SELECT owner FROM meta WHERE id=1').fetchone()[0], '/another/computer/vault\n' + self.directory)
 
     def test_synced_history_recovers_a_pending_save_without_changing_owner(self):
@@ -130,11 +144,11 @@ class DesignDocumentTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 self.apply({'type': 'project.update', 'patch': {'name': 'Pending synced edit'}})
         foreign_owner = 'D:\\Knowledge\n' + self.directory
-        with self.service._database(self.current['document']['id']) as db:
+        with self.database(self.current['document']['id']) as db:
             db.execute('UPDATE meta SET owner=? WHERE id=1', (foreign_owner,))
         self.current = DesignDocuments(self.studio).read(self.directory)
         self.assertEqual(self.current['document']['name'], 'Pending synced edit')
-        with self.service._database(self.current['document']['id']) as db:
+        with self.database(self.current['document']['id']) as db:
             self.assertEqual(db.execute('SELECT owner FROM meta WHERE id=1').fetchone()[0], foreign_owner)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM pending').fetchone()[0], 0)
         self.history('undo')
@@ -555,7 +569,10 @@ class DesignDocumentTests(unittest.TestCase):
                 self.service.import_workspace_asset(self.directory, 'clip.mp4', path,
                     self.current['revision'], 'invalid-' + path)
         link = self.root / 'link.mp4'
-        link.symlink_to(outside)
+        try:
+            link.symlink_to(outside)
+        except OSError as error:
+            self.skipTest(f'Symlink creation unavailable: {error}')
         with self.assertRaises(ValueError):
             self.service.import_workspace_asset(self.directory, 'clip.mp4', 'link.mp4',
                 self.current['revision'], 'linked')
@@ -593,6 +610,7 @@ class DesignDocumentTests(unittest.TestCase):
                 self.current['revision'], 'source-changed')
         self.assertEqual(self.service.read(self.directory)['revision'], self.current['revision'])
 
+    @unittest.skipIf(os.name == 'nt', 'Windows cannot rename a directory while its file is open')
     def test_asset_source_parent_link_swap_is_rechecked_before_registration(self):
         folder = (self.root / 'Source').resolve()
         folder.mkdir()
@@ -765,7 +783,7 @@ class DesignDocumentTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.service.read(self.directory)
                 self.assertEqual(self.path.read_bytes(), raw)
-                with self.service._database(original['id']) as db:
+                with self.database(original['id']) as db:
                     self.assertEqual(db.execute('SELECT revision FROM meta WHERE id=1').fetchone()[0], self.current['revision'])
                     self.assertEqual(db.execute('SELECT COUNT(*) FROM operations').fetchone()[0], 0)
         original['name'] = 'Finished edit'
@@ -798,7 +816,7 @@ class DesignDocumentTests(unittest.TestCase):
             with self.assertRaisesRegex(ConflictError, 'changed while being read'):
                 self.service.read(self.directory)
         self.assertEqual(self.path.read_bytes(), raw)
-        with self.service._database(external['id']) as db:
+        with self.database(external['id']) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM operations').fetchone()[0], 0)
         self.current = self.service.read(self.directory)
         self.assertEqual(self.current['document'], later)
@@ -859,7 +877,10 @@ class DesignDocumentTests(unittest.TestCase):
     def test_symlink_state_and_asset_paths_are_rejected(self):
         outside = self.home / 'outside'
         outside.mkdir()
-        (self.root / self.directory / 'media').symlink_to(outside, target_is_directory=True)
+        try:
+            (self.root / self.directory / 'media').symlink_to(outside, target_is_directory=True)
+        except OSError as error:
+            self.skipTest(f'Symlink creation unavailable: {error}')
         with self.assertRaises(ValueError):
             self.apply({'type': 'asset.register', 'asset': {'id': 'link', 'path': 'media/pet.png'}})
         state = self.root / '.vault-rag' / 'design-studio' / self.current['document']['id']

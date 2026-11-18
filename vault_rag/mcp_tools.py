@@ -601,10 +601,15 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         Read exact source with full=true plus page_id/node_id or section/item_id.
         full=true without selectors returns the complete document for document.replace.
         Follow next_offset; expected_revision pins pagination. Retain revision and workspace_revision.
+        Read-only external projects return the complete document without history.
         """
-        return await call(ctx, design.documents.inspect, directory, page_id, manifest, section=section,
-                          node_id=node_id, item_id=item_id, offset=offset, limit=limit, full=full,
-                          expected_revision=expected_revision)
+        def run():
+            if design.documents.is_read_only(directory):
+                return design.documents.inspect_readonly(directory, page_id)
+            return design.documents.inspect(directory, page_id, manifest, section=section,
+                                            node_id=node_id, item_id=item_id, offset=offset, limit=limit, full=full,
+                                            expected_revision=expected_revision)
+        return await call(ctx, run)
 
     @tool(write=True)
     async def design_operations(directory: str, commands: list[dict[str, Any]], expected_revision: str,
@@ -722,6 +727,58 @@ def build_workspace_mcp(config, runtime, operations, access, legacy_token, desig
         def run():
             design._check_workspace(workspace_revision)
             return design.workspace.export(directory, page_ids, expected_revision)
+        return await call(ctx, run, write=True)
+
+    @tool(write=True, additive=True)
+    async def design_register_external_project(path: str, workspace_revision: str, ctx: Context) -> CallToolResult:
+        """Open a design project folder outside the vault as read-only; enable editing separately."""
+        def run():
+            design._check_workspace(workspace_revision)
+            return design.workspace.register_external(path)
+        return await call(ctx, run, write=True)
+
+    @tool(write=True)
+    async def design_enable_external_project(directory: str, workspace_revision: str, ctx: Context) -> CallToolResult:
+        """Allow the studio to write inside a registered external project."""
+        def run():
+            design._check_workspace(workspace_revision)
+            return design.workspace.enable_external(directory)
+        return await call(ctx, run, write=True)
+
+    @tool(write=True, additive=True)
+    async def design_remove_external_project(directory: str, expected_revision: str, operation_id: str,
+                                             workspace_revision: str, ctx: Context) -> CallToolResult:
+        """Forget an external project registration without touching its files."""
+        def run():
+            design._check_workspace(workspace_revision)
+            return design.workspace.manage(directory, 'forget', expected_revision, operation_id)
+        return await call(ctx, run, write=True)
+
+    @tool(write=True)
+    async def design_export_project(directory: str, workspace_revision: str, ctx: Context) -> CallToolResult:
+        """Export an editable project ZIP for another Design Studio; excludes playback exports."""
+        def run():
+            design._check_workspace(workspace_revision)
+            return design.workspace.export_project(directory)
+        return await call(ctx, run, write=True)
+
+    @tool(write=True)
+    async def design_import_project(source_path: str, workspace_revision: str, ctx: Context,
+                                    directory: str = '') -> CallToolResult:
+        """Import an exported project ZIP from a local file into the vault."""
+        def run():
+            from pathlib import Path
+            from vault_rag.platform_support import is_link
+            design._check_workspace(workspace_revision)
+            source = Path(source_path).expanduser()
+            if not source.is_absolute():
+                source = design.config.root / source
+            if not source.is_file() or is_link(source):
+                raise ValueError('工程包必须是普通本地文件，且不能是链接')
+            size = source.stat().st_size
+            if not 0 < size <= design.workspace.MAX_PROJECT_ARCHIVE_BYTES:
+                raise ValueError('工程包大小必须在 1 字节到 512 MiB 之间')
+            return design.workspace.import_project(source.read_bytes(), directory)
         return await call(ctx, run, write=True)
 
     if feishu is not None:

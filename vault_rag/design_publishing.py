@@ -260,7 +260,7 @@ class DesignPublisher:
                 if not asset.get('path'):
                     continue
                 name = relative(asset['path'])
-                path = self.config.path_for(body['directory'] + '/' + name)
+                path = self.workspace._project_file(body['directory'], name)
                 if not path.is_file():
                     continue  # Referenced missing resources fail their own item.
                 size += path.stat().st_size

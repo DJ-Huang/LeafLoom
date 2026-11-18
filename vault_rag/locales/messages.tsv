@@ -3181,3 +3181,22 @@ calendar.syncMissing|已读取的变更文件缺失。请从另一台电脑或�
 calendar.syncInvalid|日历变更文件不完整、被修改或格式不受支持；原有数据保留，请检查同步文件。|Calendar change files are incomplete, modified or unsupported. Existing data is preserved; check the synced files.|変更ファイルが未完成・変更済み・未対応形式です。既存データを保持しています。同期ファイルを確認してください。
 calendar.syncTooLarge|单次日历变更过大，请拆分操作|The calendar change is too large; split the operation|変更が大きすぎます。操作を分けてください
 calendar.migrationFailed|旧日历数据核对未通过，已保留原数据，请检查备份后重试|Legacy calendar verification failed. Original data is preserved; check the backup and retry.|旧カレンダーの検証に失敗しました。元データは保持しています。バックアップを確認して再試行してください。
+打开外部工程|Open external project|外部プロジェクトを開く
+导入项目|Import project|プロジェクトをインポート
+已打开外部工程，当前为只读|External project opened as read-only|外部プロジェクトを読み取り専用で開きました
+已导入到|Imported to|インポート先
+已导出工程包|Project package exported|プロジェクトパッケージを書き出しました
+已启用编辑|Editing enabled|編集を有効にしました
+已从列表移除，磁盘文件未改动|Removed from the list; disk files were not changed|一覧から削除しました。ディスク上のファイルは変更していません
+外部工程当前只读，启用编辑后才能保存修改|The external project is read-only until editing is enabled|外部プロジェクトは読み取り専用です。編集を有効にすると保存できます
+外部 · 只读|External · read-only|外部 · 読み取り専用
+外部|External|外部
+启用编辑|Enable editing|編集を有効にする
+从列表移除|Remove from list|一覧から削除
+启用后工作台会向该目录写入设计文件、图层变换和导入的素材。|Enabling editing lets the studio write design files, layer transforms and imported assets into this folder.|有効にすると、このフォルダーに設計ファイル、レイヤー変換、インポートした素材を書き込みます。
+只移除工作台注册，磁盘上的工程文件不会被删除。|Only the studio registration is removed; project files on disk stay untouched.|スタジオの登録のみを削除します。ディスク上のプロジェクトファイルは変更しません。
+外部工程 · 只读。启用编辑后才能保存修改。|External project · read-only. Enable editing to save changes.|外部プロジェクト · 読み取り専用。編集を有効にすると保存できます。
+外部工程当前只读，请先在工作台启用编辑|The external project is read-only; enable editing in the studio first|外部プロジェクトは読み取り専用です。先にスタジオで編集を有効にしてください
+确认|Confirm|確認
+导出工程包|Export project package|プロジェクトパッケージを書き出す
+只读|Read-only|読み取り専用

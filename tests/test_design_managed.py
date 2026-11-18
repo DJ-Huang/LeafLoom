@@ -111,6 +111,41 @@ class ManagedDesignTests(unittest.TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertFalse((self.root / 'Projects/Wrong').exists())
 
+    def test_external_project_and_project_package_http(self):
+        self.create()
+        root = str(self.root)
+        exported = self.client.post('/api/design/project/export', headers=self.auth,
+                                    json={'root': root, 'directory': 'Projects/Studio'})
+        self.assertEqual(exported.status_code, 200, exported.text)
+        export_id = exported.json()['id']
+        download = self.client.get('/api/design/project/export/' + export_id, headers=self.auth)
+        self.assertEqual(download.status_code, 200)
+        state = self.client.get('/api/design/workspace', headers=self.auth).json()
+        imported = self.client.post('/api/design/project/import?' + urlencode({'root': root, 'expected_workspace_revision': state['revision']}),
+                                    headers={**self.auth, 'Content-Type': 'application/octet-stream'}, content=download.content)
+        self.assertEqual(imported.status_code, 200, imported.text)
+        self.assertNotEqual(imported.json()['directory'], 'Projects/Studio')
+
+        external = self.root.parent / 'External Studio'
+        __import__('shutil').copytree(self.root / 'Projects/Studio', external)
+        registered = self.client.post('/api/design/external', headers=self.auth, json={'root': root, 'path': str(external)})
+        self.assertEqual(registered.status_code, 200, registered.text)
+        key = registered.json()['directory']
+        self.assertTrue(registered.json()['project']['readOnly'])
+        document = self.client.get('/api/design/document?' + urlencode({'root': root, 'directory': key, 'view': 'true'}),
+                                   headers=self.auth)
+        self.assertEqual(document.status_code, 200, document.text)
+        self.assertTrue(document.json()['readOnly'])
+        enabled = self.client.post('/api/design/external/enable', headers=self.auth, json={'root': root, 'directory': key})
+        self.assertEqual(enabled.status_code, 200, enabled.text)
+        self.assertFalse(enabled.json()['project']['readOnly'])
+        current = self.client.get('/api/design/workspace', headers=self.auth).json()
+        removed = self.client.post('/api/design/external/remove', headers=self.auth,
+                                   json={'root': root, 'directory': key, 'expected_revision': current['revision'],
+                                         'operation_id': 'forget-external-http'})
+        self.assertEqual(removed.status_code, 200, removed.text)
+        self.assertTrue((external / 'Design/project-spec.json').is_file())
+
     def test_project_trash_permanent_delete_requires_root_confirmation_and_revision(self):
         self.create()
         state = self.client.get('/api/design/workspace', headers=self.auth).json()

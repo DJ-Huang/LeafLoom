@@ -291,6 +291,7 @@ class DesignDocuments:
     def __init__(self, studio):
         self.studio = studio
         self.config, self.runtime, self.files = studio.config, studio.runtime, studio.files
+        self.locations = studio.locations
         self._parsed = OrderedDict()
         self._view_indexes = OrderedDict()
 
@@ -331,13 +332,13 @@ class DesignDocuments:
         return self.config.data.get('revision', '')
 
     def _paths(self, directory: str):
-        directory = relative(directory)
+        directory = self.locations.key(directory)
         if not directory:
             raise ValueError('Managed projects require a project subdirectory')
-        project = self.config.path_for(directory, writable=True)
+        project = self.locations.path(directory, writable=True)
         if not project.is_dir():
             raise FileNotFoundError(directory)
-        path = self.config.path_for(f'{directory}/{DOCUMENT_PATH}', writable=True)
+        path = self.locations.path(f'{directory}/{DOCUMENT_PATH}', writable=True)
         return directory, project, path
 
     def _database(self, document_id: str):
@@ -567,6 +568,31 @@ class DesignDocuments:
                 return result
             finally:
                 db.close()
+
+    def is_read_only(self, directory: str) -> bool:
+        """True for registered external projects that have not been enabled for editing."""
+        if not self.locations.is_external(directory):
+            return False
+        item = self.locations.project(directory)
+        return bool(item and not item.get('writable'))
+
+    def inspect_readonly(self, directory: str, page_id: str | None = None, *, include_document=True):
+        """Project an external project's document without history or disk writes."""
+        with self.config.lock, self.files.lock:
+            directory = self.locations.key(directory)
+            project = self.locations.path(directory)
+            path = self.locations.path(f'{directory}/{DOCUMENT_PATH}')
+            if not path.is_file():
+                raise FileNotFoundError(f'No managed design document in {directory}')
+            cached = self._cached_document(path, project)
+            result = {'ok': True, 'directory': directory, 'revision': cached['hash'],
+                      'workspace_revision': self.workspace_revision, 'readOnly': True,
+                      'history': {'can_undo': False, 'can_redo': False, 'undo_label': '', 'redo_label': ''}}
+            if include_document:
+                result['document'] = copy.deepcopy(cached['document'])
+                if page_id is not None:
+                    result['page'] = self._page(result['document'], page_id)
+            return result
 
     def inspect(self, directory: str, page_id=None, manifest=False, *, section='pages', node_id=None,
                 item_id=None, offset=0, limit=20, full=False, expected_revision=None):
@@ -907,7 +933,7 @@ class DesignDocuments:
                 pass
         with self.config.lock, self.files.lock:
             directory, _, _ = self._paths(directory)
-            target = self.config.path_for(f'{directory}/{rel_path}', writable=True)
+            target = self.locations.path(f'{directory}/{rel_path}', writable=True)
             # Check CAS and request replay before creating a retained media object.
             command = {'type': 'asset.register', 'asset': asset}
             fingerprint = _hash(_json({'commands': [command], 'label': 'Import ' + name}))
@@ -1471,7 +1497,7 @@ class DesignDocuments:
                 raise ValueError('Asset paths must be project-relative local paths')
             if project is not None:
                 full = project / path
-                self.config.path_for(full.relative_to(self.config.root).as_posix())
+                self.locations.path(self.locations.key(full))
         for key, component in document['components'].items():
             if not isinstance(component, dict) or component.get('id') != key or not isinstance(component.get('node'), dict):
                 raise ValueError('Component requires a matching identity and root node')
