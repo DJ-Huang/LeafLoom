@@ -11,7 +11,8 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from studio_publishing_fixture import ART_SVG, fixture_document
-from vault_rag.design_publishing import DesignPublisher
+from vault_rag.design_locations import DesignLocations
+from vault_rag.design_workspace import DesignWorkspace
 from vault_rag.local_state import LocalConfig, Files
 
 with tempfile.TemporaryDirectory(prefix='leafloom-native-publish-') as directory:
@@ -22,9 +23,10 @@ with tempfile.TemporaryDirectory(prefix='leafloom-native-publish-') as directory
     config = LocalConfig(Path(directory) / 'config')
     config.save({'root': str(root), 'include_roots': ['Projects']})
     document = fixture_document()
-    workspace = SimpleNamespace(config=config, files=Files(config), documents=SimpleNamespace(
-        read=lambda _: {'document': copy.deepcopy(document), 'revision': 'fixture-revision'}))
-    publisher = DesignPublisher(workspace)
+    studio = SimpleNamespace(config=config, files=Files(config), runtime=None,
+                             locations=DesignLocations(config))
+    documents = SimpleNamespace(read=lambda _: {'document': copy.deepcopy(document), 'revision': 'fixture-revision'})
+    publisher = DesignWorkspace(studio, documents).publisher
     try:
         for line in sys.stdin:
             try:
