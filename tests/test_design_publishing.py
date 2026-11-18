@@ -11,7 +11,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from vault_rag.design_publishing import DesignPublisher, plan, render_item, renderer_available, validate_static_media
+from vault_rag.design_locations import DesignLocations
+from vault_rag.design_publishing import plan, render_item, renderer_available, validate_static_media
+from vault_rag.design_workspace import DesignWorkspace
 from vault_rag.local_state import LocalConfig, Files, ConflictError
 
 
@@ -28,11 +30,11 @@ class PublishingTests(unittest.TestCase):
         self.root=Path(self.temp.name)/'vault'; self.root.mkdir()
         self.config=LocalConfig(Path(self.temp.name)/'config')
         self.config.save({'root':str(self.root),'include_roots':['Projects']})
-        self.files=Files(self.config)
         self.doc=document()
-        workspace=SimpleNamespace(config=self.config,files=self.files,
-                                  documents=SimpleNamespace(read=lambda _: {'document':copy.deepcopy(self.doc),'revision':'rev'}))
-        self.publisher=DesignPublisher(workspace)
+        studio = SimpleNamespace(config=self.config, files=Files(self.config), runtime=None,
+                                 locations=DesignLocations(self.config))
+        documents = SimpleNamespace(read=lambda _: {'document': copy.deepcopy(self.doc), 'revision': 'rev'})
+        self.publisher = DesignWorkspace(studio, documents).publisher
         self.body={'directory':'Projects/Design','expected_revision':'rev','page_ids':['one','two'],'renderer':'native','format':'png'}
 
     def tearDown(self):

@@ -21,6 +21,8 @@ export type DesignScreenSummary={
 export type DesignProjectSummary={
  managed?:boolean;
  cover?:string;
+ external?:boolean;
+ readOnly?:boolean;
  id:string;
  name:string;
  directory:string;

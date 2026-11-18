@@ -54,7 +54,7 @@ class LocalConfig:
         self.data=json.loads(self.path.read_text(encoding='utf-8')) if self.path.exists() else self.defaults()
     @staticmethod
     def defaults():
-        return {'root':None,'include_roots':[],'exclude_roots':[], 'rules_roots':[], 'wiki_roots':[], 'estimation_roots':[], 'write_targets':{'notes':'Notes','rules':'Rules','navigation':'Topics','estimation':'Estimation'}, 'homepage':'', 'templates':'Templates', 'daily_folder':'Daily', 'attachment_folder':'_attachments', 'port':18080}
+        return {'root':None,'include_roots':[],'exclude_roots':[], 'rules_roots':[], 'wiki_roots':[], 'estimation_roots':[], 'design_external_projects':[], 'write_targets':{'notes':'Notes','rules':'Rules','navigation':'Topics','estimation':'Estimation'}, 'homepage':'', 'templates':'Templates', 'daily_folder':'Daily', 'attachment_folder':'_attachments', 'port':18080}
     @property
     def root(self):
         if not self.data.get('root'): raise ValueError('请先在网页关联一个本地目录')
@@ -84,6 +84,24 @@ class LocalConfig:
                     for rel in data[name]:
                         p=Path(data['root'])/rel
                         if p.exists() and (not p.is_dir() or is_link(p) or not p.resolve().is_relative_to(Path(data['root']))):raise ValueError('目录配置不能指向文件、链接或根目录外部')
+            # External design projects stay absolute local directories. Existence
+            # and link checks run when the project is registered or opened, so a
+            # moved directory cannot block unrelated settings from saving.
+            projects=[]
+            for item in data.get('design_external_projects',[]):
+                if not isinstance(item,dict):raise ValueError('外部工程配置格式无效')
+                raw=str(item.get('path','')).strip()
+                p=Path(raw).expanduser()
+                if is_windows() and p.drive.startswith('\\\\'):raise ValueError('不支持网络共享目录中的外部工程')
+                if not raw or not p.is_absolute() or (is_windows() and not p.drive):
+                    raise ValueError('外部工程目录必须是本机绝对路径')
+                resolved=p.resolve()
+                if data.get('root') and (resolved.is_relative_to(Path(data['root'])) or Path(data['root']).is_relative_to(resolved)):
+                    raise ValueError('外部工程不能与已关联目录重叠')
+                if any(path_key(value['path'])==path_key(resolved.as_posix()) for value in projects):
+                    continue
+                projects.append({'path':resolved.as_posix(),'writable':bool(item.get('writable'))})
+            data['design_external_projects']=projects
             data['revision']=uuid.uuid4().hex
             atomic_write(self.path,json.dumps(data,ensure_ascii=False,indent=2).encode());private_file_mode(self.path);self.data=data
             return data

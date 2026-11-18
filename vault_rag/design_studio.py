@@ -17,6 +17,7 @@ import time
 from typing import Any
 
 from vault_rag.local_state import ConflictError, PROTECTED, atomic_write, relative, under
+from vault_rag.design_locations import DesignLocations
 from vault_rag.platform_support import is_link, path_key
 
 ASSETS_DIR = Path(__file__).resolve().parent / 'design_assets' / 'layer_review'
@@ -71,6 +72,7 @@ class DesignStudio:
         self.runtime = runtime
         self.files = runtime.files
         self.websites = websites
+        self.locations = DesignLocations(config)
         from vault_rag.design_documents import DesignDocuments
         from vault_rag.design_workspace import DesignWorkspace
         self.documents = DesignDocuments(self)
@@ -132,7 +134,7 @@ class DesignStudio:
                     return {}
         return {}
 
-    def _entry_for_project(self, project_dir: Path, root: Path) -> tuple[str, str]:
+    def _entry_for_project(self, project_dir: Path) -> tuple[str, str]:
         candidates = [
             project_dir / 'Design' / 'UI' / 'Site' / 'ui-gallery.html',
             project_dir / 'Design' / 'index.html',
@@ -140,7 +142,7 @@ class DesignStudio:
         ]
         gallery = next((c for c in candidates if c.is_file() and not is_link(c)), candidates[-1])
         portal = next((c for c in (project_dir / 'Design' / 'index.html', project_dir / 'index.html', gallery) if c.is_file() and not is_link(c)), gallery)
-        return gallery.relative_to(root).as_posix(), portal.relative_to(root).as_posix()
+        return self.locations.key(gallery), self.locations.key(portal)
 
     def _project_summary(self, project_dir: Path, root: Path) -> dict[str, Any] | None:
         spec_file = self._find_spec_file(project_dir)
@@ -153,7 +155,9 @@ class DesignStudio:
         if not isinstance(spec, dict) or not isinstance(spec.get('project'), dict):
             return None
 
-        rel_dir = '' if project_dir == root else project_dir.relative_to(root).as_posix()
+        rel_dir = '' if project_dir == root else self.locations.key(project_dir)
+        external = bool(rel_dir) and self.locations.is_external(rel_dir)
+        read_only = bool(external and not (self.locations.project(rel_dir) or {}).get('writable'))
         proj_meta = spec['project']
         managed_path = project_dir / 'Design/studio/project.json'
         managed = None
@@ -188,11 +192,11 @@ class DesignStudio:
         transforms_boards = self._read_transforms_file(project_dir)
         transformed_layers = sum(len(v) for v in transforms_boards.values() if isinstance(v, dict))
 
-        gallery_entry, portal_entry = self._entry_for_project(project_dir, root)
+        gallery_entry, portal_entry = self._entry_for_project(project_dir)
         if managed and (project_dir / 'Design/studio/runtime.html').is_file():
-            gallery_entry = (project_dir / 'Design/studio/runtime.html').relative_to(root).as_posix()
+            gallery_entry = self.locations.key(project_dir / 'Design/studio/runtime.html')
         html_project = None
-        if (root / gallery_entry).is_file():
+        if self.locations.path(gallery_entry).is_file():
             try:
                 html_project = self.websites.register(str(root), rel_dir, gallery_entry, spa=False)
             except Exception:
@@ -207,7 +211,9 @@ class DesignStudio:
             'name': str((managed or {}).get('name') or proj_meta.get('name') or project_dir.name),
             'managed': bool(managed),
             'directory': rel_dir,
-            'spec_path': spec_file.relative_to(root).as_posix(),
+            'external': external,
+            'readOnly': read_only,
+            'spec_path': self.locations.key(spec_file),
             'entry': gallery_entry,
             'portal_entry': portal_entry,
             'html_project_id': html_project['id'] if html_project else None,
@@ -262,6 +268,15 @@ class DesignStudio:
             if summary is not None:
                 # Workspace display metadata must never contaminate source caches.
                 projects.append(copy.deepcopy(summary))
+        if not folder:
+            # External projects are explicit registrations, never a recursive scan.
+            for item in self.locations.entries():
+                try:
+                    summary = self._project_summary(Path(item['path']), root)
+                except (OSError, ValueError):
+                    summary = None
+                if summary is not None:
+                    projects.append(summary)
 
         selected = None
         if current_path:
@@ -317,7 +332,7 @@ class DesignStudio:
         for name in names:
             try:
                 path = project / relative(name)
-                self.config.path_for(path.relative_to(root).as_posix())
+                self.locations.path(path)
                 result.append(path)
             except (ValueError, TypeError):
                 continue
@@ -416,8 +431,8 @@ class DesignStudio:
 
     def get_project(self, directory: str, board_id: str | None = None, *, include_document=True) -> dict[str, Any]:
         root = self.config.root
-        directory = relative(directory)
-        proj_dir = self.config.path_for(directory) if directory else root
+        directory = self.locations.key(directory) if directory else ''
+        proj_dir = self.locations.path(directory) if directory else root
         if not proj_dir.is_dir():
             raise FileNotFoundError(f'Design project directory not found: {directory}')
         summary = self._project_summary(proj_dir, root)
@@ -434,7 +449,10 @@ class DesignStudio:
             'workspace_revision': self.workspace_revision,
         }
         if summary.get('managed'):
-            result.update(self.documents.read(directory, board_id) if include_document else self.documents.inspect(directory, board_id))
+            if summary.get('readOnly'):
+                result.update(self.documents.inspect_readonly(directory, board_id, include_document=include_document))
+            else:
+                result.update(self.documents.read(directory, board_id) if include_document else self.documents.inspect(directory, board_id))
         if board_id is not None:
             result['board_id'] = board_id
             result['board_transforms'] = transforms_boards.get(board_id, {})
@@ -442,8 +460,8 @@ class DesignStudio:
 
     def get_transforms(self, directory: str, board_id: str = '') -> dict[str, Any]:
         root = self.config.root
-        directory = relative(directory)
-        proj_dir = self.config.path_for(directory) if directory else root
+        directory = self.locations.key(directory) if directory else ''
+        proj_dir = self.locations.path(directory) if directory else root
         if not proj_dir.is_dir():
             raise FileNotFoundError(f'Design project directory not found: {directory}')
         boards = self._read_transforms_file(proj_dir)
@@ -469,8 +487,8 @@ class DesignStudio:
         with self.config.lock, self.files.lock:
             self._check_workspace(workspace_revision)
             root = self.config.root
-            directory = relative(directory)
-            proj_dir = self.config.path_for(directory, writable=True) if directory else root
+            directory = self.locations.key(directory) if directory else ''
+            proj_dir = self.locations.path(directory, writable=True) if directory else root
             if not proj_dir.is_dir():
                 raise FileNotFoundError(f'Design project directory not found: {directory}')
             if (proj_dir / 'Design/studio/project.json').is_file():
@@ -498,8 +516,8 @@ class DesignStudio:
 
             design_dir = proj_dir / 'Design' if (proj_dir / 'Design').is_dir() else proj_dir
             transforms_path = design_dir / 'layer-transforms.json'
-            rel_transforms = transforms_path.relative_to(root).as_posix()
-            self.config.path_for(rel_transforms, writable=True)
+            rel_transforms = self.locations.key(transforms_path)
+            self.locations.path(rel_transforms, writable=True)
 
             existing_doc: dict[str, Any] = {'schemaVersion': 1, 'updatedAt': '', 'boards': {}}
             if transforms_path.is_file():
@@ -547,8 +565,8 @@ class DesignStudio:
             site_dir = design_dir / 'UI' / 'Site'
             if site_dir.is_dir():
                 data_js = site_dir / 'layer-transforms-data.js'
-                rel_js = data_js.relative_to(root).as_posix()
-                self.config.path_for(rel_js, writable=True)
+                rel_js = self.locations.key(data_js)
+                self.locations.path(rel_js, writable=True)
                 js_payload = 'window.DESIGN_LAYER_TRANSFORMS = ' + json.dumps(existing_doc['boards'], ensure_ascii=False, separators=(',', ':')) + ';\n'
                 atomic_write(data_js, js_payload.encode('utf-8'))
                 changed_paths.append(rel_js)
@@ -1319,8 +1337,8 @@ openBoard(hashMatch ? decodeURIComponent(hashMatch[1]) : screens[0].id, false);
         with self.config.lock, self.files.lock:
             self._check_workspace(workspace_revision)
             root = self.config.root
-            directory = relative(directory)
-            proj_dir = self.config.path_for(directory, writable=True) if directory else root
+            directory = self.locations.key(directory) if directory else ''
+            proj_dir = self.locations.path(directory, writable=True) if directory else root
             spec_file = self._find_spec_file(proj_dir)
             if spec_file is None:
                 raise FileNotFoundError(f'No Design/project-spec.json found in {directory}')
@@ -1367,7 +1385,7 @@ openBoard(hashMatch ? decodeURIComponent(hashMatch[1]) : screens[0].id, false);
                 # change; conversion keeps this source intact and gives the new
                 # managed runtime the complete structural editing capability.
                 runtime_path = screens_path.parent / 'artboards.js'
-                self.config.path_for(runtime_path.relative_to(root).as_posix())
+                self.locations.path(self.locations.key(runtime_path))
                 supports_custom = False
                 if runtime_path.is_file():
                     from vault_rag.design_literals import tokens
@@ -1476,8 +1494,8 @@ openBoard(hashMatch ? decodeURIComponent(hashMatch[1]) : screens[0].id, false);
 
     def check_project(self, directory: str) -> dict[str, Any]:
         root = self.config.root
-        directory = relative(directory)
-        proj_dir = self.config.path_for(directory) if directory else root
+        directory = self.locations.key(directory) if directory else ''
+        proj_dir = self.locations.path(directory) if directory else root
         spec_file = self._find_spec_file(proj_dir)
         if spec_file is None:
             return {'ok': False, 'directory': directory, 'errors': ['Missing Design/project-spec.json'], 'warnings': []}
@@ -1494,7 +1512,7 @@ openBoard(hashMatch ? decodeURIComponent(hashMatch[1]) : screens[0].id, false);
         if std_ref:
             std_path = (spec_file.parent / std_ref).resolve()
             checker = std_path.parent / 'tools' / 'check_design.py'
-            if checker.is_file() and checker.is_relative_to(root):
+            if checker.is_file() and (checker.is_relative_to(root) or checker.is_relative_to(proj_dir)):
                 try:
                     import os, sys
                     ext_path = os.environ.get('PATH', '') + os.pathsep + '/opt/homebrew/bin' + os.pathsep + '/usr/local/bin'

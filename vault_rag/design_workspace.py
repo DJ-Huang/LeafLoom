@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import html
+import io
 import json
 import mimetypes
 import re
@@ -23,11 +24,14 @@ from typing import Any
 
 from vault_rag.local_state import ConflictError, atomic_write, relative
 from vault_rag.platform_support import is_link, move_exclusive
-from vault_rag.design_documents import _diff, _patch, validate_page_contexts, history_owner_matches
+from vault_rag.design_documents import DOCUMENT_PATH, _diff, _patch, validate_page_contexts, history_owner_matches
 from vault_rag.design_references import AssetReferences, script_references, rewrite_script, srcset_urls as _srcset_urls
 
 
 RUNTIME = Path(__file__).parent / 'design_assets' / 'studio'
+MAX_PROJECT_ARCHIVE_BYTES = 512 * 1024 * 1024
+MAX_PROJECT_UNPACKED_BYTES = 2 * 1024 * 1024 * 1024
+MAX_PROJECT_MEMBERS = 20000
 
 
 def _bytes(value):
@@ -66,8 +70,16 @@ class DesignWorkspace:
     def __init__(self, studio, documents):
         self.studio, self.documents = studio, documents
         self.config, self.files, self.runtime = studio.config, studio.files, studio.runtime
+        self.locations = studio.locations
         from vault_rag.design_publishing import DesignPublisher
         self.publisher = DesignPublisher(self)
+
+    def _project(self, directory, *, writable=False):
+        return self.locations.path(self.locations.key(directory), writable=writable)
+
+    def _project_file(self, directory, rel, *, writable=False):
+        key = self.locations.key(directory)
+        return self.locations.path(f'{key}/{self.locations.key(rel)}', writable=writable)
 
     def _state(self, *parts):
         return self.files.state_path('design-studio', *parts)
@@ -76,10 +88,10 @@ class DesignWorkspace:
         path = self._state('workspace.json')
         if not path.exists():
             return {'version': 1, 'meta': {}, 'library': {}, 'history': [], 'cursor': 0}
-        state = json.loads(path.read_text())
+        state = json.loads(path.read_text(encoding='utf-8'))
         pending = self._state('workspace-pending.json')
         if pending.exists():
-            journal = json.loads(pending.read_text())
+            journal = json.loads(pending.read_text(encoding='utf-8'))
             if _digest(state) == journal['after_hash']:
                 self._purge_files(journal.get('purge', []))
                 pending.unlink()
@@ -118,10 +130,13 @@ class DesignWorkspace:
             raise ConflictError('Design workspace changed; refresh before retrying')
 
     def _path(self, name):
+        text = str(name or '')
+        if self.locations.is_external(text):
+            return self.locations.path(self.locations.key(text), writable=True)
         name = relative(name)
         if name.startswith('.vault-rag/design-studio/'):
             return self.files.state_path(*PurePosixPath(name).parts[1:])
-        return self.config.path_for(name, writable=True)
+        return self.locations.path(name, writable=True)
 
     def _move(self, action, recovering=False):
         if not action:
@@ -137,7 +152,7 @@ class DesignWorkspace:
             raise ValueError('Project destination must be outside the source')
         # A content guard prevents undo from removing newer user work.
         identity_path = source / 'Design/studio/project.json'
-        if action.get('document_id') and (not identity_path.is_file() or json.loads(identity_path.read_text()).get('id') != action['document_id']):
+        if action.get('document_id') and (not identity_path.is_file() or json.loads(identity_path.read_text(encoding='utf-8')).get('id') != action['document_id']):
             raise ConflictError('Project identity changed; no project was moved')
         if action.get('document_id'):
             self._validate_tree(source)
@@ -214,8 +229,11 @@ class DesignWorkspace:
             database = self._state(document_id, 'history.sqlite3')
             if database.exists():
                 from urllib.parse import quote
-                with sqlite3.connect('file:' + quote(str(database), safe='/') + '?mode=ro', uri=True) as db:
+                db = sqlite3.connect('file:' + quote(str(database), safe='/') + '?mode=ro', uri=True)
+                try:
                     row = db.execute('SELECT owner FROM meta WHERE id=1').fetchone()
+                finally:
+                    db.close()
                 if row is None or not history_owner_matches(row[0], item['trash']):
                     raise ConflictError('Project history location changed; permanent deletion stopped')
             elif not item.get('history_verified'):
@@ -319,9 +337,9 @@ class DesignWorkspace:
             before = self._load()
             after = copy.deepcopy(before)
             key = uuid.uuid4().hex
-            project = self.config.path_for(directory)
+            project = self._project(directory)
             reverse = {'source': directory, 'destination': f'.vault-rag/design-studio/workspace-trash/{key}/content'}
-            managed = self.config.path_for(directory) / 'Design/studio/project.json'
+            managed = self._project(directory) / 'Design/studio/project.json'
             if managed.is_file():
                 self._validate_tree(project)
                 reverse['document_id'] = json.loads(managed.read_bytes())['id']
@@ -340,10 +358,12 @@ class DesignWorkspace:
             if self._request(before, operation_id, fingerprint):
                 return self.state()
             self._validate_revision(before, expected_revision)
-            directory = relative(directory)
+            directory = self.locations.key(directory)
+            if action in ('move', 'delete') and self.locations.is_external(directory):
+                raise ValueError('外部工程不能移动或移入回收站；请使用「复制到我的 vault」或「从列表移除」')
             deleted = before['meta'].get(directory, {})
-            project = deleted.get('project') if action == 'restore' else self.studio._project_summary(self.config.path_for(directory), self.config.root)
-            if project is None:
+            project = None if action == 'forget' else (deleted.get('project') if action == 'restore' else self.studio._project_summary(self._project(directory), self.config.root))
+            if project is None and action != 'forget':
                 raise ValueError('Design project not found')
             after = copy.deepcopy(before)
             meta = after['meta'].setdefault(directory, {})
@@ -379,22 +399,27 @@ class DesignWorkspace:
                 if action == 'move':
                     self.config.path_for(destination, writable=True)
                 move = {'source': directory, 'destination': destination}
-                managed = self.config.path_for(directory) / 'Design/studio/project.json'
+                managed = self._project(directory) / 'Design/studio/project.json'
                 if managed.is_file():
                     move['document_id'] = json.loads(managed.read_bytes())['id']
                 else:
-                    move['snapshot'] = self._snapshot(self.config.path_for(directory))
+                    move['snapshot'] = self._snapshot(self._project(directory))
                 reverse = {**move, 'source': destination, 'destination': directory}
                 del after['meta'][directory]
                 if action == 'move':
                     after['meta'][destination] = meta
                 else:
                     after['meta'][directory] = {**meta, 'deleted': True, 'trash': destination, 'project': project}
+            elif action == 'forget':
+                if not self.locations.is_external(directory):
+                    raise ValueError('只有外部工程可以从列表移除')
+                self.locations.remove(directory)
+                after['meta'].pop(directory, None)
             else:
                 raise ValueError('Unknown project management action')
             after.setdefault('receipts', {})[operation_id] = fingerprint
-            if action == 'open':
-                # Recents are navigation state and do not clear a redo branch.
+            if action in ('open', 'forget'):
+                # Recents and external registration are navigation state, not undoable content.
                 self._commit(before, after)
             else:
                 entry = self._entry(before, after, operation_id, action, move, reverse)
@@ -432,28 +457,35 @@ class DesignWorkspace:
             return result
 
     def install_runtime(self, directory):
-        project = self.config.path_for(directory, writable=True)
-        dest = self.config.path_for('/'.join(filter(None, (directory, 'Design/studio'))), writable=True)
+        project = self._project(directory, writable=True)
+        dest = self._project_file(directory, 'Design/studio', writable=True)
         dest.mkdir(parents=True, exist_ok=True)
         for source in RUNTIME.iterdir():
             if source.suffix in ('.html', '.js', '.css'):
-                target = self.config.path_for((dest / source.name).relative_to(self.config.root).as_posix(), writable=True)
+                target = self.locations.path(self.locations.key(dest / source.name), writable=True)
                 data = source.read_bytes()
                 if not target.exists() or target.read_bytes() != data:
                     atomic_write(target, data)
         return project
 
     def session(self, directory, capture=False):
-        self.install_runtime(directory)
-        directory = relative(directory)
-        canonical = '/'.join(filter(None, (directory, 'Design/studio/runtime.html')))
-        entry = '/'.join(filter(None, (directory, 'Design/studio/' + ('capture.html' if capture else 'runtime.html'))))
-        project = self.studio.websites.register(str(self.config.root), directory, canonical)
+        key = self.locations.key(directory)
+        read_only = self.documents.is_read_only(key)
+        if not read_only:
+            self.install_runtime(key)
+        staged = self._project_file(key, 'Design/studio/' + ('capture.html' if capture else 'runtime.html'))
+        if staged.is_file():
+            entry = self.locations.key(staged)
+        elif capture:
+            raise ValueError('请先启用编辑后再转换项目')
+        else:
+            entry, _ = self.studio._entry_for_project(self._project(key))
+        project = self.studio.websites.register(str(self.config.root), key, entry)
         return self.studio.websites.create(str(self.config.root), entry, project['id'])
 
     def _copy(self, source, destination):
-        source, destination = relative(source), relative(destination)
-        src, dest = self.config.path_for(source), self.config.path_for(destination, writable=True)
+        source, destination = self.locations.key(source), relative(destination)
+        src, dest = self._project(source), self._project(destination, writable=True)
         if not destination or dest.exists() or dest.is_relative_to(src) or src.is_relative_to(dest):
             raise ConflictError('Choose a new project directory outside the source')
         self._validate_tree(src)
@@ -461,19 +493,69 @@ class DesignWorkspace:
         shutil.copytree(src, dest, ignore=shutil.ignore_patterns('.vault-rag', '.git', '.DS_Store'))
         return dest
 
+    def register_external(self, path):
+        """Register an already-authored project outside the vault as read-only."""
+        with self.config.lock, self.files.lock:
+            item = self.locations.register(path)
+            directory = item['path']
+            summary = self.studio._project_summary(Path(directory), self.config.root)
+            if summary is None:
+                self.locations.remove(directory)
+                raise ValueError('所选目录不是设计工程：缺少 Design/project-spec.json')
+            self.files.changed(directory)
+            return {'ok': True, 'directory': directory, 'project': summary}
+
+    @staticmethod
+    def _reassign_identity(project):
+        """Detach a copied folder from the source project's history and spec identity."""
+        managed = project / DOCUMENT_PATH
+        if managed.is_file():
+            document = json.loads(managed.read_text(encoding='utf-8'))
+            document['id'] = uuid.uuid4().hex
+            atomic_write(managed, _bytes(document))
+        spec_path = next((candidate for candidate in (project / 'Design/project-spec.json', project / 'project-spec.json')
+                          if candidate.is_file()), None)
+        if spec_path is not None:
+            spec = json.loads(spec_path.read_text(encoding='utf-8'))
+            if isinstance(spec.get('project'), dict):
+                spec['project']['id'] = uuid.uuid4().hex
+                atomic_write(spec_path, _bytes(spec))
+
+    def enable_external(self, directory):
+        """Allow writes inside a registered external project and start its history."""
+        with self.config.lock, self.files.lock:
+            item = self.locations.project(directory)
+            if item is None:
+                raise ValueError('该目录不是已注册的外部工程')
+            key = item['path']
+            self.locations.set_writable(key, True)
+            self.install_runtime(key)
+            result = {'ok': True, 'directory': key,
+                      'project': self.studio._project_summary(self._project(key), self.config.root)}
+            if self._project_file(key, DOCUMENT_PATH).is_file():
+                try:
+                    value = self.documents.read(key)
+                except ConflictError:
+                    # A copied folder shares its document ID; give this copy its own.
+                    self._reassign_identity(self._project(key))
+                    value = self.documents.read(key)
+                result.update(revision=value['revision'], history=value['history'])
+            self.files.changed(key)
+            return result
+
     def copy_project(self, source, destination):
         with self.config.lock, self.files.lock:
-            display_name = self._load()['meta'].get(relative(source), {}).get('name')
+            display_name = self._load()['meta'].get(self.locations.key(source), {}).get('name')
             dest = self._copy(source, destination)
             managed = dest / 'Design/studio/project.json'
             if managed.exists():
-                document = json.loads(managed.read_text())
+                document = json.loads(managed.read_text(encoding='utf-8'))
                 document['id'] = uuid.uuid4().hex
                 document['name'] = str(display_name or document['name']) + ' Copy'
                 atomic_write(managed, _bytes(document))
             spec = self.studio._find_spec_file(dest)
             if spec:
-                value = json.loads(spec.read_text())
+                value = json.loads(spec.read_text(encoding='utf-8'))
                 value['project']['id'] = uuid.uuid4().hex
                 value['project']['name'] = str(display_name or value['project'].get('name') or Path(source).name) + ' Copy'
                 atomic_write(spec, _bytes(value))
@@ -484,26 +566,27 @@ class DesignWorkspace:
     def migrate(self, source, destination):
         """Copy first; browser captures each authored page in the isolated copy."""
         with self.config.lock, self.files.lock:
-            summary = self.studio._project_summary(self.config.path_for(source), self.config.root)
+            summary = self.studio._project_summary(self._project(source), self.config.root)
             if not summary:
                 raise ValueError('Design project not found')
             dest = self._copy(source, destination)
             recovery = self._recover_legacy_declarations(dest)
             value = self.documents.create(destination, summary['name'], summary['width'], summary['height'])
             self.install_runtime(destination)
-            spec = json.loads(self.studio._find_spec_file(dest).read_text())
+            spec = json.loads(self.studio._find_spec_file(dest).read_text(encoding='utf-8'))
             assets_rel = spec.get('project', {}).get('sources', {}).get('assets', 'Design/Assets/manifest.json')
-            manifest_path = self.config.path_for(destination + '/' + assets_rel)
+            manifest_path = self._project_file(destination, assets_rel)
             assets = {}
             if manifest_path.is_file():
-                manifest = json.loads(manifest_path.read_text())
+                manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
                 for item in manifest.get('assets', []):
-                    path = manifest_path.parent / item.get('path', '')
-                    resolved = self.config.path_for(path.relative_to(self.config.root).as_posix())
+                    if not item.get('path'):
+                        continue
+                    resolved = self._project_file(destination, item['path'])
                     if resolved.is_file():
                         asset = copy.deepcopy(item)
                         asset['path'] = resolved.relative_to(dest).as_posix()
-                        asset['name'] = item.get('name') or path.name
+                        asset['name'] = item.get('name') or resolved.name
                         asset_id = str(item.get('id') or 'asset-' + hashlib.sha256(asset['path'].encode()).hexdigest()[:24])
                         if asset_id in assets and assets[asset_id]['path'] != asset['path']:
                             asset_id += '-' + hashlib.sha256(asset['path'].encode()).hexdigest()[:8]
@@ -528,15 +611,15 @@ class DesignWorkspace:
         from vault_rag.design_literals import bindings, declarations, literal_values, tokens, insert_declarations, IDENTIFIER
         spec = json.loads(self.studio._find_spec_file(project).read_text(encoding='utf-8'))
         screens_rel = relative(spec.get('project', {}).get('sources', {}).get('screens', 'Design/UI/Site/screens.js'))
-        target = self.config.path_for((project / screens_rel).relative_to(self.config.root).as_posix(), writable=True)
-        backup = self.config.path_for((project / 'Design/Assets/source' / Path(screens_rel).name).relative_to(self.config.root).as_posix())
+        target = self.locations.path(self.locations.key(project / screens_rel), writable=True)
+        backup = self.locations.path(self.locations.key(project / 'Design/Assets/source' / Path(screens_rel).name))
         if target.suffix.lower() != '.js' or not target.is_file() or not backup.is_file() or target == backup:
             return []
         current, original = target.read_bytes().decode('utf-8'), backup.read_bytes().decode('utf-8')
         present = bindings(current)
         needed = set()
         for path in target.parent.glob('*.js'):
-            self.config.path_for(path.relative_to(self.config.root).as_posix())
+            self.locations.path(self.locations.key(path))
             if path.is_file() and path.stat().st_size <= 8 * 1024 * 1024:
                 needed.update(value for value, _, _ in tokens(path.read_text(encoding='utf-8')) if IDENTIFIER.fullmatch(value))
         literals = literal_values(original)
@@ -648,7 +731,7 @@ class DesignWorkspace:
                 return
             # ctx.assets.resolve also accepts a local project path. Preserve
             # that fallback without importing files outside this project.
-            target = self.config.path_for(directory + '/' + path)
+            target = self._project_file(directory, path)
             if target.is_file():
                 asset_id = 'library-path-' + hashlib.sha256(path.encode()).hexdigest()[:24]
                 source['asset'][asset_id] = {'id': asset_id, 'name': target.name, 'path': path,
@@ -665,7 +748,7 @@ class DesignWorkspace:
             selected[resource_kind][key] = copy.deepcopy(value)
             scan(value, value.get('path', '') if isinstance(value, dict) else '')
             if resource_kind == 'asset' and Path(value.get('path', '')).suffix.lower() in ('.css', '.svg', '.js', '.mjs', '.json'):
-                path = self.config.path_for(directory + '/' + value['path'])
+                path = self._project_file(directory, value['path'])
                 if path.is_file() and path.stat().st_size <= 2 * 1024 * 1024:
                     scan(path.read_text(encoding='utf-8'), value['path'])
 
@@ -749,7 +832,7 @@ class DesignWorkspace:
             for aid, asset in dependencies['asset'].items():
                 if not isinstance(asset.get('path'), str):
                     continue
-                path = self.config.path_for(directory + '/' + asset['path'])
+                path = self._project_file(directory, asset['path'])
                 if not path.is_file():
                     raise ValueError('Missing library resource: ' + aid)
                 data = path.read_bytes()
@@ -809,7 +892,7 @@ class DesignWorkspace:
                 new_id = maps['asset'][aid]
                 path = f'Design/Assets/Library/{item_id}/v{item["version"]}/{relative(asset["path"])}'
                 paths[asset['path']] = path
-                target = self.config.path_for(directory + '/' + path, writable=True)
+                target = self._project_file(directory, path, writable=True)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 blob = self._state('library-blobs', asset['sha256'])
                 data = blob.read_bytes()
@@ -900,6 +983,171 @@ class DesignWorkspace:
                                         label='Update shared library' if imported_before else 'Import shared library', request_identity=request_identity,
                                         include_document=include_document)
 
+    @staticmethod
+    def _project_archive_name(value):
+        text = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', '-', str(value or '')).strip(' .')
+        return (text or 'Design Project')[:80]
+
+    def _free_project_directory(self, name):
+        key = relative(name)
+        if not key:
+            raise ValueError('请选择项目目录')
+        candidate, index = key, 2
+        while self.config.path_for(candidate).exists():
+            candidate = f'{key} ({index})'
+            index += 1
+        return candidate
+
+    def export_project(self, directory):
+        """Package a complete project so another studio can keep editing it."""
+        with self.config.lock, self.files.lock:
+            key = self.locations.key(directory)
+            project = self._project(key)
+            if not project.is_dir():
+                raise FileNotFoundError(f'Design project directory not found: {key}')
+            summary = self.studio._project_summary(project, self.config.root)
+            if summary is None:
+                raise ValueError('所选目录不是设计工程：缺少 Design/project-spec.json')
+            files = self._validate_tree(project)
+            name = self._load()['meta'].get(key, {}).get('name') or summary['name']
+            spec = json.loads(self.studio._find_spec_file(project).read_text(encoding='utf-8'))
+            document_path = project / DOCUMENT_PATH
+            document = None
+            revision = ''
+            if document_path.is_file():
+                raw = document_path.read_bytes()
+                document = json.loads(raw)
+                revision = hashlib.sha256(raw).hexdigest()
+            manifest = {
+                'format': 'vault-rag-design-project',
+                'schemaVersion': 1,
+                'exportedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                'project': {'id': str(spec.get('project', {}).get('id', '')), 'name': name},
+                'document': {'id': str((document or {}).get('id', '')),
+                             'name': str((document or {}).get('name', name)), 'revision': revision},
+            }
+            folder = self.config.directory / 'design-project-exports'
+            folder.mkdir(parents=True, exist_ok=True)
+            export_id = uuid.uuid4().hex
+            bundle = folder / f'{export_id}.zip'
+            skipped = ('Design/exports/', '.vault-rag/', '.git/', '.DS_Store')
+            with zipfile.ZipFile(bundle, 'x', compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr('design-project.json', _bytes(manifest))
+                for path in files:
+                    rel = path.relative_to(project).as_posix()
+                    if rel.startswith(skipped) or rel in ('.DS_Store',): 
+                        continue
+                    archive.write(path, rel)
+            cutoff = time.time() - 24 * 3600
+            for old in folder.glob('*.zip'):
+                try:
+                    if old != bundle and old.stat().st_mtime < cutoff:
+                        old.unlink()
+                except OSError:
+                    pass
+            return {'ok': True, 'id': export_id, 'path': str(bundle), 'name': name, 'size': bundle.stat().st_size}
+
+    def import_project(self, archive, destination=''):
+        """Create a vault project from an exported工程包 without ever overwriting files."""
+        if not isinstance(archive, (bytes, bytearray)) or not archive:
+            raise ValueError('工程包为空')
+        if len(archive) > MAX_PROJECT_ARCHIVE_BYTES:
+            raise ValueError('工程包超过 512 MiB')
+        key = uuid.uuid4().hex
+        # Keep staging inside the vault so the final rename stays on one volume.
+        staging = self.config.root / '.vault-rag' / 'design-studio' / 'imports' / key / 'content'
+        staging.parent.mkdir(parents=True, exist_ok=False)
+        staging.mkdir(parents=True, exist_ok=True)
+        total = 0
+        try:
+            with zipfile.ZipFile(io.BytesIO(bytes(archive))) as bundle:
+                members = bundle.infolist()
+                if len(members) > MAX_PROJECT_MEMBERS:
+                    raise ValueError('工程包条目过多')
+                for info in members:
+                    if info.is_dir():
+                        continue
+                    if info.flag_bits & 0x1:
+                        raise ValueError('工程包不能包含加密条目')
+                    mode = (info.external_attr >> 16) & 0o170000
+                    if mode == 0o120000:
+                        raise ValueError('工程包不能包含符号链接')
+                    if info.file_size > MAX_PROJECT_ARCHIVE_BYTES:
+                        raise ValueError('工程包单文件超过 512 MiB')
+                    name = relative(info.filename)
+                    if not name or any(part.startswith('.') for part in PurePosixPath(name).parts):
+                        raise ValueError('工程包包含不允许的路径')
+                    target = staging / PurePosixPath(name)
+                    if not target.resolve().is_relative_to(staging):
+                        raise ValueError('工程包包含越界路径')
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with bundle.open(info) as source, target.open('xb') as sink:
+                        while True:
+                            chunk = source.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            total += len(chunk)
+                            if total > MAX_PROJECT_UNPACKED_BYTES:
+                                raise ValueError('工程包解压后超过 2 GiB')
+                            sink.write(chunk)
+            spec_path = staging / 'Design/project-spec.json'
+            if not spec_path.is_file():
+                spec_path = staging / 'project-spec.json'
+            if not spec_path.is_file():
+                raise ValueError('工程包缺少 Design/project-spec.json')
+            spec_rel = spec_path.relative_to(staging).as_posix()
+            spec = json.loads(spec_path.read_text(encoding='utf-8'))
+            if not isinstance(spec, dict) or not isinstance(spec.get('project'), dict):
+                raise ValueError('工程包 project-spec.json 无效')
+            managed_path = staging / DOCUMENT_PATH
+            document = None
+            if managed_path.is_file():
+                document = json.loads(managed_path.read_text(encoding='utf-8'))
+                if not isinstance(document, dict) or document.get('schemaVersion') != 1:
+                    raise ValueError('Unsupported design document version')
+            manifest = {}
+            manifest_path = staging / 'design-project.json'
+            if manifest_path.is_file():
+                try:
+                    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+                except ValueError:
+                    manifest = {}
+            source_name = ''
+            if isinstance(manifest.get('project'), dict):
+                source_name = str(manifest['project'].get('name') or '')
+            name = self._project_archive_name(source_name or spec['project'].get('name') or Path(key).name)
+            chosen = self._free_project_directory(destination or name)
+            identity = uuid.uuid4().hex
+            if document is not None:
+                document['id'] = identity
+                document['name'] = str(document.get('name') or name)
+                atomic_write(managed_path, _bytes(document))
+            spec['project']['id'] = identity
+            atomic_write(spec_path, _bytes(spec))
+            transforms_path = staging / 'Design/layer-transforms.json'
+            if transforms_path.is_file():
+                value = json.loads(transforms_path.read_text(encoding='utf-8'))
+                if isinstance(value, dict):
+                    value['projectId'] = identity
+                    atomic_write(transforms_path, _bytes(value))
+            manifest_path.unlink(missing_ok=True)
+            dest = self.config.path_for(chosen, writable=True)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            move_exclusive(staging, dest)
+            try:
+                staging.parent.rmdir()
+            except OSError:
+                pass
+            self.install_runtime(chosen)
+            self.record_creation(chosen, 'Import project')
+            self.files.changed(chosen)
+            summary = self.studio._project_summary(dest, self.config.root)
+            return {'ok': True, 'directory': chosen, 'project': summary,
+                    'files': sum(1 for path in dest.rglob('*') if path.is_file()), 'size': total}
+        except BaseException:
+            shutil.rmtree(staging.parent, ignore_errors=True)
+            raise
+
     def export_preflight(self, directory, page_ids, expected_revision=None):
         value = self.documents.read(directory)
         if expected_revision and value['revision'] != expected_revision:
@@ -920,10 +1168,10 @@ class DesignWorkspace:
             from vault_rag.design_export_selection import select_export
             document, selection = select_export(document, page_ids)
         with self.config.lock, self.files.lock:
-            document['name'] = self._load()['meta'].get(relative(directory), {}).get('name') or document['name']
+            document['name'] = self._load()['meta'].get(self.locations.key(directory), {}).get('name') or document['name']
         if snapshot_dir is None:
             self.install_runtime(directory)
-        project = self.config.path_for(directory)
+        project = self._project(directory)
         # Export the resource graph, not archives, validation records or unrelated
         # source files that happen to live beside a design.
         from urllib.parse import unquote, urlsplit
@@ -932,7 +1180,7 @@ class DesignWorkspace:
         if selection is not None:
             resources.update(selection['paths'])
             for path in resources:
-                if not self.config.path_for(directory + '/' + relative(path)).is_file():
+                if not self._project_file(directory, relative(path)).is_file():
                     raise ValueError('Missing export resource: ' + path)
         virtual_scripts = {(item.get('path', key) if isinstance(item, dict) else key)
                            for key, item in document.get('scripts', {}).items()
@@ -963,7 +1211,7 @@ class DesignWorkspace:
             path = posixpath.normpath(posixpath.join(base, decoded.lstrip('/')))
             try:
                 path = relative(path)
-                target = self.config.path_for(directory + '/' + path)
+                target = self._project_file(directory, path)
             except ValueError:
                 return
             if path.startswith('Design/exports/') or path.startswith('Design/studio/'):
@@ -1010,7 +1258,7 @@ class DesignWorkspace:
         while resources - scanned:
             for rel in list(resources - scanned):
                 scanned.add(rel)
-                path = self.config.path_for(directory + '/' + rel)
+                path = self._project_file(directory, rel)
                 if path.suffix.lower() in ('.js', '.mjs', '.css', '.html', '.htm', '.svg', '.json') and path.stat().st_size <= 2 * 1024 * 1024:
                     text = path.read_text(encoding='utf-8')
                     scan(text, posixpath.dirname(rel))
@@ -1031,7 +1279,7 @@ class DesignWorkspace:
         if snapshot_dir is None:
             export_id = uuid.uuid4().hex
             export_rel = f'Design/exports/{export_id}'
-            dest = self.config.path_for(directory + '/' + export_rel, writable=True)
+            dest = self._project_file(directory, export_rel, writable=True)
         else:
             # Internal publication jobs write their immutable snapshot outside
             # the source project; ordinary HTML exports keep their old location.
@@ -1041,7 +1289,7 @@ class DesignWorkspace:
             atomic_write(dest / name, (RUNTIME / name).read_bytes())
         # Keep project-relative paths intact in the bundle and copy referenced assets.
         for rel in sorted(resources):
-            path = self.config.path_for(directory + '/' + rel)
+            path = self._project_file(directory, rel)
             if not path.is_file():
                 raise ValueError('Missing export resource: ' + rel)
             target = dest / rel

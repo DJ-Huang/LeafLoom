@@ -7,6 +7,7 @@ import unittest
 
 from vault_rag.design_bindings import binding_status, resolve_document, resolve_page
 from vault_rag.design_documents import DesignDocuments
+from vault_rag.design_locations import DesignLocations
 from vault_rag.local_state import ConflictError, Files, LocalConfig
 
 
@@ -18,7 +19,8 @@ class DesignBindingTests(unittest.TestCase):
         (root / 'Projects/Test').mkdir(parents=True)
         config = LocalConfig(home / 'config')
         config.save({'root': str(root), 'include_roots': ['Projects']})
-        self.service = DesignDocuments(SimpleNamespace(config=config, files=Files(config), runtime=SimpleNamespace()))
+        self.service = DesignDocuments(SimpleNamespace(config=config, files=Files(config), runtime=SimpleNamespace(),
+                                                      locations=DesignLocations(config)))
         self.current = self.service.create('Projects/Test', 'Test')
         self.page = self.current['document']['pages'][0]['id']
         self.apply({'type': 'node.create', 'page_id': self.page, 'node': {'id': 'title', 'type': 'text', 'props': {'text': 'Hello'}, 'script': {'source': 'export function mount(ctx) {}'}}},

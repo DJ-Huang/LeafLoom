@@ -1,7 +1,9 @@
 """Workspace moves/history and shared-library dependency integrity."""
 import copy
+import io
 import json
 from pathlib import Path
+import shutil
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -9,6 +11,7 @@ import zipfile
 from unittest.mock import patch
 
 from vault_rag.design_documents import DesignDocuments
+from vault_rag.design_locations import DesignLocations
 from vault_rag.design_workspace import DesignWorkspace, _walk, _srcset_urls
 from vault_rag.local_state import ConflictError, Files, LocalConfig
 
@@ -24,6 +27,7 @@ class DesignWorkspaceTests(unittest.TestCase):
         self.events = []
         runtime = SimpleNamespace(events=SimpleNamespace(publish=lambda kind, **value: self.events.append({'type': kind, **value})))
         self.studio = SimpleNamespace(config=self.config, files=self.files, runtime=runtime,
+                                      locations=DesignLocations(self.config),
                                       _project_summary=self.summary, _find_spec_file=lambda project: project / 'Design/project-spec.json')
         self.docs = DesignDocuments(self.studio)
         self.workspace = DesignWorkspace(self.studio, self.docs)
@@ -38,7 +42,25 @@ class DesignWorkspaceTests(unittest.TestCase):
         if not spec.is_file():
             return None
         value = json.loads(spec.read_text())['project']
-        return {'id': value['id'], 'name': value['name'], 'directory': project.relative_to(root).as_posix()}
+        try:
+            directory = project.relative_to(root).as_posix()
+            external = False
+        except ValueError:
+            directory = project.as_posix()
+            external = True
+        entry = self.studio.locations.project(directory) if external else None
+        return {'id': value['id'], 'name': value['name'], 'directory': directory,
+                'external': external, 'readOnly': bool(external and not (entry or {}).get('writable'))}
+
+    def create_external(self, name='External'):
+        project = self.root.parent / name
+        (project / 'Design/studio').mkdir(parents=True)
+        (project / 'Design/project-spec.json').write_text(json.dumps({'project': {'id': name, 'name': 'External Design'}}))
+        document = {'schemaVersion': 1, 'id': 'external-doc', 'name': 'External Design',
+                    'pages': [{'id': 'home', 'name': 'Home', 'width': 720, 'height': 1560, 'nodes': []}],
+                    'assets': {}, 'components': {}, 'styles': {}, 'scripts': {}}
+        (project / 'Design/studio/project.json').write_text(json.dumps(document))
+        return project
 
     def create(self, directory):
         project = self.root / directory
@@ -180,7 +202,10 @@ class DesignWorkspaceTests(unittest.TestCase):
         self.assertEqual(shared.read_bytes(), b'keep')
         document.write_bytes(original_document)
         victim = self.root / 'unrelated.txt';victim.write_text('keep original')
-        (trash / 'external-link').symlink_to(victim)
+        try:
+            (trash / 'external-link').symlink_to(victim)
+        except OSError as error:
+            self.skipTest(f'Symlink creation unavailable: {error}')
         with self.assertRaises(ValueError):
             self.workspace.purge_trash(None, deleted['revision'], 'purge-linked-content', confirm=True)
         self.assertEqual(victim.read_text(), 'keep original')
@@ -215,8 +240,12 @@ class DesignWorkspaceTests(unittest.TestCase):
 
     def test_synced_history_supports_move_restore_and_trash_purge(self):
         def foreign_owner(directory):
-            with self.docs._database(self.project['document']['id']) as db:
-                db.execute('UPDATE meta SET owner=? WHERE id=1', ('D:\\Knowledge\n' + directory,))
+            db = self.docs._database(self.project['document']['id'])
+            try:
+                with db:
+                    db.execute('UPDATE meta SET owner=? WHERE id=1', ('D:\\Knowledge\n' + directory,))
+            finally:
+                db.close()
 
         foreign_owner(self.directory)
         moved = self.manage('move', 'move-synced-project', destination='Projects/Moved')
@@ -336,7 +365,10 @@ class DesignWorkspaceTests(unittest.TestCase):
     def test_lightweight_copy_validation_still_rejects_links(self):
         outside = self.root.parent / 'outside.txt'
         outside.write_bytes(b'external')
-        (self.root / self.directory / 'linked.txt').symlink_to(outside)
+        try:
+            (self.root / self.directory / 'linked.txt').symlink_to(outside)
+        except OSError as error:
+            self.skipTest(f'Symlink creation unavailable: {error}')
         with self.assertRaises(ValueError):
             self.workspace.copy_project(self.directory, 'Projects/Copy')
         self.assertFalse((self.root / 'Projects/Copy').exists())
@@ -627,6 +659,122 @@ export function mount(ctx) {
         path_asset = next(asset for asset in imported['assets'].values() if asset['name'] == 'path-only.png')
         self.assertIn("ctx.assets.resolve('" + path_asset['path'] + "')", rewritten)
         self.assertEqual((self.root / 'Projects/Target' / path_asset['path']).read_bytes(), b'path-only-bytes')
+
+
+    def test_locations_reject_unregistered_and_unwritable_external(self):
+        locations = self.studio.locations
+        outside = self.root.parent / 'not-registered'
+        outside.mkdir()
+        with self.assertRaises(ValueError):
+            locations.path(outside.as_posix())
+        external = self.create_external('Registered')
+        key = locations.register(str(external))['path']
+        self.assertFalse(locations.project(key)['writable'])
+        with self.assertRaisesRegex(ValueError, '未启用编辑'):
+            locations.path(key, writable=True)
+        locations.set_writable(key, True)
+        self.assertEqual(locations.path(key, writable=True).resolve(), external.resolve())
+
+    def test_external_project_registers_read_only_and_requires_enable(self):
+        external = self.create_external()
+        registered = self.workspace.register_external(str(external))
+        key = external.as_posix()
+        self.assertEqual(registered['directory'], key)
+        self.assertTrue(registered['project']['readOnly'])
+        with self.assertRaisesRegex(ValueError, '未启用编辑'):
+            self.workspace._project_file(key, 'Design/studio/project.json', writable=True)
+        enabled = self.workspace.enable_external(key)
+        self.assertFalse(enabled['project']['readOnly'])
+        self.assertEqual(self.docs.read(key)['document']['id'], 'external-doc')
+        self.assertTrue((external / 'Design/studio/runtime.html').is_file())
+
+    def test_external_project_cannot_move_or_delete_and_forget_keeps_files(self):
+        external = self.create_external()
+        key = self.workspace.register_external(str(external))['directory']
+        for action, operation in (('move', 'move-external'), ('delete', 'delete-external')):
+            with self.assertRaisesRegex(ValueError, '外部工程'):
+                self.workspace.manage(key, action, self.workspace.state()['revision'], operation,
+                                      **({'destination': 'Projects/Moved'} if action == 'move' else {}))
+        self.workspace.manage(key, 'favorite', self.workspace.state()['revision'], 'favorite-external', value=True)
+        self.workspace.manage(key, 'forget', self.workspace.state()['revision'], 'forget-external')
+        self.assertTrue((external / 'Design/project-spec.json').is_file())
+        self.assertEqual(self.workspace.locations.entries(), [])
+        self.assertNotIn(key, self.workspace.state()['meta'])
+
+    def test_external_copy_to_vault_reassigns_identity(self):
+        external = self.create_external()
+        key = self.workspace.register_external(str(external))['directory']
+        self.workspace.enable_external(key)
+        self.workspace.copy_project(key, 'Projects/Copied')
+        value = self.docs.read('Projects/Copied')
+        self.assertNotEqual(value['document']['id'], 'external-doc')
+        self.assertNotEqual(self.summary(self.root / 'Projects/Copied', self.root)['id'], 'External')
+        self.assertTrue((external / 'Design/studio/project.json').is_file())
+
+    def test_external_enable_detaches_copied_identity(self):
+        external = self.create_external()
+        shared = self.root / 'Projects/Shared'
+        shutil.copytree(external, shared)
+        self.docs.read('Projects/Shared')
+        key = self.workspace.register_external(str(external))['directory']
+        self.workspace.enable_external(key)
+        changed = json.loads((external / 'Design/studio/project.json').read_text(encoding='utf-8'))['id']
+        self.assertNotEqual(changed, 'external-doc')
+        self.assertTrue(self.docs.read(key)['document']['name'])
+
+    def test_project_export_round_trip_keeps_project_editable(self):
+        legacy = self.root / self.directory / 'Design/exports/old'
+        legacy.mkdir(parents=True)
+        (legacy / 'index.html').write_text('<p>old</p>')
+        exported = self.workspace.export_project(self.directory)
+        self.assertTrue(Path(exported['path']).is_file())
+        with zipfile.ZipFile(exported['path']) as archive:
+            names = set(archive.namelist())
+        self.assertIn('design-project.json', names)
+        self.assertIn('Design/project-spec.json', names)
+        self.assertIn('Design/studio/project.json', names)
+        self.assertFalse(any(name.startswith('Design/exports/') for name in names))
+        imported = self.workspace.import_project(Path(exported['path']).read_bytes())
+        self.assertNotEqual(imported['directory'], self.directory)
+        self.assertNotEqual(self.docs.read(imported['directory'])['document']['id'], self.project['document']['id'])
+
+    def test_project_import_picks_free_directory_and_rejects_unsafe_archives(self):
+        exported = self.workspace.export_project(self.directory)
+        data = Path(exported['path']).read_bytes()
+        first = self.workspace.import_project(data)
+        second = self.workspace.import_project(data)
+        self.assertEqual((first['directory'], second['directory']), ('Pet Home', 'Pet Home (2)'))
+        with self.assertRaises(ValueError):
+            self.workspace.import_project(b'')
+        traversal = io.BytesIO()
+        with zipfile.ZipFile(traversal, 'w') as archive:
+            archive.writestr('../evil.txt', b'x')
+        with self.assertRaises(ValueError):
+            self.workspace.import_project(traversal.getvalue())
+        absolute = io.BytesIO()
+        with zipfile.ZipFile(absolute, 'w') as archive:
+            archive.writestr('/etc/passwd', b'x')
+        with self.assertRaises(ValueError):
+            self.workspace.import_project(absolute.getvalue())
+        missing = io.BytesIO()
+        with zipfile.ZipFile(missing, 'w') as archive:
+            archive.writestr('README.md', b'x')
+        with self.assertRaisesRegex(ValueError, 'project-spec'):
+            self.workspace.import_project(missing.getvalue())
+        linked = io.BytesIO()
+        with zipfile.ZipFile(linked, 'w') as archive:
+            info = zipfile.ZipInfo('Design/project-spec.json')
+            info.external_attr = 0o120777 << 16
+            archive.writestr(info, json.dumps({'project': {'id': 'x', 'name': 'X'}}))
+        with self.assertRaisesRegex(ValueError, '符号链接'):
+            self.workspace.import_project(linked.getvalue())
+        versioned = io.BytesIO()
+        with zipfile.ZipFile(versioned, 'w') as archive:
+            archive.writestr('Design/project-spec.json', json.dumps({'project': {'id': 'x', 'name': 'X'}}))
+            archive.writestr('Design/studio/project.json', json.dumps({'schemaVersion': 2, 'id': 'x', 'pages': []}))
+        with self.assertRaisesRegex(ValueError, 'Unsupported'):
+            self.workspace.import_project(versioned.getvalue())
+        self.assertFalse(any((self.root / '.vault-rag/design-studio/imports').glob('*')))
 
 
 if __name__ == '__main__':

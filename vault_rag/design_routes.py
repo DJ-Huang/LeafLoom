@@ -45,8 +45,12 @@ def design_router(studio, feishu=None):
     async def read_document(directory: str, page_id: str | None = None, manifest: bool = False, root: str | None = None, view: bool = False):
         if root is not None:
             guard({'root': root})
-        operation = documents.manifest if manifest else documents.page_view if view else documents.read
-        return await asyncio.to_thread(operation, directory, **({} if manifest else {'page_id': page_id}))
+        def read():
+            if documents.is_read_only(directory):
+                return documents.inspect_readonly(directory, page_id)
+            operation = documents.manifest if manifest else documents.page_view if view else documents.read
+            return operation(directory, **({} if manifest else {'page_id': page_id}))
+        return await asyncio.to_thread(read)
 
     @router.post('/operations')
     async def operations(request: Request):
@@ -205,6 +209,66 @@ def design_router(studio, feishu=None):
     async def copy_project(request: Request):
         body = await request.json(); guard(body)
         return await run(body, workspace.copy_project, body['directory'], body['destination'])
+
+    @router.post('/external')
+    async def register_external(request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, workspace.register_external, body['path'])
+
+    @router.post('/external/enable')
+    async def enable_external(request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, workspace.enable_external, body['directory'])
+
+    @router.post('/external/remove')
+    async def remove_external(request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, workspace.manage, body['directory'], 'forget', body['expected_revision'],
+                         body['operation_id'])
+
+    @router.post('/project/export')
+    async def export_project(request: Request):
+        body = await request.json(); guard(body)
+        return await run(body, workspace.export_project, body['directory'])
+
+    @router.get('/project/export/{export_id}')
+    async def download_project(export_id: str):
+        import json
+        import re
+        import zipfile
+        if not re.fullmatch(r'[a-f0-9]{32}', export_id):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404)
+        path = studio.config.directory / 'design-project-exports' / f'{export_id}.zip'
+        if not path.is_file():
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404)
+        name = 'design-project'
+        try:
+            with zipfile.ZipFile(path) as bundle:
+                if 'design-project.json' in bundle.namelist():
+                    name = json.loads(bundle.read('design-project.json')).get('project', {}).get('name') or name
+        except (OSError, ValueError, KeyError, AttributeError):
+            pass
+        name = workspace._project_archive_name(name)
+        return FileResponse(path, media_type='application/zip', filename=f'{name}.zip')
+
+    @router.post('/project/import')
+    async def import_project(request: Request, root: str = '', directory: str = '', expected_workspace_revision: str = ''):
+        guard({'root': root})
+        chunks, size = [], 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > 512 * 1024 * 1024:
+                raise ValueError('工程包超过 512 MiB')
+            chunks.append(chunk)
+        def save():
+            with studio.config.lock:
+                guard({'root': root})
+                if expected_workspace_revision and workspace.state()['revision'] != expected_workspace_revision:
+                    raise ConflictError('Design workspace changed; refresh before importing')
+                return workspace.import_project(b''.join(chunks), directory)
+        return await asyncio.to_thread(save)
 
     @router.post('/migrate')
     async def migrate(request: Request):

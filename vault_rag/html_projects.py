@@ -21,6 +21,7 @@ from starlette.responses import HTMLResponse, JSONResponse, Response, RedirectRe
 
 from vault_rag.http_cache import conditional_file
 from vault_rag.local_state import ConflictError, atomic_write, relative
+from vault_rag.design_locations import DesignLocations
 from vault_rag.platform_support import is_link
 
 MAX_SESSIONS = 32
@@ -46,6 +47,7 @@ class HtmlProjects:
     def __init__(self, config, port):
         self.config = config
         self.port = port
+        self.locations = DesignLocations(config)
         self.lock = threading.RLock()
         identity = config.directory / 'web-identity'
         if not identity.exists():
@@ -69,9 +71,9 @@ class HtmlProjects:
         if expected != str(self.config.root):
             raise ConflictError('关联目录已切换，请重新打开网页；原草稿仍保留')
 
-    def _directory(self, root):
-        root = relative(root)
-        p = self.config.path_for(root)
+    def _directory(self, directory, *, writable=False):
+        directory = self.locations.key(directory)
+        p = self.locations.path(directory, writable=writable)
         if not p.is_dir():
             raise ValueError('请选择项目文件夹')
         if (p / INTERNAL.strip('/')).exists():
@@ -93,10 +95,11 @@ class HtmlProjects:
             self._check_root(root)
             if not isinstance(spa, bool):
                 raise ValueError('SPA 设置必须是布尔值')
-            directory = relative(directory)
+            directory = self.locations.key(directory)
             p = self._directory(directory)
-            entry = relative(entry)
-            if not self.config.path_for(entry).is_file() or not self.config.path_for(entry).is_relative_to(p):
+            entry = self.locations.key(entry)
+            entry_path = self.locations.path(entry)
+            if not entry_path.is_file() or not entry_path.is_relative_to(p):
                 raise ValueError('入口文件必须位于项目文件夹内')
             previous = next((p for p in self.projects if p['vault'] == root and
                              (p['id'] == project_id if project_id else p['directory'] == directory)), None)
@@ -131,7 +134,7 @@ class HtmlProjects:
             project = next((p for p in self.projects if p['id'] == project_id and p['vault'] == root), None)
             if project is None:
                 raise ValueError('网页项目不存在')
-            base = self._directory(project['directory'])
+            base = self._directory(project['directory'], writable=True)
             subdirectory = relative(subdirectory or 'assets')
             if not subdirectory or subdirectory in {'.', '..'} or any(part.startswith('.') for part in PurePosixPath(subdirectory).parts):
                 raise ValueError('Asset subdirectory is not allowed')
@@ -155,7 +158,7 @@ class HtmlProjects:
                         break
                     n += 1
             atomic_write(destination, bytes(data))
-            rel = destination.relative_to(self.config.root).as_posix()
+            rel = self.locations.key(destination)
             return {'path': rel, 'project_id': project_id, 'directory': project['directory']}
 
     def create(self, root, path='', project_id=None, draft=None, url=None):
@@ -173,9 +176,9 @@ class HtmlProjects:
             project = next((p for p in self.projects if p['id'] == project_id and p['vault'] == root), None)
             if project is None:
                 raise ValueError('请先确认 HTML 项目的根目录')
-            path = relative(path)
+            path = self.locations.key(path)
             base = self._directory(project['directory'])
-            entry = self.config.path_for(path)
+            entry = self.locations.path(path)
             if not entry.is_file() or not entry.is_relative_to(base) or entry.suffix.lower() not in ('.html', '.htm'):
                 raise ValueError('请选择项目内的 HTML 文件')
             if draft is not None and (not isinstance(draft, str) or len(draft.encode()) > MAX_DRAFT_BYTES):
@@ -317,7 +320,7 @@ class HtmlProjects:
                 if is_link(p):
                     raise ValueError('不允许通过链接读取网页资源')
             if not p.is_file() and project['spa'] and 'text/html' in request.headers.get('accept', '') and not p.suffix:
-                p = self.config.path_for(project['entry'])
+                p = self.locations.path(project['entry'])
             if not p.is_file():
                 return Response(status_code=404, headers=headers)
             if session['draft'] is not None and p == base / session['entry']:
