@@ -76,6 +76,8 @@ BGE-M3 使用本地已准备的权重；macOS 优先 MPS 并可回退 CPU，Wind
 
 哈希命名的静态资源 immutable 一年，入口与会话 no-store。知识素材 private/no-cache，校验根目录与权限后处理 ETag/304、视频 Range；媒体 ETag 包含根目录与配置版本。HTML 快照正文 no-store，配套资源可条件校验，失效地址即使携带旧 ETag 也不能得到 304。
 
+外部设计工程由 `design_locations.py` 登记，默认只读，启用编辑后才允许写入工程目录；取消登记不删除原文件。`design_workspace.py` 支持工程 ZIP 导出与校验后导入，导入时创建独立身份并避免覆盖现有目录。
+
 ## Design Studio 编辑模型
 
 `design_documents.py` 以项目内 `Design/studio/project.json` 为编辑真源，保存具有稳定 ID 的页面、元素、素材、组件、样式与脚本。网页、公共 MCP 和内置 AI 共用同一批量命令及版本校验；一次指令作为一个事务，旧版 `design_studio.py` 接口保留兼容适配。项目私有 `.vault-rag/design-studio/<id>/history.sqlite3` 保存正反差量、请求回执、周期检查点与未完成提交，衔接 SQLite 与 JSON 原子替换；读取时若发现合法的完整外部文档，沿当前历史的父链与检查点重建原版本，在单个 SQLite 事务中记录「External file changes」，不替换外部文件字节；分支外的检查点不参与重建，纯格式变化仅更新内容摘要。新版本仍拒绝旧窗口的保存并保留草稿。JSON 无效或仍在变化时允许修正后重试；未完成提交与外部文件冲突、历史缺损仍保留数据并停止接入。
