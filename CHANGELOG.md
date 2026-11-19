@@ -2,7 +2,13 @@
 
 [English](CHANGELOG.md) · [中文](docs/zh-CN/CHANGELOG.md) · [日本語](docs/ja/CHANGELOG.md)
 
-## Unreleased
+## 0.1.10 - 2026-11-19
+
+- Open existing Design Studio projects outside the vault as read-only, and explicitly enable editing to write to their folders. Remove an external project from the list without deleting its files. Copy external projects into the vault.
+
+- Export projects as ZIP packages and import them as independent vault projects without overwriting existing folders. Import validates archive paths and contents, assigns a new project identity, and preserves project assets.
+
+- Add a recovery workflow for verified desktop release artifacts and validate version-specific release note headings.
 
 ## 0.1.9 - 2026-11-12
 

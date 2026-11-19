@@ -1,6 +1,6 @@
 # Your first steps with LeafLoom
 
-[What changed in 0.1.9 and how to upgrade](RELEASE_NOTES_0.1.9.md)
+[What changed in 0.1.10 and how to upgrade](RELEASE_NOTES_0.1.10.md)
 
 Install or update the bundled **LeafLoom skill** from **Settings → Skill**. In a new local Codex chat, use `$leafloom` to search your knowledge, manage project tasks or capture work. For design, it guides you to **Design Studio**. The skill calls the running app directly. Enable local AI reading in **Settings → AI integration**, and enable writing when you want it to save changes.
 
@@ -115,6 +115,8 @@ Highlights and comments are **user data**, not a disposable index: back up `.vau
 3. Use back, forward, refresh, full screen or **Open in new tab** in the website toolbar. In the desktop app, the same website runs inside its window. Browser and desktop website storage are independent.
 4. To open an existing website or development server, choose **Preview → Open website** and enter its HTTP/HTTPS URL. LeafLoom does not install dependencies or start a backend. A site may refuse embedding or require sign-in.
 5. Open **Design Studio** from the sidebar or a folder's **New design project here** menu. New projects use a managed visual document; existing `1.1.0` projects keep their layer-review tools and can be converted into a separate editable copy. Choose mobile portrait `720×1560`, mobile landscape `1560×720`, desktop `1440×900` or custom page dimensions.
+
+**External projects and sharing.** In the Design Studio project list, choose **Open external project** and select an existing project folder. It opens read-only; choose **Enable editing** in its menu to allow writes to design files, layer transforms and imported assets in that folder. **Remove from list** only unregisters it and leaves disk files intact. Use **Export project package** from the project menu to share a ZIP, then **Import project** on the project list to create an independent copy in the vault without overwriting an existing folder. The ZIP import limit is 512 MiB (2 GiB unpacked).
 
 **Source** opens the HTML text. Ordinary edits autosave; if an unsaved draft remains, the website view previews it in a temporary origin without saving it. Companion resources still come from disk. HTML remains browsable independently of the selected search folders and is not indexed for knowledge search.
 
