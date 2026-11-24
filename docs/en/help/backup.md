@@ -16,9 +16,13 @@ Save notes and AI drafts, pause external edits/sync, then quit normally.
 4. Export any unique unsaved browser/desktop drafts separately and check backup readability.
 5. Restore to a new local folder for inspection before replacing existing material.
 
+If you use attachment servers, also back up the original files in every server root used by the vault, including originals outside the current upload folder, and each configured server metadata directory. Keep the storage ID, relative paths and metadata directory mapping so existing note links can still resolve. A migrated original may exist only on the server; thumbnails, local caches and the catalog are not substitutes.
+
+Check a restore in a separate vault and, for server attachments, against a separate restored server copy with empty client caches. Open a local original and a server-only original from their existing note links and compare their SHA-256 checksums with the originals. If you use attachment groups or covers, check that they also appear. A visible thumbnail alone does not verify the original.
+
 ## What to expect
 
-Your backup includes originals and user records. Local indexes and trash are not an off-device backup.
+A complete backup protects both the originals and user records. Local indexes and trash are not an off-device backup.
 
 ## If it does not work
 
