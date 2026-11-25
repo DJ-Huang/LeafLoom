@@ -34,6 +34,16 @@ Choose **ATELIER** when creating a project for a three-artboard lighting campaig
 
 The workbench separates editing tools from Export and Publish. Page reorder, duplicate and delete controls are grouped under **Page actions** in the page inspector. Batch publishing keeps its action bar visible while you choose pages, variants and format. Review the output summary, run the selected-output check, then publish. Completed items use compact expandable rows; failed items expand their diagnostics. Text fitting limits and shared check limitations remain available in disclosure sections. Static export checks do not replace visual review of fonts and layout. Use the canvas toolbar’s **Hide panels** control for more canvas space on a narrow window; **Show panels** restores the previous inspector and layer selection.
 
+A passing output check does not mean every translation is ready. Missing values
+render the source text; translations marked for review still render their saved
+values. Review each selected language's warnings, fill in missing translations, and
+update or confirm reviewed translations. Save, then check again and start a new job.
+Retry uses the old snapshot. For one PDF per language, select one variant per job.
+
+For a quick layout check, export ATELIER's **02 / Mobile landing** artboard
+(390 × 2320) in your target languages. Open the actual files and check line breaks,
+clipping and glyphs; a completed job does not verify translated copy or layout.
+
 ## What to expect
 
 Get a static PNG ZIP or multi-page PDF; interactive projects can still export HTML ZIP.
