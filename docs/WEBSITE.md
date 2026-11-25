@@ -82,3 +82,34 @@ For rollback, revert the website change through a PR and redeploy. Do not force-
 ## 日本語
 
 本文は `messages.tsv` の `site.*` キーで日英中を管理し、既存の翻訳コンパイラーと `scripts/build_site.py` で独立した静的ページを生成します。上記のコマンドでビルド・プレビューでき、生成先の `dist/site/` は直接編集しません。ダウンロードは最新正式 Release の実在するアセットを参照。新しい Release に対象のアセットがない場合は、利用できる最新正式版とその版のバージョン・ノート・チェックサムを掲載し、正式版のインストーラーがない場合のみ利用不可になります。すべてのアセットをアップロードしてから Release を公開し、公開済み版への追加アップロード後は **LeafLoom website** を手動実行します。Pages 環境で main ブランチと v* タグを許可し、Release イベントからも自動公開します。PR の main へのマージ後に公開され、PR 自体はデプロイしません。main の強制プッシュと削除は禁止。管理者も PR を使いますが、他者の承認は必須ではありません。
+
+## Live-site mismatch runbook
+
+Use this read-only procedure when **LeafLoom website** reports success but the public downloads remain old. Do not treat a successful deployment, a shared commit SHA, or a repeated deployment ID as proof of which HTML is being served.
+
+1. Record the latest stable Release, actual platform assets and checksum filenames. Check the per-platform fallback rules above before calling an older installer a fault.
+2. Record both the previous and new workflow run IDs, their `github-pages` artifact IDs and expiry times. Download the ZIPs before expiry and retain their SHA-256 hashes. Inside each ZIP, read `artifact.tar` and compare `index.html`, `zh-CN/index.html` and `ja/index.html`. Compare the bytes and download URLs, not only the source commit.
+3. Fetch those three public pages with a fresh query parameter and `Cache-Control: no-cache`. Save the raw response body, UTC time, URL, status and cache headers (`Date`, `Last-Modified`, `ETag`, `Age`, `Cache-Control`, `Via`, `X-Cache`). Hash the bodies and compare each with both artifacts. A cache-busting request is diagnostic, not a guarantee that every intermediary bypassed its cache.
+4. If needed, make at most three rounds, five minutes apart, with a 20-second timeout per request. Treat this as a bounded observation window, not a promised propagation deadline. Report timeouts separately from a verified old response; do not loop indefinitely or automatically redeploy.
+5. Read the deployment log's submitted `artifact_id` and reported status. Distinguish **generated content**, **submitted artifact**, **reported deployment success**, and **observed public bytes**. If Pages status access is unavailable, record that limitation rather than inferring the serving association from its ID.
+
+| Evidence | Next step |
+| --- | --- |
+| New artifact itself contains unexpected old links | Reproduce the build with the saved release JSON; check missing assets and fallback selection before proposing a code change. |
+| New artifact is correct, public bytes match the old artifact | Keep the evidence and investigate deployment/hosting/cache state. Do not hard-code a new version into the page template. |
+| Public bytes match the new artifact in all languages | Record convergence and stop the follow-up; no repair is needed. |
+| Fetch fails or matches neither artifact | Record the failure or differing content and check for a newer deployment; do not label it a cache failure without evidence. |
+
+Until the mismatch is resolved, direct users to the verified [GitHub Releases page](https://github.com/DJ-Huang/LeafLoom/releases), stating the intended version and platform. A link check or checksum-file read is not an installer hash verification or an installation test. Any rerun, redeployment, rollback or settings change is a separate action requiring the maintainer's authorization; this diagnostic procedure makes none of those changes.
+
+### 中文：线上版本不一致排查
+
+部署成功不等于公网已更新；相同提交 SHA 或部署 ID 也不能证明实际服务的内容。先确认正式 Release 的实际安装包和校验文件，区分合法的平台旧版回退。保存前后两次运行的 artifact ID、到期时间与 ZIP 哈希，在到期前下载；比较 `artifact.tar` 内三语首页的字节和链接。再保存公网三语首页的原始响应、UTC 时间和缓存头，与两份产物逐字节比较。带新查询参数及 no-cache 的请求也不能证明所有中间缓存已绕过。
+
+最多检查三轮、每轮间隔五分钟、每次请求超时二十秒；这是观察窗口，不是传播时限保证。分别记录生成产物、实际提交的 artifact ID、部署报告和公网内容。新产物正确但线上匹配旧产物时，继续核对托管／部署／缓存状态，不硬编码版本、不自动重部署；状态接口不可用就明确记录限制。三语均匹配新产物后停止跟进。期间提供已核验版本的 GitHub Releases 下载入口，不把校验文件可读当成安装包哈希或原生安装验证。重跑、部署、回滚和设置变更均需另行获得维护者授权。
+
+### 日本語：公開ページのバージョン不一致
+
+デプロイ成功は公開内容の更新を保証しません。同じコミット SHA やデプロイ ID だけで配信中の内容を判断しないでください。正式 Release の実際のアセットとチェックサムを確認し、正当なプラットフォーム別フォールバックを区別します。新旧 run の artifact ID・期限・ZIP ハッシュを記録し、期限前に保存します。`artifact.tar` 内の 3 言語のトップページを取り出し、公開レスポンスのバイト列・リンクと比較します。UTC 時刻とキャッシュヘッダーも保存してください。新しいクエリ文字列と no-cache は、全中継キャッシュの回避を保証しません。
+
+確認は最大 3 回、5 分間隔、各リクエストのタイムアウトは 20 秒とします。これは観測時間であり反映期限の保証ではありません。生成物、送信した artifact ID、デプロイ結果、公開内容を分けて記録します。新しい生成物が正しくても公開内容が古い場合は、ホスティング・配信・キャッシュを調査し、バージョンの直書きや自動再デプロイはしません。状態 API にアクセスできなければ、その制限を報告します。全言語が新しい生成物と一致したら確認を終了します。それまでは検証済みの GitHub Releases を案内してください。チェックサムファイルの取得はインストーラーのハッシュ検証やインストール試験とは異なります。再実行・再デプロイ・ロールバック・設定変更には別途メンテナーの承認が必要です。
