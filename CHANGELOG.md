@@ -2,6 +2,13 @@
 
 [English](CHANGELOG.md) · [中文](docs/zh-CN/CHANGELOG.md) · [日本語](docs/ja/CHANGELOG.md)
 
+
+## Unreleased
+
+- Enable encrypted cover imports and optional encrypted captions from any database with a record folder. Previously configured galleries retain their existing passphrase, links, and captions.
+
+- Fix Feishu document reads when `lark-cli docs +fetch` returns JSON by default and its help omits the output format option.
+
 ## 0.1.10 - 2026-11-19
 
 - Open existing Design Studio projects outside the vault as read-only, and explicitly enable editing to write to their folders. Remove an external project from the list without deleting its files. Copy external projects into the vault.

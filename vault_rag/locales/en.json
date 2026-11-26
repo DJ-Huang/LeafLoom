@@ -3157,5 +3157,21 @@
   "外部工程当前只读，请先在工作台启用编辑": "The external project is read-only; enable editing in the studio first",
   "确认": "Confirm",
   "导出工程包": "Export project package",
-  "只读": "Read-only"
+  "只读": "Read-only",
+  "photo.lock": "Lock photos",
+  "photo.unlock": "Unlock photos",
+  "photo.password": "Photo passphrase",
+  "photo.unlockFailed": "Could not unlock photos. Check the passphrase and try again.",
+  "photo.unavailable": "Photo unavailable",
+  "photo.caption": "Photo caption",
+  "photo.protectedCaption": "Encrypted caption",
+  "photo.editCaption": "Edit caption",
+  "photo.captionUnavailable": "Caption unavailable. Try again.",
+  "photo.importFailed": "Could not import photo",
+  "photo.enableGallery": "Enable photo encryption",
+  "photo.galleryHelp": "Databases that use this record folder share the setting. New imports through cover fields are encrypted. Existing files remain accessible.",
+  "photo.passphraseMismatch": "The passphrases do not match",
+  "photo.setupFailed": "Could not enable photo encryption. Check the vault settings and try again.",
+  "photo.confirmPassphrase": "Confirm photo passphrase",
+  "photo.enableCaptions": "Add an encrypted caption field"
 }

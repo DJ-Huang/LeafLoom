@@ -509,3 +509,13 @@ Each edit creates a separate immutable change file. Different items merge automa
 On the first upgrade, the app backs up `.vault-rag/calendar.sqlite3` into `.vault-rag/calendar-backups/`, verifies the backup and exports plans, exceptions, completions and deleted records. Interrupted migrations can retry. The old database remains after success, but older builds refuse to write it to prevent divergent data. **Sync and conflicts** shows the backup location. Local reminder preferences and delivery history move to `.vault-rag/calendar-local.sqlite3`.
 
 Back up the whole `Calendar/LeafLoom/` folder for calendar content. Also back up the local `.vault-rag/calendar-local.sqlite3` and migration backup to retain device preferences and reminder history. Linked database definitions, task Markdown and daily notes still use their existing sync mechanism; calendar sync does not resolve concurrent edits to those notes or expand retrieval scope.
+
+## Protected database photos
+
+In a database with a record folder, choose **Enable photo encryption** from the toolbar. Databases using that same folder share the setting. The first protected gallery asks for a photo passphrase. Other galleries in the vault use the same passphrase.
+
+Edit a cover field to import an encrypted photo. Use **Unlock photos** to see covers on cards and in record details. **Lock photos** hides protected content. The session also locks after 30 minutes of inactivity. Existing covers remain readable in their original format.
+
+Choose **Add an encrypted caption field** during setup to add private captions from the record detail and read them on gallery cards. Record titles and other properties stay searchable. Previously migrated galleries retain their existing links, caption display, and passphrase.
+
+Back up the gallery files and the vault’s `.vault-rag` directory together. Sync the wrapped key and gallery settings along with the photo files and records when opening the gallery from another device. Photos and encrypted captions sync as ciphertext.

@@ -3,7 +3,7 @@ import {createPortal} from 'react-dom';
 import {ArrowDown,ArrowUp,ChevronRight,GripVertical,MoreHorizontal,Pencil,Plus,Settings2,Trash2} from 'lucide-react';
 import {t} from './i18n';
 import {ActionMenu,FormDialog,MenuPoint,Modal} from './ui';
-import {BaseConfig,Row,View,labelOf,valueOf} from './database-model';
+import {coverFields,BaseConfig,Row,View,labelOf,valueOf} from './database-model';
 import {Cell} from './database-cell';
 import {FieldIcon} from './database-ui';
 import {PropertySection,usePropertyDrag} from './database-property-drag';
@@ -29,6 +29,7 @@ function AddRecordField({config,view,visible,commit,onClose}:{config:BaseConfig,
 }
 
 export function RecordProperties({config,view,row,busy,update,commit}:{config:BaseConfig,view:View,row:Row,busy:boolean,update:(row:Row,values:any)=>Promise<void>,commit:(cmd:any)=>Promise<any>}){
+ const covers=coverFields(config);
  const [adding,setAdding]=useState(false),[editingField,setEditingField]=useState(''),layout=recordDetailLayout(config,view,row);
  const extra=[...new Set<string>([...(Array.isArray(layout.view.leafloom?.detailExtraOrder)?layout.view.leafloom.detailExtraOrder:[]),...Object.keys(config.fields)])].filter(k=>!!config.fields[k]&&!layout.keys.includes(k));
  const host=useRef<HTMLDivElement>(null),alive=useRef(true),locked=useRef(false),renameInput=useRef<HTMLInputElement>(null),cancelRename=useRef(false);
@@ -65,7 +66,7 @@ export function RecordProperties({config,view,row,busy,update,commit}:{config:Ba
    <div className="db-property-label"><button className="db-property-grip" disabled={blocked||!!renaming} aria-label={t('db.dragProperty')+' '+name} title={t('db.dragProperty')} onPointerDown={event=>{setMenu(undefined);sorting.start(event,key,section,keys);}}><GripVertical size={13}/></button>
    {renaming?.key===key?<input ref={renameInput} className="db-property-rename" aria-label={t('db.fieldName')} value={renaming.value} disabled={renameBusy} onChange={event=>setRenaming({...renaming,value:event.target.value})} onBlur={()=>void rename()} onKeyDown={event=>{if(event.key==='Enter'){event.preventDefault();event.stopPropagation();void rename();}if(event.key==='Escape'){event.preventDefault();event.stopPropagation();cancelRename.current=true;setRenaming(undefined);setRenameError('');}}}/>:<button className="db-property-name" aria-haspopup="menu" title={name} onClick={event=>showMenu(key,section,event.currentTarget)} onKeyDown={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();event.stopPropagation();showMenu(key,section,event.currentTarget);}else if(event.altKey&&['ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();event.stopPropagation();if(!blocked)shift(key,section,event.key==='ArrowUp'?-1:1);}}}><FieldIcon fieldKey={key} field={config.fields[key]}/><span>{name}</span></button>}
    <button className="db-property-menu-trigger" aria-label={t('db.propertyActions')+' '+name} aria-haspopup="menu" aria-expanded={menu?.key===key} title={t('db.propertyActions')} onClick={event=>showMenu(key,section,event.currentTarget)}><MoreHorizontal size={13}/></button></div>
-   <Cell row={row} fieldKey={key} field={config.fields[key]} root={config.root} disabled={busy} update={update}/>
+   <Cell row={row} fieldKey={key} field={config.fields[key]} root={config.root} disabled={busy} update={update} isCover={covers.has(key)}/>
   </div>;
  };
  const menuKeys=menu?keysFor(menu.section):[],menuIndex=menu?menuKeys.indexOf(menu.key):-1;

@@ -3200,3 +3200,19 @@ calendar.migrationFailed|旧日历数据核对未通过，已保留原数据，�
 确认|Confirm|確認
 导出工程包|Export project package|プロジェクトパッケージを書き出す
 只读|Read-only|読み取り専用
+photo.lock|锁定照片|Lock photos|写真をロック
+photo.unlock|解锁照片|Unlock photos|写真のロックを解除
+photo.password|照片口令|Photo passphrase|写真のパスフレーズ
+photo.unlockFailed|无法解锁照片，请核对口令后重试|Could not unlock photos. Check the passphrase and try again.|写真を開けません。パスフレーズを確認して再試行してください。
+photo.unavailable|照片暂不可读|Photo unavailable|写真を表示できません
+photo.caption|照片配文|Photo caption|写真のキャプション
+photo.protectedCaption|加密配文|Encrypted caption|暗号化されたキャプション
+photo.editCaption|编辑配文|Edit caption|キャプションを編集
+photo.captionUnavailable|配文暂不可用，请重试|Caption unavailable. Try again.|キャプションを読み込めません。再試行してください。
+photo.importFailed|照片导入失败|Could not import photo|写真をインポートできません
+photo.enableGallery|启用照片加密|Enable photo encryption|写真の暗号化を有効にする
+photo.galleryHelp|使用此记录文件夹的数据库共享设置。此后从封面字段导入的照片会加密。已有文件可继续访问。|Databases that use this record folder share the setting. New imports through cover fields are encrypted. Existing files remain accessible.|このレコードフォルダーを使用するデータベースで設定を共有します。今後カバーフィールドから読み込む写真が暗号化されます。既存のファイルは引き続き開けます。
+photo.passphraseMismatch|两次输入的口令不同|The passphrases do not match|パスフレーズが一致しません
+photo.setupFailed|启用照片加密失败，请检查知识库设置后重试|Could not enable photo encryption. Check the vault settings and try again.|写真の暗号化を有効にできません。保管庫の設定を確認して再試行してください。
+photo.confirmPassphrase|确认照片口令|Confirm photo passphrase|写真のパスフレーズを確認
+photo.enableCaptions|提供加密配文栏|Add an encrypted caption field|暗号化キャプション欄を追加

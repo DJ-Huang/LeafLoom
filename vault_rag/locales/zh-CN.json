@@ -3157,5 +3157,21 @@
   "外部工程当前只读，请先在工作台启用编辑": "外部工程当前只读，请先在工作台启用编辑",
   "确认": "确认",
   "导出工程包": "导出工程包",
-  "只读": "只读"
+  "只读": "只读",
+  "photo.lock": "锁定照片",
+  "photo.unlock": "解锁照片",
+  "photo.password": "照片口令",
+  "photo.unlockFailed": "无法解锁照片，请核对口令后重试",
+  "photo.unavailable": "照片暂不可读",
+  "photo.caption": "照片配文",
+  "photo.protectedCaption": "加密配文",
+  "photo.editCaption": "编辑配文",
+  "photo.captionUnavailable": "配文暂不可用，请重试",
+  "photo.importFailed": "照片导入失败",
+  "photo.enableGallery": "启用照片加密",
+  "photo.galleryHelp": "使用此记录文件夹的数据库共享设置。此后从封面字段导入的照片会加密。已有文件可继续访问。",
+  "photo.passphraseMismatch": "两次输入的口令不同",
+  "photo.setupFailed": "启用照片加密失败，请检查知识库设置后重试",
+  "photo.confirmPassphrase": "确认照片口令",
+  "photo.enableCaptions": "提供加密配文栏"
 }

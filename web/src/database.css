@@ -173,3 +173,7 @@
 @media(max-width:1200px) { .db-view-bar { flex-wrap: wrap; gap: 0; }.db-view-tabs { flex: 1; }.db-toolbar { padding-bottom: 7px; }.db-search:focus-within,.db-search:hover { width: 126px; } }
 @media(max-width:760px) { .database { padding: 30px 20px 40px; }.db-page-mark { margin-bottom: 8px; }.db-header h1 { font-size: 30px; }.db-header { margin-bottom: 21px; }.db-view-tabs { flex-basis: 100%; }.db-toolbar { width: 100%; margin-left: 0; padding: 5px 0 9px; }.db-toolbar .db-tool>span { display: none; }.db-toolbar .db-new-button { margin-left: auto; }.db-storage-hint { display: none; }.db-list-row { flex-wrap: wrap; gap: 2px 8px; }.db-list-title { flex-basis: 100%; }.db-list-field { width: 130px; }.db-card-body { padding: 12px; }.db-record-properties>label { grid-template-columns: 95px 1fr; }.db-record-properties { padding: 0 20px 20px; }.db-record-modal>header { padding: 25px 20px 10px; }.db-embedded { padding: 8px 0; } }
 @media(prefers-reduced-motion:reduce) { .database * { transition: none !important; } }
+.db-protected-photo { display: grid; place-items: center; min-height: 72px; width: 100%; height: 100%; }
+.db-protected-photo img { width: 100%; height: 100%; max-height: 62vh; }
+.db-protected-record-cover { min-height: 100px; margin: .5rem 1rem; }
+.db-card-cover .db-protected-photo > button { align-self: end; justify-self: start; margin: .5rem; }

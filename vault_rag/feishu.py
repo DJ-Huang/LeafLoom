@@ -458,8 +458,6 @@ class Feishu:
                 normalized.append(canonical + '=' + value)
             options.setdefault(canonical, []).append(value)
             i += 1
-        if '--as' not in flags or '--format' not in flags:
-            raise FeishuError('command_unavailable', 'Command does not support fixed identity and JSON output')
         if command == ['api']:
             risk = 'high-risk-write'
         elif len(command) == 3 and not command[1].startswith('+'):
@@ -478,6 +476,10 @@ class Feishu:
             risk = match[1] if match else None
         if risk not in ('read', 'write', 'high-risk-write'):
             raise FeishuError('unknown_risk', 'CLI did not provide a recognized command risk')
+        # docs +fetch defaults to JSON even when --format is hidden from help.
+        defaults_to_json = command == ['docs', '+fetch'] and risk == 'read'
+        if '--as' not in flags or ('--format' not in flags and not defaults_to_json):
+            raise FeishuError('command_unavailable', 'Command does not support fixed identity and JSON output')
         return command, normalized, options, flags, risk
 
     def _revision(self, document, expected_revision):
@@ -566,7 +568,10 @@ class Feishu:
                             if flag.startswith('--output'):
                                 p.parent.mkdir(parents=True, exist_ok=True)
                 file_mode = bool(inputs) or any('file' in flag or 'output' in flag for flag in options)
-                code, out, err = self._run([*args, '--as=user', '--format=json'], content=stdin,
+                args.append('--as=user')
+                if '--format' in flags:
+                    args.append('--format=json')
+                code, out, err = self._run(args, content=stdin,
                     cwd=job, timeout=300 if file_mode else 45,
                     monitor=lambda: self.files.scan(owner, job, inputs))
                 outputs = self.files.scan(owner, job, inputs)

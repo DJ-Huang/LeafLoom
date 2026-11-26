@@ -9,6 +9,7 @@ export type BaseConfig={path:string,root:string,revision:string,workspace_revisi
 export type TaskSetup={statusField:string,priorityField:string,dueField:string,initialStatus:string,completedStatuses:string[]};
 export type BoardGroup={key:string,value:string|null,count:number,configured:boolean,label?:string,labelKey?:string,color?:string};
 export type BoardSummary={groups:BoardGroup[],catalog_version:number|string,config_revision:string,total:number,needs_group:boolean};
+export const coverFields=(config:BaseConfig)=>new Set<string>(['cover',...config.views.flatMap(view=>typeof view.leafloom?.coverField==='string'?[view.leafloom.coverField]:[])]);
 export const valueOf=(row:Row,key:string)=>key==='title'?row.title:key.startsWith('file.')?row.file[key.slice(5)]:row.metadata[key.replace(/^note\./,'')];
 export const labelOf=(key:string,field?:Field)=>field?.displayName&&field.displayName!==key?field.displayName:({title:'db.title',category:'db.category',attachments:'db.attachments',cover:'db.cover',start_date:'db.start',end_date:'db.end','file.ctime':'db.created','file.mtime':'db.modified'}[key]||key);
 export function useDatabase(path:string,initialView:string){

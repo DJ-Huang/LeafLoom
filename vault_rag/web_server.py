@@ -45,6 +45,10 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     if dev_ui_loopback and dev is None:
         raise ValueError('Loopback UI is only available with an explicit development frontend')
     config=config or LocalConfig()
+    from .locked_photos import MIGRATING
+    photo_root = config.data.get('root')
+    if photo_root and (Path(photo_root) / '.vault-rag' / MIGRATING).exists():
+        raise RuntimeError('Resume the protected photo migration before starting LeafLoom.')
     if runtime is None:
         from vault_rag.knowledge import Runtime
         runtime=Runtime(config)
@@ -204,6 +208,8 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     app.include_router(design_router(design, feishu))
     from vault_rag.local_skill_api import local_skill_router
     app.include_router(local_skill_router(config, runtime, notes, databases, mcp_access, feishu))
+    from .photo_routes import photo_router
+    app.include_router(photo_router(config, runtime, databases, token, csrf))
     @app.middleware('http')
     async def local_security(request,call_next):
         host=request.headers.get('host','')

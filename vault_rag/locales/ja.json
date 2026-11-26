@@ -3157,5 +3157,21 @@
   "外部工程当前只读，请先在工作台启用编辑": "外部プロジェクトは読み取り専用です。先にスタジオで編集を有効にしてください",
   "确认": "確認",
   "导出工程包": "プロジェクトパッケージを書き出す",
-  "只读": "読み取り専用"
+  "只读": "読み取り専用",
+  "photo.lock": "写真をロック",
+  "photo.unlock": "写真のロックを解除",
+  "photo.password": "写真のパスフレーズ",
+  "photo.unlockFailed": "写真を開けません。パスフレーズを確認して再試行してください。",
+  "photo.unavailable": "写真を表示できません",
+  "photo.caption": "写真のキャプション",
+  "photo.protectedCaption": "暗号化されたキャプション",
+  "photo.editCaption": "キャプションを編集",
+  "photo.captionUnavailable": "キャプションを読み込めません。再試行してください。",
+  "photo.importFailed": "写真をインポートできません",
+  "photo.enableGallery": "写真の暗号化を有効にする",
+  "photo.galleryHelp": "このレコードフォルダーを使用するデータベースで設定を共有します。今後カバーフィールドから読み込む写真が暗号化されます。既存のファイルは引き続き開けます。",
+  "photo.passphraseMismatch": "パスフレーズが一致しません",
+  "photo.setupFailed": "写真の暗号化を有効にできません。保管庫の設定を確認して再試行してください。",
+  "photo.confirmPassphrase": "写真のパスフレーズを確認",
+  "photo.enableCaptions": "暗号化キャプション欄を追加"
 }
