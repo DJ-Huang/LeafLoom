@@ -28,6 +28,8 @@ A complete backup protects both the originals and user records. Local indexes an
 
 OS-encrypted credentials may need reauthorization on another computer. Keep credential-containing backups private.
 
+If the server is reachable but an old note link cannot open its attachment, check both the original at its backed-up relative path and the restored metadata directory. Files visible on the server are not enough: the metadata can carry the mapping from the original note link to the stored file. If the downloaded file has a different SHA-256, stop and locate the correct backed-up version, even if the file opens. Keep the existing backup and note link unchanged until the restore is verified.
+
 ## Next steps
 
 - [Restore note history and recycled files](recovery.md)
