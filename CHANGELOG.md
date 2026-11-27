@@ -5,7 +5,7 @@
 
 ## Unreleased
 
-- Enable encrypted cover imports and optional encrypted captions from any database with a record folder. Previously configured galleries retain their existing passphrase, links, and captions.
+- Encrypt entire databases, including their views, records, and attachments. Set a passphrase when creating a database or convert an existing database with a dedicated record folder.
 
 - Fix Feishu document reads when `lark-cli docs +fetch` returns JSON by default and its help omits the output format option.
 

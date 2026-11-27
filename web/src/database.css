@@ -177,3 +177,33 @@
 .db-protected-photo img { width: 100%; height: 100%; max-height: 62vh; }
 .db-protected-record-cover { min-height: 100px; margin: .5rem 1rem; }
 .db-card-cover .db-protected-photo > button { align-self: end; justify-self: start; margin: .5rem; }
+
+.db-security-control { white-space: nowrap; }
+.db-locked-panel {
+ display: grid; justify-items: center; gap: 12px;
+ max-width: 520px; margin: 38px auto 0; padding: 40px 28px;
+ border: 1px solid var(--db-line); border-radius: 14px; text-align: center;
+}
+.db-lock-icon {
+ display: grid; place-items: center; width: 52px; height: 52px;
+ color: var(--db-blue); border-radius: 14px; background: var(--db-hover);
+}
+.db-locked-panel h2 { margin: 3px 0 0; font-size: 22px; }
+.db-locked-panel > p { color: var(--db-muted); margin: 0; }
+.db-locked-panel form { width: min(100%, 290px); text-align: start; }
+.db-locked-panel form > button { width: 100%; margin-top: 12px; }
+.db-security-fields { display: grid; gap: 12px; }
+.db-security-fields p { margin: 0; }
+.db-security-fields .setting-field { margin: 0; }
+.db-security-toggle { display: flex; align-items: center; gap: 8px; width: fit-content; }
+.db-security-toggle input { margin: 0; }
+.db-security-summary {
+ display: flex; gap: 16px; flex-wrap: wrap;
+ padding: 10px 12px; background: var(--hover); border-radius: 7px;
+}
+.db-private-record { padding: 12px 22px 20px; }
+.db-private-record textarea { width: 100%; resize: vertical; font-family: ui-monospace, monospace; }
+.db-private-record-actions, .db-private-attachment { display: flex; justify-content: space-between; gap: 10px; }
+.db-private-cover { display: grid; min-height: 40px; height: 100%; place-items: center; overflow: hidden; }
+.db-private-cover img { width: 100%; height: 100%; }
+.db-private-video { display: block; width: 100%; max-height: 70vh; }

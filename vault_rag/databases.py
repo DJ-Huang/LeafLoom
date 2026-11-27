@@ -16,7 +16,7 @@ from functools import cmp_to_key
 from ruamel.yaml import YAML
 
 from vault_rag.catalog import Expr, list_value
-from vault_rag.local_state import ConflictError, atomic_write, digest, relative, under
+from vault_rag.local_state import ConflictError, digest, relative, under
 from vault_rag.note_operations import NoteError, NoteOperations
 
 TYPES = {'text', 'number', 'select', 'multiselect', 'date', 'checkbox', 'url', 'attachment'}
@@ -341,7 +341,7 @@ class Databases:
                         if action in {'record.create', 'record.duplicate'}:
                             _, original_data, _ = self.document(path)
                             result.update(self.creation_result(original_data, self.view(original_data, command.get('view_id', '')), target, command.get('search', ''), command.get('return_record', False)))
-                        atomic_write(receipt, json.dumps({**previous, 'result': result}).encode()); return result
+                        self.files.write_state(receipt, json.dumps({**previous, 'result': result}).encode()); return result
                 else: previous = None
             if action == 'create':
                 path = relative(path)
@@ -508,11 +508,11 @@ class Databases:
     def create_once(self, target, text, receipt, signature, data=None, view=None, search='', return_record=False):
         previous = {'signature': signature, 'target': target, 'content_hash': digest(text.encode())}
         receipt.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(receipt, json.dumps(previous).encode())
+        self.files.write_state(receipt, json.dumps(previous).encode())
         self.files.create(target, text=text)
         result = {'ok': True, 'path': target, 'revision': self.files.read(target)['etag'], 'workspace_revision': self.notes.workspace_revision}
         if data is not None and view is not None: result.update(self.creation_result(data, view, target, search, return_record))
-        atomic_write(receipt, json.dumps({**previous, 'result': result}).encode())
+        self.files.write_state(receipt, json.dumps({**previous, 'result': result}).encode())
         return result
 
 

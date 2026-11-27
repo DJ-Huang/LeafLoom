@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {api,Change} from './api';
+import {Change} from './api';
+import {useDatabaseRequest,useSecureDatabase} from './database-security';
 import {documentState,applyProperties,hasDocumentDraft} from './document-state';
 export type Field={type:string,displayName:string,options?:string[],optionMeta?:Record<string,{label?:string,labelKey?:string,color?:string}>,readonly?:boolean};
 export type Row={path:string,title:string,metadata:Record<string,any>,file:Record<string,any>,revision:string,recent?:boolean,pendingIndex?:boolean};
@@ -13,6 +14,7 @@ export const coverFields=(config:BaseConfig)=>new Set<string>(['cover',...config
 export const valueOf=(row:Row,key:string)=>key==='title'?row.title:key.startsWith('file.')?row.file[key.slice(5)]:row.metadata[key.replace(/^note\./,'')];
 export const labelOf=(key:string,field?:Field)=>field?.displayName&&field.displayName!==key?field.displayName:({title:'db.title',category:'db.category',attachments:'db.attachments',cover:'db.cover',start_date:'db.start',end_date:'db.end','file.ctime':'db.created','file.mtime':'db.modified'}[key]||key);
 export function useDatabase(path:string,initialView:string){
+ const api=useDatabaseRequest(),secure=useSecureDatabase();
  const [config,setConfig]=useState<BaseConfig>(),[viewId,setViewId]=useState(initialView),[rows,setRows]=useState<Row[]>([]),[total,setTotal]=useState(0),[cursor,setCursor]=useState(''),[search,setSearch]=useState(''),[readError,setReadError]=useState(''),[writeError,setWriteError]=useState(''),[busy,setBusy]=useState(false),[epoch,setEpoch]=useState(0);
  const error=writeError||readError;
  const [configEpoch,setConfigEpoch]=useState(0);
@@ -47,15 +49,15 @@ export function useDatabase(path:string,initialView:string){
  useEffect(()=>{life.current++;const scope=JSON.stringify([path,view?.id,search]);if(queryScope.current!==scope){queryScope.current=scope;setRows([]);}setCursor('');const timer=setTimeout(()=>{issuedSearch.current=search;void load();},issuedSearch.current===search?0:150);return()=>{clearTimeout(timer);life.current++;};},[load]);
  const command=async(cmd:Record<string,any>)=>{
   const c=configRef.current;if(!c||c.path!==path||locked.current)throw new Error('db.busy');
-  const record=cmd.path&&documentState(c.root,cmd.path);
-  if(record&&(record.dirty||record.pending)&&!cmd.order_only)throw new Error('db.draftConflict');
-  if(cmd.type==='board.group.remove'&&!cmd.dry_run&&cmd.records?.some((r:{path:string})=>hasDocumentDraft(c.root,r.path)))throw new Error('db.draftConflict');
+ const hasDraft=(target:string)=>secure?secure.hasDraft(target):hasDocumentDraft(c.root,target);
+  if(cmd.path&&hasDraft(cmd.path)&&!cmd.order_only)throw new Error('db.draftConflict');
+  if(cmd.type==='board.group.remove'&&!cmd.dry_run&&cmd.records?.some((r:{path:string})=>hasDraft(r.path)))throw new Error('db.draftConflict');
   locked.current=true;setBusy(true);
   const creationScope=activeScope.current;
   const signature=JSON.stringify(cmd),creating=['record.create','record.duplicate','record.move','board.undo'].includes(cmd.type)||cmd.type==='board.group.remove'&&!cmd.dry_run;
   if(creating&&!creations.current.has(signature))creations.current.set(signature,crypto.randomUUID());
   try{const result=await api<any>('bases/commands',{path,command:Object.fromEntries(Object.entries({...cmd,...(['record.create','record.duplicate'].includes(cmd.type)?{return_record:true}:{})}).filter(([k])=>!['config_revision','order_only'].includes(k))),workspace_revision:c.workspace_revision,expected_revision:cmd.config_revision||c.revision,operation_id:creating?creations.current.get(signature):crypto.randomUUID()});
-   setWriteError('');if(result.note){const state=documentState(c.root,result.note.path);if(state&&!state.dirty&&!state.pending)applyProperties(state,result.note);}
+   setWriteError('');if(result.note&&!secure){const state=documentState(c.root,result.note.path);if(state&&!state.dirty&&!state.pending)applyProperties(state,result.note);}
    if(creating)creations.current.delete(signature);
    if(result.dry_run||result.changed===false)return result;
    const sameScope=()=>configRef.current?.root===c.root&&configRef.current?.path===c.path;
@@ -64,6 +66,7 @@ export function useDatabase(path:string,initialView:string){
    if(sameScope()&&cmd.type==='board.group.remove')changeRecent(old=>old.filter(r=>!cmd.records.some((record:{path:string})=>record.path===r.row.path)));
    if(sameScope()&&result.note){const fresh=(row:Row):Row=>({...row,title:String(result.note.metadata.name||result.note.metadata.title||row.title),metadata:result.note.metadata,revision:result.note.etag,file:{...row.file,mtime:result.note.mtime,modified:result.note.mtime}});setRows(old=>old.map(row=>row.path===result.note.path?fresh(row):row));changeRecent(old=>old.map(r=>r.row.path===result.note.path?{...r,row:fresh(r.row),version:Number(result.catalog_version??r.version),confirmed:false}:r));}
    if(sameScope()&&cmd.type==='record.trash')setRows(old=>old.filter(row=>row.path!==cmd.path));
+   if(sameScope()&&secure)setEpoch(value=>value+1);
    if(!String(cmd.type).startsWith('record.')||cmd.type==='record.move'){
     try{const fresh=await api<BaseConfig>('bases/config?path='+encodeURIComponent(path),undefined,'GET',{force:true});
      if(sameScope()){configRef.current=fresh;setConfig(fresh);}

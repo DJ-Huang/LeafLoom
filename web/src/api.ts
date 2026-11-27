@@ -33,6 +33,11 @@ export function invalidate(change:Change={reset:true}){
  for(const key of requests.keys())if(affected(key.slice(key.indexOf('\n')+1).split('\n')[0],change))versions.set(key.slice(0,key.lastIndexOf('\n')),(versions.get(key.slice(0,key.lastIndexOf('\n')))||0)+1);
  window.dispatchEvent(new CustomEvent('vault-data-changed',{detail:change}));
 }
+export function clearRequestCache(){
+ cache.clear();bytes=0;
+ for(const request of requests.values())request.controller.abort();
+ requests.clear();
+}
 function remember(key:string,value:Cached){
  const previous=cache.get(key);if(previous)bytes-=previous.bytes;
  cache.delete(key);cache.set(key,value);bytes+=value.bytes;

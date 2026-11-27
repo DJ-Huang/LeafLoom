@@ -16,6 +16,20 @@ PHOTO_ID = re.compile(r'[a-f0-9]{32}|[a-f0-9]{64}')
 MIME = {'PNG': 'image/png', 'JPEG': 'image/jpeg', 'WEBP': 'image/webp'}
 
 
+def require_local_browser(request, browser_cookie, csrf):
+    from hmac import compare_digest
+    from ipaddress import ip_address
+
+    try:
+        loopback = bool(request.client and ip_address(request.client.host).is_loopback)
+    except ValueError:
+        loopback = False
+    if (not loopback or not compare_digest(request.cookies.get('vault_session', '').encode(), browser_cookie.encode())
+            or (request.method == 'POST' and not compare_digest(
+                request.headers.get('x-vault-csrf', '').encode(), csrf.encode()))):
+        raise PermissionError()
+
+
 def photo_router(config, runtime, databases, browser_cookie, csrf):
     router = APIRouter(prefix='/api/photo-vault')
     sessions = crypto.Sessions()
@@ -32,14 +46,7 @@ def photo_router(config, runtime, databases, browser_cookie, csrf):
         return active, storage
 
     def browser(request):
-        from hmac import compare_digest
-        from ipaddress import ip_address
-
-        if (not request.client or not ip_address(request.client.host).is_loopback
-                or not compare_digest(request.cookies.get('vault_session', '').encode(), browser_cookie.encode())
-                or (request.method == 'POST' and not compare_digest(
-                    request.headers.get('x-vault-csrf', '').encode(), csrf.encode()))):
-            raise PermissionError()
+        require_local_browser(request, browser_cookie, csrf)
 
     def key(request, storage):
         return sessions.key(storage, request.headers.get(PHOTO_HEADER))

@@ -510,12 +510,12 @@ On the first upgrade, the app backs up `.vault-rag/calendar.sqlite3` into `.vaul
 
 Back up the whole `Calendar/LeafLoom/` folder for calendar content. Also back up the local `.vault-rag/calendar-local.sqlite3` and migration backup to retain device preferences and reminder history. Linked database definitions, task Markdown and daily notes still use their existing sync mechanism; calendar sync does not resolve concurrent edits to those notes or expand retrieval scope.
 
-## Protected database photos
+## Encrypted databases
 
-In a database with a record folder, choose **Enable photo encryption** from the toolbar. Databases using that same folder share the setting. The first protected gallery asks for a photo passphrase. Other galleries in the vault use the same passphrase.
+When creating a database, select **Encrypt database** and set its passphrase. To convert an existing database, select **Encrypt database** in the toolbar. Review the record and attachment counts, then select **Encrypt and lock**. If the database uses the earlier gallery protection, enter its gallery passphrase so the converter can bring over covers and captions.
 
-Edit a cover field to import an encrypted photo. Use **Unlock photos** to see covers on cards and in record details. **Lock photos** hides protected content. The session also locks after 30 minutes of inactivity. Existing covers remain readable in their original format.
+An encrypted database keeps its views, fields, records, and attachments together in a single `.base` file. The filename stays visible. Open the database and authenticate once to use its views and edit records. Select **Lock database** to close all views in the current LeafLoom window. The database also locks after 30 minutes of inactivity. Its contents are available in LeafLoom and stay out of global search, AI retrieval, and MCP.
 
-Choose **Add an encrypted caption field** during setup to add private captions from the record detail and read them on gallery cards. Record titles and other properties stay searchable. Previously migrated galleries retain their existing links, caption display, and passphrase.
+Conversion requires a dedicated record folder. It verifies the encrypted copy before removing the managed files from their original paths. Other Markdown tools can no longer open those records directly. Linked attachments outside the folder are copied into the encrypted database while their original files remain in place. Conversion stops if it detects shared record folders, retrieval indexes, annotations, or file-operation history that it cannot safely move.
 
-Back up the gallery files and the vault’s `.vault-rag` directory together. Sync the wrapped key and gallery settings along with the photo files and records when opening the gallery from another device. Photos and encrypted captions sync as ciphertext.
+Back up the resulting `.base` file and keep the passphrase separately. The package, including attachments and internal edit history, can be up to 256 MiB. Older plaintext backups and copies managed outside LeafLoom retain their original contents.

@@ -15,7 +15,7 @@ async function main() {
   server.listen(0,'127.0.0.1',()=>{const port=server.address().port;server.close(()=>resolve(port));});
  });
  const fixture=spawn(process.env.LEAFLOOM_TEST_PYTHON || path.join(root,'.venv/bin/python'),
-  ['-u','tests/database_ui_server.py','vault_rag/static'],{cwd:root,env:{...process.env,
+  ['-u','tests/database_ui_server.py',process.env.LEAFLOOM_TEST_STATIC || 'vault_rag/static'],{cwd:root,env:{...process.env,
    LEAFLOOM_DATABASE_TEST_PORT:String(port), LEAFLOOM_DATABASE_DESIGN:'1',
    LEAFLOOM_DATABASE_ENCRYPTED_PHOTOS:'1', LEAFLOOM_DATABASE_ENCRYPTED_CAPTIONS:'1'},stdio:['ignore','pipe','inherit']});
  const ended=once(fixture,'exit');
@@ -57,34 +57,63 @@ async function main() {
   await card.getByText('Encrypted caption',{exact:true}).waitFor();
   assert.equal(await card.getByText('Edited encrypted caption',{exact:true}).count(),0);
 
+  await page.getByRole('button',{name:'Encrypt database',exact:true}).click();
+  const conversion=page.getByRole('dialog',{name:'Encrypt database'});
+  await conversion.getByLabel('Existing gallery passphrase').fill('synthetic photo passphrase');
+  const password='synthetic database passphrase';
+  await conversion.getByLabel('Database passphrase',{exact:true}).fill(password);
+  await conversion.getByLabel('Confirm passphrase').fill(password);
+  const [converted]=await Promise.all([
+   page.waitForResponse(response=>response.url().includes('/api/database-security/convert')),
+   conversion.getByRole('button',{name:'Encrypt and lock'}).click(),
+  ]);
+  assert.equal(converted.status(),200);
+  const locked=page.getByRole('region',{name:'Database locked'});
+  await locked.waitFor();
+  assert.equal(await page.locator('.db-view-tabs').count(),0);
+  assert.equal(await page.getByText('Edited encrypted caption',{exact:true}).count(),0);
+  await locked.getByLabel('Database passphrase').fill(password);
+  await locked.getByRole('button',{name:'Unlock database',exact:true}).click();
+  await page.locator('.db-view-tabs button').filter({hasText:'Gallery'}).click();
+  const secured=page.locator('[data-db-record="Showcase/Record 0000.md"].db-card');
+  const securedImage=secured.locator('img[src^="blob:"]');
+  await securedImage.evaluate(image=>image.decode());
+  await secured.getByRole('button',{name:'Edited encrypted caption',exact:true}).click();
+  const detail=page.getByRole('dialog',{name:'Edited encrypted caption'});
+  const markdown=detail.getByLabel('Record contents (Markdown)');
+  await markdown.waitFor();
+  await markdown.fill((await markdown.inputValue())+'\n\nNew private body.');
+  const [bodySaved]=await Promise.all([
+   page.waitForResponse(response=>new URL(response.url()).pathname==='/api/database-security/record'&&response.request().method()==='POST'),
+   detail.getByRole('button',{name:'Save',exact:true}).click(),
+  ]);
+  assert.equal(bodySaved.status(),200);
+  await detail.locator('header button').first().click();
+  await page.getByRole('button',{name:'Lock database',exact:true}).click();
+  await locked.waitFor();
+  assert.equal(await page.locator('.db-view-tabs').count(),0);
+  assert.equal(await page.locator('img[src^="blob:"]').count(),0);
+
   await page.goto('/?note=Studio%20notes.base');
   await page.locator('.db-view-tabs button').filter({hasText:'Gallery'}).click();
-  await page.getByRole('button',{name:'Enable photo encryption'}).click();
-  const setup=page.getByRole('dialog',{name:'Enable photo encryption'});
-  await setup.getByRole('button',{name:'Unlock photos'}).click();
-  const unlock=page.getByRole('dialog',{name:'Unlock photos'});
-  await unlock.getByLabel('Photo passphrase').fill('synthetic photo passphrase');
-  await unlock.getByRole('button',{name:'Unlock photos'}).click();
-  await setup.getByRole('button',{name:'Enable photo encryption'}).click();
-  await setup.waitFor({state:'hidden'});
   const ordinary=page.locator('[data-db-record="Studio notes/01.md"].db-card');
   await ordinary.locator('img').evaluate(image=>image.decode());
-  await ordinary.getByRole('button',{name:'01 — Quiet architecture',exact:true}).click();
-  const detail=page.locator('.db-record-modal');
-  const newCaption=detail.locator('.db-protected-caption');
-  await newCaption.getByRole('button',{name:'Edit caption'}).click();
-  await newCaption.getByLabel('Photo caption').fill('Protected studio caption');
-  const [savedStudio]=await Promise.all([page.waitForResponse(response=>response.url().includes('/api/photo-vault/caption?')&&response.request().method()==='POST'),
-   newCaption.getByRole('button',{name:'Save',exact:true}).click()]);
-  assert.equal(savedStudio.status(),200,await savedStudio.text());
-  await newCaption.filter({hasText:'Protected studio caption'}).waitFor();
-  await detail.locator('header button').first().click();
-  await ordinary.getByRole('button',{name:'01 — Quiet architecture',exact:true}).waitFor();
-  await ordinary.getByText('Protected studio caption',{exact:true}).waitFor();
-  await page.getByRole('button',{name:'Lock photos',exact:true}).click();
-  await ordinary.getByText('Encrypted caption',{exact:true}).waitFor();
-  assert.equal(await ordinary.getByText('Protected studio caption',{exact:true}).count(),0);
-  console.log('Legacy gallery and generic photo encryption setup, caption editing and locking passed');
+
+  await page.getByRole('button',{name:'New database',exact:true}).click();
+  const create=page.getByRole('dialog',{name:'New database'});
+  await create.getByLabel('Database name').fill('Private fixture');
+  await create.getByLabel('Encrypt database').check();
+  await create.getByLabel('Database passphrase',{exact:true}).fill(password);
+  await create.getByLabel('Confirm passphrase').fill(password);
+  await create.getByRole('button',{name:'New database',exact:true}).click();
+  await create.waitFor({state:'hidden'});
+  const privateDatabase=page.locator('[data-database$="Private fixture.base"]');
+  await privateDatabase.getByRole('button',{name:'Add record',exact:true}).first().click();
+  const record=page.getByRole('dialog',{name:'Add record'});
+  await record.getByLabel('Title').fill('New private record');
+  await record.getByRole('button',{name:'Save',exact:true}).click();
+  await privateDatabase.getByText('New private record',{exact:true}).first().waitFor();
+  console.log('Legacy gallery conversion, database unlock/lock, private record editing and encrypted creation passed');
  } finally{
   await browser?.close();
   fixture.kill('SIGTERM');

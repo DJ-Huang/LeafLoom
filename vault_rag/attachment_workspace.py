@@ -167,8 +167,13 @@ class AttachmentWorkspace:
                             data = self._encode_thumbnail(stream)
                     else:
                         raise
-                self.migrations._guard(root)
-                atomic_write(target, data)
+                with self.config.lock, files.lock:
+                    self.migrations._guard(root)
+                    if not remote:
+                        current = files.config.path_for(path).stat()
+                        if (current.st_size, current.st_mtime_ns, current.st_ino) != (before.st_size, before.st_mtime_ns, before.st_ino):
+                            raise ConflictError('Image changed while preparing its thumbnail')
+                    atomic_write(target, data)
                 entries = list(target.parent.glob('*.webp'))
                 if not remote and len(entries) > 1024:
                     for old in sorted(entries, key=lambda p: p.stat().st_mtime)[:len(entries) - 1024]:

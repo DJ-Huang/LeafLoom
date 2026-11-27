@@ -155,6 +155,10 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     async def lifespan(app):
         async with mcp.session_manager.run(),ai_mcp.session_manager.run():
             ai.loop=asyncio.get_running_loop()
+            root = config.data.get('root')
+            if root and (Path(root) / '.vault-rag' / 'database-conversions').is_dir():
+                from .database_conversion import recover_database_conversions
+                await asyncio.to_thread(recover_database_conversions, config, runtime.files)
             if start_background:
                 runtime.start()
                 calendar.start()
@@ -210,6 +214,18 @@ def create_app(config=None,runtime=None,*,start_background=True,static_dir=None,
     app.include_router(local_skill_router(config, runtime, notes, databases, mcp_access, feishu))
     from .photo_routes import photo_router
     app.include_router(photo_router(config, runtime, databases, token, csrf))
+    from .database_security import database_security_router
+    from .locked_photos import Busy as DatabaseUnlockBusy, Locked as DatabaseLocked
+    app.include_router(database_security_router(config, runtime, databases, token, csrf))
+
+    @app.exception_handler(DatabaseLocked)
+    async def database_locked(request, error):
+        return json_response({'error':'db.securityLocked'},423)
+
+    @app.exception_handler(DatabaseUnlockBusy)
+    async def database_unlock_busy(request, error):
+        return json_response({'error':'db.securityTryAgain'},429)
+
     @app.middleware('http')
     async def local_security(request,call_next):
         host=request.headers.get('host','')

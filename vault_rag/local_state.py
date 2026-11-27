@@ -168,6 +168,8 @@ class Files:
             if is_link(path):raise ValueError('历史和回收区不能指向符号链接或 junction')
         if not path.resolve().is_relative_to(root):raise ValueError('恢复记录越出关联目录')
         return path
+    def write_state(self,path,data):
+        atomic_write(path,data)
     def snapshot(self,rel):
         """Hash a complete subtree, rejecting hidden/protected/link/special entries."""
         import stat
@@ -227,6 +229,9 @@ class Files:
         return value
     def _read(self,rel):
         p=self.config.path_for(rel)
+        if p.suffix.lower()=='.base':
+            from vault_rag.database_envelope import encrypted
+            if encrypted(p):raise ValueError('db.securityLocked')
         if p.stat().st_size>10*1024*1024:raise ValueError('文本文件过大，请下载后打开')
         b=p.read_bytes();text=b.decode('utf-8-sig')
         try:meta=frontmatter.loads(text).metadata if p.suffix.lower()=='.md' else {}
@@ -261,6 +266,9 @@ class Files:
             if not p.is_file():raise FileNotFoundError(rel)
             if p.suffix.lower() not in TEXT_EXTENSIONS:raise ValueError('该文件不支持文本编辑')
             old=p.read_bytes()
+            if p.suffix.lower()=='.base':
+                from vault_rag.database_envelope import MAGIC
+                if old.startswith(MAGIC):raise ValueError('db.securityLocked')
             if etag!=digest(old):raise ConflictError('文件已被其他窗口或程序修改，未覆盖；请合并后保存')
             self._validate_photo_caption(rel,text,old)
             # Rich/source editors send the original line endings with local

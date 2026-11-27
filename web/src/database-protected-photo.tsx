@@ -10,7 +10,6 @@ type Gallery = {folder:string,captions:boolean,title:string|null};
 type PhotoSettings = {scopes:string[],galleries?:Gallery[],key_ready?:boolean,protected_captions?:boolean};
 const scopes = new Map<string,Promise<PhotoSettings|null>>();
 let token = '', owner = '', timer: number | undefined, pending = 0;
-let settingsRevision = 0;
 const queue: (()=>Promise<void>)[] = [];
 
 const subscribe = (callback:()=>void) => {
@@ -42,7 +41,6 @@ window.addEventListener('pagehide',()=>lock());
 
 export const protectedRef = (path:string) => /\.llphoto$/i.test(path);
 function usePhotoSettings(root:string) {
- const revision=useSyncExternalStore(subscribe,()=>settingsRevision);
  const [value,setValue] = useState<{root:string,settings:PhotoSettings}|null>(null);
  useEffect(()=>{
   if(!root)return;
@@ -55,7 +53,7 @@ function usePhotoSettings(root:string) {
   }
   void scopes.get(root)?.then(settings=>{if(live)setValue(settings?{root,settings}:null);});
   return ()=>{live=false;};
- },[root,revision]);
+ },[root]);
  return value?.root===root?value.settings:null;
 }
 
@@ -90,41 +88,6 @@ export function PhotoUnlock({root}:{root:string}) {
   }}><label>{t('photo.password')} <input type="password" required autoFocus autoComplete="off"
    value={password} onChange={event=>setPassword(event.target.value)}/></label>
    {error&&<p role="alert">{error}</p>}<button disabled={busy}>{t('photo.unlock')}</button></form></Modal>}
- </>;
-}
-
-export function PhotoGallerySetup({root,database,folder}:{root:string,database:string,folder?:string|null}) {
- const settings=usePhotoSettings(root);
- const current=useProtectedPhotoSession(root);
- const [open,setOpen]=useState(false),[password,setPassword]=useState(''),[confirmation,setConfirmation]=useState(''),
-  [captions,setCaptions]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState('');
- if(!settings||folder===null||folder===undefined||settings.scopes.includes(folder))return null;
- const close=()=>{if(!busy){setOpen(false);setPassword('');setConfirmation('');setError('');}};
- return <>
-  <button type="button" className="db-tool" onClick={()=>setOpen(true)}>{t('photo.enableGallery')}</button>
-  {open&&<Modal title={t('photo.enableGallery')} onClose={close}><div className="pad">
-   <p>{t('photo.galleryHelp')}</p>
-   {settings.scopes.length>0&&!settings.key_ready?<p role="alert">{t('photo.unavailable')}</p>:settings.key_ready&&!current?<PhotoUnlock root={root}/>:<form onSubmit={async event=>{
-    event.preventDefault();setError('');
-    if(!settings.key_ready&&password!==confirmation){setError(t('photo.passphraseMismatch'));return;}
-    setBusy(true);
-    try{
-     const response=await fetch(url(root,'/gallery'),{method:'POST',headers:{...headers(current),'Content-Type':'application/json'},
-      body:JSON.stringify(settings.key_ready?{database,captions}:{database,captions,password}),cache:'no-store'});
-     if(response.status===423&&token===current)lock(false);
-     if(!response.ok)throw new Error(t('photo.setupFailed'));
-     scopes.delete(root);settingsRevision++;publish();setOpen(false);
-    }catch(e){setError((e as Error).message);}finally{setBusy(false);setPassword('');setConfirmation('');}
-   }}>
-    {!settings.key_ready&&<>
-     <label>{t('photo.password')} <input type="password" autoComplete="new-password" required minLength={12} value={password} onChange={event=>setPassword(event.target.value)}/></label>
-     <label>{t('photo.confirmPassphrase')} <input type="password" autoComplete="new-password" required value={confirmation} onChange={event=>setConfirmation(event.target.value)}/></label>
-    </>}
-    <label><input type="checkbox" checked={captions} onChange={event=>setCaptions(event.target.checked)}/>{t('photo.enableCaptions')}</label>
-    {error&&<p role="alert">{error}</p>}
-    <button disabled={busy}>{t('photo.enableGallery')}</button>
-   </form>}
-  </div></Modal>}
  </>;
 }
 
