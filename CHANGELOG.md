@@ -7,6 +7,8 @@
 
 - Encrypt entire databases, including their views, records, and attachments. Set a passphrase when creating a database or convert an existing database with a dedicated record folder.
 
+- Fix full-page gallery scrolling so cards below the viewport can be reached.
+
 - Fix Feishu document reads when `lark-cli docs +fetch` returns JSON by default and its help omits the output format option.
 
 ## 0.1.10 - 2026-11-19

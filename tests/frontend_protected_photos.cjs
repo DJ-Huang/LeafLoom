@@ -9,6 +9,27 @@ const {chromium} = require('../desktop/node_modules/playwright-core');
 
 const root = path.resolve(__dirname, '..');
 
+async function checkGalleryScroll(page){
+ const database=page.locator('[data-database="Showcase.base"]');
+ const first=database.locator('.db-card').first();
+ const last=database.locator('[data-db-record="Showcase/Record 0007.md"].db-card');
+ await first.hover();
+ assert.ok((await last.boundingBox()).y>=page.viewportSize().height,'gallery must extend below the viewport');
+ await page.mouse.wheel(0,3000);
+ await page.waitForFunction(()=>{
+  const database=document.querySelector('[data-database="Showcase.base"]');
+  const card=database?.querySelector('[data-db-record="Showcase/Record 0007.md"].db-card')?.getBoundingClientRect();
+  const footer=database?.querySelector('.db-footer')?.getBoundingClientRect();
+  return card&&footer&&card.top>=0&&footer.bottom<=innerHeight;
+ },undefined,{timeout:4000});
+ await page.mouse.wheel(0,-3000);
+ await page.waitForFunction(()=>{
+  const first=document.querySelector('[data-database="Showcase.base"] .db-card');
+  const bounds=first?.getBoundingClientRect();
+  return bounds&&bounds.top>=0&&bounds.top<innerHeight;
+ });
+}
+
 async function main() {
  const port = await new Promise(resolve => {
   const server=net.createServer();
@@ -30,10 +51,12 @@ async function main() {
   }
   browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH ||
    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});
-  const page=await browser.newPage({baseURL:info.ui,viewport:{width:1500,height:1100}});
+  const page=await browser.newPage({baseURL:info.ui,viewport:{width:1180,height:640}});
   page.setDefaultTimeout(12000);
   await page.goto('/?note=Showcase.base');
   await page.locator('.db-view-tabs button').filter({hasText:'Gallery'}).click();
+  await checkGalleryScroll(page);
+  await page.setViewportSize({width:1500,height:1100});
   const card=page.locator('[data-db-record="Showcase/Record 0000.md"].db-card');
   const cover=card.locator('.db-protected-photo');
   await card.getByText('Encrypted caption',{exact:true}).waitFor();
@@ -74,7 +97,10 @@ async function main() {
   assert.equal(await page.getByText('Edited encrypted caption',{exact:true}).count(),0);
   await locked.getByLabel('Database passphrase').fill(password);
   await locked.getByRole('button',{name:'Unlock database',exact:true}).click();
+  await page.setViewportSize({width:1180,height:640});
   await page.locator('.db-view-tabs button').filter({hasText:'Gallery'}).click();
+  await checkGalleryScroll(page);
+  await page.setViewportSize({width:1500,height:1100});
   const secured=page.locator('[data-db-record="Showcase/Record 0000.md"].db-card');
   const securedImage=secured.locator('img[src^="blob:"]');
   await securedImage.evaluate(image=>image.decode());
