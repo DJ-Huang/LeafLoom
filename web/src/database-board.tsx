@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ChevronDown,ChevronRight,GripVertical,MoreHorizontal,Plus,Columns3,Undo2,CalendarDays,AlertCircle,ArrowUp,ArrowDown,ArrowLeft,ArrowRight,Eye,EyeOff,Trash2} from 'lucide-react';
-import {api} from './api';
+import {useDatabaseRequest} from './database-security';
 import {t,getLocale} from './i18n';
 import {ActionMenu,Modal,MenuPoint} from './ui';
 import {RecordMenuRenderer} from './database-record-menu';
@@ -107,6 +107,7 @@ export function DatabaseBoard({config,view,summary,search,busy,commit,open,notif
 
 type ColumnProps={group:BoardGroup,config:BaseConfig,view:View,summary:BoardSummary,search:string,pending?:Pending,collapsed:boolean,busy:boolean,activeDrag?:string,drop?:Drop,onVisible:(visible:boolean)=>void,onData:(data:ColumnData)=>void,reload:()=>void,open:(row:Row)=>void,onPointerDown:(event:React.PointerEvent,row:Row)=>void,onMenu:(anchor:HTMLElement,row?:Row,point?:MenuPoint)=>void,onCollapse:()=>void,create:(title:string)=>Promise<void>,recentRows:Row[]};
 function BoardColumn({group,config,view,summary,search,pending,collapsed,busy,activeDrag,drop,onVisible,onData,reload,open,onPointerDown,onMenu,onCollapse,create,recentRows}:ColumnProps){
+ const api=useDatabaseRequest();
  const host=useRef<HTMLElement>(null),shell=useRef<HTMLDivElement>(null),life=useRef(0),anchor=useRef(''),scope=useRef(search),callbacks=useRef({onVisible,onData});callbacks.current={onVisible,onData};
  const pageRef=useRef<{rows:Row[],cursor:string,previous:string,revision:string,catalog_version:string|number}>({rows:[],cursor:'',previous:'',revision:'',catalog_version:''});
  const [visible,setVisible]=useState(false),[page,setPage]=useState<{rows:Row[],cursor:string,previous:string,revision:string,catalog_version:string|number}>({rows:[],cursor:'',previous:'',revision:'',catalog_version:''}),[loading,setLoading]=useState(false),[error,setError]=useState(''),[adding,setAdding]=useState(false),[title,setTitle]=useState(''),[height,setHeight]=useState(440);

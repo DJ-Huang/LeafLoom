@@ -10,6 +10,25 @@ export function hasDocumentDraft(root:string,path:string){
  if(session)return session.dirty||!!session.pending;
  try{return typeof JSON.parse(localStorage.getItem(key)||'null')?.text==='string';}catch{return false;}
 }
+export function hasDatabaseDrafts(root:string,folder:string,database:string){
+ const prefix=draftKey(root,folder+'/'),definition=draftKey(root,database);
+ for(const [key,session] of sessions)if((key===definition||key.startsWith(prefix))&&(session.dirty||session.pending))return true;
+ try{
+  for(let index=0;index<localStorage.length;index++){
+   const key=localStorage.key(index);
+   if(key===definition||key?.startsWith(prefix))return true;
+  }
+ }catch{}
+ return false;
+}
+export function retireDatabaseDocuments(root:string,folder:string,database:string){
+ const prefix=draftKey(root,folder+'/'),definition=draftKey(root,database);
+ for(const [key,session] of sessions){
+  if(key!==definition&&!key.startsWith(prefix))continue;
+  session.readGeneration++;clearTimeout(session.timer);session.note=undefined;session.text='';session.etag='';
+  session.error='db.securityLocked';session.externalEpoch++;histories.delete(session);emit(session);
+ }
+}
 function emit(session:DocumentState){session.version++;session.touched=Date.now();for(const listener of session.listeners)listener();}
 function persist(session:DocumentState){try{if(session.dirty)localStorage.setItem(session.key,JSON.stringify({text:session.text,etag:session.etag,manualSave:session.manualSave}));else localStorage.removeItem(session.key);}catch{if(session.dirty)session.error='本地草稿存储不可用；当前内容仍在页面中，请保存或下载草稿';}}
 function trim(retain?:DocumentState){

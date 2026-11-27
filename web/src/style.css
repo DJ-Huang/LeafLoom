@@ -123,6 +123,7 @@ button.index-status:hover { background: var(--hover); }
 .dashboard-footer span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panes { flex: 1; min-height: 0; display: flex; }
 .panes[hidden], .search-page[hidden] { display: none; }
+.database-pane { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
 .document { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .document-toolbar { display: flex; align-items: center; gap: 12px; justify-content: flex-end; padding: 9px 18px; min-height: 47px; flex-shrink: 0; }
 .toolbar-actions { display: flex; align-items: center; gap: 5px; font-size: 12px; flex-shrink: 0; }

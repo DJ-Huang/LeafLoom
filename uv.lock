@@ -4135,6 +4135,7 @@ name = "vault-rag"
 version = "0.1.10"
 source = { editable = "." }
 dependencies = [
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "lancedb" },
@@ -4169,6 +4170,7 @@ publish = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=46,<51" },
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "httpx", specifier = ">=0.27,<1" },
     { name = "lancedb", specifier = ">=0.38.0,<0.39" },

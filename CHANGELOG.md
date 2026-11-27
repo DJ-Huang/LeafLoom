@@ -2,6 +2,15 @@
 
 [English](CHANGELOG.md) · [中文](docs/zh-CN/CHANGELOG.md) · [日本語](docs/ja/CHANGELOG.md)
 
+
+## Unreleased
+
+- Encrypt entire databases, including their views, records, and attachments. Set a passphrase when creating a database or convert an existing database with a dedicated record folder.
+
+- Fix full-page gallery scrolling so cards below the viewport can be reached.
+
+- Fix Feishu document reads when `lark-cli docs +fetch` returns JSON by default and its help omits the output format option.
+
 ## 0.1.10 - 2026-11-19
 
 - Open existing Design Studio projects outside the vault as read-only, and explicitly enable editing to write to their folders. Remove an external project from the list without deleting its files. Copy external projects into the vault.

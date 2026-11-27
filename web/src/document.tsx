@@ -192,7 +192,9 @@ export const DocumentPane=memo(function DocumentPane({path,vaultRoot,onOpen,noti
  };
  const releaseEditor=(view:any)=>{sessionStorage.setItem(viewKey+':cursor',String(view.state.selection.main.head));editor.current=null;};
  const readyEditor=(view:any)=>{editor.current=view;area.current?.dispatchEvent(new CustomEvent('vault-document-rendered'));const stored=sessionStorage.getItem('cursor:'+path)||sessionStorage.getItem(viewKey+':cursor');if(stored!==null){sessionStorage.removeItem('cursor:'+path);view.dispatch({selection:{anchor:Math.min(Number(stored)||0,view.state.doc.length)},scrollIntoView:true});}view.dom.addEventListener('keyup',()=>sessionStorage.setItem(viewKey+':cursor',String(view.state.selection.main.head)));if(pendingOutlineJump.current)jumpToOutline(pendingOutlineJump.current);};
- if(ext==='base')return <LazyBoundary><Suspense fallback={<p>{t("正在打开视图…")}</p>}><BaseViewer path={path} onOpen={onOpen} notify={notify}/></Suspense></LazyBoundary>;
+ if(ext==='base')return <div className="database-pane">
+  <LazyBoundary><Suspense fallback={<p>{t("正在打开视图…")}</p>}><BaseViewer path={path} onOpen={onOpen} notify={notify}/></Suspense></LazyBoundary>
+ </div>;
  if(!textFile)return <MediaFileView path={path} ext={ext} vaultRoot={vaultRoot} active={active} viewKey={viewKey} notify={notify}/>;
  if(!note&&!(isHtml&&mode==='read'))return <div className={'empty-state '+(session.error?'error':'')}>{session.error||t("正在打开文档…")}{session.error&&<button onClick={()=>void loadDocument(session,undefined,true)}>{t("重试")}</button>}</div>;
  return <div className={'document'+(wide||isHtml?' wide-content':'')} onKeyDown={event=>{

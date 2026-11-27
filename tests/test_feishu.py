@@ -89,6 +89,41 @@ class FeishuTests(unittest.TestCase):
             with self.assertRaises(ValueError): self.execute(['docs', '+fetch', flag])
         self.assertFalse(any('--as=user' in args for args, _ in self.calls))
 
+    def test_docs_fetch_accepts_default_json_without_visible_format_flag(self):
+        def cli_with_hidden_output_flags(binary, args, **kwargs):
+            code, out, err = self.fake(binary, args, **kwargs)
+            if args in (['docs', '+fetch', '--help'], ['docs', '+future', '--help']):
+                out = '\n'.join(line for line in out.splitlines()
+                                if not line.lstrip().startswith(('--format ', '--json ')))
+            return code, out, err
+
+        document = {'document_id': 'example', 'revision_id': 12, 'content': '# Monthly report'}
+        self.result = envelope({'document': document})
+        request = ['docs', '+fetch', '--doc=example', '--doc-format=markdown']
+        with patch('vault_rag.feishu.run_cli', side_effect=cli_with_hidden_output_flags):
+            result = self.execute(request)
+            self.assertTrue(result['ok'])
+            self.assertEqual(result['risk'], 'read')
+            self.assertEqual(result['data']['data']['document'], document)
+            self.assertIn('--as=user', self.calls[-1][0])
+            self.assertNotIn('--format=json', self.calls[-1][0])
+
+            with self.assertRaisesRegex(ValueError, 'Use feishu_cli_read'):
+                self.execute(request, write=True)
+            with self.assertRaises(FeishuError) as unavailable:
+                self.execute(['docs', '+future'])
+            self.assertEqual(unavailable.exception.code, 'command_unavailable')
+
+            for payload, error_code in (
+                ('plain text', 'invalid_cli_response'),
+                (json.dumps({'ok': True, 'identity': 'bot'}), 'identity_mismatch'),
+            ):
+                with self.subTest(error_code=error_code):
+                    self.result = (0, payload, '')
+                    with self.assertRaises(FeishuError) as invalid:
+                        self.execute(request)
+                    self.assertEqual(invalid.exception.code, error_code)
+
     def test_raw_api_paths_and_confirmation(self):
         for path in ('https://evil/open-apis/im/v1/messages', '/open-apis/auth/v3/token',
                      '/open-apis/x/../auth/token', '/open-apis/%61uth/token', '/open-apis/im/v1/messages?x=1'):

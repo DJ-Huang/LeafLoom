@@ -9,7 +9,7 @@ import re
 import time
 from pathlib import Path
 from ruamel.yaml import YAML
-from vault_rag.local_state import ConflictError, atomic_write, digest, relative, under
+from vault_rag.local_state import ConflictError, digest, relative, under
 
 COLORS = {'gray', 'blue', 'green', 'red', 'orange', 'yellow', 'purple', 'pink'}
 
@@ -193,7 +193,7 @@ class DatabaseBoard:
 
     def _store(self, path, record):
         path.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write(path, json.dumps(record, ensure_ascii=False).encode())
+        self.files.write_state(path, json.dumps(record, ensure_ascii=False).encode())
 
     def _pending(self, operation_id):
         return self.files.state_path('database-board-pending', digest(operation_id) + '.json')

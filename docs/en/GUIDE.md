@@ -509,3 +509,13 @@ Each edit creates a separate immutable change file. Different items merge automa
 On the first upgrade, the app backs up `.vault-rag/calendar.sqlite3` into `.vault-rag/calendar-backups/`, verifies the backup and exports plans, exceptions, completions and deleted records. Interrupted migrations can retry. The old database remains after success, but older builds refuse to write it to prevent divergent data. **Sync and conflicts** shows the backup location. Local reminder preferences and delivery history move to `.vault-rag/calendar-local.sqlite3`.
 
 Back up the whole `Calendar/LeafLoom/` folder for calendar content. Also back up the local `.vault-rag/calendar-local.sqlite3` and migration backup to retain device preferences and reminder history. Linked database definitions, task Markdown and daily notes still use their existing sync mechanism; calendar sync does not resolve concurrent edits to those notes or expand retrieval scope.
+
+## Encrypted databases
+
+When creating a database, select **Encrypt database** and set its passphrase. To convert an existing database, select **Encrypt database** in the toolbar. Review the record and attachment counts, then select **Encrypt and lock**. If the database uses the earlier gallery protection, enter its gallery passphrase so the converter can bring over covers and captions.
+
+An encrypted database keeps its views, fields, records, and attachments together in a single `.base` file. The filename stays visible. Open the database and authenticate once to use its views and edit records. Select **Lock database** to close all views in the current LeafLoom window. The database also locks after 30 minutes of inactivity. Its contents are available in LeafLoom and stay out of global search, AI retrieval, and MCP.
+
+Conversion requires a dedicated record folder. It verifies the encrypted copy before removing the managed files from their original paths. Other Markdown tools can no longer open those records directly. Linked attachments outside the folder are copied into the encrypted database while their original files remain in place. Conversion stops if it detects shared record folders, retrieval indexes, annotations, or file-operation history that it cannot safely move.
+
+Back up the resulting `.base` file and keep the passphrase separately. The package, including attachments and internal edit history, can be up to 256 MiB. Older plaintext backups and copies managed outside LeafLoom retain their original contents.

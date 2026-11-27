@@ -3200,3 +3200,57 @@ calendar.migrationFailed|旧日历数据核对未通过，已保留原数据，�
 确认|Confirm|確認
 导出工程包|Export project package|プロジェクトパッケージを書き出す
 只读|Read-only|読み取り専用
+photo.lock|锁定照片|Lock photos|写真をロック
+photo.unlock|解锁照片|Unlock photos|写真のロックを解除
+photo.password|照片口令|Photo passphrase|写真のパスフレーズ
+photo.unlockFailed|无法解锁照片，请核对口令后重试|Could not unlock photos. Check the passphrase and try again.|写真を開けません。パスフレーズを確認して再試行してください。
+photo.unavailable|照片暂不可读|Photo unavailable|写真を表示できません
+photo.caption|照片配文|Photo caption|写真のキャプション
+photo.protectedCaption|加密配文|Encrypted caption|暗号化されたキャプション
+photo.editCaption|编辑配文|Edit caption|キャプションを編集
+photo.captionUnavailable|配文暂不可用，请重试|Caption unavailable. Try again.|キャプションを読み込めません。再試行してください。
+photo.importFailed|照片导入失败|Could not import photo|写真をインポートできません
+photo.enableGallery|启用照片加密|Enable photo encryption|写真の暗号化を有効にする
+photo.galleryHelp|使用此记录文件夹的数据库共享设置。此后从封面字段导入的照片会加密。已有文件可继续访问。|Databases that use this record folder share the setting. New imports through cover fields are encrypted. Existing files remain accessible.|このレコードフォルダーを使用するデータベースで設定を共有します。今後カバーフィールドから読み込む写真が暗号化されます。既存のファイルは引き続き開けます。
+photo.passphraseMismatch|两次输入的口令不同|The passphrases do not match|パスフレーズが一致しません
+photo.setupFailed|启用照片加密失败，请检查知识库设置后重试|Could not enable photo encryption. Check the vault settings and try again.|写真の暗号化を有効にできません。保管庫の設定を確認して再試行してください。
+photo.confirmPassphrase|确认照片口令|Confirm photo passphrase|写真のパスフレーズを確認
+photo.enableCaptions|提供加密配文栏|Add an encrypted caption field|暗号化キャプション欄を追加
+db.securityEnable|加密数据库|Encrypt database|データベースを暗号化
+db.securityProtected|已加密|Encrypted|暗号化済み
+db.securityLocked|数据库已锁定|Database locked|データベースはロックされています
+db.securityUnlock|解锁数据库|Unlock database|データベースのロックを解除
+db.securityLock|锁定数据库|Lock database|データベースをロック
+db.securityUnlockHint|输入此数据库的口令，即可查看记录和附件。|Enter this database’s passphrase to access its records and attachments.|このデータベースのパスフレーズを入力すると、レコードと添付ファイルを開けます。
+db.securityPassphrase|数据库口令|Database passphrase|データベースのパスフレーズ
+db.securityConfirmPassphrase|确认口令|Confirm passphrase|パスフレーズを確認
+db.securityPasswordHint|至少 12 个字符。丢失口令将无法解锁。|Use at least 12 characters. Keep your passphrase somewhere safe. It is required to unlock this database.|12 文字以上で設定してください。パスフレーズは解除に必要なため、安全な場所に保管してください。
+db.securityPassphraseLength|请使用至少 12 个字符的口令。|Use a passphrase with at least 12 characters.|12 文字以上のパスフレーズを入力してください。
+db.securityMismatch|两次输入的口令不一致。|The passphrases do not match.|パスフレーズが一致しません。
+db.securityWrongPassword|口令不正确。|Incorrect passphrase.|パスフレーズが正しくありません。
+db.securityTryAgain|解锁请求过多，请稍后重试。|Wait a moment and try unlocking again.|少し待ってからロック解除をやり直してください。
+db.securityWorkspaceChanged|知识库已切换，请重新打开数据库。|The vault changed. Reopen the database.|保管庫が切り替わりました。データベースを開き直してください。
+db.securityConvert|加密并锁定|Encrypt and lock|暗号化してロック
+db.securityConvertHint|视图、字段、记录和附件将存入一个加密文件。转换完成后，记录通过 LeafLoom 解锁访问。|Views, fields, records, and attachments will be stored in one encrypted file. After conversion, unlock the database in LeafLoom to access its records.|ビュー、フィールド、レコード、添付ファイルを 1 つの暗号化ファイルに保存します。変換後は LeafLoom でロックを解除して開きます。
+db.securityChecking|正在检查记录与附件…|Checking records and attachments…|レコードと添付ファイルを確認しています…
+db.securityRecords|{count} 条记录|{count} records|レコード {count} 件
+db.securityAttachments|{count} 个附件|{count} attachments|添付ファイル {count} 件
+db.securitySharedAssets|目录外的附件会复制到加密库，其他位置的原件会保留。|Attachments outside the record folder are copied into the encrypted database. Their originals stay where they are.|記録フォルダー外の添付ファイルは暗号化データベースにコピーされます。元のファイルは現在の場所に残ります。
+db.securityOldPassphrase|原图库口令|Existing gallery passphrase|現在のギャラリーのパスフレーズ
+db.securityOldPassword|无法用此口令打开原图库。|This passphrase could not unlock the existing gallery.|このパスフレーズで現在のギャラリーを開けませんでした。
+db.securitySharedFolder|记录目录与其他数据库共享，或含有其他数据库。请使用独立的记录目录。|The record folder is shared with or contains another database. Use a dedicated record folder.|記録フォルダーが別のデータベースと共有されているか、別のデータベースを含んでいます。専用の記録フォルダーを使用してください。
+db.securityDedicatedFolder|此数据库需要独立的记录目录才能转换。|This database needs a dedicated record folder before it can be encrypted.|暗号化するには、このデータベース専用の記録フォルダーが必要です。
+db.securityIndexed|此目录已选入知识检索或仍有旧索引。请先将目录移出检索范围并清理旧索引。|This folder is selected for knowledge retrieval or remains in a previous index. Remove it from retrieval and clear the old index first.|このフォルダーが知識検索の対象か、以前のインデックスに残っています。対象から外し、古いインデックスを消去してください。
+db.securityAnnotated|此目录有独立保存的标注，暂无法安全转换。|This folder contains separately stored annotations and cannot be converted safely yet.|このフォルダーには別に保存された注釈があるため、現在は安全に変換できません。
+db.securityOperationHistory|此目录有移动或看板操作历史需要先处理。|This folder has move or board recovery history that must be resolved before conversion.|変換前に、このフォルダーの移動またはボードの復旧履歴を処理してください。
+db.securityDrafts|请先保存或放弃未保存的草稿。|Save or discard unsaved drafts first.|未保存の下書きを先に保存するか破棄してください。
+db.securityPreviewChanged|记录或附件已变化，请重新检查后加密。|Records or attachments changed. Check them again before encrypting.|レコードまたは添付ファイルが変更されました。暗号化の前にもう一度確認してください。
+db.securityInvalid|无法读取此加密数据库或完成此操作。|This encrypted database could not be read or the operation could not be completed.|暗号化データベースを読み取れないか、操作を完了できませんでした。
+db.securityFileMissing|加密库中找不到此文件。|This file was not found in the encrypted database.|暗号化データベースにこのファイルが見つかりません。
+db.securityFileExists|同名文件已存在。|A file with this name already exists.|同じ名前のファイルが既にあります。
+db.securityTooLarge|文件超过加密库的大小限制。|The file exceeds the encrypted database size limit.|ファイルが暗号化データベースの容量制限を超えています。
+db.securityRecovery|数据库转换未完成，需要先恢复。|The database conversion must be recovered before continuing.|続行する前にデータベースの変換を復旧してください。
+db.securityRecordBody|记录正文（Markdown）|Record contents (Markdown)|レコード本文（Markdown）
+db.securityDiscard|放弃更改|Discard changes|変更を破棄
+db.securityRemoveAttachment|移除引用|Remove reference|参照を削除
+db.securityOldGalleryMissing|找不到原图库设置。请先恢复原加密图库的目录和设置。|The original gallery settings are missing. Restore the protected gallery folder and settings first.|元のギャラリー設定が見つかりません。暗号化ギャラリーのフォルダーと設定を先に復元してください。

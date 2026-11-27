@@ -101,7 +101,11 @@ class Catalog:
         meta={};text='';body='';sha=''
         # Assets stay in the filename registry without being read/hashed/parsed.
         if parse and p.suffix.lower() in ('.md','.txt','.base') and stat.st_size<=10*1024*1024:
-            raw=p.read_bytes();sha=digest(raw);text=raw.decode('utf-8-sig',errors='replace')
+            raw=p.read_bytes();sha=digest(raw)
+            if p.suffix.lower()=='.base':
+                from vault_rag.database_envelope import MAGIC
+                if raw.startswith(MAGIC):raw=b''
+            text=raw.decode('utf-8-sig',errors='replace')
             try:
                 post=frontmatter.loads(text) if p.suffix.lower()=='.md' else None
                 meta=post.metadata if post else {};body=post.content if post else text

@@ -83,6 +83,27 @@ if os.environ.get('LEAFLOOM_WORKSPACE_DESIGN'):
     (root/'Templates').mkdir(exist_ok=True); (root/'Notes/Daily').mkdir(exist_ok=True)
     (root/'Templates/Meeting.md').write_text('# Meeting notes\n\n## Decisions\n\n## Next steps\n')
     config.save({'homepage':'Notes/Project journal.md','daily_folder':'Notes/Daily'})
+if os.environ.get('LEAFLOOM_DATABASE_ENCRYPTED_PHOTOS'):
+    from vault_rag import locked_photos as crypto
+    from vault_rag.photo_routes import SCOPES_FILE
+
+    scope = 'Showcase'
+    secret = bytes(32)
+    storage = root / '.vault-rag'
+    crypto.atomic_bytes(storage / crypto.KEY_FILE, crypto.wrap_key(secret, 'synthetic photo passphrase'))
+    crypto.atomic_bytes(storage / SCOPES_FILE, json.dumps([scope]).encode())
+    data = (root / 'Assets/cover.png').read_bytes()
+    name = crypto.asset_name(secret, scope, data)
+    cover = f'{scope}/图片/{name}'
+    crypto.atomic_bytes(root / cover, crypto.seal(secret, scope, name, data))
+    note = root / scope / 'Record 0000.md'
+    note.write_text(note.read_text().replace('cover: ["[[Assets/cover.png]]"]', f'cover: ["[[{cover}]]"]'))
+    if os.environ.get('LEAFLOOM_DATABASE_ENCRYPTED_CAPTIONS'):
+        ident = 'a' * 32
+        cipher = crypto.seal_caption(secret, scope, ident, 'Fixture photo caption')
+        note.write_text(note.read_text().replace('title: Record 0000',
+            f'title: 角色照片\nphoto_id: {ident}\n{crypto.CAPTION_FIELD}: {cipher}'))
+        crypto.atomic_bytes(storage / crypto.CAPTION_MARKER, b'1')
 runtime.catalog.scan()
 def changed(*paths):
     runtime.catalog.apply(list(paths)); runtime.catalog.metadata_ready = True
